@@ -1,0 +1,96 @@
+<?xml version="1.0" encoding="utf-8"?>
+<manifest xmlns:android="http://schemas.android.com/apk/res/android">
+
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE_DATA_SYNC" />
+    <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
+    <uses-permission android:name="android.permission.INTERNET" />
+    <!-- 锁屏保持下载：息屏时维持 Wi-Fi/CPU，避免长时间下载断连 -->
+    <uses-permission android:name="android.permission.WAKE_LOCK" />
+    <!-- 锁屏保持下载：允许引导用户将应用加入「忽略电池优化」白名单 -->
+    <uses-permission android:name="android.permission.REQUEST_IGNORE_BATTERY_OPTIMIZATIONS" />
+    <!-- APK 安装：Android 8+ 检查「安装未知来源应用」权限需要 -->
+    <uses-permission android:name="android.permission.REQUEST_INSTALL_PACKAGES" />
+    <!-- Android 9- 写公共 Download 目录需要（10 走 MediaStore，legacy 模式回退也需要） -->
+    <uses-permission
+        android:name="android.permission.WRITE_EXTERNAL_STORAGE"
+        android:maxSdkVersion="29" />
+
+    <application
+        android:name=".YunGetApp"
+        android:allowBackup="false"
+        android:icon="@drawable/icon_dl"
+        android:label="@string/app_name"
+        android:roundIcon="@drawable/icon_dl"
+        android:supportsRtl="true"
+        android:requestLegacyExternalStorage="true"
+        android:theme="@style/Theme.ComposeEmptyActivity">
+
+        <!-- 默认桌面图标 = 新绘制的多线程下载图标（icon_dl，本二次开发版默认标识） -->
+        <activity
+            android:name=".MainActivity"
+            android:exported="true"
+            android:theme="@style/Theme.ComposeEmptyActivity">
+            <intent-filter>
+                <action android:name="android.intent.action.MAIN" />
+                <category android:name="android.intent.category.LAUNCHER" />
+            </intent-filter>
+        </activity>
+
+        <!-- 图标变体 1：经典图标（上游原项目风格，icon）；默认禁用，主题与外观页切换后启用 -->
+        <activity-alias
+            android:name=".MainActivityIcon1"
+            android:enabled="false"
+            android:exported="true"
+            android:icon="@drawable/icon"
+            android:roundIcon="@drawable/icon"
+            android:label="@string/app_name"
+            android:targetActivity=".MainActivity">
+            <intent-filter>
+                <action android:name="android.intent.action.MAIN" />
+                <category android:name="android.intent.category.LAUNCHER" />
+            </intent-filter>
+        </activity-alias>
+
+        <!-- 图标变体 2：云 X 图标（icon2）；默认禁用，主题与外观页切换后启用 -->
+        <activity-alias
+            android:name=".MainActivityIcon2"
+            android:enabled="false"
+            android:exported="true"
+            android:icon="@drawable/icon2"
+            android:roundIcon="@drawable/icon2"
+            android:label="@string/app_name"
+            android:targetActivity=".MainActivity">
+            <intent-filter>
+                <action android:name="android.intent.action.MAIN" />
+                <category android:name="android.intent.category.LAUNCHER" />
+            </intent-filter>
+        </activity-alias>
+
+        <!-- 崩溃界面：独立进程运行，避免主线程崩溃后无法展示 UI -->
+        <activity
+            android:name=".crash.CrashActivity"
+            android:exported="false"
+            android:process=":crash"
+            android:theme="@style/Theme.ComposeEmptyActivity" />
+
+        <!-- 下载前台服务：下载中保持前台，避免后台限速/进程被杀 -->
+        <service
+            android:name=".data.download.DownloadService"
+            android:exported="false"
+            android:foregroundServiceType="dataSync" />
+
+        <!-- 文件共享：导出日志等场景（ACTION_SEND 分享） -->
+        <provider
+            android:name="androidx.core.content.FileProvider"
+            android:authorities="${applicationId}.fileprovider"
+            android:exported="false"
+            android:grantUriPermissions="true">
+            <meta-data
+                android:name="android.support.FILE_PROVIDER_PATHS"
+                android:resource="@xml/file_paths" />
+        </provider>
+
+    </application>
+
+</manifest>

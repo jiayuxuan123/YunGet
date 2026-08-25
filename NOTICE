@@ -1,0 +1,32 @@
+YunGet（云取）
+==============
+
+本项目是 CYQawa/YunX（云析）的二次开发（fork）版本。
+
+上游原项目：
+  YunX（云析）
+  https://github.com/CYQawa/YunX
+  Copyright (C) 上游原作者（CYQawa 及贡献者）
+  许可协议：GNU Affero General Public License v3.0 (AGPL-3.0)
+
+本二次开发版本：
+  YunGet（云取）
+  https://github.com/jiayuxuan123/YunGet
+  许可协议：GNU Affero General Public License v3.0 (AGPL-3.0)
+
+主要修改说明
+------------
+1. 将下载引擎从上游的「主池 70% 等分 + 弹性区 30% 中点劈分」两阶段模型，
+   重写为自适应多线程引擎（app/src/main/kotlin/com/yunget/app/data/download/AdaptiveDownloadEngine.kt）：
+   - 工作窃取调度（work-stealing）
+   - 动态并发调节（AIMD）
+   - 自适应分块
+   - HTTP/2 连接复用
+2. 品牌标识（应用名、包名、图标、内部标识）由 YunX 调整为 YunGet。
+3. 新增默认桌面图标（多线程下载主题），并保留原「经典图标」作为可切换选项，
+   另增「云 X 图标」变体。
+4. 应用内赞赏码替换为本二次开发版本维护者的收款码，并在文案中明确：
+   上游原项目的捐赠请移步上游仓库，二者互不相关。
+
+依据 AGPL-3.0，本项目在分发时同步公开全部源代码，并保留上游的版权与协议声明。
+上游代码版权归其原作者所有。

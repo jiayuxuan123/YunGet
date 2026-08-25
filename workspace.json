@@ -1,0 +1,2263 @@
+{
+  "modules": [
+    {
+      "name": "YunX",
+      "type": "JAVA_MODULE",
+      "contentRoots": [
+        {
+          "path": "/storage/emulated/0/AndroidIDEProjects/YunX",
+          "excludedPatterns": [
+            "build/**",
+            ".gradle/**"
+          ],
+          "excludedUrls": [],
+          "sourceRoots": [
+            {
+              "path": "/storage/emulated/0/AndroidIDEProjects/YunX",
+              "type": "kotlin-source"
+            }
+          ]
+        }
+      ],
+      "dependencies": [
+        {
+          "type": "moduleSource"
+        },
+        {
+          "type": "sdk",
+          "name": "21",
+          "kind": "jdk"
+        },
+        {
+          "type": "library",
+          "name": "android-36",
+          "scope": "compile"
+        },
+        {
+          "type": "library",
+          "name": "jdk-stubs",
+          "scope": "compile"
+        },
+        {
+          "type": "library",
+          "name": "transformed:lifecycle-viewmodel-savedstate-release:jars:classes",
+          "scope": "compile"
+        },
+        {
+          "type": "library",
+          "name": "transformed:transition-1.5.0:jars:classes",
+          "scope": "compile"
+        },
+        {
+          "type": "library",
+          "name": "transformed:runtime-annotation:jars:classes",
+          "scope": "compile"
+        },
+        {
+          "type": "library",
+          "name": "transformed:activity-ktx-1.11.0:jars:classes",
+          "scope": "compile"
+        },
+        {
+          "type": "library",
+          "name": "transformed:ui-unit:jars:classes",
+          "scope": "compile"
+        },
+        {
+          "type": "library",
+          "name": "androidx.room:room-common:2.6.1",
+          "scope": "compile"
+        },
+        {
+          "type": "library",
+          "name": "transformed:sqlite-framework-2.4.0:jars:classes",
+          "scope": "compile"
+        },
+        {
+          "type": "library",
+          "name": "transformed:ui-text:jars:classes",
+          "scope": "compile"
+        },
+        {
+          "type": "library",
+          "name": "transformed:coordinatorlayout-1.1.0:jars:classes",
+          "scope": "compile"
+        },
+        {
+          "type": "library",
+          "name": "transformed:material-ripple:jars:classes",
+          "scope": "compile"
+        },
+        {
+          "type": "library",
+          "name": "com.google.guava:listenablefuture:1.0",
+          "scope": "compile"
+        },
+        {
+          "type": "library",
+          "name": "transformed:appcompat-1.7.0:jars:classes",
+          "scope": "compile"
+        },
+        {
+          "type": "library",
+          "name": "transformed:viewpager2-1.0.0:jars:classes",
+          "scope": "compile"
+        },
+        {
+          "type": "library",
+          "name": "transformed:core-runtime-2.2.0:jars:classes",
+          "scope": "compile"
+        },
+        {
+          "type": "library",
+          "name": "transformed:savedstate-release:jars:classes",
+          "scope": "compile"
+        },
+        {
+          "type": "library",
+          "name": "transformed:ui-tooling-data:jars:classes",
+          "scope": "compile"
+        },
+        {
+          "type": "library",
+          "name": "transformed:emoji2-views-helper-1.4.0:jars:classes",
+          "scope": "compile"
+        },
+        {
+          "type": "library",
+          "name": "transformed:ui-release:jars:classes",
+          "scope": "compile"
+        },
+        {
+          "type": "library",
+          "name": "androidx.lifecycle:lifecycle-common-jvm:2.9.4",
+          "scope": "compile"
+        },
+        {
+          "type": "library",
+          "name": "org.jetbrains.kotlinx:kotlinx-coroutines-core-jvm:1.8.1",
+          "scope": "compile"
+        },
+        {
+          "type": "library",
+          "name": "transformed:material-1.14.0:jars:classes",
+          "scope": "compile"
+        },
+        {
+          "type": "library",
+          "name": "transformed:runtime-saveable:jars:classes",
+          "scope": "compile"
+        },
+        {
+          "type": "library",
+          "name": "transformed:recyclerview-1.2.1:jars:classes",
+          "scope": "compile"
+        },
+        {
+          "type": "library",
+          "name": "androidx.resourceinspection:resourceinspection-annotation:1.0.1",
+          "scope": "compile"
+        },
+        {
+          "type": "library",
+          "name": "transformed:animation:jars:classes",
+          "scope": "compile"
+        },
+        {
+          "type": "library",
+          "name": "transformed:annotation-experimental-1.4.1:jars:classes",
+          "scope": "compile"
+        },
+        {
+          "type": "library",
+          "name": "transformed:vectordrawable-animated-1.1.0:jars:classes",
+          "scope": "compile"
+        },
+        {
+          "type": "library",
+          "name": "transformed:material3:jars:classes",
+          "scope": "compile"
+        },
+        {
+          "type": "library",
+          "name": "transformed:room-ktx-2.6.1:jars:classes",
+          "scope": "compile"
+        },
+        {
+          "type": "library",
+          "name": "transformed:viewpager-1.0.0:jars:classes",
+          "scope": "compile"
+        },
+        {
+          "type": "library",
+          "name": "transformed:foundation-layout:jars:classes",
+          "scope": "compile"
+        },
+        {
+          "type": "library",
+          "name": "androidx.collection:collection-jvm:1.5.0",
+          "scope": "compile"
+        },
+        {
+          "type": "library",
+          "name": "transformed:sqlite-2.4.0:jars:classes",
+          "scope": "compile"
+        },
+        {
+          "type": "library",
+          "name": "transformed:core-viewtree-1.0.0:jars:classes",
+          "scope": "compile"
+        },
+        {
+          "type": "library",
+          "name": "transformed:lifecycle-viewmodel-compose-release:jars:classes",
+          "scope": "compile"
+        },
+        {
+          "type": "library",
+          "name": "transformed:activity-compose-1.11.0:jars:classes",
+          "scope": "compile"
+        },
+        {
+          "type": "library",
+          "name": "com.squareup.okio:okio-jvm:3.6.0",
+          "scope": "compile"
+        },
+        {
+          "type": "library",
+          "name": "transformed:constraintlayout-2.2.1:jars:classes",
+          "scope": "compile"
+        },
+        {
+          "type": "library",
+          "name": "androidx.constraintlayout:constraintlayout-core:1.1.1",
+          "scope": "compile"
+        },
+        {
+          "type": "library",
+          "name": "transformed:lifecycle-runtime-ktx:jars:classes",
+          "scope": "compile"
+        },
+        {
+          "type": "library",
+          "name": "org.jetbrains.kotlin:kotlin-stdlib-jdk8:1.9.10",
+          "scope": "compile"
+        },
+        {
+          "type": "library",
+          "name": "transformed:lifecycle-livedata-2.9.4:jars:classes",
+          "scope": "compile"
+        },
+        {
+          "type": "library",
+          "name": "org.jetbrains.kotlin:kotlin-stdlib:2.1.0",
+          "scope": "compile"
+        },
+        {
+          "type": "library",
+          "name": "transformed:runtime:jars:classes",
+          "scope": "compile"
+        },
+        {
+          "type": "library",
+          "name": "transformed:cursoradapter-1.0.0:jars:classes",
+          "scope": "compile"
+        },
+        {
+          "type": "library",
+          "name": "transformed:ui-util:jars:classes",
+          "scope": "compile"
+        },
+        {
+          "type": "library",
+          "name": "transformed:ui-graphics-release:jars:classes",
+          "scope": "compile"
+        },
+        {
+          "type": "library",
+          "name": "transformed:lifecycle-livedata-core-2.9.4:jars:classes",
+          "scope": "compile"
+        },
+        {
+          "type": "library",
+          "name": "transformed:ui-tooling-preview:jars:classes",
+          "scope": "compile"
+        },
+        {
+          "type": "library",
+          "name": "org.jetbrains.kotlinx:kotlinx-serialization-core-jvm:1.7.3",
+          "scope": "compile"
+        },
+        {
+          "type": "library",
+          "name": "transformed:versionedparcelable-1.1.1:jars:classes",
+          "scope": "compile"
+        },
+        {
+          "type": "library",
+          "name": "transformed:startup-runtime-1.1.1:jars:classes",
+          "scope": "compile"
+        },
+        {
+          "type": "library",
+          "name": "transformed:dynamicanimation-1.1.0:jars:classes",
+          "scope": "compile"
+        },
+        {
+          "type": "library",
+          "name": "transformed:material-icons-core-release:jars:classes",
+          "scope": "compile"
+        },
+        {
+          "type": "library",
+          "name": "transformed:interpolator-1.0.0:jars:classes",
+          "scope": "compile"
+        },
+        {
+          "type": "library",
+          "name": "org.jspecify:jspecify:1.0.0",
+          "scope": "compile"
+        },
+        {
+          "type": "library",
+          "name": "transformed:graphics-path-1.0.1:jars:classes",
+          "scope": "compile"
+        },
+        {
+          "type": "library",
+          "name": "transformed:activity-1.11.0:jars:classes",
+          "scope": "compile"
+        },
+        {
+          "type": "library",
+          "name": "transformed:ui-test-manifest-1.9.4:jars:classes",
+          "scope": "compile"
+        },
+        {
+          "type": "library",
+          "name": "transformed:ui-tooling:jars:classes",
+          "scope": "compile"
+        },
+        {
+          "type": "library",
+          "name": "transformed:lifecycle-process-2.9.4:jars:classes",
+          "scope": "compile"
+        },
+        {
+          "type": "library",
+          "name": "transformed:savedstate-ktx-1.3.3:jars:classes",
+          "scope": "compile"
+        },
+        {
+          "type": "library",
+          "name": "androidx.annotation:annotation-jvm:1.9.1",
+          "scope": "compile"
+        },
+        {
+          "type": "library",
+          "name": "transformed:lifecycle-runtime-compose-release:jars:classes",
+          "scope": "compile"
+        },
+        {
+          "type": "library",
+          "name": "org.jetbrains:annotations:23.0.0",
+          "scope": "compile"
+        },
+        {
+          "type": "library",
+          "name": "transformed:vectordrawable-1.1.0:jars:classes",
+          "scope": "compile"
+        },
+        {
+          "type": "library",
+          "name": "transformed:drawerlayout-1.1.1:jars:classes",
+          "scope": "compile"
+        },
+        {
+          "type": "library",
+          "name": "transformed:cardview-1.0.0:jars:classes",
+          "scope": "compile"
+        },
+        {
+          "type": "library",
+          "name": "transformed:savedstate-compose:jars:classes",
+          "scope": "compile"
+        },
+        {
+          "type": "library",
+          "name": "androidx.arch.core:core-common:2.2.0",
+          "scope": "compile"
+        },
+        {
+          "type": "library",
+          "name": "transformed:ui-geometry:jars:classes",
+          "scope": "compile"
+        },
+        {
+          "type": "library",
+          "name": "androidx.lifecycle:lifecycle-common-java8:2.9.4",
+          "scope": "compile"
+        },
+        {
+          "type": "library",
+          "name": "transformed:material:jars:classes",
+          "scope": "compile"
+        },
+        {
+          "type": "library",
+          "name": "transformed:lifecycle-viewmodel-release:jars:classes",
+          "scope": "compile"
+        },
+        {
+          "type": "library",
+          "name": "com.google.errorprone:error_prone_annotations:2.15.0",
+          "scope": "compile"
+        },
+        {
+          "type": "library",
+          "name": "transformed:customview-1.2.0:jars:classes",
+          "scope": "compile"
+        },
+        {
+          "type": "library",
+          "name": "transformed:room-runtime-2.6.1:jars:classes",
+          "scope": "compile"
+        },
+        {
+          "type": "library",
+          "name": "transformed:animation-core:jars:classes",
+          "scope": "compile"
+        },
+        {
+          "type": "library",
+          "name": "transformed:customview-poolingcontainer-1.0.0:jars:classes",
+          "scope": "compile"
+        },
+        {
+          "type": "library",
+          "name": "transformed:lifecycle-viewmodel-ktx-2.9.4:jars:classes",
+          "scope": "compile"
+        },
+        {
+          "type": "library",
+          "name": "transformed:lifecycle-livedata-core-ktx-2.9.4:jars:classes",
+          "scope": "compile"
+        },
+        {
+          "type": "library",
+          "name": "androidx.concurrent:concurrent-futures:1.1.0",
+          "scope": "compile"
+        },
+        {
+          "type": "library",
+          "name": "transformed:material-icons-extended-release:jars:classes",
+          "scope": "compile"
+        },
+        {
+          "type": "library",
+          "name": "org.jetbrains.kotlinx:kotlinx-coroutines-android:1.8.1",
+          "scope": "compile"
+        },
+        {
+          "type": "library",
+          "name": "org.jetbrains.kotlin:kotlin-stdlib-jdk7:1.9.10",
+          "scope": "compile"
+        },
+        {
+          "type": "library",
+          "name": "com.squareup.okhttp3:okhttp:4.12.0",
+          "scope": "compile"
+        },
+        {
+          "type": "library",
+          "name": "transformed:loader-1.0.0:jars:classes",
+          "scope": "compile"
+        },
+        {
+          "type": "library",
+          "name": "transformed:autofill-1.0.0:jars:classes",
+          "scope": "compile"
+        },
+        {
+          "type": "library",
+          "name": "transformed:core-ktx-1.17.0:jars:classes",
+          "scope": "compile"
+        },
+        {
+          "type": "library",
+          "name": "transformed:appcompat-resources-1.7.0:jars:classes",
+          "scope": "compile"
+        },
+        {
+          "type": "library",
+          "name": "transformed:foundation-release:jars:classes",
+          "scope": "compile"
+        },
+        {
+          "type": "library",
+          "name": "transformed:lifecycle-runtime-release:jars:classes",
+          "scope": "compile"
+        },
+        {
+          "type": "library",
+          "name": "transformed:emoji2-1.4.0:jars:classes",
+          "scope": "compile"
+        },
+        {
+          "type": "library",
+          "name": "emoji2-1.4.0:jars:libs:repackaged",
+          "scope": "compile"
+        },
+        {
+          "type": "library",
+          "name": "transformed:tracing-1.2.0:jars:classes",
+          "scope": "compile"
+        },
+        {
+          "type": "library",
+          "name": "transformed:profileinstaller-1.4.0:jars:classes",
+          "scope": "compile"
+        },
+        {
+          "type": "library",
+          "name": "androidx.collection:collection-ktx:1.5.0",
+          "scope": "compile"
+        },
+        {
+          "type": "library",
+          "name": "transformed:core-1.17.0:jars:classes",
+          "scope": "compile"
+        },
+        {
+          "type": "library",
+          "name": "transformed:graphics-shapes-release:jars:classes",
+          "scope": "compile"
+        },
+        {
+          "type": "library",
+          "name": "transformed:fragment-1.5.4:jars:classes",
+          "scope": "compile"
+        },
+        {
+          "type": "library",
+          "name": "compile_and_runtime_not_namespaced_r_class_jar:debug:processDebugResources:R",
+          "scope": "compile"
+        }
+      ]
+    },
+    {
+      "name": "app",
+      "type": "JAVA_MODULE",
+      "contentRoots": [
+        {
+          "path": "/storage/emulated/0/AndroidIDEProjects/YunX/app",
+          "excludedPatterns": [
+            "build/**",
+            ".gradle/**"
+          ],
+          "excludedUrls": [],
+          "sourceRoots": [
+            {
+              "path": "/storage/emulated/0/AndroidIDEProjects/YunX/app/src/main/kotlin",
+              "type": "kotlin-source"
+            }
+          ]
+        },
+        {
+          "path": "/storage/emulated/0/AndroidIDEProjects/YunX/app/src/main/kotlin",
+          "excludedPatterns": [],
+          "excludedUrls": [],
+          "sourceRoots": [
+            {
+              "path": "/storage/emulated/0/AndroidIDEProjects/YunX/app/src/main/kotlin",
+              "type": "kotlin-source"
+            }
+          ]
+        },
+        {
+          "path": "/storage/emulated/0/AndroidIDEProjects/YunX/app/build/generated/ap_generated_sources/debug/out",
+          "excludedPatterns": [],
+          "excludedUrls": [],
+          "sourceRoots": [
+            {
+              "path": "/storage/emulated/0/AndroidIDEProjects/YunX/app/build/generated/ap_generated_sources/debug/out",
+              "type": "java-source"
+            }
+          ]
+        },
+        {
+          "path": "/storage/emulated/0/AndroidIDEProjects/YunX/app/build/generated/ksp/debug",
+          "excludedPatterns": [],
+          "excludedUrls": [],
+          "sourceRoots": [
+            {
+              "path": "/storage/emulated/0/AndroidIDEProjects/YunX/app/build/generated/ksp/debug",
+              "type": "kotlin-source"
+            }
+          ]
+        },
+        {
+          "path": "/storage/emulated/0/AndroidIDEProjects/YunX/app/build/generated/updated_navigation_xml/debug",
+          "excludedPatterns": [],
+          "excludedUrls": [],
+          "sourceRoots": [
+            {
+              "path": "/storage/emulated/0/AndroidIDEProjects/YunX/app/build/generated/updated_navigation_xml/debug",
+              "type": "java-source"
+            }
+          ]
+        }
+      ],
+      "dependencies": [
+        {
+          "type": "moduleSource"
+        },
+        {
+          "type": "sdk",
+          "name": "21",
+          "kind": "jdk"
+        },
+        {
+          "type": "library",
+          "name": "android-36",
+          "scope": "compile"
+        },
+        {
+          "type": "library",
+          "name": "jdk-stubs",
+          "scope": "compile"
+        },
+        {
+          "type": "library",
+          "name": "transformed:lifecycle-viewmodel-savedstate-release:jars:classes",
+          "scope": "compile"
+        },
+        {
+          "type": "library",
+          "name": "transformed:transition-1.5.0:jars:classes",
+          "scope": "compile"
+        },
+        {
+          "type": "library",
+          "name": "transformed:runtime-annotation:jars:classes",
+          "scope": "compile"
+        },
+        {
+          "type": "library",
+          "name": "transformed:activity-ktx-1.11.0:jars:classes",
+          "scope": "compile"
+        },
+        {
+          "type": "library",
+          "name": "transformed:ui-unit:jars:classes",
+          "scope": "compile"
+        },
+        {
+          "type": "library",
+          "name": "androidx.room:room-common:2.6.1",
+          "scope": "compile"
+        },
+        {
+          "type": "library",
+          "name": "transformed:sqlite-framework-2.4.0:jars:classes",
+          "scope": "compile"
+        },
+        {
+          "type": "library",
+          "name": "transformed:ui-text:jars:classes",
+          "scope": "compile"
+        },
+        {
+          "type": "library",
+          "name": "transformed:coordinatorlayout-1.1.0:jars:classes",
+          "scope": "compile"
+        },
+        {
+          "type": "library",
+          "name": "transformed:material-ripple:jars:classes",
+          "scope": "compile"
+        },
+        {
+          "type": "library",
+          "name": "com.google.guava:listenablefuture:1.0",
+          "scope": "compile"
+        },
+        {
+          "type": "library",
+          "name": "transformed:appcompat-1.7.0:jars:classes",
+          "scope": "compile"
+        },
+        {
+          "type": "library",
+          "name": "transformed:viewpager2-1.0.0:jars:classes",
+          "scope": "compile"
+        },
+        {
+          "type": "library",
+          "name": "transformed:core-runtime-2.2.0:jars:classes",
+          "scope": "compile"
+        },
+        {
+          "type": "library",
+          "name": "transformed:savedstate-release:jars:classes",
+          "scope": "compile"
+        },
+        {
+          "type": "library",
+          "name": "transformed:ui-tooling-data:jars:classes",
+          "scope": "compile"
+        },
+        {
+          "type": "library",
+          "name": "transformed:emoji2-views-helper-1.4.0:jars:classes",
+          "scope": "compile"
+        },
+        {
+          "type": "library",
+          "name": "transformed:ui-release:jars:classes",
+          "scope": "compile"
+        },
+        {
+          "type": "library",
+          "name": "androidx.lifecycle:lifecycle-common-jvm:2.9.4",
+          "scope": "compile"
+        },
+        {
+          "type": "library",
+          "name": "org.jetbrains.kotlinx:kotlinx-coroutines-core-jvm:1.8.1",
+          "scope": "compile"
+        },
+        {
+          "type": "library",
+          "name": "transformed:material-1.14.0:jars:classes",
+          "scope": "compile"
+        },
+        {
+          "type": "library",
+          "name": "transformed:runtime-saveable:jars:classes",
+          "scope": "compile"
+        },
+        {
+          "type": "library",
+          "name": "transformed:recyclerview-1.2.1:jars:classes",
+          "scope": "compile"
+        },
+        {
+          "type": "library",
+          "name": "androidx.resourceinspection:resourceinspection-annotation:1.0.1",
+          "scope": "compile"
+        },
+        {
+          "type": "library",
+          "name": "transformed:animation:jars:classes",
+          "scope": "compile"
+        },
+        {
+          "type": "library",
+          "name": "transformed:annotation-experimental-1.4.1:jars:classes",
+          "scope": "compile"
+        },
+        {
+          "type": "library",
+          "name": "transformed:vectordrawable-animated-1.1.0:jars:classes",
+          "scope": "compile"
+        },
+        {
+          "type": "library",
+          "name": "transformed:material3:jars:classes",
+          "scope": "compile"
+        },
+        {
+          "type": "library",
+          "name": "transformed:room-ktx-2.6.1:jars:classes",
+          "scope": "compile"
+        },
+        {
+          "type": "library",
+          "name": "transformed:viewpager-1.0.0:jars:classes",
+          "scope": "compile"
+        },
+        {
+          "type": "library",
+          "name": "transformed:foundation-layout:jars:classes",
+          "scope": "compile"
+        },
+        {
+          "type": "library",
+          "name": "androidx.collection:collection-jvm:1.5.0",
+          "scope": "compile"
+        },
+        {
+          "type": "library",
+          "name": "transformed:sqlite-2.4.0:jars:classes",
+          "scope": "compile"
+        },
+        {
+          "type": "library",
+          "name": "transformed:core-viewtree-1.0.0:jars:classes",
+          "scope": "compile"
+        },
+        {
+          "type": "library",
+          "name": "transformed:lifecycle-viewmodel-compose-release:jars:classes",
+          "scope": "compile"
+        },
+        {
+          "type": "library",
+          "name": "transformed:activity-compose-1.11.0:jars:classes",
+          "scope": "compile"
+        },
+        {
+          "type": "library",
+          "name": "com.squareup.okio:okio-jvm:3.6.0",
+          "scope": "compile"
+        },
+        {
+          "type": "library",
+          "name": "transformed:constraintlayout-2.2.1:jars:classes",
+          "scope": "compile"
+        },
+        {
+          "type": "library",
+          "name": "androidx.constraintlayout:constraintlayout-core:1.1.1",
+          "scope": "compile"
+        },
+        {
+          "type": "library",
+          "name": "transformed:lifecycle-runtime-ktx:jars:classes",
+          "scope": "compile"
+        },
+        {
+          "type": "library",
+          "name": "org.jetbrains.kotlin:kotlin-stdlib-jdk8:1.9.10",
+          "scope": "compile"
+        },
+        {
+          "type": "library",
+          "name": "transformed:lifecycle-livedata-2.9.4:jars:classes",
+          "scope": "compile"
+        },
+        {
+          "type": "library",
+          "name": "org.jetbrains.kotlin:kotlin-stdlib:2.1.0",
+          "scope": "compile"
+        },
+        {
+          "type": "library",
+          "name": "transformed:runtime:jars:classes",
+          "scope": "compile"
+        },
+        {
+          "type": "library",
+          "name": "transformed:cursoradapter-1.0.0:jars:classes",
+          "scope": "compile"
+        },
+        {
+          "type": "library",
+          "name": "transformed:ui-util:jars:classes",
+          "scope": "compile"
+        },
+        {
+          "type": "library",
+          "name": "transformed:ui-graphics-release:jars:classes",
+          "scope": "compile"
+        },
+        {
+          "type": "library",
+          "name": "transformed:lifecycle-livedata-core-2.9.4:jars:classes",
+          "scope": "compile"
+        },
+        {
+          "type": "library",
+          "name": "transformed:ui-tooling-preview:jars:classes",
+          "scope": "compile"
+        },
+        {
+          "type": "library",
+          "name": "org.jetbrains.kotlinx:kotlinx-serialization-core-jvm:1.7.3",
+          "scope": "compile"
+        },
+        {
+          "type": "library",
+          "name": "transformed:versionedparcelable-1.1.1:jars:classes",
+          "scope": "compile"
+        },
+        {
+          "type": "library",
+          "name": "transformed:startup-runtime-1.1.1:jars:classes",
+          "scope": "compile"
+        },
+        {
+          "type": "library",
+          "name": "transformed:dynamicanimation-1.1.0:jars:classes",
+          "scope": "compile"
+        },
+        {
+          "type": "library",
+          "name": "transformed:material-icons-core-release:jars:classes",
+          "scope": "compile"
+        },
+        {
+          "type": "library",
+          "name": "transformed:interpolator-1.0.0:jars:classes",
+          "scope": "compile"
+        },
+        {
+          "type": "library",
+          "name": "org.jspecify:jspecify:1.0.0",
+          "scope": "compile"
+        },
+        {
+          "type": "library",
+          "name": "transformed:graphics-path-1.0.1:jars:classes",
+          "scope": "compile"
+        },
+        {
+          "type": "library",
+          "name": "transformed:activity-1.11.0:jars:classes",
+          "scope": "compile"
+        },
+        {
+          "type": "library",
+          "name": "transformed:ui-test-manifest-1.9.4:jars:classes",
+          "scope": "compile"
+        },
+        {
+          "type": "library",
+          "name": "transformed:ui-tooling:jars:classes",
+          "scope": "compile"
+        },
+        {
+          "type": "library",
+          "name": "transformed:lifecycle-process-2.9.4:jars:classes",
+          "scope": "compile"
+        },
+        {
+          "type": "library",
+          "name": "transformed:savedstate-ktx-1.3.3:jars:classes",
+          "scope": "compile"
+        },
+        {
+          "type": "library",
+          "name": "androidx.annotation:annotation-jvm:1.9.1",
+          "scope": "compile"
+        },
+        {
+          "type": "library",
+          "name": "transformed:lifecycle-runtime-compose-release:jars:classes",
+          "scope": "compile"
+        },
+        {
+          "type": "library",
+          "name": "org.jetbrains:annotations:23.0.0",
+          "scope": "compile"
+        },
+        {
+          "type": "library",
+          "name": "transformed:vectordrawable-1.1.0:jars:classes",
+          "scope": "compile"
+        },
+        {
+          "type": "library",
+          "name": "transformed:drawerlayout-1.1.1:jars:classes",
+          "scope": "compile"
+        },
+        {
+          "type": "library",
+          "name": "transformed:cardview-1.0.0:jars:classes",
+          "scope": "compile"
+        },
+        {
+          "type": "library",
+          "name": "transformed:savedstate-compose:jars:classes",
+          "scope": "compile"
+        },
+        {
+          "type": "library",
+          "name": "androidx.arch.core:core-common:2.2.0",
+          "scope": "compile"
+        },
+        {
+          "type": "library",
+          "name": "transformed:ui-geometry:jars:classes",
+          "scope": "compile"
+        },
+        {
+          "type": "library",
+          "name": "androidx.lifecycle:lifecycle-common-java8:2.9.4",
+          "scope": "compile"
+        },
+        {
+          "type": "library",
+          "name": "transformed:material:jars:classes",
+          "scope": "compile"
+        },
+        {
+          "type": "library",
+          "name": "transformed:lifecycle-viewmodel-release:jars:classes",
+          "scope": "compile"
+        },
+        {
+          "type": "library",
+          "name": "com.google.errorprone:error_prone_annotations:2.15.0",
+          "scope": "compile"
+        },
+        {
+          "type": "library",
+          "name": "transformed:customview-1.2.0:jars:classes",
+          "scope": "compile"
+        },
+        {
+          "type": "library",
+          "name": "transformed:room-runtime-2.6.1:jars:classes",
+          "scope": "compile"
+        },
+        {
+          "type": "library",
+          "name": "transformed:animation-core:jars:classes",
+          "scope": "compile"
+        },
+        {
+          "type": "library",
+          "name": "transformed:customview-poolingcontainer-1.0.0:jars:classes",
+          "scope": "compile"
+        },
+        {
+          "type": "library",
+          "name": "transformed:lifecycle-viewmodel-ktx-2.9.4:jars:classes",
+          "scope": "compile"
+        },
+        {
+          "type": "library",
+          "name": "transformed:lifecycle-livedata-core-ktx-2.9.4:jars:classes",
+          "scope": "compile"
+        },
+        {
+          "type": "library",
+          "name": "androidx.concurrent:concurrent-futures:1.1.0",
+          "scope": "compile"
+        },
+        {
+          "type": "library",
+          "name": "transformed:material-icons-extended-release:jars:classes",
+          "scope": "compile"
+        },
+        {
+          "type": "library",
+          "name": "org.jetbrains.kotlinx:kotlinx-coroutines-android:1.8.1",
+          "scope": "compile"
+        },
+        {
+          "type": "library",
+          "name": "org.jetbrains.kotlin:kotlin-stdlib-jdk7:1.9.10",
+          "scope": "compile"
+        },
+        {
+          "type": "library",
+          "name": "com.squareup.okhttp3:okhttp:4.12.0",
+          "scope": "compile"
+        },
+        {
+          "type": "library",
+          "name": "transformed:loader-1.0.0:jars:classes",
+          "scope": "compile"
+        },
+        {
+          "type": "library",
+          "name": "transformed:autofill-1.0.0:jars:classes",
+          "scope": "compile"
+        },
+        {
+          "type": "library",
+          "name": "transformed:core-ktx-1.17.0:jars:classes",
+          "scope": "compile"
+        },
+        {
+          "type": "library",
+          "name": "transformed:appcompat-resources-1.7.0:jars:classes",
+          "scope": "compile"
+        },
+        {
+          "type": "library",
+          "name": "transformed:foundation-release:jars:classes",
+          "scope": "compile"
+        },
+        {
+          "type": "library",
+          "name": "transformed:lifecycle-runtime-release:jars:classes",
+          "scope": "compile"
+        },
+        {
+          "type": "library",
+          "name": "transformed:emoji2-1.4.0:jars:classes",
+          "scope": "compile"
+        },
+        {
+          "type": "library",
+          "name": "emoji2-1.4.0:jars:libs:repackaged",
+          "scope": "compile"
+        },
+        {
+          "type": "library",
+          "name": "transformed:tracing-1.2.0:jars:classes",
+          "scope": "compile"
+        },
+        {
+          "type": "library",
+          "name": "transformed:profileinstaller-1.4.0:jars:classes",
+          "scope": "compile"
+        },
+        {
+          "type": "library",
+          "name": "androidx.collection:collection-ktx:1.5.0",
+          "scope": "compile"
+        },
+        {
+          "type": "library",
+          "name": "transformed:core-1.17.0:jars:classes",
+          "scope": "compile"
+        },
+        {
+          "type": "library",
+          "name": "transformed:graphics-shapes-release:jars:classes",
+          "scope": "compile"
+        },
+        {
+          "type": "library",
+          "name": "transformed:fragment-1.5.4:jars:classes",
+          "scope": "compile"
+        },
+        {
+          "type": "library",
+          "name": "compile_and_runtime_not_namespaced_r_class_jar:debug:processDebugResources:R",
+          "scope": "compile"
+        }
+      ]
+    }
+  ],
+  "libraries": [
+    {
+      "name": "android-36",
+      "type": "COMPILE",
+      "roots": [
+        {
+          "path": "/home/Android/Sdk/platforms/android-36/android.jar",
+          "type": "CLASSES"
+        }
+      ]
+    },
+    {
+      "name": "jdk-stubs",
+      "type": "COMPILE",
+      "roots": [
+        {
+          "path": "/home/lsp/jdk-stubs.jar",
+          "type": "CLASSES"
+        }
+      ]
+    },
+    {
+      "name": "transformed:lifecycle-viewmodel-savedstate-release:jars:classes",
+      "type": "COMPILE",
+      "roots": [
+        {
+          "path": "/home/.gradle/caches/9.0.0/transforms/ef94b6dd84fd668398a6103f5d07489f/transformed/lifecycle-viewmodel-savedstate-release/jars/classes.jar",
+          "type": "CLASSES"
+        }
+      ]
+    },
+    {
+      "name": "transformed:transition-1.5.0:jars:classes",
+      "type": "COMPILE",
+      "roots": [
+        {
+          "path": "/home/.gradle/caches/9.0.0/transforms/6b4161654aaa02fbf1053df0e8c44cbf/transformed/transition-1.5.0/jars/classes.jar",
+          "type": "CLASSES"
+        }
+      ]
+    },
+    {
+      "name": "transformed:runtime-annotation:jars:classes",
+      "type": "COMPILE",
+      "roots": [
+        {
+          "path": "/home/.gradle/caches/9.0.0/transforms/2fb396308911abf110327ddb9a0f7047/transformed/runtime-annotation/jars/classes.jar",
+          "type": "CLASSES"
+        }
+      ]
+    },
+    {
+      "name": "transformed:activity-ktx-1.11.0:jars:classes",
+      "type": "COMPILE",
+      "roots": [
+        {
+          "path": "/home/.gradle/caches/9.0.0/transforms/8d2d3c680277179d60a5fa9a6145ca49/transformed/activity-ktx-1.11.0/jars/classes.jar",
+          "type": "CLASSES"
+        }
+      ]
+    },
+    {
+      "name": "transformed:ui-unit:jars:classes",
+      "type": "COMPILE",
+      "roots": [
+        {
+          "path": "/home/.gradle/caches/9.0.0/transforms/c7b416456da3b8c10a28ba07d343e69d/transformed/ui-unit/jars/classes.jar",
+          "type": "CLASSES"
+        }
+      ]
+    },
+    {
+      "name": "androidx.room:room-common:2.6.1",
+      "type": "COMPILE",
+      "roots": [
+        {
+          "path": "/home/.gradle/caches/modules-2/files-2.1/androidx.room/room-common/2.6.1/ff1b9580850a9b7eef56554e356628d225785265/room-common-2.6.1.jar",
+          "type": "CLASSES"
+        }
+      ]
+    },
+    {
+      "name": "transformed:sqlite-framework-2.4.0:jars:classes",
+      "type": "COMPILE",
+      "roots": [
+        {
+          "path": "/home/.gradle/caches/9.0.0/transforms/0d9840645a5bb6183c4b17288aee7bed/transformed/sqlite-framework-2.4.0/jars/classes.jar",
+          "type": "CLASSES"
+        }
+      ]
+    },
+    {
+      "name": "transformed:ui-text:jars:classes",
+      "type": "COMPILE",
+      "roots": [
+        {
+          "path": "/home/.gradle/caches/9.0.0/transforms/0476377e5343db1a53172eeefe4f18b3/transformed/ui-text/jars/classes.jar",
+          "type": "CLASSES"
+        }
+      ]
+    },
+    {
+      "name": "transformed:coordinatorlayout-1.1.0:jars:classes",
+      "type": "COMPILE",
+      "roots": [
+        {
+          "path": "/home/.gradle/caches/9.0.0/transforms/ddbff462c1e820b5d05ab045ebb7f1d0/transformed/coordinatorlayout-1.1.0/jars/classes.jar",
+          "type": "CLASSES"
+        }
+      ]
+    },
+    {
+      "name": "transformed:material-ripple:jars:classes",
+      "type": "COMPILE",
+      "roots": [
+        {
+          "path": "/home/.gradle/caches/9.0.0/transforms/d74552c121313cb67f91597df8b30e2b/transformed/material-ripple/jars/classes.jar",
+          "type": "CLASSES"
+        }
+      ]
+    },
+    {
+      "name": "com.google.guava:listenablefuture:1.0",
+      "type": "COMPILE",
+      "roots": [
+        {
+          "path": "/home/.gradle/caches/modules-2/files-2.1/com.google.guava/listenablefuture/1.0/c949a840a6acbc5268d088e47b04177bf90b3cad/listenablefuture-1.0.jar",
+          "type": "CLASSES"
+        }
+      ]
+    },
+    {
+      "name": "transformed:appcompat-1.7.0:jars:classes",
+      "type": "COMPILE",
+      "roots": [
+        {
+          "path": "/home/.gradle/caches/9.0.0/transforms/134aefedc232cc104d626203b4e572b4/transformed/appcompat-1.7.0/jars/classes.jar",
+          "type": "CLASSES"
+        }
+      ]
+    },
+    {
+      "name": "transformed:viewpager2-1.0.0:jars:classes",
+      "type": "COMPILE",
+      "roots": [
+        {
+          "path": "/home/.gradle/caches/9.0.0/transforms/09717a58a9bec378d3661c884b71001e/transformed/viewpager2-1.0.0/jars/classes.jar",
+          "type": "CLASSES"
+        }
+      ]
+    },
+    {
+      "name": "transformed:core-runtime-2.2.0:jars:classes",
+      "type": "COMPILE",
+      "roots": [
+        {
+          "path": "/home/.gradle/caches/9.0.0/transforms/afa50d0cee4c1c9c3cf848603921e641/transformed/core-runtime-2.2.0/jars/classes.jar",
+          "type": "CLASSES"
+        }
+      ]
+    },
+    {
+      "name": "transformed:savedstate-release:jars:classes",
+      "type": "COMPILE",
+      "roots": [
+        {
+          "path": "/home/.gradle/caches/9.0.0/transforms/dd6cd81e41c8d5b6cbebb61cd1a62f51/transformed/savedstate-release/jars/classes.jar",
+          "type": "CLASSES"
+        }
+      ]
+    },
+    {
+      "name": "transformed:ui-tooling-data:jars:classes",
+      "type": "COMPILE",
+      "roots": [
+        {
+          "path": "/home/.gradle/caches/9.0.0/transforms/4f314696d7890b43223bb7a913809e22/transformed/ui-tooling-data/jars/classes.jar",
+          "type": "CLASSES"
+        }
+      ]
+    },
+    {
+      "name": "transformed:emoji2-views-helper-1.4.0:jars:classes",
+      "type": "COMPILE",
+      "roots": [
+        {
+          "path": "/home/.gradle/caches/9.0.0/transforms/0f886e8bb19258e6c81fedb438612155/transformed/emoji2-views-helper-1.4.0/jars/classes.jar",
+          "type": "CLASSES"
+        }
+      ]
+    },
+    {
+      "name": "transformed:ui-release:jars:classes",
+      "type": "COMPILE",
+      "roots": [
+        {
+          "path": "/home/.gradle/caches/9.0.0/transforms/75829544ab58f3d67400e9eb66be962c/transformed/ui-release/jars/classes.jar",
+          "type": "CLASSES"
+        }
+      ]
+    },
+    {
+      "name": "androidx.lifecycle:lifecycle-common-jvm:2.9.4",
+      "type": "COMPILE",
+      "roots": [
+        {
+          "path": "/home/.gradle/caches/modules-2/files-2.1/androidx.lifecycle/lifecycle-common-jvm/2.9.4/ab739bccdb3541983385af169565c7c035d897e7/lifecycle-common-jvm-2.9.4.jar",
+          "type": "CLASSES"
+        }
+      ]
+    },
+    {
+      "name": "org.jetbrains.kotlinx:kotlinx-coroutines-core-jvm:1.8.1",
+      "type": "COMPILE",
+      "roots": [
+        {
+          "path": "/home/.gradle/caches/modules-2/files-2.1/org.jetbrains.kotlinx/kotlinx-coroutines-core-jvm/1.8.1/bb0e192bd7c2b6b8217440d36e9758e377e450/kotlinx-coroutines-core-jvm-1.8.1.jar",
+          "type": "CLASSES"
+        }
+      ]
+    },
+    {
+      "name": "transformed:material-1.14.0:jars:classes",
+      "type": "COMPILE",
+      "roots": [
+        {
+          "path": "/home/.gradle/caches/9.0.0/transforms/7e976785597a14a159d6c2860a382eb5/transformed/material-1.14.0/jars/classes.jar",
+          "type": "CLASSES"
+        }
+      ]
+    },
+    {
+      "name": "transformed:runtime-saveable:jars:classes",
+      "type": "COMPILE",
+      "roots": [
+        {
+          "path": "/home/.gradle/caches/9.0.0/transforms/360b5e08194ac9588003c21c3f24f04b/transformed/runtime-saveable/jars/classes.jar",
+          "type": "CLASSES"
+        }
+      ]
+    },
+    {
+      "name": "transformed:recyclerview-1.2.1:jars:classes",
+      "type": "COMPILE",
+      "roots": [
+        {
+          "path": "/home/.gradle/caches/9.0.0/transforms/d68491840458b251ffec418f8d92078a/transformed/recyclerview-1.2.1/jars/classes.jar",
+          "type": "CLASSES"
+        }
+      ]
+    },
+    {
+      "name": "androidx.resourceinspection:resourceinspection-annotation:1.0.1",
+      "type": "COMPILE",
+      "roots": [
+        {
+          "path": "/home/.gradle/caches/modules-2/files-2.1/androidx.resourceinspection/resourceinspection-annotation/1.0.1/8c21f8ff5d96d5d52c948707f7e4d6ca6773feef/resourceinspection-annotation-1.0.1.jar",
+          "type": "CLASSES"
+        }
+      ]
+    },
+    {
+      "name": "transformed:animation:jars:classes",
+      "type": "COMPILE",
+      "roots": [
+        {
+          "path": "/home/.gradle/caches/9.0.0/transforms/d70143e4d4564fdf501d0af6ff5437d6/transformed/animation/jars/classes.jar",
+          "type": "CLASSES"
+        }
+      ]
+    },
+    {
+      "name": "transformed:annotation-experimental-1.4.1:jars:classes",
+      "type": "COMPILE",
+      "roots": [
+        {
+          "path": "/home/.gradle/caches/9.0.0/transforms/7a5f72fc6a012004df055becee7abc3c/transformed/annotation-experimental-1.4.1/jars/classes.jar",
+          "type": "CLASSES"
+        }
+      ]
+    },
+    {
+      "name": "transformed:vectordrawable-animated-1.1.0:jars:classes",
+      "type": "COMPILE",
+      "roots": [
+        {
+          "path": "/home/.gradle/caches/9.0.0/transforms/63e8a49dc21b0221c0148c7810268dd2/transformed/vectordrawable-animated-1.1.0/jars/classes.jar",
+          "type": "CLASSES"
+        }
+      ]
+    },
+    {
+      "name": "transformed:material3:jars:classes",
+      "type": "COMPILE",
+      "roots": [
+        {
+          "path": "/home/.gradle/caches/9.0.0/transforms/803d66c321d4bea78670b422e2cac88e/transformed/material3/jars/classes.jar",
+          "type": "CLASSES"
+        }
+      ]
+    },
+    {
+      "name": "transformed:room-ktx-2.6.1:jars:classes",
+      "type": "COMPILE",
+      "roots": [
+        {
+          "path": "/home/.gradle/caches/9.0.0/transforms/daf4d4388a44c75d440fb902e7e5a567/transformed/room-ktx-2.6.1/jars/classes.jar",
+          "type": "CLASSES"
+        }
+      ]
+    },
+    {
+      "name": "transformed:viewpager-1.0.0:jars:classes",
+      "type": "COMPILE",
+      "roots": [
+        {
+          "path": "/home/.gradle/caches/9.0.0/transforms/7501cd49246fde4e9cc323d1908513d7/transformed/viewpager-1.0.0/jars/classes.jar",
+          "type": "CLASSES"
+        }
+      ]
+    },
+    {
+      "name": "transformed:foundation-layout:jars:classes",
+      "type": "COMPILE",
+      "roots": [
+        {
+          "path": "/home/.gradle/caches/9.0.0/transforms/bb5fccab379a2ad4f34e0b5f583a440a/transformed/foundation-layout/jars/classes.jar",
+          "type": "CLASSES"
+        }
+      ]
+    },
+    {
+      "name": "androidx.collection:collection-jvm:1.5.0",
+      "type": "COMPILE",
+      "roots": [
+        {
+          "path": "/home/.gradle/caches/modules-2/files-2.1/androidx.collection/collection-jvm/1.5.0/7ba2c69414d46ebc2dd76598bdd0a75c54281a57/collection-jvm-1.5.0.jar",
+          "type": "CLASSES"
+        }
+      ]
+    },
+    {
+      "name": "transformed:sqlite-2.4.0:jars:classes",
+      "type": "COMPILE",
+      "roots": [
+        {
+          "path": "/home/.gradle/caches/9.0.0/transforms/9f6b9aa7686a273ad2ff4583389891db/transformed/sqlite-2.4.0/jars/classes.jar",
+          "type": "CLASSES"
+        }
+      ]
+    },
+    {
+      "name": "transformed:core-viewtree-1.0.0:jars:classes",
+      "type": "COMPILE",
+      "roots": [
+        {
+          "path": "/home/.gradle/caches/9.0.0/transforms/494fa220ca9101327ad61657075e03bc/transformed/core-viewtree-1.0.0/jars/classes.jar",
+          "type": "CLASSES"
+        }
+      ]
+    },
+    {
+      "name": "transformed:lifecycle-viewmodel-compose-release:jars:classes",
+      "type": "COMPILE",
+      "roots": [
+        {
+          "path": "/home/.gradle/caches/9.0.0/transforms/5307770b44c3fd149e0b3ac78f0924af/transformed/lifecycle-viewmodel-compose-release/jars/classes.jar",
+          "type": "CLASSES"
+        }
+      ]
+    },
+    {
+      "name": "transformed:activity-compose-1.11.0:jars:classes",
+      "type": "COMPILE",
+      "roots": [
+        {
+          "path": "/home/.gradle/caches/9.0.0/transforms/49d25f26f19c069d02ed3c999596d3d7/transformed/activity-compose-1.11.0/jars/classes.jar",
+          "type": "CLASSES"
+        }
+      ]
+    },
+    {
+      "name": "com.squareup.okio:okio-jvm:3.6.0",
+      "type": "COMPILE",
+      "roots": [
+        {
+          "path": "/home/.gradle/caches/modules-2/files-2.1/com.squareup.okio/okio-jvm/3.6.0/5600569133b7bdefe1daf9ec7f4abeb6d13e1786/okio-jvm-3.6.0.jar",
+          "type": "CLASSES"
+        }
+      ]
+    },
+    {
+      "name": "transformed:constraintlayout-2.2.1:jars:classes",
+      "type": "COMPILE",
+      "roots": [
+        {
+          "path": "/home/.gradle/caches/9.0.0/transforms/30654f6191587afef786f146216052f0/transformed/constraintlayout-2.2.1/jars/classes.jar",
+          "type": "CLASSES"
+        }
+      ]
+    },
+    {
+      "name": "androidx.constraintlayout:constraintlayout-core:1.1.1",
+      "type": "COMPILE",
+      "roots": [
+        {
+          "path": "/home/.gradle/caches/modules-2/files-2.1/androidx.constraintlayout/constraintlayout-core/1.1.1/f7ab6170b99b9421bd4942846426ff820b552f7d/constraintlayout-core-1.1.1.jar",
+          "type": "CLASSES"
+        }
+      ]
+    },
+    {
+      "name": "transformed:lifecycle-runtime-ktx:jars:classes",
+      "type": "COMPILE",
+      "roots": [
+        {
+          "path": "/home/.gradle/caches/9.0.0/transforms/09b81042b0f7a0bdfb82634a0ea6a139/transformed/lifecycle-runtime-ktx/jars/classes.jar",
+          "type": "CLASSES"
+        }
+      ]
+    },
+    {
+      "name": "org.jetbrains.kotlin:kotlin-stdlib-jdk8:1.9.10",
+      "type": "COMPILE",
+      "roots": [
+        {
+          "path": "/home/.gradle/caches/modules-2/files-2.1/org.jetbrains.kotlin/kotlin-stdlib-jdk8/1.9.10/c7510d64a83411a649c76f2778304ddf71d7437b/kotlin-stdlib-jdk8-1.9.10.jar",
+          "type": "CLASSES"
+        }
+      ]
+    },
+    {
+      "name": "transformed:lifecycle-livedata-2.9.4:jars:classes",
+      "type": "COMPILE",
+      "roots": [
+        {
+          "path": "/home/.gradle/caches/9.0.0/transforms/7cbd73b4e0f0c545e116acdb00e7db6f/transformed/lifecycle-livedata-2.9.4/jars/classes.jar",
+          "type": "CLASSES"
+        }
+      ]
+    },
+    {
+      "name": "org.jetbrains.kotlin:kotlin-stdlib:2.1.0",
+      "type": "COMPILE",
+      "roots": [
+        {
+          "path": "/home/.gradle/caches/modules-2/files-2.1/org.jetbrains.kotlin/kotlin-stdlib/2.1.0/85f8b81009cda5890e54ba67d64b5e599c645020/kotlin-stdlib-2.1.0.jar",
+          "type": "CLASSES"
+        }
+      ]
+    },
+    {
+      "name": "transformed:runtime:jars:classes",
+      "type": "COMPILE",
+      "roots": [
+        {
+          "path": "/home/.gradle/caches/9.0.0/transforms/2c8fc1c5ab358eeeb9af0c7c88eebaf3/transformed/runtime/jars/classes.jar",
+          "type": "CLASSES"
+        }
+      ]
+    },
+    {
+      "name": "transformed:cursoradapter-1.0.0:jars:classes",
+      "type": "COMPILE",
+      "roots": [
+        {
+          "path": "/home/.gradle/caches/9.0.0/transforms/c8a0879083b1c196d0ab7b4523eaab00/transformed/cursoradapter-1.0.0/jars/classes.jar",
+          "type": "CLASSES"
+        }
+      ]
+    },
+    {
+      "name": "transformed:ui-util:jars:classes",
+      "type": "COMPILE",
+      "roots": [
+        {
+          "path": "/home/.gradle/caches/9.0.0/transforms/e104494891afb6be1bf0eb7fada0cd73/transformed/ui-util/jars/classes.jar",
+          "type": "CLASSES"
+        }
+      ]
+    },
+    {
+      "name": "transformed:ui-graphics-release:jars:classes",
+      "type": "COMPILE",
+      "roots": [
+        {
+          "path": "/home/.gradle/caches/9.0.0/transforms/5dec58f27e91c74512b7b8cfadc9a55b/transformed/ui-graphics-release/jars/classes.jar",
+          "type": "CLASSES"
+        }
+      ]
+    },
+    {
+      "name": "transformed:lifecycle-livedata-core-2.9.4:jars:classes",
+      "type": "COMPILE",
+      "roots": [
+        {
+          "path": "/home/.gradle/caches/9.0.0/transforms/39449744007def0ec32dfc1f6aa40ef6/transformed/lifecycle-livedata-core-2.9.4/jars/classes.jar",
+          "type": "CLASSES"
+        }
+      ]
+    },
+    {
+      "name": "transformed:ui-tooling-preview:jars:classes",
+      "type": "COMPILE",
+      "roots": [
+        {
+          "path": "/home/.gradle/caches/9.0.0/transforms/15ff6170b62ee72d3932ff1549be228f/transformed/ui-tooling-preview/jars/classes.jar",
+          "type": "CLASSES"
+        }
+      ]
+    },
+    {
+      "name": "org.jetbrains.kotlinx:kotlinx-serialization-core-jvm:1.7.3",
+      "type": "COMPILE",
+      "roots": [
+        {
+          "path": "/home/.gradle/caches/modules-2/files-2.1/org.jetbrains.kotlinx/kotlinx-serialization-core-jvm/1.7.3/1f226780b845ff9206474c05159245d861556249/kotlinx-serialization-core-jvm-1.7.3.jar",
+          "type": "CLASSES"
+        }
+      ]
+    },
+    {
+      "name": "transformed:versionedparcelable-1.1.1:jars:classes",
+      "type": "COMPILE",
+      "roots": [
+        {
+          "path": "/home/.gradle/caches/9.0.0/transforms/0a89dd7ae57da135e810c5b463fa2862/transformed/versionedparcelable-1.1.1/jars/classes.jar",
+          "type": "CLASSES"
+        }
+      ]
+    },
+    {
+      "name": "transformed:startup-runtime-1.1.1:jars:classes",
+      "type": "COMPILE",
+      "roots": [
+        {
+          "path": "/home/.gradle/caches/9.0.0/transforms/2cac33c75ee66f833cac19281a6454c6/transformed/startup-runtime-1.1.1/jars/classes.jar",
+          "type": "CLASSES"
+        }
+      ]
+    },
+    {
+      "name": "transformed:dynamicanimation-1.1.0:jars:classes",
+      "type": "COMPILE",
+      "roots": [
+        {
+          "path": "/home/.gradle/caches/9.0.0/transforms/844ed3282ec7a6733c659fafde2728b0/transformed/dynamicanimation-1.1.0/jars/classes.jar",
+          "type": "CLASSES"
+        }
+      ]
+    },
+    {
+      "name": "transformed:material-icons-core-release:jars:classes",
+      "type": "COMPILE",
+      "roots": [
+        {
+          "path": "/home/.gradle/caches/9.0.0/transforms/e9f28a0e1763c829fb9c31ae41697feb/transformed/material-icons-core-release/jars/classes.jar",
+          "type": "CLASSES"
+        }
+      ]
+    },
+    {
+      "name": "transformed:interpolator-1.0.0:jars:classes",
+      "type": "COMPILE",
+      "roots": [
+        {
+          "path": "/home/.gradle/caches/9.0.0/transforms/137841520ce89d2141276b605c89a17c/transformed/interpolator-1.0.0/jars/classes.jar",
+          "type": "CLASSES"
+        }
+      ]
+    },
+    {
+      "name": "org.jspecify:jspecify:1.0.0",
+      "type": "COMPILE",
+      "roots": [
+        {
+          "path": "/home/.gradle/caches/modules-2/files-2.1/org.jspecify/jspecify/1.0.0/7425a601c1c7ec76645a78d22b8c6a627edee507/jspecify-1.0.0.jar",
+          "type": "CLASSES"
+        }
+      ]
+    },
+    {
+      "name": "transformed:graphics-path-1.0.1:jars:classes",
+      "type": "COMPILE",
+      "roots": [
+        {
+          "path": "/home/.gradle/caches/9.0.0/transforms/c6e97fc94438a2d289afa98638434395/transformed/graphics-path-1.0.1/jars/classes.jar",
+          "type": "CLASSES"
+        }
+      ]
+    },
+    {
+      "name": "transformed:activity-1.11.0:jars:classes",
+      "type": "COMPILE",
+      "roots": [
+        {
+          "path": "/home/.gradle/caches/9.0.0/transforms/de081c1df9368e651ab9d5f1a0ec07d9/transformed/activity-1.11.0/jars/classes.jar",
+          "type": "CLASSES"
+        }
+      ]
+    },
+    {
+      "name": "transformed:ui-test-manifest-1.9.4:jars:classes",
+      "type": "COMPILE",
+      "roots": [
+        {
+          "path": "/home/.gradle/caches/9.0.0/transforms/9cc7ae3fcc85b59d98dd32e6c777eb88/transformed/ui-test-manifest-1.9.4/jars/classes.jar",
+          "type": "CLASSES"
+        }
+      ]
+    },
+    {
+      "name": "transformed:ui-tooling:jars:classes",
+      "type": "COMPILE",
+      "roots": [
+        {
+          "path": "/home/.gradle/caches/9.0.0/transforms/d30bcdf99a1f01564587900eea706393/transformed/ui-tooling/jars/classes.jar",
+          "type": "CLASSES"
+        }
+      ]
+    },
+    {
+      "name": "transformed:lifecycle-process-2.9.4:jars:classes",
+      "type": "COMPILE",
+      "roots": [
+        {
+          "path": "/home/.gradle/caches/9.0.0/transforms/28ce16680d91b99cef5b5e4febcbb41d/transformed/lifecycle-process-2.9.4/jars/classes.jar",
+          "type": "CLASSES"
+        }
+      ]
+    },
+    {
+      "name": "transformed:savedstate-ktx-1.3.3:jars:classes",
+      "type": "COMPILE",
+      "roots": [
+        {
+          "path": "/home/.gradle/caches/9.0.0/transforms/d56fb33bf2044d46007a5780f9153761/transformed/savedstate-ktx-1.3.3/jars/classes.jar",
+          "type": "CLASSES"
+        }
+      ]
+    },
+    {
+      "name": "androidx.annotation:annotation-jvm:1.9.1",
+      "type": "COMPILE",
+      "roots": [
+        {
+          "path": "/home/.gradle/caches/modules-2/files-2.1/androidx.annotation/annotation-jvm/1.9.1/b17951747e38bf3986a24431b9ba0d039958aa5f/annotation-jvm-1.9.1.jar",
+          "type": "CLASSES"
+        }
+      ]
+    },
+    {
+      "name": "transformed:lifecycle-runtime-compose-release:jars:classes",
+      "type": "COMPILE",
+      "roots": [
+        {
+          "path": "/home/.gradle/caches/9.0.0/transforms/0ec899186c0bfbe4bfcb8f438b984a05/transformed/lifecycle-runtime-compose-release/jars/classes.jar",
+          "type": "CLASSES"
+        }
+      ]
+    },
+    {
+      "name": "org.jetbrains:annotations:23.0.0",
+      "type": "COMPILE",
+      "roots": [
+        {
+          "path": "/home/.gradle/caches/modules-2/files-2.1/org.jetbrains/annotations/23.0.0/8cc20c07506ec18e0834947b84a864bfc094484e/annotations-23.0.0.jar",
+          "type": "CLASSES"
+        }
+      ]
+    },
+    {
+      "name": "transformed:vectordrawable-1.1.0:jars:classes",
+      "type": "COMPILE",
+      "roots": [
+        {
+          "path": "/home/.gradle/caches/9.0.0/transforms/fa209083023a8df04263f22df15284a2/transformed/vectordrawable-1.1.0/jars/classes.jar",
+          "type": "CLASSES"
+        }
+      ]
+    },
+    {
+      "name": "transformed:drawerlayout-1.1.1:jars:classes",
+      "type": "COMPILE",
+      "roots": [
+        {
+          "path": "/home/.gradle/caches/9.0.0/transforms/79e5f66746ace75034b02146128b56db/transformed/drawerlayout-1.1.1/jars/classes.jar",
+          "type": "CLASSES"
+        }
+      ]
+    },
+    {
+      "name": "transformed:cardview-1.0.0:jars:classes",
+      "type": "COMPILE",
+      "roots": [
+        {
+          "path": "/home/.gradle/caches/9.0.0/transforms/c19998c6c70a4d79e8ec947fb2d7ee98/transformed/cardview-1.0.0/jars/classes.jar",
+          "type": "CLASSES"
+        }
+      ]
+    },
+    {
+      "name": "transformed:savedstate-compose:jars:classes",
+      "type": "COMPILE",
+      "roots": [
+        {
+          "path": "/home/.gradle/caches/9.0.0/transforms/6b8b7b26f7c5d1c3c55ddcee018b2d5e/transformed/savedstate-compose/jars/classes.jar",
+          "type": "CLASSES"
+        }
+      ]
+    },
+    {
+      "name": "androidx.arch.core:core-common:2.2.0",
+      "type": "COMPILE",
+      "roots": [
+        {
+          "path": "/home/.gradle/caches/modules-2/files-2.1/androidx.arch.core/core-common/2.2.0/5e1b8b81dfd5f52c56a8d53b18ca759c19a301f3/core-common-2.2.0.jar",
+          "type": "CLASSES"
+        }
+      ]
+    },
+    {
+      "name": "transformed:ui-geometry:jars:classes",
+      "type": "COMPILE",
+      "roots": [
+        {
+          "path": "/home/.gradle/caches/9.0.0/transforms/834029bc9c12355f3a833ec8183ef35d/transformed/ui-geometry/jars/classes.jar",
+          "type": "CLASSES"
+        }
+      ]
+    },
+    {
+      "name": "androidx.lifecycle:lifecycle-common-java8:2.9.4",
+      "type": "COMPILE",
+      "roots": [
+        {
+          "path": "/home/.gradle/caches/modules-2/files-2.1/androidx.lifecycle/lifecycle-common-java8/2.9.4/86a8e6b9d0ba0c964fdc7223a38b6ce74bcb24dd/lifecycle-common-java8-2.9.4.jar",
+          "type": "CLASSES"
+        }
+      ]
+    },
+    {
+      "name": "transformed:material:jars:classes",
+      "type": "COMPILE",
+      "roots": [
+        {
+          "path": "/home/.gradle/caches/9.0.0/transforms/646fedb45127cee7e3d59b70c1f419cc/transformed/material/jars/classes.jar",
+          "type": "CLASSES"
+        }
+      ]
+    },
+    {
+      "name": "transformed:lifecycle-viewmodel-release:jars:classes",
+      "type": "COMPILE",
+      "roots": [
+        {
+          "path": "/home/.gradle/caches/9.0.0/transforms/986c77a81a627292fde222f3725bb2a6/transformed/lifecycle-viewmodel-release/jars/classes.jar",
+          "type": "CLASSES"
+        }
+      ]
+    },
+    {
+      "name": "com.google.errorprone:error_prone_annotations:2.15.0",
+      "type": "COMPILE",
+      "roots": [
+        {
+          "path": "/home/.gradle/caches/modules-2/files-2.1/com.google.errorprone/error_prone_annotations/2.15.0/38c8485a652f808c8c149150da4e5c2b0bd17f9a/error_prone_annotations-2.15.0.jar",
+          "type": "CLASSES"
+        }
+      ]
+    },
+    {
+      "name": "transformed:customview-1.2.0:jars:classes",
+      "type": "COMPILE",
+      "roots": [
+        {
+          "path": "/home/.gradle/caches/9.0.0/transforms/544bf5f0a62ccf3486724cfc0703dc00/transformed/customview-1.2.0/jars/classes.jar",
+          "type": "CLASSES"
+        }
+      ]
+    },
+    {
+      "name": "transformed:room-runtime-2.6.1:jars:classes",
+      "type": "COMPILE",
+      "roots": [
+        {
+          "path": "/home/.gradle/caches/9.0.0/transforms/6baece5380a621f2ec8ffe01ef2ed95a/transformed/room-runtime-2.6.1/jars/classes.jar",
+          "type": "CLASSES"
+        }
+      ]
+    },
+    {
+      "name": "transformed:animation-core:jars:classes",
+      "type": "COMPILE",
+      "roots": [
+        {
+          "path": "/home/.gradle/caches/9.0.0/transforms/cace92b40309adc58caf227d0b7e2c95/transformed/animation-core/jars/classes.jar",
+          "type": "CLASSES"
+        }
+      ]
+    },
+    {
+      "name": "transformed:customview-poolingcontainer-1.0.0:jars:classes",
+      "type": "COMPILE",
+      "roots": [
+        {
+          "path": "/home/.gradle/caches/9.0.0/transforms/80b3b3fde492bd950b95d37743207234/transformed/customview-poolingcontainer-1.0.0/jars/classes.jar",
+          "type": "CLASSES"
+        }
+      ]
+    },
+    {
+      "name": "transformed:lifecycle-viewmodel-ktx-2.9.4:jars:classes",
+      "type": "COMPILE",
+      "roots": [
+        {
+          "path": "/home/.gradle/caches/9.0.0/transforms/c0476d7531eec23464c32c1bbad02cfa/transformed/lifecycle-viewmodel-ktx-2.9.4/jars/classes.jar",
+          "type": "CLASSES"
+        }
+      ]
+    },
+    {
+      "name": "transformed:lifecycle-livedata-core-ktx-2.9.4:jars:classes",
+      "type": "COMPILE",
+      "roots": [
+        {
+          "path": "/home/.gradle/caches/9.0.0/transforms/5edc64986ada9c2aea2f16880891aa51/transformed/lifecycle-livedata-core-ktx-2.9.4/jars/classes.jar",
+          "type": "CLASSES"
+        }
+      ]
+    },
+    {
+      "name": "androidx.concurrent:concurrent-futures:1.1.0",
+      "type": "COMPILE",
+      "roots": [
+        {
+          "path": "/home/.gradle/caches/modules-2/files-2.1/androidx.concurrent/concurrent-futures/1.1.0/50b7fb98350d5f42a4e49704b03278542293ba48/concurrent-futures-1.1.0.jar",
+          "type": "CLASSES"
+        }
+      ]
+    },
+    {
+      "name": "transformed:material-icons-extended-release:jars:classes",
+      "type": "COMPILE",
+      "roots": [
+        {
+          "path": "/home/.gradle/caches/9.0.0/transforms/57ee6a27f00647a0f372359e6ab81825/transformed/material-icons-extended-release/jars/classes.jar",
+          "type": "CLASSES"
+        }
+      ]
+    },
+    {
+      "name": "org.jetbrains.kotlinx:kotlinx-coroutines-android:1.8.1",
+      "type": "COMPILE",
+      "roots": [
+        {
+          "path": "/home/.gradle/caches/modules-2/files-2.1/org.jetbrains.kotlinx/kotlinx-coroutines-android/1.8.1/73e2acdd18df99dd4849d99f188dff529fc0afe0/kotlinx-coroutines-android-1.8.1.jar",
+          "type": "CLASSES"
+        }
+      ]
+    },
+    {
+      "name": "org.jetbrains.kotlin:kotlin-stdlib-jdk7:1.9.10",
+      "type": "COMPILE",
+      "roots": [
+        {
+          "path": "/home/.gradle/caches/modules-2/files-2.1/org.jetbrains.kotlin/kotlin-stdlib-jdk7/1.9.10/bc5bfc2690338defd5195b05c57562f2194eeb10/kotlin-stdlib-jdk7-1.9.10.jar",
+          "type": "CLASSES"
+        }
+      ]
+    },
+    {
+      "name": "com.squareup.okhttp3:okhttp:4.12.0",
+      "type": "COMPILE",
+      "roots": [
+        {
+          "path": "/home/.gradle/caches/modules-2/files-2.1/com.squareup.okhttp3/okhttp/4.12.0/2f4525d4a200e97e1b87449c2cd9bd2e25b7e8cd/okhttp-4.12.0.jar",
+          "type": "CLASSES"
+        }
+      ]
+    },
+    {
+      "name": "transformed:loader-1.0.0:jars:classes",
+      "type": "COMPILE",
+      "roots": [
+        {
+          "path": "/home/.gradle/caches/9.0.0/transforms/43159c3a2254088a891855e266c74f80/transformed/loader-1.0.0/jars/classes.jar",
+          "type": "CLASSES"
+        }
+      ]
+    },
+    {
+      "name": "transformed:autofill-1.0.0:jars:classes",
+      "type": "COMPILE",
+      "roots": [
+        {
+          "path": "/home/.gradle/caches/9.0.0/transforms/674dfc0b6f60372645e18f1c965c0afe/transformed/autofill-1.0.0/jars/classes.jar",
+          "type": "CLASSES"
+        }
+      ]
+    },
+    {
+      "name": "transformed:core-ktx-1.17.0:jars:classes",
+      "type": "COMPILE",
+      "roots": [
+        {
+          "path": "/home/.gradle/caches/9.0.0/transforms/854bfa206285c5318e6d33543a8e6647/transformed/core-ktx-1.17.0/jars/classes.jar",
+          "type": "CLASSES"
+        }
+      ]
+    },
+    {
+      "name": "transformed:appcompat-resources-1.7.0:jars:classes",
+      "type": "COMPILE",
+      "roots": [
+        {
+          "path": "/home/.gradle/caches/9.0.0/transforms/c9e33d80140437f0e6fbfd3c853ac635/transformed/appcompat-resources-1.7.0/jars/classes.jar",
+          "type": "CLASSES"
+        }
+      ]
+    },
+    {
+      "name": "transformed:foundation-release:jars:classes",
+      "type": "COMPILE",
+      "roots": [
+        {
+          "path": "/home/.gradle/caches/9.0.0/transforms/12feb21693582f943e65ed4713f49fa6/transformed/foundation-release/jars/classes.jar",
+          "type": "CLASSES"
+        }
+      ]
+    },
+    {
+      "name": "transformed:lifecycle-runtime-release:jars:classes",
+      "type": "COMPILE",
+      "roots": [
+        {
+          "path": "/home/.gradle/caches/9.0.0/transforms/02b23de6d84a78b9b1ea3670bda45aa6/transformed/lifecycle-runtime-release/jars/classes.jar",
+          "type": "CLASSES"
+        }
+      ]
+    },
+    {
+      "name": "transformed:emoji2-1.4.0:jars:classes",
+      "type": "COMPILE",
+      "roots": [
+        {
+          "path": "/home/.gradle/caches/9.0.0/transforms/6d620149449fd241694a74d401c5d91b/transformed/emoji2-1.4.0/jars/classes.jar",
+          "type": "CLASSES"
+        }
+      ]
+    },
+    {
+      "name": "emoji2-1.4.0:jars:libs:repackaged",
+      "type": "COMPILE",
+      "roots": [
+        {
+          "path": "/home/.gradle/caches/9.0.0/transforms/6d620149449fd241694a74d401c5d91b/transformed/emoji2-1.4.0/jars/libs/repackaged.jar",
+          "type": "CLASSES"
+        }
+      ]
+    },
+    {
+      "name": "transformed:tracing-1.2.0:jars:classes",
+      "type": "COMPILE",
+      "roots": [
+        {
+          "path": "/home/.gradle/caches/9.0.0/transforms/edc066b7e3d52897a0cd33523c9ebcfb/transformed/tracing-1.2.0/jars/classes.jar",
+          "type": "CLASSES"
+        }
+      ]
+    },
+    {
+      "name": "transformed:profileinstaller-1.4.0:jars:classes",
+      "type": "COMPILE",
+      "roots": [
+        {
+          "path": "/home/.gradle/caches/9.0.0/transforms/6b407a1440f1bb54ba21870106812ab5/transformed/profileinstaller-1.4.0/jars/classes.jar",
+          "type": "CLASSES"
+        }
+      ]
+    },
+    {
+      "name": "androidx.collection:collection-ktx:1.5.0",
+      "type": "COMPILE",
+      "roots": [
+        {
+          "path": "/home/.gradle/caches/modules-2/files-2.1/androidx.collection/collection-ktx/1.5.0/27c78a926a16a1bf792b2285cf2834e8caae4a07/collection-ktx-1.5.0.jar",
+          "type": "CLASSES"
+        }
+      ]
+    },
+    {
+      "name": "transformed:core-1.17.0:jars:classes",
+      "type": "COMPILE",
+      "roots": [
+        {
+          "path": "/home/.gradle/caches/9.0.0/transforms/769bbf82827fbf32eb5e01407754d7cb/transformed/core-1.17.0/jars/classes.jar",
+          "type": "CLASSES"
+        }
+      ]
+    },
+    {
+      "name": "transformed:graphics-shapes-release:jars:classes",
+      "type": "COMPILE",
+      "roots": [
+        {
+          "path": "/home/.gradle/caches/9.0.0/transforms/d8a9ef1b49a908a01acf626cd668ba39/transformed/graphics-shapes-release/jars/classes.jar",
+          "type": "CLASSES"
+        }
+      ]
+    },
+    {
+      "name": "transformed:fragment-1.5.4:jars:classes",
+      "type": "COMPILE",
+      "roots": [
+        {
+          "path": "/home/.gradle/caches/9.0.0/transforms/d2c1c6c5981a5ac1e83f5d6489350662/transformed/fragment-1.5.4/jars/classes.jar",
+          "type": "CLASSES"
+        }
+      ]
+    },
+    {
+      "name": "compile_and_runtime_not_namespaced_r_class_jar:debug:processDebugResources:R",
+      "type": "COMPILE",
+      "roots": [
+        {
+          "path": "/storage/emulated/0/AndroidIDEProjects/YunX/app/build/intermediates/compile_and_runtime_not_namespaced_r_class_jar/debug/processDebugResources/R.jar",
+          "type": "CLASSES"
+        }
+      ]
+    }
+  ],
+  "sdks": [
+    {
+      "name": "21",
+      "type": "jdk",
+      "version": "JDK_21",
+      "homePath": "/opt/temurin/current",
+      "roots": [
+        {
+          "url": "jar:///home/lsp/jdk-stubs.jar!/",
+          "type": "CLASSES"
+        }
+      ],
+      "additionalData": ""
+    }
+  ],
+  "kotlinSettings": [
+    {
+      "name": "YunX",
+      "module": "YunX",
+      "useProjectSettings": false,
+      "sourceRoots": [],
+      "configFileItems": [],
+      "implementedModuleNames": [],
+      "dependsOnModuleNames": [],
+      "additionalVisibleModuleNames": [],
+      "productionOutputPath": null,
+      "testOutputPath": null,
+      "sourceSetNames": [],
+      "isTestModule": false,
+      "externalProjectId": "",
+      "isHmppEnabled": false,
+      "pureKotlinSourceFolders": [],
+      "kind": "default",
+      "compilerArguments": "J{\"pluginClasspaths\":[\"/home/acslab/lsp/kotlin/lib/kotlin-compose-compiler-plugin-embeddable-2.3.0.jar\"]}",
+      "additionalArguments": null,
+      "scriptTemplates": null,
+      "scriptTemplatesClasspath": null,
+      "copyJsLibraryFiles": false,
+      "outputDirectoryForJsLibraryFiles": null,
+      "targetPlatform": null,
+      "externalSystemRunTasks": [],
+      "version": 1,
+      "flushNeeded": false
+    },
+    {
+      "name": "app",
+      "module": "app",
+      "useProjectSettings": false,
+      "sourceRoots": [],
+      "configFileItems": [],
+      "implementedModuleNames": [],
+      "dependsOnModuleNames": [],
+      "additionalVisibleModuleNames": [],
+      "productionOutputPath": null,
+      "testOutputPath": null,
+      "sourceSetNames": [],
+      "isTestModule": false,
+      "externalProjectId": "",
+      "isHmppEnabled": false,
+      "pureKotlinSourceFolders": [],
+      "kind": "default",
+      "compilerArguments": "J{\"pluginClasspaths\":[\"/home/acslab/lsp/kotlin/lib/kotlin-compose-compiler-plugin-embeddable-2.3.0.jar\"]}",
+      "additionalArguments": null,
+      "scriptTemplates": null,
+      "scriptTemplatesClasspath": null,
+      "copyJsLibraryFiles": false,
+      "outputDirectoryForJsLibraryFiles": null,
+      "targetPlatform": null,
+      "externalSystemRunTasks": [],
+      "version": 1,
+      "flushNeeded": false
+    }
+  ],
+  "javaSettings": [
+    {
+      "module": "YunX",
+      "inheritedCompilerOutput": false,
+      "excludeOutput": false,
+      "compilerOutput": null,
+      "compilerOutputForTests": null,
+      "languageLevelId": "JDK_21",
+      "manifestAttributes": {}
+    },
+    {
+      "module": "app",
+      "inheritedCompilerOutput": false,
+      "excludeOutput": false,
+      "compilerOutput": null,
+      "compilerOutputForTests": null,
+      "languageLevelId": "JDK_17",
+      "manifestAttributes": {}
+    }
+  ]
+}

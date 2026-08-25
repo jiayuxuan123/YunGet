@@ -1,0 +1,12 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- FileProvider 共享路径：导出日志、打开/安装已下载文件等场景使用 -->
+<paths>
+    <!-- 内部缓存目录：cacheDir/logs -->
+    <cache-path name="cache_logs" path="logs/" />
+    <!-- 崩溃日志目录：filesDir/crash -->
+    <files-path name="files_crash" path="crash/" />
+    <!-- 公共下载目录：Environment.getExternalStoragePublicDirectory(DIRECTORY_DOWNLOADS)（Android 9- 保存位置） -->
+    <external-path name="downloads" path="Download/" />
+    <!-- 兜底：外部存储根下其他目录（部分设备下载目录路径差异） -->
+    <external-path name="external_files" path="." />
+</paths>
