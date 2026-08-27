@@ -34,13 +34,6 @@ import java.util.concurrent.atomic.AtomicLong
 import kotlin.coroutines.coroutineContext
 import kotlin.math.min
 
-/** 实时下载统计（用于 UI 展示速度/剩余时间/线程数） */
-data class DownloadStats(
-    val speed: Long = 0L,        // 字节/秒
-    val remainMillis: Long = -1L, // 剩余时间（毫秒），未知为 -1
-    val chunkCount: Int = 1       // 分片（线程）数
-)
-
 private const val TAG = "YunGet-DL"
 
 /** 单文件 Range 分片的安全并发上限。迅雷等 CDN 对单文件并发 Range 有阈值，
@@ -55,7 +48,7 @@ private const val RANGE_WORKERS_CAP = 8
  * - 断点续传：part 文件保留，暂停/重启后从已有大小继续；
  * - 完成后合并分片并保存到公共 Download 目录。
  */
-class DownloadManager(
+class LegacyDownloadManager(
     private val context: Context,
     private val dao: DownloadTaskDao,
     private val downloader: ChunkDownloader,

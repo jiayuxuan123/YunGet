@@ -62,7 +62,6 @@ import androidx.activity.result.contract.ActivityResultContracts
 import androidx.core.content.ContextCompat
 import com.yunget.app.data.db.AppDatabase
 import com.yunget.app.data.db.DownloadTaskEntity
-import com.yunget.app.data.download.ChunkDownloader
 import com.yunget.app.data.download.DownloadManager
 import com.yunget.app.data.backup.AuthBackupManager
 import com.yunget.app.data.network.BaiduApi
@@ -214,13 +213,14 @@ fun MainScreen() {
         )
     }
     // 下载管理器：OkHttp 分片下载器 + Room 任务持久化 + 可配置线程数（设置页动态生效）
-    // 下载客户端由全局 HttpClients 统一管理（大 Dispatcher 保障分片并发，不锁死 CDN host；
-    // 并支持隐藏菜单「忽略 SSL 证书」开关，抓包调试时即时生效，无需重启）
+    // 下载内核由 TurboDL SDK（dev.turbodl）驱动：多线程 Range 分片 / 动态分段 / 分片级重试 /
+    // 全局限速 / 断点续传 / HLS（插件路由）/ 合并与完整性校验。
+    // YunGet 侧仍自持 Room 持久化 / 前台服务 / DownloadSaver 保存（MediaStore/SAF）。
+    // 「忽略 SSL 证书」隐藏菜单开关直接映射到引擎 TurboConfig.trustAllCerts，动态生效。
     val downloadManager = remember {
         DownloadManager(
             context = context,
             dao = db.downloadTaskDao(),
-            downloader = ChunkDownloader({ HttpClients.downloadClient() }),
             threadProvider = settings::downloadThreads,
             // 自定义下载保存目录（SAF tree Uri），设置页可选，动态生效
             saveDirProvider = { settings.downloadDirUri },
@@ -230,7 +230,9 @@ fun MainScreen() {
             retryCountProvider = { settings.downloadRetryCount },
             // 锁屏保持下载 / 通知栏速度开关
             keepWhenLockedProvider = { settings.keepDownloadWhenLocked },
-            showSpeedProvider = { settings.notificationShowSpeed }
+            showSpeedProvider = { settings.notificationShowSpeed },
+            // 忽略 SSL 证书（隐藏菜单）
+            ignoreSslProvider = { settings.ignoreSslCert },
         )
     }
     // Android 9- 写公共 Download 需要 WRITE_EXTERNAL_STORAGE 运行时授权：

@@ -111,6 +111,7 @@ fun ResolveScreen(
     var ignoredClipboard by rememberSaveable { mutableStateOf<String?>(null) }
 
     // 检测函数：读取剪贴板，满足条件则设置提示（三重触发：组合时 / ON_RESUME / 剪贴板变化）
+    // 网盘分享链接、普通 http(s) 直链均提示（后者粘贴后直接走多线程下载）
     val maybeSuggestClipboard: () -> Unit = {
         val text = readClipboardSafely(context)
         if (text != null &&
@@ -118,7 +119,7 @@ fun ResolveScreen(
             text.isNotBlank() &&
             text != link &&
             text != ignoredClipboard &&
-            ShareLinkParser.parse(text) != null
+            (ShareLinkParser.parse(text) != null || looksLikeDirectUrl(text))
         ) {
             clipboardSuggestion = text
         }
@@ -246,12 +247,14 @@ fun ResolveScreen(
             animatedSuggestion?.let { suggestion ->
                 val parsed = ShareLinkParser.parse(suggestion)
                 ClipboardSuggestCard(
-                    platformName = parsed?.platform?.let { platformLabel(it) } ?: "网盘",
+                    platformName = parsed?.platform?.let { platformLabel(it) } ?: "下载",
+                    isDirectLink = parsed == null,
                     onPaste = {
                         link = suggestion
                         pwd = parsed?.pwd.orEmpty()
                         pwdEdited = true
                         clipboardSuggestion = null
+                        // 网盘链接 → 解析；非网盘直链 → ViewModel 内部自动转为多线程下载
                         viewModel.startResolve(suggestion, parsed?.pwd)
                     },
                     onDismiss = {
@@ -359,6 +362,8 @@ private fun ResolveInputContent(
             shape = MaterialTheme.shapes.large
         )
 
+        // 按钮文案随链接类型变化：网盘分享链接→「开始解析」；普通直链→「开始下载」
+        val isDirect = ShareLinkParser.parse(link) == null && looksLikeDirectUrl(link)
         Button(
             onClick = { viewModel.startResolve(link, pwd) },
             modifier = Modifier
@@ -374,7 +379,7 @@ private fun ResolveInputContent(
                 Spacer(modifier = Modifier.width(8.dp))
                 Text("解析中…")
             } else {
-                Text("开始解析")
+                Text(if (isDirect) "开始下载" else "开始解析")
             }
         }
 
@@ -445,13 +450,24 @@ private fun platformLabel(platform: SharePlatform): String = when (platform) {
     SharePlatform.PAN123 -> "123云盘"
 }
 
-/** 剪贴板分享链接提示卡片：检测到分享链接时，询问是否粘贴解析 */
+/**
+ * 是否看上去是一个可直接下载的普通 http(s) 链接。
+ * 仅用于剪贴板提示判定；真正的分流在 ResolveViewModel.startResolve 里做。
+ */
+private fun looksLikeDirectUrl(text: String): Boolean {
+    val url = Regex("""https?://[^\s]+""").find(text.trim())?.value ?: return false
+    return url.length > "https://".length
+}
+
+/** 剪贴板分享链接提示卡片：检测到分享链接/直链时，询问是否粘贴处理 */
 @Composable
 private fun ClipboardSuggestCard(
     platformName: String,
     onPaste: () -> Unit,
     onDismiss: () -> Unit,
-    modifier: Modifier = Modifier
+    modifier: Modifier = Modifier,
+    /** true = 非网盘普通直链（粘贴后直接多线程下载，不做解析） */
+    isDirectLink: Boolean = false
 ) {
     Card(
         modifier = modifier.fillMaxWidth(),
@@ -470,13 +486,13 @@ private fun ClipboardSuggestCard(
                 Spacer(modifier = Modifier.width(10.dp))
                 Column {
                     Text(
-                        text = "检测到 $platformName 分享链接",
+                        text = if (isDirectLink) "检测到下载链接" else "检测到 $platformName 分享链接",
                         style = MaterialTheme.typography.titleSmall,
                         fontWeight = androidx.compose.ui.text.font.FontWeight.Medium,
                         color = MaterialTheme.colorScheme.onPrimaryContainer
                     )
                     Text(
-                        text = "是否粘贴到解析框并开始解析？",
+                        text = if (isDirectLink) "是否用多线程下载器直接下载？" else "是否粘贴到解析框并开始解析？",
                         style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.colorScheme.onPrimaryContainer
                     )

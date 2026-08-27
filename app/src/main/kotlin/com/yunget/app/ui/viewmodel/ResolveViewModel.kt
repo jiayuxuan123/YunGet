@@ -43,6 +43,11 @@ sealed interface ResolveUiState {
     data class Error(val message: String) : ResolveUiState
 }
 
+/** 普通直链下载默认 UA（部分站点缺 UA 会 403）。 */
+private const val DIRECT_DOWNLOAD_UA =
+    "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 " +
+        "(KHTML, like Gecko) Chrome/126.0.0.0 Safari/537.36"
+
 /**
  * 解析页 ViewModel：分享解析状态机 + 目录导航 + 下载直链。
  * 支持夸克 / UC / 迅雷，按链接自动路由到对应平台仓库与凭证。
@@ -508,6 +513,13 @@ class ResolveViewModel(
             uiState = ResolveUiState.Loading
             val parsed = ShareLinkParser.parse(link)
             if (parsed == null) {
+                // 非网盘分享链接：若是普通 http(s) 直链，交 TurboDL 多线程下载器正常下载。
+                val direct = extractDirectUrl(link)
+                if (direct != null) {
+                    uiState = ResolveUiState.Idle
+                    enqueueDirectDownload(direct)
+                    return@launch
+                }
                 uiState = ResolveUiState.Error("无法识别分享链接")
                 return@launch
             }
@@ -530,6 +542,43 @@ class ResolveViewModel(
                     uiState = ResolveUiState.Error(e.message ?: "解析失败")
                 }
         }
+    }
+
+    /**
+     * 从整段文案中提取一个可下载的普通 http(s) 直链。
+     * 仅在 [ShareLinkParser] 未识别出任何网盘分享时调用。
+     */
+    private fun extractDirectUrl(text: String): String? {
+        val raw = Regex("""https?://[^\s]+""").find(text.trim())?.value ?: return null
+        return raw.trimEnd('。', '，', ',', '；', ';', ')', ']', '}', '"', '\'')
+            .takeIf { it.length > "https://".length }
+    }
+
+    /** 从 URL 推导保存文件名（去查询串、URL 解码；无法推导时用时间戳兜底）。 */
+    private fun fileNameFromUrl(url: String): String {
+        val path = url.substringBefore('#').substringBefore('?')
+        val last = path.substringAfterLast('/')
+        val decoded = runCatching {
+            java.net.URLDecoder.decode(last, "UTF-8")
+        }.getOrDefault(last)
+        // 去掉文件名中的非法字符（保存到公共目录时 SAF/MediaStore 会拒绝）
+        val cleaned = decoded.replace(Regex("""[\\/:*?"<>|]"""), "_").trim()
+        return cleaned.ifBlank { "download_${System.currentTimeMillis()}" }
+    }
+
+    /**
+     * 普通直链下载：不做任何网盘解析，直接交下载器多线程下载。
+     * 只带一个通用 UA（部分站点缺 UA 会 403）；不注入任何网盘 Cookie。
+     */
+    private suspend fun enqueueDirectDownload(url: String) {
+        val name = fileNameFromUrl(url)
+        downloadManager.enqueue(
+            url = url,
+            fileName = name,
+            headers = mapOf("User-Agent" to DIRECT_DOWNLOAD_UA),
+        )
+        downloadError = "已加入下载：$name"
+        downloadStarted = true
     }
 
     /** 进入文件夹 */
