@@ -79,6 +79,12 @@ class TurboDownloadManager(
     private val showSpeedProvider: () -> Boolean = { true },
     /** 忽略 TLS 证书校验（抓包调试；隐藏菜单）*/
     private val ignoreSslProvider: () -> Boolean = { false },
+    /** 自定义 DoH 服务器 URL 提供者（空/null = 系统 DNS） */
+    private val dohUrlProvider: () -> String? = { null },
+    /** 连接预热开关提供者（默认开） */
+    private val warmUpProvider: () -> Boolean = { true },
+    /** 慢启动开关提供者（默认开） */
+    private val slowStartProvider: () -> Boolean = { true },
 ) {
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
 
@@ -140,7 +146,7 @@ class TurboDownloadManager(
     // ---------- 配置映射 ----------
 
     private fun buildConfig(): TurboConfig = TurboConfig(
-        maxConnectionsPerTask = threadProvider().coerceIn(1, 256),
+        maxConnectionsPerTask = threadProvider().coerceIn(1, 128),
         maxConcurrentTasks = concurrencyProvider().coerceIn(1, 64),
         globalSpeedLimitBytesPerSec = speedLimitProvider().coerceAtLeast(0L),
         maxRetries = retryCountProvider().coerceIn(0, 50),
@@ -161,7 +167,10 @@ class TurboDownloadManager(
         // 分片临时目录放应用专属缓存，避免系统 tmpdir 被清理导致断点丢失。
         workDir = chunkWorkDir(),
         proxy = ProxyMode.System,
-        dns = DnsMode.System,
+        // DNS：配了 DoH 就用 DoH（可绕过本地 DNS 污染/加速解析），否则系统 DNS。
+        dns = dohUrlProvider()?.let { DnsMode.DoH(it) } ?: DnsMode.System,
+        warmUpConnections = warmUpProvider(),
+        slowStart = slowStartProvider(),
         trustAllCerts = ignoreSslProvider(),
     )
 
@@ -173,6 +182,8 @@ class TurboDownloadManager(
             cfg.maxConnectionsPerTask, cfg.maxConcurrentTasks, cfg.globalSpeedLimitBytesPerSec,
             cfg.maxRetries, cfg.trustAllCerts, cfg.forceHttp1, cfg.segmentsPerConnection,
             cfg.dynamicSegmentation, cfg.backpressureConsecutiveFailures, cfg.maxConnectionsPerHost,
+            (cfg.dns as? DnsMode.DoH)?.dohUrl ?: "system",
+            cfg.warmUpConnections, cfg.slowStart,
         ).joinToString("|")
         if (sig != lastConfigSignature) {
             lastConfigSignature = sig
@@ -239,7 +250,7 @@ class TurboDownloadManager(
                 destination = out,
                 headers = restoredHeaders,
                 knownSize = knownSize,
-                connectionsOverride = threadProvider().coerceIn(1, 256),
+                connectionsOverride = threadProvider().coerceIn(1, 128),
                 // 稳定键 = Room 任务 id：使同一任务多次 submit 复用同一分片目录，
                 // 真正实现断点续传（暂停恢复 / 进程重启都从断点继续，而非从头下）。
                 stableKey = "room-$id",

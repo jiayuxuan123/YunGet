@@ -233,6 +233,11 @@ fun MainScreen() {
             showSpeedProvider = { settings.notificationShowSpeed },
             // 忽略 SSL 证书（隐藏菜单）
             ignoreSslProvider = { settings.ignoreSslCert },
+            // 自定义 DoH（设置页可配）
+            dohUrlProvider = { settings.dohUrl },
+            // 连接预热 / 慢启动（设置页可配，默认开）
+            warmUpProvider = { settings.warmUpConnections },
+            slowStartProvider = { settings.slowStart },
         )
     }
     // Android 9- 写公共 Download 需要 WRITE_EXTERNAL_STORAGE 运行时授权：

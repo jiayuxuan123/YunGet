@@ -29,6 +29,8 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.outlined.Article
 import androidx.compose.material.icons.outlined.Backup
 import androidx.compose.material.icons.outlined.ChevronRight
+import androidx.compose.material.icons.outlined.Bolt
+import androidx.compose.material.icons.outlined.Dns
 import androidx.compose.material.icons.outlined.FolderOpen
 import androidx.compose.material.icons.outlined.Info
 import androidx.compose.material.icons.outlined.Layers
@@ -39,6 +41,7 @@ import androidx.compose.material.icons.outlined.Refresh
 import androidx.compose.material.icons.outlined.Restore
 import androidx.compose.material.icons.outlined.Speed
 import androidx.compose.material.icons.outlined.SystemUpdate
+import androidx.compose.material.icons.outlined.TrendingUp
 import androidx.compose.material.icons.outlined.Tune
 import androidx.compose.material.icons.outlined.VolunteerActivism
 import androidx.compose.foundation.text.KeyboardOptions
@@ -85,8 +88,8 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 
-/** 可选的最大下载线程数（自适应引擎在 [2, 该值] 间动态调节，最高 64） */
-private val threadOptions = listOf(1, 2, 4, 8, 16, 32, 64)
+/** 可选的最大下载线程数（引擎慢启动在 [4, 该值] 间动态爬升，最高 128） */
+private val threadOptions = listOf(1, 2, 4, 8, 16, 32, 64, 128)
 
 /**
  * 设置页：下载线程数设置 + 主题外观 + 检查更新 + 日志与网盘认证。
@@ -130,9 +133,13 @@ fun SettingsScreen(
     var maxConcurrent by remember { mutableStateOf(settingsRepo.maxConcurrentDownloads) }
     var speedLimitBps by remember { mutableStateOf(settingsRepo.downloadSpeedLimit) }
     var retryCount by remember { mutableStateOf(settingsRepo.downloadRetryCount) }
+    var dohUrl by remember { mutableStateOf(settingsRepo.dohUrl) }
+    var warmUp by remember { mutableStateOf(settingsRepo.warmUpConnections) }
+    var slowStartOn by remember { mutableStateOf(settingsRepo.slowStart) }
     var showConcurrencyDialog by remember { mutableStateOf(false) }
     var showSpeedDialog by remember { mutableStateOf(false) }
     var showRetryDialog by remember { mutableStateOf(false) }
+    var showDohDialog by remember { mutableStateOf(false) }
     // 用户体验与系统适配：锁屏保持下载 / 通知栏速度
     var keepLocked by remember { mutableStateOf(settingsRepo.keepDownloadWhenLocked) }
     var showSpeed by remember { mutableStateOf(settingsRepo.notificationShowSpeed) }
@@ -200,7 +207,7 @@ fun SettingsScreen(
         SettingsItem(
             icon = Icons.Outlined.Tune,
             title = "最大下载线程数",
-            description = "自适应并发上限：当前 $threads 线程（引擎根据实测吞吐在 2~$threads 间动态伸缩）",
+            description = "并发上限：当前 $threads 线程（引擎慢启动从少逐步爬升到该值，最高 128）",
             onClick = { showThreadsDialog = true }
         )
 
@@ -262,6 +269,45 @@ fun SettingsScreen(
             title = "失败自动重试",
             description = if (retryCount == 0) "失败后不自动重试" else "失败后自动重试 $retryCount 次（断点续传）",
             onClick = { showRetryDialog = true }
+        )
+
+        Spacer(modifier = Modifier.height(8.dp))
+
+        // 自定义 DNS over HTTPS：绕过本地 DNS 污染/加速域名解析
+        SettingsItem(
+            icon = Icons.Outlined.Dns,
+            title = "自定义 DNS (DoH)",
+            description = dohUrl?.let { "已启用：$it" }
+                ?: "使用系统 DNS（点击配置 DNS over HTTPS）",
+            onClick = { showDohDialog = true }
+        )
+
+        Spacer(modifier = Modifier.height(8.dp))
+
+        // 连接预热：下载前预建连接池，起步更快
+        SettingsItem(
+            icon = Icons.Outlined.Bolt,
+            title = "连接预热",
+            description = if (warmUp) "开启：下载前预建连接并预解析 DNS，起步更快" else "关闭：直接开始下载",
+            onClick = {
+                warmUp = !warmUp
+                settingsRepo.warmUpConnections = warmUp
+            },
+            trailing = { Switch(checked = warmUp, onCheckedChange = null) }
+        )
+
+        Spacer(modifier = Modifier.height(8.dp))
+
+        // 慢启动：并发从少爬升到设定值
+        SettingsItem(
+            icon = Icons.Outlined.TrendingUp,
+            title = "慢启动",
+            description = if (slowStartOn) "开启：并发从少逐步爬升到设定值，更稳不易被风控" else "关闭：立即全开并发",
+            onClick = {
+                slowStartOn = !slowStartOn
+                settingsRepo.slowStart = slowStartOn
+            },
+            trailing = { Switch(checked = slowStartOn, onCheckedChange = null) }
         )
 
         Spacer(modifier = Modifier.height(8.dp))
@@ -573,7 +619,7 @@ fun SettingsScreen(
             text = {
                 Column {
                     Text(
-                        text = "设置并发上限；自适应引擎会按实测吞吐自动增减线程（需服务器支持 Range）",
+                        text = "设置并发上限（最高 128）；引擎会慢启动逐步爬升到该值（需服务器支持 Range）",
                         style = MaterialTheme.typography.bodyMedium,
                         color = MaterialTheme.colorScheme.onSurfaceVariant
                     )
@@ -837,6 +883,101 @@ fun SettingsScreen(
             },
             confirmButton = {
                 TextButton(onClick = { showRetryDialog = false }) { Text("取消") }
+            }
+        )
+    }
+
+    // 自定义 DNS over HTTPS：预设公共 DoH + 自定义 URL
+    if (showDohDialog) {
+        val presets = listOf(
+            "" to "不使用（系统 DNS）",
+            "https://dns.alidns.com/dns-query" to "阿里 DoH（国内快）",
+            "https://doh.pub/dns-query" to "腾讯 DoH（国内快）",
+            "https://dns.google/dns-query" to "Google DoH（境外）",
+            "https://cloudflare-dns.com/dns-query" to "Cloudflare DoH（境外）",
+        )
+        // -1 = 自定义档位哨兵；null = 未操作
+        var tempPick by remember { mutableStateOf<Int?>(null) }
+        var customUrl by remember {
+            mutableStateOf(
+                if (dohUrl != null && presets.none { it.first == dohUrl }) dohUrl.orEmpty() else ""
+            )
+        }
+        val isCustom = when {
+            tempPick == -1 -> true
+            tempPick == null -> dohUrl != null && presets.none { it.first == dohUrl }
+            else -> false
+        }
+        AlertDialog(
+            onDismissRequest = { showDohDialog = false },
+            title = { Text("自定义 DNS (DoH)") },
+            text = {
+                Column {
+                    Text(
+                        text = "下载请求改用加密 DNS 解析域名，可绕过本地 DNS 污染、提升解析速度。仅影响下载引擎，不影响其他应用。",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                    Spacer(modifier = Modifier.height(8.dp))
+                    presets.forEach { (url, label) ->
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            RadioButton(
+                                selected = when {
+                                    tempPick != null -> tempPick == presets.indexOfFirst { it.first == url }
+                                    else -> (dohUrl ?: "") == url && !isCustom
+                                },
+                                onClick = { tempPick = presets.indexOfFirst { it.first == url } }
+                            )
+                            Spacer(modifier = Modifier.width(8.dp))
+                            Text(label, style = MaterialTheme.typography.bodyMedium)
+                        }
+                    }
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        RadioButton(selected = isCustom, onClick = { tempPick = -1 })
+                        Spacer(modifier = Modifier.width(8.dp))
+                        OutlinedTextField(
+                            value = customUrl,
+                            onValueChange = {
+                                customUrl = it.trim()
+                                tempPick = -1
+                            },
+                            modifier = Modifier.weight(1f),
+                            label = { Text("自定义 DoH URL") },
+                            placeholder = { Text("https://…/dns-query") },
+                            singleLine = true
+                        )
+                    }
+                }
+            },
+            confirmButton = {
+                TextButton(
+                    onClick = {
+                        val pick = tempPick
+                        when {
+                            // 选中某个预设
+                            pick != null && pick >= 0 -> {
+                                dohUrl = presets[pick].first.ifBlank { null }
+                                settingsRepo.dohUrl = dohUrl
+                            }
+                            // 自定义
+                            pick == -1 && customUrl.startsWith("https://") -> {
+                                dohUrl = customUrl
+                                settingsRepo.dohUrl = customUrl
+                            }
+                            // 未操作：保持现值
+                        }
+                        showDohDialog = false
+                    }
+                ) { Text("确定") }
+            },
+            dismissButton = {
+                TextButton(onClick = { showDohDialog = false }) { Text("取消") }
             }
         )
     }

@@ -10,11 +10,11 @@ class SettingsRepository(context: Context) {
     private val prefs = context.applicationContext
         .getSharedPreferences("yunget_settings", Context.MODE_PRIVATE)
 
-    /** 下载线程数（分片并发上限；自适应引擎在 [2, 该值] 间动态调节），默认 16，上限 64 */
+    /** 下载线程数（分片并发上限；引擎慢启动在 [4, 该值] 间动态爬升），默认 16，上限 128 */
     var downloadThreads: Int
-        get() = prefs.getInt("download_threads", DEFAULT_DOWNLOAD_THREADS).coerceIn(1, 64)
+        get() = prefs.getInt("download_threads", DEFAULT_DOWNLOAD_THREADS).coerceIn(1, 128)
         set(value) {
-            prefs.edit().putInt("download_threads", value.coerceIn(1, 64)).apply()
+            prefs.edit().putInt("download_threads", value.coerceIn(1, 128)).apply()
         }
 
     /** 自定义下载保存目录（SAF tree Uri，content://...）；null/空 = 系统默认 Download 目录 */
@@ -78,6 +78,27 @@ class SettingsRepository(context: Context) {
         get() = prefs.getBoolean("baidu_limit_hint_dismissed", false)
         set(value) {
             prefs.edit().putBoolean("baidu_limit_hint_dismissed", value).apply()
+        }
+
+    /** 自定义 DNS over HTTPS 服务器 URL（空 = 使用系统 DNS）；例如 https://dns.google/dns-query */
+    var dohUrl: String?
+        get() = prefs.getString("doh_url", null)?.takeIf { it.isNotBlank() }
+        set(value) {
+            prefs.edit().putString("doh_url", value?.trim().orEmpty()).apply()
+        }
+
+    /** 连接预热 / DNS 预解析（默认开）：下载前预建连接池，起步更快 */
+    var warmUpConnections: Boolean
+        get() = prefs.getBoolean("warm_up_connections", true)
+        set(value) {
+            prefs.edit().putBoolean("warm_up_connections", value).apply()
+        }
+
+    /** 慢启动（默认开）：并发从少逐步爬升到设定值，避免瞬时几十连接冲击服务器 */
+    var slowStart: Boolean
+        get() = prefs.getBoolean("slow_start", true)
+        set(value) {
+            prefs.edit().putBoolean("slow_start", value).apply()
         }
 
     /** 深色模式：0=跟随系统，1=浅色，2=深色 */

@@ -1,5 +1,6 @@
 package com.yunget.app.ui.screens
 
+import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
@@ -116,10 +117,15 @@ fun UpdateDialog(
             }
         },
         confirmButton = {
-            Column(horizontalAlignment = Alignment.End) {
+            // 全部动作放到单列全宽布局，避免 confirmButton/dismissButton 并排时按钮重叠。
+            Column(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalAlignment = Alignment.End
+            ) {
                 Button(
                     onClick = onDownload,
-                    enabled = !downloading
+                    enabled = !downloading,
+                    modifier = Modifier.fillMaxWidth()
                 ) {
                     if (downloading) {
                         CircularProgressIndicator(
@@ -139,19 +145,28 @@ fun UpdateDialog(
                     }
                 }
                 if (onDownloadMirror != null) {
-                    TextButton(onClick = onDownloadMirror) {
+                    Spacer(modifier = Modifier.height(4.dp))
+                    TextButton(
+                        onClick = onDownloadMirror,
+                        enabled = !downloading,
+                        modifier = Modifier.fillMaxWidth()
+                    ) {
                         Text("使用镜像站下载", color = MaterialTheme.colorScheme.primary)
                     }
                 }
-            }
-        },
-        dismissButton = {
-            Row {
-                TextButton(onClick = onIgnore) {
-                    Text("忽略本次", color = MaterialTheme.colorScheme.onSurfaceVariant)
-                }
-                TextButton(onClick = onLater) {
-                    Text("稍后")
+                Spacer(modifier = Modifier.height(2.dp))
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.End,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    TextButton(onClick = onIgnore) {
+                        Text("忽略本次", color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    }
+                    Spacer(modifier = Modifier.width(4.dp))
+                    TextButton(onClick = onLater) {
+                        Text("稍后")
+                    }
                 }
             }
         }
