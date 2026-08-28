@@ -24,26 +24,36 @@ class DownloadService : Service() {
     override fun onBind(intent: Intent?): IBinder? = null
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
-        when (intent?.action) {
-            ACTION_STOP -> stopSelf()
-            else -> {
-                val title = intent?.getStringExtra(EXTRA_TITLE) ?: "下载中…"
-                val progress = intent?.getIntExtra(EXTRA_PROGRESS, -1) ?: -1
-                val speed = intent?.getStringExtra(EXTRA_SPEED) ?: ""
-                val showSpeed = intent?.getBooleanExtra(EXTRA_SHOW_SPEED, true) ?: true
-                startAsForeground(title, progress, speed, showSpeed)
-            }
+        // 关键：startForegroundService() 之后必须在 ~5s 内调用 startForeground()，否则
+        // 系统抛 ForegroundServiceDidNotStartInTimeException 崩溃应用。
+        // 当任务秒失败（如大小校验失败）时，onTaskFinished→stopService 可能与本回调抢跑，
+        // 因此无论什么 action，都先立即把自己提升为前台，满足契约，再处理停止逻辑。
+        val title = intent?.getStringExtra(EXTRA_TITLE) ?: "下载中…"
+        val progress = intent?.getIntExtra(EXTRA_PROGRESS, -1) ?: -1
+        val speed = intent?.getStringExtra(EXTRA_SPEED) ?: ""
+        val showSpeed = intent?.getBooleanExtra(EXTRA_SHOW_SPEED, true) ?: true
+        runCatching { startAsForeground(title, progress, speed, showSpeed) }
+            .onFailure { android.util.Log.e("YunGet-DL", "startForeground failed: ${it.message}", it) }
+
+        if (intent?.action == ACTION_STOP) {
+            // 已在上面满足 startForeground 契约，这里安全地退出前台并停止。
+            stopForegroundCompat()
+            stopSelf()
         }
         return START_NOT_STICKY
     }
 
-    override fun onDestroy() {
+    private fun stopForegroundCompat() {
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.N) {
             stopForeground(STOP_FOREGROUND_REMOVE)
         } else {
             @Suppress("DEPRECATION")
             stopForeground(true)
         }
+    }
+
+    override fun onDestroy() {
+        stopForegroundCompat()
         super.onDestroy()
     }
 

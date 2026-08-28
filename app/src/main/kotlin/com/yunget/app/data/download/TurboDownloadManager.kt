@@ -154,8 +154,10 @@ class TurboDownloadManager(
         // 关闭背压降并发：网盘 CDN 频繁 502/503，开启后线程只降难升，
         // 是“下到后面速度暴跌”的主因；改为仅靠分片重试处理暂时错误，不动并发。
         backpressureConsecutiveFailures = 0,
-        // per-host 并发上限 16：迅雷等 CDN 超过阈值会把 Range 降级为 200 整文件，限幅避免被降级。
-        maxConnectionsPerHost = 16,
+        // 不设 per-host 上限：单个下载的所有分片都是同一 host，若在此设小值（如 16）
+        // 会把每个下载直接限死到该值（表现为“设 64 只跑 16、速度暴跌”）。
+        // 迅雷等个别 CDN 的降级问题应由调用方按具体 host 单独处理，不在此全局限。
+        maxConnectionsPerHost = 0,
         // 分片临时目录放应用专属缓存，避免系统 tmpdir 被清理导致断点丢失。
         workDir = chunkWorkDir(),
         proxy = ProxyMode.System,
