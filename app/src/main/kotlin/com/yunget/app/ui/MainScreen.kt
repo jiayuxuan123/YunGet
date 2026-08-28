@@ -258,6 +258,9 @@ fun MainScreen() {
             deferred.await()
         }
     }
+    // 进程启动时把上次被杀遗留的“下载中/等待中”任务标为已暂停，
+    // 避免状态永远卡在“下载中”；分片目录由 stableKey 保留，用户点击恢复即从断点继续。
+    LaunchedEffect(Unit) { downloadManager.recoverInterruptedTasks() }
     val viewModel: QuarkAccountViewModel = viewModel(
         factory = QuarkAccountViewModel.Factory(repository)
     )

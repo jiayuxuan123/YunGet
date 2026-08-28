@@ -12,6 +12,7 @@ import dev.turbodl.core.TurboConfig
 import dev.turbodl.core.TurboEvent
 import dev.turbodl.plugin.bootstrap.TurboBootstrap
 import dev.turbodl.plugin.hls.HlsPlugin
+import org.json.JSONObject
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
@@ -25,7 +26,6 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import java.io.File
 import java.util.concurrent.ConcurrentHashMap
-import java.util.concurrent.atomic.AtomicLong
 
 /** 实时下载统计（用于 UI 展示速度/剩余时间/线程数） */
 data class DownloadStats(
@@ -89,6 +89,10 @@ class TurboDownloadManager(
     )
     private val client get() = bootstrap.client
 
+    /** 分片临时目录根（应用专属缓存，避免被系统 tmpdir 清理）。 */
+    private fun chunkWorkDir(): File =
+        File(context.externalCacheDir ?: context.cacheDir, "turbodl_chunks")
+
     /** 实时统计（UI）*/
     private val _stats = MutableStateFlow<Map<Long, DownloadStats>>(emptyMap())
     val stats: StateFlow<Map<Long, DownloadStats>> = _stats.asStateFlow()
@@ -101,6 +105,8 @@ class TurboDownloadManager(
 
     /** roomId → TurboDL taskId */
     private val turboIds = ConcurrentHashMap<Long, Long>()
+    /** TurboDL taskId → roomId（反向映射，避免每个进度回调 O(n) 遍历）*/
+    private val turboIdToRoomId = ConcurrentHashMap<Long, Long>()
     /** roomId → 请求头（暂停/恢复复用）*/
     private val taskHeaders = ConcurrentHashMap<Long, Map<String, String>>()
     /** roomId → 已知大小 */
@@ -114,9 +120,12 @@ class TurboDownloadManager(
 
     /** 前台服务任务计数 */
     private val activeTaskCount = java.util.concurrent.atomic.AtomicInteger(0)
-    /** 通知节流 */
-    private val notifyThrottleMs = 2000L
-    private val lastNotifyTs = AtomicLong(0)
+    /** 通知节流：按 roomId 分别记录上次通知时间，避免多任务互相干扰 */
+    private val notifyThrottleMs = 1000L
+    private val lastNotifyTsByTask = ConcurrentHashMap<Long, Long>()
+    /** 进度写库节流：按 roomId 记录上次写入时间/字节，避免高频 DB 竞争 */
+    private val lastDbWriteTs = ConcurrentHashMap<Long, Long>()
+    private val lastDbWriteBytes = ConcurrentHashMap<Long, Long>()
 
     @Volatile
     private var lastConfigSignature: String = ""
@@ -142,6 +151,13 @@ class TurboDownloadManager(
         // 强制 HTTP/1.1：HTTP/2 会把所有分片多路复用到单条 TCP 连接，
         // 共享单个拥塞窗口 → 开几十线程也只有单连接速度（GitHub / 多数 CDN 均启用 h2）。
         forceHttp1 = true,
+        // 关闭背压降并发：网盘 CDN 频繁 502/503，开启后线程只降难升，
+        // 是“下到后面速度暴跌”的主因；改为仅靠分片重试处理暂时错误，不动并发。
+        backpressureConsecutiveFailures = 0,
+        // per-host 并发上限 16：迅雷等 CDN 超过阈值会把 Range 降级为 200 整文件，限幅避免被降级。
+        maxConnectionsPerHost = 16,
+        // 分片临时目录放应用专属缓存，避免系统 tmpdir 被清理导致断点丢失。
+        workDir = chunkWorkDir(),
         proxy = ProxyMode.System,
         dns = DnsMode.System,
         trustAllCerts = ignoreSslProvider(),
@@ -150,8 +166,12 @@ class TurboDownloadManager(
     /** 每次入队/开始前按当前设置热更新引擎配置（限速/并发/线程/忽略SSL 即时生效）。 */
     private fun refreshConfigIfChanged() {
         val cfg = buildConfig()
-        val sig = "${cfg.maxConnectionsPerTask}|${cfg.maxConcurrentTasks}|" +
-            "${cfg.globalSpeedLimitBytesPerSec}|${cfg.maxRetries}|${cfg.trustAllCerts}"
+        // 签名覆盖所有会影响下载行为的字段（原先只有 5 个，forceHttp1/segmentsPerConnection 等改了不生效）。
+        val sig = listOf(
+            cfg.maxConnectionsPerTask, cfg.maxConcurrentTasks, cfg.globalSpeedLimitBytesPerSec,
+            cfg.maxRetries, cfg.trustAllCerts, cfg.forceHttp1, cfg.segmentsPerConnection,
+            cfg.dynamicSegmentation, cfg.backpressureConsecutiveFailures, cfg.maxConnectionsPerHost,
+        ).joinToString("|")
         if (sig != lastConfigSignature) {
             lastConfigSignature = sig
             client.updateConfig(cfg)
@@ -173,7 +193,16 @@ class TurboDownloadManager(
                 .ifBlank { "download_${System.currentTimeMillis()}" }
         }
         Log.d(TAG, "enqueue: url=$url fileName=$safeName headers=${headers.keys} size=$size")
-        val id = dao.insert(DownloadTaskEntity(url = url, fileName = safeName))
+        // 请求头持久化到 DB：进程重启后恢复下载仍能带上 Cookie/Referer，否则必定 403。
+        val headersJson = if (headers.isNotEmpty()) JSONObject(headers as Map<*, *>).toString() else "{}"
+        val id = dao.insert(
+            DownloadTaskEntity(
+                url = url,
+                fileName = safeName,
+                requestHeadersJson = headersJson,
+                totalSize = if (size > 0) size else 0L,
+            )
+        )
         if (headers.isNotEmpty()) taskHeaders[id] = headers
         if (size > 0) taskSizes[id] = size
         taskNames[id] = safeName
@@ -192,7 +221,13 @@ class TurboDownloadManager(
         scope.launch {
             val task = dao.get(id) ?: return@launch
             taskNames[id] = task.fileName
-            if (effectiveHeaders.isNotEmpty()) taskHeaders[id] = effectiveHeaders
+            // 请求头：优先用传入的，其次内存缓存，最后从 DB 恢复（进程重启后）。
+            val restoredHeaders = effectiveHeaders.ifEmpty {
+                taskHeaders[id] ?: parseHeadersJson(task.requestHeadersJson)
+            }
+            if (restoredHeaders.isNotEmpty()) taskHeaders[id] = restoredHeaders
+            // 已知大小：优先内存缓存，其次 DB（避免重启后重复 probe）。
+            val knownSize = taskSizes[id] ?: task.totalSize.takeIf { it > 0 } ?: -1L
             onTaskStarted(id)
             // TurboDL 下到应用缓存，完成后再交 DownloadSaver 保存到公共目录。
             val out = File(turboCacheDir().apply { mkdirs() }, "task_${id}.part")
@@ -200,13 +235,17 @@ class TurboDownloadManager(
             val request = DownloadRequest(
                 url = task.url,
                 destination = out,
-                headers = effectiveHeaders,
-                knownSize = taskSizes[id] ?: -1L,
+                headers = restoredHeaders,
+                knownSize = knownSize,
                 connectionsOverride = threadProvider().coerceIn(1, 256),
+                // 稳定键 = Room 任务 id：使同一任务多次 submit 复用同一分片目录，
+                // 真正实现断点续传（暂停恢复 / 进程重启都从断点继续，而非从头下）。
+                stableKey = "room-$id",
             )
             dao.updateStatus(id, DownloadTaskEntity.STATUS_DOWNLOADING)
             val turboId = client.submit(request)
             turboIds[id] = turboId
+            turboIdToRoomId[turboId] = id
         }
     }
 
@@ -214,6 +253,7 @@ class TurboDownloadManager(
     fun pause(id: Long) {
         Log.d(TAG, "pause: id=$id")
         val turboId = turboIds.remove(id)
+        if (turboId != null) turboIdToRoomId.remove(turboId)
         _stats.update { it - id }
         scope.launch {
             if (turboId != null) client.pause(turboId)
@@ -226,6 +266,7 @@ class TurboDownloadManager(
     fun remove(id: Long, deleteLocal: Boolean = false) {
         Log.d(TAG, "remove: id=$id deleteLocal=$deleteLocal")
         val turboId = turboIds.remove(id)
+        if (turboId != null) turboIdToRoomId.remove(turboId)
         _stats.update { it - id }
         taskHeaders.remove(id)
         taskSizes.remove(id)
@@ -245,10 +286,30 @@ class TurboDownloadManager(
         }
     }
 
+    /**
+     * 进程启动时调用：把上次被杀遗留的「下载中/等待中」任务标为已暂停。
+     *
+     * 不调用的话，进程被杀后任务状态永远停在“下载中”，UI 上既不跑也无法恢复。
+     * 标为暂停后用户可手动点击恢复（因分片目录用 stableKey 保留，恢复从断点继续）。
+     */
+    fun recoverInterruptedTasks() {
+        scope.launch {
+            runCatching { dao.markInterruptedAsPaused() }
+                .onFailure { Log.e(TAG, "recoverInterruptedTasks failed: ${it.message}") }
+        }
+    }
+
+    private fun parseHeadersJson(json: String): Map<String, String> =
+        runCatching {
+            if (json.isBlank() || json == "{}") return emptyMap()
+            val obj = JSONObject(json)
+            buildMap { obj.keys().forEach { k -> put(k, obj.optString(k)) } }
+        }.getOrDefault(emptyMap())
+
     // ---------- TurboDL 事件桥接 ----------
 
     private fun onTurboEvent(ev: TurboEvent) {
-        val roomId = turboIds.entries.firstOrNull { it.value == ev.taskId }?.key ?: return
+        val roomId = turboIdToRoomId[ev.taskId] ?: return
         when (ev) {
             is TurboEvent.Progress -> {
                 val p = ev.progress
@@ -259,13 +320,16 @@ class TurboDownloadManager(
                         chunkCount = p.activeConnections.coerceAtLeast(1),
                     ))
                 }
-                scope.launch {
-                    dao.updateProgress(
-                        roomId,
-                        DownloadTaskEntity.STATUS_DOWNLOADING,
-                        p.downloadedBytes,
-                        if (p.totalBytes > 0) p.totalBytes else 0L,
-                    )
+                // 进度写库节流：每任务至多每 800ms 或每增长 1MB 写一次，避免高频 launch+DB 竞争拖慢吞吐。
+                if (shouldWriteDb(roomId, p.downloadedBytes)) {
+                    scope.launch {
+                        dao.updateProgress(
+                            roomId,
+                            DownloadTaskEntity.STATUS_DOWNLOADING,
+                            p.downloadedBytes,
+                            if (p.totalBytes > 0) p.totalBytes else 0L,
+                        )
+                    }
                 }
                 taskNames[roomId]?.let { name ->
                     notifyProgress(roomId, name, p.downloadedBytes, p.totalBytes)
@@ -274,7 +338,7 @@ class TurboDownloadManager(
             is TurboEvent.Completed -> scope.launch { onTurboCompleted(roomId, ev.file, ev.totalBytes) }
             is TurboEvent.Failed -> scope.launch {
                 Log.e(TAG, "task $roomId failed: ${ev.reason}")
-                turboIds.remove(roomId)
+                turboIds.remove(roomId)?.let { turboIdToRoomId.remove(it) }
                 _stats.update { it - roomId }
                 dao.updateStatus(roomId, DownloadTaskEntity.STATUS_FAILED)
                 dao.updateError(roomId, ev.reason)
@@ -290,35 +354,17 @@ class TurboDownloadManager(
         }
     }
 
-    /** TurboDL 下载完成：保存到公共目录（MediaStore/SAF）→ 更新状态 → 完成回调 → 清理。 */
-    private suspend fun onTurboCompleted(roomId: Long, file: File, total: Long) {
-        val task = dao.get(roomId) ?: return
-        try {
-            if (!storagePermissionProvider()) {
-                file.delete()
-                turboIds.remove(roomId)
-                dao.updateStatus(roomId, DownloadTaskEntity.STATUS_FAILED)
-                dao.updateError(roomId, "未授予存储权限，无法保存到下载目录")
-                onTaskFinished()
-                return
-            }
-            val savedPath = withContext(Dispatchers.IO) {
-                DownloadSaver.save(context, task.fileName, file, saveDirProvider())
-            } ?: throw IllegalStateException("保存到下载目录失败")
-            dao.complete(roomId, DownloadTaskEntity.STATUS_COMPLETED, savedPath)
-            Log.d(TAG, "onTurboCompleted: id=$roomId saved=$savedPath size=${file.length()}")
-            taskCallbacks.remove(roomId)?.let { cb -> runCatching { cb() } }
-        } catch (e: Exception) {
-            Log.e(TAG, "onTurboCompleted save failed id=$roomId: ${e.message}", e)
-            dao.updateStatus(roomId, DownloadTaskEntity.STATUS_FAILED)
-            dao.updateError(roomId, e.message ?: "保存失败")
-        } finally {
-            turboIds.remove(roomId)
-            _stats.update { it - roomId }
-            turboOutputs.remove(roomId)?.delete()
-            file.delete()
-            onTaskFinished()
+    /** 进度写库节流：时间（800ms）或字节（1MB）阈值任一达到即写；完成/暂停由各自分支强制写。 */
+    private fun shouldWriteDb(roomId: Long, downloaded: Long): Boolean {
+        val now = System.currentTimeMillis()
+        val lastTs = lastDbWriteTs[roomId] ?: 0L
+        val lastBytes = lastDbWriteBytes[roomId] ?: 0L
+        if (now - lastTs >= 800 || downloaded - lastBytes >= 1L * 1024 * 1024) {
+            lastDbWriteTs[roomId] = now
+            lastDbWriteBytes[roomId] = downloaded
+            return true
         }
+        return false
     }
 
     // ---------- 前台服务 / 通知 / WakeLock ----------
@@ -341,12 +387,49 @@ class TurboDownloadManager(
 
     private fun notifyProgress(id: Long, fileName: String, new: Long, total: Long) {
         val now = System.currentTimeMillis()
-        if (now - lastNotifyTs.get() >= notifyThrottleMs) {
-            lastNotifyTs.set(now)
+        val last = lastNotifyTsByTask[id] ?: 0L
+        if (now - last >= notifyThrottleMs) {
+            lastNotifyTsByTask[id] = now
             val percent = if (total > 0) ((new * 100 / total).toInt().coerceIn(0, 100)) else -1
             val speed = _stats.value[id]?.speed ?: 0L
             val speedText = if (speed > 0) formatSpeed(speed) else ""
             DownloadService.update(context, fileName, percent, speedText, showSpeedProvider())
+        }
+    }
+
+    /** TurboDL 下载完成：保存到公共目录（MediaStore/SAF）→ 更新状态 → 完成回调 → 清理。 */
+    private suspend fun onTurboCompleted(roomId: Long, file: File, total: Long) {
+        val task = dao.get(roomId) ?: return
+        try {
+            if (!storagePermissionProvider()) {
+                // 未授权：保留临时文件，标为失败供重试保存（不删）。
+                turboIds.remove(roomId)?.let { turboIdToRoomId.remove(it) }
+                _stats.update { it - roomId }
+                dao.updateStatus(roomId, DownloadTaskEntity.STATUS_FAILED)
+                dao.updateError(roomId, "未授予存储权限，无法保存到下载目录（已保留临时文件，可重试）")
+                onTaskFinished()
+                return
+            }
+            val savedPath = withContext(Dispatchers.IO) {
+                DownloadSaver.save(context, task.fileName, file, saveDirProvider())
+            } ?: throw IllegalStateException("保存到下载目录失败")
+            dao.complete(roomId, DownloadTaskEntity.STATUS_COMPLETED, savedPath)
+            Log.d(TAG, "onTurboCompleted: id=$roomId saved=$savedPath size=${file.length()}")
+            // 保存成功才清理：临时文件 + 网盘临时转存回调。
+            turboIds.remove(roomId)?.let { turboIdToRoomId.remove(it) }
+            _stats.update { it - roomId }
+            turboOutputs.remove(roomId)?.delete()
+            file.delete()
+            taskCallbacks.remove(roomId)?.let { cb -> runCatching { cb() } }
+            onTaskFinished()
+        } catch (e: Exception) {
+            Log.e(TAG, "onTurboCompleted save failed id=$roomId: ${e.message}", e)
+            // 保存失败：保留临时文件与回调，标为失败供用户重试保存（不删文件、不清理回调）。
+            turboIds.remove(roomId)?.let { turboIdToRoomId.remove(it) }
+            _stats.update { it - roomId }
+            dao.updateStatus(roomId, DownloadTaskEntity.STATUS_FAILED)
+            dao.updateError(roomId, (e.message ?: "保存失败") + "（已保留临时文件，可重试）")
+            onTaskFinished()
         }
     }
 

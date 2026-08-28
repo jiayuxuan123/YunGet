@@ -35,6 +35,18 @@ interface DownloadTaskDao {
     @Query("UPDATE download_task SET status = :status, savePath = :savePath WHERE id = :id")
     suspend fun complete(id: Long, status: Int, savePath: String)
 
+    /** 持久化请求头（Cookie/Referer/UA），供进程重启后恢复下载。 */
+    @Query("UPDATE download_task SET requestHeadersJson = :headersJson WHERE id = :id")
+    suspend fun updateHeaders(id: Long, headersJson: String)
+
+    /** 持久化完成/删除后需清理的云端临时目录 ID（如夸克转存目录）。 */
+    @Query("UPDATE download_task SET cleanupId = :cleanupId WHERE id = :id")
+    suspend fun updateCleanupId(id: Long, cleanupId: String)
+
+    /** 查询处于暂停态的任务（进程重启后据此恢复）。 */
+    @Query("SELECT * FROM download_task WHERE status = 2 ORDER BY createTime ASC")
+    suspend fun getPausedTasks(): List<DownloadTaskEntity>
+
     @Query("DELETE FROM download_task WHERE id = :id")
     suspend fun delete(id: Long)
 }
