@@ -363,6 +363,23 @@ class TurboDownloadManager(
                     _stats.update { it - roomId }
                 }
             }
+            is TurboEvent.Metadata -> {
+                // 静默利用探测到的服务器建议文件名：仅当现名看起来是无意义的
+                // （UUID / 无扩展名 / download_ 占位）且服务器给了带扩展名的名字时才替换，
+                // 避免覆盖网盘解析得到的准确文件名。失败不影响下载。
+                val suggested = ev.suggestedFileName?.trim()
+                if (!suggested.isNullOrBlank() && suggested.contains('.')) {
+                    val cur = taskNames[roomId]
+                    val curLooksPoor = cur == null || !cur.contains('.') ||
+                        cur.startsWith("download_") ||
+                        Regex("^[0-9a-fA-F-]{16,}$").matches(cur.substringBeforeLast('.'))
+                    if (curLooksPoor) {
+                        taskNames[roomId] = suggested
+                        scope.launch { runCatching { dao.updateFileName(roomId, suggested) } }
+                        Log.d(TAG, "metadata: id=$roomId 文件名修正 '$cur' -> '$suggested'")
+                    }
+                }
+            }
             else -> {}
         }
     }

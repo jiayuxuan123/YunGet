@@ -43,6 +43,10 @@ interface DownloadTaskDao {
     @Query("UPDATE download_task SET cleanupId = :cleanupId WHERE id = :id")
     suspend fun updateCleanupId(id: Long, cleanupId: String)
 
+    /** 修正文件名（如探测到服务器 Content-Disposition 建议名，比 URL 末段的 UUID 可读）。 */
+    @Query("UPDATE download_task SET fileName = :fileName WHERE id = :id")
+    suspend fun updateFileName(id: Long, fileName: String)
+
     /** 查询处于暂停态的任务（进程重启后据此恢复）。 */
     @Query("SELECT * FROM download_task WHERE status = 2 ORDER BY createTime ASC")
     suspend fun getPausedTasks(): List<DownloadTaskEntity>
