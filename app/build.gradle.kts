@@ -26,8 +26,8 @@ android {
         applicationId = "com.yunget.app"
         minSdk = 23
         targetSdk = 34
-        versionCode = 9
-        versionName = "2.4.1"
+        versionCode = 10
+        versionName = "2.4.2"
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
     }
@@ -80,11 +80,11 @@ dependencies {
     implementation("androidx.lifecycle:lifecycle-viewmodel-compose:2.8.7")
     implementation("com.squareup.okhttp3:okhttp:4.12.0")
 
-    // TurboDL SDK（纯 JVM 多线程下载引擎 + 可选插件框架），从 mavenLocal 解析 dev.turbodl:*:0.2.0-rc8
-    implementation("dev.turbodl:turbodl-core:0.2.0-rc8")
-    implementation("dev.turbodl:turbo-plugin-runtime:0.2.0-rc8")
-    implementation("dev.turbodl:turbo-plugin-bootstrap:0.2.0-rc8")
-    implementation("dev.turbodl:turbo-plugin-hls:0.2.0-rc8")
+    // TurboDL SDK（纯 JVM 多线程下载引擎 + 可选插件框架），从 mavenLocal 解析 dev.turbodl:*:0.2.0-rc9
+    implementation("dev.turbodl:turbodl-core:0.2.0-rc9")
+    implementation("dev.turbodl:turbo-plugin-runtime:0.2.0-rc9")
+    implementation("dev.turbodl:turbo-plugin-bootstrap:0.2.0-rc9")
+    implementation("dev.turbodl:turbo-plugin-hls:0.2.0-rc9")
 
     implementation(libs.material)   // 原 libs.material.color.utilities -> 改为官方 Material 主库（含 color.utilities 包）
 
