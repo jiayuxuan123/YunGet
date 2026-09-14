@@ -74,6 +74,74 @@ android {
     }
 }
 
+/**
+ * 【防"陈旧产物"事故】校验 release APK **内嵌**的 versionCode/versionName
+ * 是否与当前 `build.gradle.kts` 一致。
+ *
+ * 起因（真实事故）：构建**跑着的时候**才去改版本号 →
+ * 打出来的 APK 是旧版本（2.6.0 / code 13），却按新版本号（2.6.1 / code 14）发了出去。
+ * 用户装上去看到的版本号是旧的，而且**从产物上完全看不出来**。
+ *
+ * Gradle 无法阻止"先构建、后改版本"，但可以在**发布前**把这种不一致拦住。
+ * 发版流程应改为：改版本号 → `assembleRelease` → **`verifyApkVersion`** → 上传。
+ */
+tasks.register("verifyApkVersion") {
+    group = "verification"
+    description = "校验 release APK 内嵌版本与 build.gradle.kts 一致（发版前置检查）"
+    dependsOn("assembleRelease")
+
+    doLast {
+        val apk = layout.buildDirectory.file("outputs/apk/release/app-release.apk").get().asFile
+        if (!apk.isFile) throw GradleException("未找到 release APK：$apk")
+
+        val expectedName = android.defaultConfig.versionName
+        val expectedCode = android.defaultConfig.versionCode
+        if (expectedName == null || expectedCode == null) {
+            throw GradleException("android.defaultConfig 未设置 versionName/versionCode")
+        }
+
+        // 从 local.properties / 环境变量定位 Android SDK
+        // 注意：这里**不能**写 `java.util.Properties()` —— Kotlin DSL 里 `java` 是 Gradle 的
+        // JavaPluginExtension，会遮蔽同名包。文件顶部已 `import java.util.Properties`，直接用即可。
+        val props = Properties()
+        sequenceOf(rootProject.file("local.properties"), project.file("local.properties"))
+            .firstOrNull { it.isFile }
+            ?.inputStream()?.use { props.load(it) }
+        val sdkDir = props.getProperty("sdk.dir")
+            ?: System.getenv("ANDROID_HOME")
+            ?: System.getenv("ANDROID_SDK_ROOT")
+            ?: throw GradleException("找不到 Android SDK（local.properties 的 sdk.dir 或 ANDROID_HOME）")
+
+        val aapt2 = File(sdkDir, "build-tools")
+            .listFiles()?.sortedByDescending { it.name }
+            ?.asSequence()
+            ?.map { File(it, "aapt2.exe").takeIf { f -> f.isFile } ?: File(it, "aapt2") }
+            ?.firstOrNull { it.isFile }
+            ?: throw GradleException("在 $sdkDir/build-tools 下找不到 aapt2")
+
+        val badging = providers.exec {
+            commandLine(aapt2.absolutePath, "dump", "badging", apk.absolutePath)
+        }.standardOutput.asText.get()
+
+        val m = Regex("versionCode='(\\d+)' versionName='([^']*)'").find(badging)
+            ?: throw GradleException("无法从 APK 解析版本信息：$apk")
+        val actualCode = m.groupValues[1].toInt()
+        val actualName = m.groupValues[2]
+
+        if (actualCode != expectedCode || actualName != expectedName) {
+            throw GradleException(
+                buildString {
+                    appendLine("APK 内嵌版本与源码不一致 —— 产物是**陈旧**的，绝不能发布！")
+                    appendLine("    APK  : versionCode=$actualCode versionName=$actualName")
+                    appendLine("    源码 : versionCode=$expectedCode versionName=$expectedName")
+                    appendLine("处理：确认版本号改动已完成，然后重新执行 assembleRelease（不要复用旧产物）。")
+                }
+            )
+        }
+        logger.lifecycle("verifyApkVersion OK: versionCode=$expectedCode versionName=$expectedName")
+    }
+}
+
 dependencies {
     implementation("androidx.compose.material:material-icons-extended")
     implementation("androidx.lifecycle:lifecycle-viewmodel-ktx:2.8.7")
