@@ -172,6 +172,15 @@ class TurboDownloadManager(
         warmUpConnections = warmUpProvider(),
         slowStart = slowStartProvider(),
         trustAllCerts = ignoreSslProvider(),
+        // 弱校验器续传策略（TurboDL 0.2.0-rc12 新增，默认 false）。
+        // 服务器只回 Content-Length、无 ETag/Last-Modified 时，续传令牌退化为 len=N。
+        // 此时「服务器换了同样大小的新文件」检测不到 → 旧分片被复用 → 合并出静默损坏的文件，
+        // 而最终长度校验恰好通过。false = 丢弃旧分片重下（正确性优先）。
+        //
+        // 代价：弱校验器来源的下载在**被中断后恢复**时会重下（分片目录已在完成后清理，
+        // 因此正常完成的任务不受影响）。若你的来源普遍不提供 ETag/Last-Modified
+        // 且更在意省流量，可显式改为 true 并自行承担损坏风险。
+        trustWeakValidator = false,
     )
 
     /** 每次入队/开始前按当前设置热更新引擎配置（限速/并发/线程/忽略SSL 即时生效）。 */
