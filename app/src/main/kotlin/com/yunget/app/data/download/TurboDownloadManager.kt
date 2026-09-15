@@ -133,6 +133,9 @@ class TurboDownloadManager(
     private val lastDbWriteTs = ConcurrentHashMap<Long, Long>()
     private val lastDbWriteBytes = ConcurrentHashMap<Long, Long>()
 
+    /** 启动阶段诊断：Metadata(探测完成)时刻，用于在首个 Progress 时算出「首字节耗时」。任务结束即清。 */
+    private val metadataAtMs = ConcurrentHashMap<Long, Long>()
+
     @Volatile
     private var lastConfigSignature: String = ""
 
@@ -335,6 +338,12 @@ class TurboDownloadManager(
         when (ev) {
             is TurboEvent.Progress -> {
                 val p = ev.progress
+                // 【诊断】首字节耗时 = 从探测完成到第一批字节。若它很大而探测(见 Metadata 日志)很小，
+                // 说明慢在**首连接**（DNS / IPv6 路由 / TLS），而不是解析。
+                val metaAt = if (p.downloadedBytes > 0) metadataAtMs.remove(roomId) else null
+                metaAt?.let { t0 ->
+                    Log.i(TAG, "首字节: id=$roomId 距探测完成 ${System.currentTimeMillis() - t0}ms downloaded=${p.downloadedBytes}")
+                }
                 _stats.update {
                     it + (roomId to DownloadStats(
                         speed = p.speedBytesPerSec,
@@ -362,6 +371,7 @@ class TurboDownloadManager(
                 Log.e(TAG, "task $roomId failed: ${ev.reason}")
                 turboIds.remove(roomId)?.let { turboIdToRoomId.remove(it) }
                 _stats.update { it - roomId }
+                metadataAtMs.remove(roomId)
                 dao.updateStatus(roomId, DownloadTaskEntity.STATUS_FAILED)
                 dao.updateError(roomId, ev.reason)
                 turboOutputs.remove(roomId)?.delete()
@@ -373,6 +383,9 @@ class TurboDownloadManager(
                 }
             }
             is TurboEvent.Metadata -> {
+                // 【诊断】解析(探测)耗时：值大=探测/服务器响应慢；≈0(已知大小跳过探测)而首字节慢=慢在首连接。
+                metadataAtMs[roomId] = System.currentTimeMillis()
+                Log.i(TAG, "启动阶段: id=$roomId probe=${ev.probeMs}ms total=${ev.totalBytes} range=${ev.supportsRange}")
                 // 静默利用探测到的服务器建议文件名：仅当现名看起来是无意义的
                 // （UUID / 无扩展名 / download_ 占位）且服务器给了带扩展名的名字时才替换，
                 // 避免覆盖网盘解析得到的准确文件名。失败不影响下载。
@@ -464,6 +477,7 @@ class TurboDownloadManager(
             // 保存成功才清理：临时文件 + 网盘临时转存回调。
             turboIds.remove(roomId)?.let { turboIdToRoomId.remove(it) }
             _stats.update { it - roomId }
+            metadataAtMs.remove(roomId)
             turboOutputs.remove(roomId)?.delete()
             file.delete()
             taskCallbacks.remove(roomId)?.let { cb -> runCatching { cb() } }
