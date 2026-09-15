@@ -452,8 +452,15 @@ class TurboDownloadManager(
             val savedPath = withContext(Dispatchers.IO) {
                 DownloadSaver.save(context, task.fileName, file, saveDirProvider())
             } ?: throw IllegalStateException("保存到下载目录失败")
-            dao.complete(roomId, DownloadTaskEntity.STATUS_COMPLETED, savedPath)
-            Log.d(TAG, "onTurboCompleted: id=$roomId saved=$savedPath size=${file.length()}")
+            // 完成时用**实际落盘大小**修正进度记录。
+            // 进度是节流写库的（每 800ms / 每 1MB），最后一段增量可能压根没写进去，
+            // 只写 status 的话界面就会显示「已完成 · 18.0/18.1 MB · 99%」——
+            // 状态说完成、百分比说没完成，自相矛盾。以实际文件为准，
+            // 并让 totalSize 不小于它，保证完成后恒为 100%。
+            val actualSize = file.length()
+            val finalTotal = maxOf(if (total > 0) total else 0L, actualSize)
+            dao.complete(roomId, DownloadTaskEntity.STATUS_COMPLETED, savedPath, actualSize, finalTotal)
+            Log.d(TAG, "onTurboCompleted: id=$roomId saved=$savedPath size=$actualSize total=$finalTotal")
             // 保存成功才清理：临时文件 + 网盘临时转存回调。
             turboIds.remove(roomId)?.let { turboIdToRoomId.remove(it) }
             _stats.update { it - roomId }

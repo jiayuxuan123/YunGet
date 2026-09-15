@@ -580,8 +580,10 @@ class LegacyDownloadManager(
             DownloadSaver.save(context, task.fileName, hlsFile, saveDirProvider())
         }
             ?: throw IllegalStateException("保存到下载目录失败")
-        dao.complete(id, DownloadTaskEntity.STATUS_COMPLETED, savedPath)
-        Log.d(TAG, "hlsDownload: id=$id 下载完成 savedPath=$savedPath size=${hlsFile.length()}")
+        // 完成时以实际落盘大小修正进度（进度写库是节流的，末段增量可能没写进去）。
+        val hlsSize = hlsFile.length()
+        dao.complete(id, DownloadTaskEntity.STATUS_COMPLETED, savedPath, hlsSize, hlsSize)
+        Log.d(TAG, "hlsDownload: id=$id 下载完成 savedPath=$savedPath size=$hlsSize")
         taskCallbacks.remove(id)?.let { cb -> runCatching { cb() } }
         _stats.update { it - id }
         hlsFile.delete()
@@ -631,8 +633,10 @@ class LegacyDownloadManager(
             DownloadSaver.save(context, fileName, merged, saveDirProvider())
         }
             ?: throw IllegalStateException("保存到下载目录失败")
-        dao.complete(id, DownloadTaskEntity.STATUS_COMPLETED, savedPath)
-        Log.d(TAG, "finishDownload: id=$id 下载完成 savedPath=$savedPath size=${merged.length()}")
+        // 完成时以实际落盘大小修正进度（进度写库是节流的，末段增量可能没写进去）。
+        val mergedSize = merged.length()
+        dao.complete(id, DownloadTaskEntity.STATUS_COMPLETED, savedPath, mergedSize, mergedSize)
+        Log.d(TAG, "finishDownload: id=$id 下载完成 savedPath=$savedPath size=$mergedSize")
         taskCallbacks.remove(id)?.let { cb ->
             runCatching { cb() }
         }
