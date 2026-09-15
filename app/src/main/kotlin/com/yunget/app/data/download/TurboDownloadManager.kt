@@ -383,9 +383,15 @@ class TurboDownloadManager(
                 }
             }
             is TurboEvent.Metadata -> {
-                // 【诊断】解析(探测)耗时：值大=探测/服务器响应慢；≈0(已知大小跳过探测)而首字节慢=慢在首连接。
+                // 【诊断】解析(探测)耗时 + 续传判定：
+                //  - probe 大 → 探测/服务器慢；probe≈0 而首字节慢 → 慢在首连接。
+                //  - resume=… → 定位"断点续传为什么不生效"（没找到旧分片 / 校验器变了 / 指纹不通过）。
                 metadataAtMs[roomId] = System.currentTimeMillis()
-                Log.i(TAG, "启动阶段: id=$roomId probe=${ev.probeMs}ms total=${ev.totalBytes} range=${ev.supportsRange}")
+                Log.i(
+                    TAG,
+                    "启动阶段: id=$roomId probe=${ev.probeMs}ms total=${ev.totalBytes} " +
+                        "range=${ev.supportsRange} resume=[${ev.resumeNote}]"
+                )
                 // 静默利用探测到的服务器建议文件名：仅当现名看起来是无意义的
                 // （UUID / 无扩展名 / download_ 占位）且服务器给了带扩展名的名字时才替换，
                 // 避免覆盖网盘解析得到的准确文件名。失败不影响下载。
