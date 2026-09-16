@@ -645,6 +645,7 @@ fun MainScreen() {
                         onAboutClick = { showAbout = true },
                         onSupportClick = { showSupport = true },
                         backupManager = backupManager,
+                        onConnectionDiagnose = { downloadManager.diagnoseConnections() },
                         onDownloadUpdateApk = { url, name ->
                             scope.launch {
                                 downloadManager.enqueue(url = url, fileName = name)

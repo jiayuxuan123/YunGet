@@ -11,6 +11,10 @@ interface DownloadTaskDao {
     @Query("SELECT * FROM download_task ORDER BY createTime DESC")
     fun observeAll(): Flow<List<DownloadTaskEntity>>
 
+    /** 一次性取全部任务（诊断等非响应式场景用，避免为拿一次快照而收集 Flow）。 */
+    @Query("SELECT * FROM download_task ORDER BY createTime DESC")
+    suspend fun getAllOnce(): List<DownloadTaskEntity>
+
     @Insert
     suspend fun insert(task: DownloadTaskEntity): Long
 

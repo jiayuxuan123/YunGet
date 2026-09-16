@@ -106,6 +106,11 @@ fun SettingsScreen(
     backupManager: AuthBackupManager,
     /** 用应用内置下载器下载更新 APK（URL + 文件名），由 MainScreen 注入 DownloadManager */
     onDownloadUpdateApk: (url: String, fileName: String) -> Unit,
+    /**
+     * 【开发诊断】用最近一个任务的真实链接做连接数扫描，返回可读报告。
+     * 由 MainScreen 注入 DownloadManager 实现；只在隐藏开发菜单里调用。
+     */
+    onConnectionDiagnose: suspend () -> String,
     modifier: Modifier = Modifier
 ) {
     var showThreadsDialog by remember { mutableStateOf(false) }
@@ -128,6 +133,9 @@ fun SettingsScreen(
     // 隐藏开发调试：忽略 SSL 证书（抓包用，长按「关于云取」打开菜单）
     var ignoreSsl by remember { mutableStateOf(settingsRepo.ignoreSslCert) }
     var showDevMenu by remember { mutableStateOf(false) }
+    // 【开发诊断】连接数扫描：运行中 / 结果文本
+    var diagRunning by remember { mutableStateOf(false) }
+    var diagResult by remember { mutableStateOf<String?>(null) }
     LaunchedEffect(Unit) { ignoreSsl = settingsRepo.ignoreSslCert }
     // 网络与下载策略（本地状态驱动 UI，同时同步 SharedPreferences）
     var maxConcurrent by remember { mutableStateOf(settingsRepo.maxConcurrentDownloads) }
@@ -567,10 +575,56 @@ fun SettingsScreen(
                         },
                         modifier = Modifier.fillMaxWidth()
                     ) { Text("显示检查更新弹窗") }
+
+                    Spacer(modifier = Modifier.height(12.dp))
+                    Button(
+                        onClick = {
+                            showDevMenu = false
+                            if (!diagRunning) {
+                                diagRunning = true
+                                diagResult = null
+                                // 用最近一个任务的**真实链接**扫连接数：8/16/64/128，每档 15s。
+                                // 结果同时进 logcat（可随"导出日志"回传），并弹窗展示判读。
+                                scope.launch {
+                                    val text = runCatching { onConnectionDiagnose() }
+                                        .getOrElse { "诊断失败：${it.message}" }
+                                    diagResult = text
+                                    diagRunning = false
+                                }
+                            }
+                        },
+                        enabled = !diagRunning,
+                        modifier = Modifier.fillMaxWidth()
+                    ) {
+                        Text(if (diagRunning) "连接数诊断运行中…（约 1 分钟）" else "连接数诊断（用最近任务）")
+                    }
+                    Spacer(modifier = Modifier.height(4.dp))
+                    Text(
+                        text = "只改连接数、每档只跑 15 秒即取消，不会下完整个文件。" +
+                            "结果用于判断服务器是「每连接限速」还是「按 IP 聚合限速」还是「对并发有惩罚」。",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
                 }
             },
             confirmButton = {
                 TextButton(onClick = { showDevMenu = false }) { Text("关闭") }
+            }
+        )
+    }
+
+    // 连接数诊断结果（只读文本，可直接复制）
+    diagResult?.let { text ->
+        AlertDialog(
+            onDismissRequest = { diagResult = null },
+            title = { Text("连接数诊断") },
+            text = {
+                Column(modifier = Modifier.verticalScroll(rememberScrollState())) {
+                    Text(text = text, style = MaterialTheme.typography.bodySmall)
+                }
+            },
+            confirmButton = {
+                TextButton(onClick = { diagResult = null }) { Text("关闭") }
             }
         )
     }

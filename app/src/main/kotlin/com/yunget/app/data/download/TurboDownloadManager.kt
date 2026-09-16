@@ -9,6 +9,7 @@ import dev.turbodl.core.DnsMode
 import dev.turbodl.core.ProxyMode
 import dev.turbodl.core.TaskState
 import dev.turbodl.core.TurboConfig
+import dev.turbodl.core.TurboDiagnostics
 import dev.turbodl.core.TurboEvent
 import dev.turbodl.plugin.bootstrap.TurboBootstrap
 import dev.turbodl.plugin.hls.HlsPlugin
@@ -186,9 +187,62 @@ class TurboDownloadManager(
         trustWeakValidator = false,
     )
 
+    /**
+     * 【开发诊断】用最近一个任务（优先未完成的）的**真实链接**做连接数扫描，返回可读报告。
+     *
+     * 为什么必须在手机上跑：夸克等网盘的直链带签名/Cookie，且限速行为与出口 IP 相关 ——
+     * 只有在真实设备 + 真实链接上测，曲线才有意义（回环或代理都测不出真实模型）。
+     *
+     * 只改连接数、其他配置不变，每档跑固定窗口后取消（**不会**下完整个文件）。
+     * 曲线形状的判读见 `TurboDiagnostics.interpret`：
+     * 线性上升=每连接限速；持平=按 IP 聚合限速；先升后降=对并发有惩罚。
+     *
+     * 结果同时写入日志，可随"导出日志"一起回传。
+     */
+    suspend fun diagnoseConnections(
+        tiers: List<Int> = listOf(8, 16, 64, 128),
+        windowMs: Long = 15_000,
+    ): String {
+        val tasks = dao.getAllOnce()
+        val task = tasks.firstOrNull { it.status != DownloadTaskEntity.STATUS_COMPLETED }
+            ?: tasks.firstOrNull()
+            ?: return "没有可用的任务：先添加一个下载任务，再用它的链接做诊断。"
+        val headers = taskHeaders[task.id] ?: parseHeadersJson(task.requestHeadersJson)
+        val known = taskSizes[task.id] ?: task.totalSize.takeIf { it > 0 } ?: -1L
+
+        Log.i(
+            TAG,
+            "=== 连接数诊断开始 task=$task.id url=${task.url.take(100)} " +
+                "knownSize=$known 档位=$tiers 每档=${windowMs}ms ==="
+        )
+        val results = runCatching {
+            TurboDiagnostics.sweepConnections(
+                url = task.url,
+                headers = headers,
+                knownSize = known,
+                tiers = tiers,
+                windowMs = windowMs,
+                workDir = chunkWorkDir(),
+            ) { r -> Log.i(TAG, "连接数诊断: $r") }
+        }.getOrElse { e ->
+            Log.w(TAG, "连接数诊断失败: ${e.message}")
+            return "诊断失败：${e.message}"
+        }
+        val verdict = TurboDiagnostics.interpret(results)
+        Log.i(TAG, "连接数诊断判读: $verdict")
+
+        return buildString {
+            appendLine("任务：${task.fileName.ifBlank { task.url.take(60) }}")
+            appendLine("档位：${tiers.joinToString(" / ")}（每档 ${windowMs / 1000}s）")
+            appendLine()
+            results.forEach { appendLine(it.toString()) }
+            appendLine()
+            append(verdict)
+        }
+    }
+
     /** 每次入队/开始前按当前设置热更新引擎配置（限速/并发/线程/忽略SSL 即时生效）。 */
-    private fun refreshConfigIfChanged() {
-        val cfg = buildConfig()
+    private fun refreshConfigIfChanged() {        val cfg = buildConfig()
         // 签名覆盖所有会影响下载行为的字段（原先只有 5 个，forceHttp1/segmentsPerConnection 等改了不生效）。
         val sig = listOf(
             cfg.maxConnectionsPerTask, cfg.maxConcurrentTasks, cfg.globalSpeedLimitBytesPerSec,
