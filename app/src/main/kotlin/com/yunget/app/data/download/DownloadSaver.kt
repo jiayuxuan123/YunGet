@@ -32,6 +32,22 @@ object DownloadSaver {
      * @return 保存成功后的标识（MediaStore uri 字符串 / SAF 文档 uri / 文件绝对路径）；失败返回 null
      */
     fun save(context: Context, fileName: String, source: File, targetDirUri: String? = null): String? {
+        // 【必须先拦空源】三条保存路径都用 `copyTo` 写目标：
+        // `InputStream.copyTo` 对空输入返回 0 **且不抛异常**，于是写入方会认为自己成功了
+        // （MediaStore 里 `wrote = true` 照常发布、SAF/legacy 同样通过），
+        // 最终在下载目录里留下一个 0 字节文件，而任务状态是"已完成"。
+        // 配合引擎侧"total<=0 时跳过长度校验"（TurboClient.finish），
+        // 「服务器返回空响应 + 大小未知」这一组合会被静默判为成功 —— 用户拿到空的"已下载"文件。
+        // 故在入口统一拒绝：宁可让上层报失败（保留现场供重试），也不要发布空文件。
+        val sourceLen = runCatching { source.length() }.getOrDefault(-1L)
+        if (sourceLen == 0L) {
+            Log.e(TAG, "拒绝保存 0 字节源文件（下载未真正写入数据）：$source")
+            return null
+        }
+        if (sourceLen < 0 || !source.isFile) {
+            Log.e(TAG, "源文件不存在或不可读，放弃保存：$source")
+            return null
+        }
         // 拆分相对路径与文件名：目录段与文件名分别清洗
         val clean = fileName.replace('\\', '/')
         val slash = clean.lastIndexOf('/')

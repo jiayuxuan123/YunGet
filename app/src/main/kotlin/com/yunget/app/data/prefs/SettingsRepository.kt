@@ -101,6 +101,22 @@ class SettingsRepository(context: Context) {
             prefs.edit().putBoolean("slow_start", value).apply()
         }
 
+    /**
+     * 下载引擎 id（见 `com.yunget.app.data.download.DownloadEngine`），默认 TurboDL。
+     *
+     * 用途：TurboDL 出现异常时的兜底 —— 可切到内置兼容引擎（LegacyDownloadManager）。
+     *
+     * ⚠️ **切换后需重启 App 才生效**：管理器由 ViewModel 持有，而各业务 ViewModel
+     * 在构造时已强引用它。若做热切换，旧 ViewModel 会继续指向旧管理器
+     * （两套引擎同时活着、连接池重复占用），所以刻意不做。UI 必须明确提示"重启后生效"，
+     * 不能让用户以为点了就立即换引擎。
+     */
+    var downloadEngineId: String
+        get() = prefs.getString("download_engine_id", DEFAULT_DOWNLOAD_ENGINE) ?: DEFAULT_DOWNLOAD_ENGINE
+        set(value) {
+            prefs.edit().putString("download_engine_id", value).apply()
+        }
+
     /** 深色模式：0=跟随系统，1=浅色，2=深色 */
     var darkMode: Int
         get() = prefs.getInt("dark_mode", 0)
@@ -126,6 +142,9 @@ class SettingsRepository(context: Context) {
         const val DEFAULT_DOWNLOAD_THREADS = 16
         const val DEFAULT_MAX_CONCURRENT_DOWNLOADS = 1
         const val DEFAULT_DOWNLOAD_RETRY_COUNT = 3
+
+        /** 默认下载引擎：TurboDL 内核 */
+        const val DEFAULT_DOWNLOAD_ENGINE = "turbodl"
 
         /** 默认主题种子色：Material Blue（与内置默认方案一致） */
         const val DEFAULT_SEED_COLOR = 0xFF415F91L

@@ -18,6 +18,7 @@ import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.cancel
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -27,6 +28,7 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import java.io.File
 import java.util.concurrent.ConcurrentHashMap
+import com.yunget.app.util.DiagLog
 
 /** 实时下载统计（用于 UI 展示速度/剩余时间/线程数） */
 data class DownloadStats(
@@ -38,10 +40,12 @@ data class DownloadStats(
 private const val TAG = "YunGet-DL"
 
 /**
- * 兼容别名：全 App（ViewModel / UI）以 `DownloadManager` 类型引用下载管理器。
- * 现指向 TurboDL 内核版实现；旧实现保留为 [LegacyDownloadManager]（暂不接线）。
+ * 诊断最多探活多少个候选任务。
+ *
+ * 每次探活只是一次 1 字节 Range 请求（几十毫秒），但任务多时逐个探完没意义 ——
+ * 挑大的前几个即可，反正真正测的是"链接可用"这件事。
  */
-typealias DownloadManager = TurboDownloadManager
+private const val DIAG_PROBE_MAX_CANDIDATES = 8
 
 /**
  * 下载任务管理器（TurboDL 内核版）。
@@ -86,7 +90,7 @@ class TurboDownloadManager(
     private val warmUpProvider: () -> Boolean = { true },
     /** 慢启动开关提供者（默认开） */
     private val slowStartProvider: () -> Boolean = { true },
-) {
+) : DownloadManager {
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
 
     /** TurboDL 引导：装配 PluginHost + TurboClient + 基础插件；额外装 HLS 插件。 */
@@ -102,13 +106,13 @@ class TurboDownloadManager(
 
     /** 实时统计（UI）*/
     private val _stats = MutableStateFlow<Map<Long, DownloadStats>>(emptyMap())
-    val stats: StateFlow<Map<Long, DownloadStats>> = _stats.asStateFlow()
+    override val stats: StateFlow<Map<Long, DownloadStats>> = _stats.asStateFlow()
 
     /** 任务列表（Room Flow 直通）*/
-    val tasks: Flow<List<DownloadTaskEntity>> = dao.observeAll()
+    override val tasks: Flow<List<DownloadTaskEntity>> = dao.observeAll()
 
     /** 存储权限检查（UI 注入）；Android 10+ 或已授权返回 true。 */
-    var storagePermissionProvider: suspend () -> Boolean = { true }
+    override var storagePermissionProvider: suspend () -> Boolean = { true }
 
     /** roomId → TurboDL taskId */
     private val turboIds = ConcurrentHashMap<Long, Long>()
@@ -188,6 +192,148 @@ class TurboDownloadManager(
     )
 
     /**
+     * 【开发诊断】状态与结果都**挂在管理器上**（而不是界面的 remember 里）——
+     * 否则用户一切页面/退出设置页，状态就丢了，"跑没跑完"无从判断。
+     */
+    @Volatile
+    override var diagnoseStatus: String? = null
+        private set
+
+    @Volatile
+    override var diagnoseLastResult: String? = null
+        private set
+
+    /** 诊断目标：任务的链接、请求头与已知大小。 */
+    private data class DiagTarget(
+        val id: Long,
+        val fileName: String,
+        val url: String,
+        val headers: Map<String, String>,
+        val knownSize: Long,
+    )
+
+    /** 文件太小的话，固定时长窗口内会下完 → 速率不可比（见 [pickDiagTarget] 注释）。 */
+    private fun sizeWarning(knownSize: Long): String =
+        if (knownSize in 1..(64L * 1024 * 1024)) {
+            "⚠ 该文件仅 ${knownSize / 1048576} MB，可能在窗口内下完导致数据不可比；" +
+                "建议改用 ≥200MB 的任务复测。\n\n"
+        } else ""
+
+    /**
+     * 【开发诊断】按"最可能成功"的顺序尝试任务，返回第一个**链接仍然可用**的目标。
+     *
+     * 【为什么必须探活】任务表存的是**取链时刻的签名直链**：夸克 `__puus` 约 3 小时过期，
+     * 且分享转存类任务在下载完成后会**删掉云端临时目录** —— 那条直链永久失效。
+     * 实测事故：诊断拿这种死链连跑 4 档 × 15 秒，最后只给出"四档全 0 + 样本不足"，
+     * 用户白等 1 分钟还看不出是链接的问题。
+     *
+     * 现在：按大小降序**逐个探活**（每次只发 1 字节 Range 请求，几十毫秒），
+     * 用第一个通的；全都不通则把失败原因交回界面。
+     */
+    private suspend fun pickAliveDiagTarget(): DiagTarget? {
+        val tasks = dao.getAllOnce()
+        fun sizeOf(t: DownloadTaskEntity) = taskSizes[t.id] ?: t.totalSize.takeIf { it > 0 } ?: -1L
+        val pool = tasks.filter { it.status != DownloadTaskEntity.STATUS_COMPLETED }
+            .ifEmpty { tasks }
+            .sortedByDescending { sizeOf(it) }
+        if (pool.isEmpty()) return null
+
+        var lastReason: String? = null
+        for (t in pool.take(DIAG_PROBE_MAX_CANDIDATES)) {
+            val headers = taskHeaders[t.id] ?: parseHeadersJson(t.requestHeadersJson)
+            val bad = TurboDiagnostics.checkReachable(t.url, headers)
+            if (bad == null) {
+                return DiagTarget(
+                    id = t.id,
+                    fileName = t.fileName,
+                    url = t.url,
+                    headers = headers,
+                    knownSize = sizeOf(t),
+                )
+            }
+            lastReason = bad
+            Log.i(TAG, "诊断候选不可用 task=${t.id} ${t.fileName.take(40)} 原因=$bad")
+        }
+        diagnoseStatus = "❌ 没有链接可用的任务（共试了 ${minOf(pool.size, DIAG_PROBE_MAX_CANDIDATES)} 个）：" +
+            "${lastReason ?: "未知原因"}\n。任务的直链是取链时签发的，会过期；" +
+            "请重新解析该链接、新建下载任务后再诊断。"
+        return null
+    }
+
+    /**
+     * 【开发诊断】并发任务扫描：固定每任务连接数，只改**同时下载的任务数**（1/2/3）。
+     *
+     * 回答连接数扫描回答不了的问题：这个固定速率是**单文件上限**（多任务可叠加 → 想更快就并行多任务）
+     * 还是 **IP/账户总量上限**（多任务无用 → 任何客户端手段都突破不了）。
+     */
+    override suspend fun diagnoseConcurrentTasks(
+        taskCounts: List<Int>,
+        connectionsPerTask: Int,
+        windowMs: Long,
+    ): String {
+        val target = pickAliveDiagTarget() ?: run {
+            if (diagnoseStatus == null) {
+                diagnoseStatus = "❌ 没有可用的任务：先添加一个下载任务，再跑诊断。"
+            }
+            return diagnoseStatus!!
+        }
+        diagnoseLastResult = null
+        diagnoseStatus = "运行中（并发任务）0/${taskCounts.size}：准备…"
+        Log.i(
+            TAG,
+            "=== 并发任务诊断开始 task=${target.id} url=${target.url.take(100)} " +
+                "任务数=$taskCounts 每任务连接=$connectionsPerTask 每档=${windowMs}ms ==="
+        )
+        var done = 0
+        val results = runCatching {
+            TurboDiagnostics.sweepConcurrentTasks(
+                url = target.url,
+                headers = target.headers,
+                knownSize = target.knownSize,
+                taskCounts = taskCounts,
+                connectionsPerTask = connectionsPerTask,
+                windowMs = windowMs,
+                workDir = chunkWorkDir(),
+            ) { r ->
+                done += 1
+                diagnoseStatus = "运行中（并发任务）$done/${taskCounts.size}：${r.axisLabel} → %.2f MB/s"
+                    .format(r.mbPerSec)
+                Log.i(TAG, "并发任务诊断: $r")
+            }
+        }.getOrElse { e ->
+            Log.w(TAG, "并发任务诊断失败: ${e.message}")
+            diagnoseStatus = "❌ 诊断失败：${e.message}"
+            return diagnoseStatus!!
+        }
+        val verdict = TurboDiagnostics.interpretConcurrent(results)
+        Log.i(TAG, "并发任务诊断判读: $verdict")
+
+        val text = buildString {
+            appendLine("云取 · 并发任务诊断（每任务 $connectionsPerTask 连接）")
+            appendLine("时间：${java.text.SimpleDateFormat("yyyy-MM-dd HH:mm:ss", java.util.Locale.CHINA).format(java.util.Date())}")
+            appendLine("任务：${target.fileName.ifBlank { target.url.take(60) }}")
+            appendLine("文件大小：${if (target.knownSize > 0) "${target.knownSize / 1048576} MB" else "未知"}")
+            appendLine("档位：${taskCounts.joinToString(" / ")} 个任务并行（每档 ${windowMs / 1000}s）")
+            appendLine()
+            append(sizeWarning(target.knownSize))
+            results.forEach { appendLine(it.toString()) }
+            appendLine()
+            append(verdict)
+        }
+        diagnoseLastResult = text
+        val savedPath = runCatching {
+            val dir = File(context.getExternalFilesDir(null), "diagnostics").apply { mkdirs() }
+            val f = File(dir, "concurrent-sweep-${System.currentTimeMillis()}.txt")
+            f.writeText(text)
+            f.absolutePath
+        }.getOrNull()
+        Log.i(TAG, "并发任务诊断结果已写入：${savedPath ?: "(落盘失败)"}")
+        diagnoseStatus = "✅ 已完成（并发任务 ${results.size} 档）" +
+            if (savedPath != null) " · 结果文件：$savedPath" else " · 结果见日志"
+        return text
+    }
+
+    /**
      * 【开发诊断】用最近一个任务（优先未完成的）的**真实链接**做连接数扫描，返回可读报告。
      *
      * 为什么必须在手机上跑：夸克等网盘的直链带签名/Cookie，且限速行为与出口 IP 相关 ——
@@ -197,53 +343,87 @@ class TurboDownloadManager(
      * 曲线形状的判读见 `TurboDiagnostics.interpret`：
      * 线性上升=每连接限速；持平=按 IP 聚合限速；先升后降=对并发有惩罚。
      *
-     * 结果同时写入日志，可随"导出日志"一起回传。
+     * 结果会：① 写入应用外部目录的文件（可直接取走）② 写进日志（可随"导出日志"回传）
+     * ③ 保留在 [diagnoseLastResult] 供界面随时查看/分享。
      */
-    suspend fun diagnoseConnections(
-        tiers: List<Int> = listOf(8, 16, 64, 128),
-        windowMs: Long = 15_000,
+    override suspend fun diagnoseConnections(
+        // 档位上限压到 64：连接数拉满容易触发网盘风控（用户 2026-09-17 明确要求）。
+        // 8/16/32/64 四点已足够看出单调性/平坦/拐点三种形状。
+        tiers: List<Int>,
+        windowMs: Long,
     ): String {
-        val tasks = dao.getAllOnce()
-        val task = tasks.firstOrNull { it.status != DownloadTaskEntity.STATUS_COMPLETED }
-            ?: tasks.firstOrNull()
-            ?: return "没有可用的任务：先添加一个下载任务，再用它的链接做诊断。"
-        val headers = taskHeaders[task.id] ?: parseHeadersJson(task.requestHeadersJson)
-        val known = taskSizes[task.id] ?: task.totalSize.takeIf { it > 0 } ?: -1L
+        val target = pickAliveDiagTarget() ?: run {
+            if (diagnoseStatus == null) {
+                diagnoseStatus = "❌ 没有可用的任务：先添加一个下载任务，再用它的链接做诊断。"
+            }
+            return diagnoseStatus!!
+        }
+        val headers = target.headers
+        val known = target.knownSize
 
+        diagnoseLastResult = null
+        diagnoseStatus = "运行中 0/${tiers.size}：准备…"
         Log.i(
             TAG,
-            "=== 连接数诊断开始 task=$task.id url=${task.url.take(100)} " +
+            "=== 连接数诊断开始 task=${target.id} url=${target.url.take(100)} " +
                 "knownSize=$known 档位=$tiers 每档=${windowMs}ms ==="
         )
+        var done = 0
         val results = runCatching {
             TurboDiagnostics.sweepConnections(
-                url = task.url,
+                url = target.url,
                 headers = headers,
                 knownSize = known,
                 tiers = tiers,
                 windowMs = windowMs,
                 workDir = chunkWorkDir(),
-            ) { r -> Log.i(TAG, "连接数诊断: $r") }
+            ) { r ->
+                done += 1
+                diagnoseStatus = if (r.error != null) {
+                    "运行中 $done/${tiers.size}：连接=${r.connections} ❌ ${r.error}"
+                } else {
+                    "运行中 $done/${tiers.size}：连接=${r.connections} → %.2f MB/s".format(r.mbPerSec)
+                }
+                Log.i(TAG, "连接数诊断: $r")
+            }
         }.getOrElse { e ->
             Log.w(TAG, "连接数诊断失败: ${e.message}")
-            return "诊断失败：${e.message}"
+            diagnoseStatus = "❌ 诊断失败：${e.message}"
+            return diagnoseStatus!!
         }
         val verdict = TurboDiagnostics.interpret(results)
         Log.i(TAG, "连接数诊断判读: $verdict")
 
-        return buildString {
-            appendLine("任务：${task.fileName.ifBlank { task.url.take(60) }}")
+        val text = buildString {
+            appendLine("云取 · 连接数诊断")
+            appendLine("时间：${java.text.SimpleDateFormat("yyyy-MM-dd HH:mm:ss", java.util.Locale.CHINA).format(java.util.Date())}")
+            appendLine("任务：${target.fileName.ifBlank { target.url.take(60) }}")
+            appendLine("文件大小：${if (target.knownSize > 0) "${target.knownSize / 1048576} MB" else "未知"}")
             appendLine("档位：${tiers.joinToString(" / ")}（每档 ${windowMs / 1000}s）")
             appendLine()
+            append(sizeWarning(target.knownSize))
             results.forEach { appendLine(it.toString()) }
             appendLine()
             append(verdict)
         }
+        diagnoseLastResult = text
+
+        // 落盘：结果文件放在应用外部目录，文件管理器可直接取走（通知里会给路径）。
+        val savedPath = runCatching {
+            val dir = File(context.getExternalFilesDir(null), "diagnostics").apply { mkdirs() }
+            val f = File(dir, "conn-sweep-${System.currentTimeMillis()}.txt")
+            f.writeText(text)
+            f.absolutePath
+        }.getOrNull()
+        Log.i(TAG, "连接数诊断结果已写入：${savedPath ?: "(落盘失败)"}")
+
+        diagnoseStatus = "✅ 已完成（${results.size} 档）" +
+            if (savedPath != null) " · 结果文件：$savedPath" else " · 结果见日志"
+        return text
     }
 
     /** 每次入队/开始前按当前设置热更新引擎配置（限速/并发/线程/忽略SSL 即时生效）。 */
-    private fun refreshConfigIfChanged() {        val cfg = buildConfig()
-        // 签名覆盖所有会影响下载行为的字段（原先只有 5 个，forceHttp1/segmentsPerConnection 等改了不生效）。
+    private fun refreshConfigIfChanged() {        val cfg = buildConfig()        // 签名覆盖所有会影响下载行为的字段（原先只有 5 个，forceHttp1/segmentsPerConnection 等改了不生效）。
         val sig = listOf(
             cfg.maxConnectionsPerTask, cfg.maxConcurrentTasks, cfg.globalSpeedLimitBytesPerSec,
             cfg.maxRetries, cfg.trustAllCerts, cfg.forceHttp1, cfg.segmentsPerConnection,
@@ -259,13 +439,44 @@ class TurboDownloadManager(
 
     // ---------- 公开 API（与 LegacyDownloadManager 一致）----------
 
+    /**
+     * 释放本管理器持有的全部资源（引擎、OkHttp 连接池与线程、事件收集协程、WakeLock）。
+     *
+     * 【为什么必须有】管理器在 `MainScreen` 里用 `remember {}` 创建，而 `remember` 无 key：
+     * Activity 每次重建（旋转屏幕、改主题/图标、系统回收重建）都会 new 一个新实例。
+     * 旧实例若不被释放，它的 TurboClient（含两个 OkHttpClient 的 Dispatcher 线程池与连接池）
+     * 与 `client.events.collect` 协程会**永久残留**——长跑下来就是无界增长。
+     *
+     * 幂等：重复调用安全（内部各步都做了容错；[TurboBootstrap.shutdown] 自身可重复进入）。
+     */
+    override fun shutdown() {
+        if (!shutdownFlag.compareAndSet(false, true)) return
+        runCatching { scope.cancel() }
+        runCatching { bootstrap.shutdown() }
+        runCatching { releaseWakeLock() }
+        runCatching { DownloadService.stop(context) }
+        turboIds.clear()
+        turboIdToRoomId.clear()
+        taskHeaders.clear()
+        taskSizes.clear()
+        taskNames.clear()
+        taskCallbacks.clear()
+        turboOutputs.clear()
+        Log.i(TAG, "manager shutdown 完成（引擎与连接池已释放）")
+    }
+
+    /** 是否已释放（释放后再调用 start/enqueue 会被忽略，避免用已关闭的 client 提交任务）。 */
+    val isShutdown: Boolean get() = shutdownFlag.get()
+
+    private val shutdownFlag = java.util.concurrent.atomic.AtomicBoolean(false)
+
     /** 入队并立即开始下载。返回 Room 任务 id。 */
-    suspend fun enqueue(
+    override suspend fun enqueue(
         url: String,
         fileName: String,
-        headers: Map<String, String> = emptyMap(),
-        size: Long = -1L,
-        onComplete: suspend () -> Unit = {}
+        headers: Map<String, String>,
+        size: Long,
+        onComplete: suspend () -> Unit,
     ): Long {
         val safeName = fileName.ifBlank {
             url.substringAfterLast('/').substringBefore('?')
@@ -291,7 +502,7 @@ class TurboDownloadManager(
     }
 
     /** 开始/恢复下载（断点续传）。 */
-    fun start(id: Long, headers: Map<String, String> = emptyMap()) {
+    override fun start(id: Long, headers: Map<String, String>) {
         val effectiveHeaders = headers.ifEmpty { taskHeaders[id] ?: emptyMap() }
         Log.d(TAG, "start: id=$id headers=${effectiveHeaders.keys}")
         // 已在运行：忽略重复启动
@@ -329,7 +540,7 @@ class TurboDownloadManager(
     }
 
     /** 暂停下载（保留断点）。 */
-    fun pause(id: Long) {
+    override fun pause(id: Long) {
         Log.d(TAG, "pause: id=$id")
         val turboId = turboIds.remove(id)
         if (turboId != null) turboIdToRoomId.remove(turboId)
@@ -342,7 +553,7 @@ class TurboDownloadManager(
     }
 
     /** 删除任务（可选删除本地文件），并触发清理回调。 */
-    fun remove(id: Long, deleteLocal: Boolean = false) {
+    override fun remove(id: Long, deleteLocal: Boolean) {
         Log.d(TAG, "remove: id=$id deleteLocal=$deleteLocal")
         val turboId = turboIds.remove(id)
         if (turboId != null) turboIdToRoomId.remove(turboId)
@@ -371,7 +582,7 @@ class TurboDownloadManager(
      * 不调用的话，进程被杀后任务状态永远停在“下载中”，UI 上既不跑也无法恢复。
      * 标为暂停后用户可手动点击恢复（因分片目录用 stableKey 保留，恢复从断点继续）。
      */
-    fun recoverInterruptedTasks() {
+    override fun recoverInterruptedTasks() {
         scope.launch {
             runCatching { dao.markInterruptedAsPaused() }
                 .onFailure { Log.e(TAG, "recoverInterruptedTasks failed: ${it.message}") }
@@ -441,9 +652,13 @@ class TurboDownloadManager(
                 //  - probe 大 → 探测/服务器慢；probe≈0 而首字节慢 → 慢在首连接。
                 //  - resume=… → 定位"断点续传为什么不生效"（没找到旧分片 / 校验器变了 / 指纹不通过）。
                 metadataAtMs[roomId] = System.currentTimeMillis()
-                Log.i(
-                    TAG,
-                    "启动阶段: id=$roomId probe=${ev.probeMs}ms total=${ev.totalBytes} " +
+                // 【必须落盘，不能只打 logcat】实测（OnePlus/ColorOS/Android 16）系统日志缓冲
+                // 只保留几秒，用户"点下载→导出日志"时这行早被冲掉，导出文件里一行本应用日志都没有。
+                // 走 DiagLog：同时进 logcat 与 filesDir/diag/diag.log，导出时整份附加。
+                DiagLog.i(
+                    context,
+                    "启动阶段",
+                    "id=$roomId probe=${ev.probeMs}ms total=${ev.totalBytes} " +
                         "range=${ev.supportsRange} resume=[${ev.resumeNote}]"
                 )
                 // 静默利用探测到的服务器建议文件名：仅当现名看起来是无意义的

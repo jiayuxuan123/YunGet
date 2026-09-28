@@ -26,8 +26,29 @@ android {
         applicationId = "com.yunget.app"
         minSdk = 23
         targetSdk = 34
-        versionCode = 21
-        versionName = "2.6.8"
+        versionCode = 34
+        // 2.6.9 正式版内容（这是首个把下载引擎做成"可切换"的版本）：
+        //  ① 诊断：下完即停 / 无效数据拒绝给结论 / 自动选最大任务 / 并发判读不再误报"按文件限速"
+        //     / 档位上限压到 64 避免风控 / 开跑前探活（链接失效立刻报 HTTP 状态码）
+        //  ② 引擎：h2 客户端惰性创建（启动段 1.28s→0.66s）；插件后端传输层设置热更新
+        //     （改代理/DoH/忽略SSL 不再需要重启进程）
+        //  ③ App：管理器改由 ViewModel 持有（修配置变更时的引擎重复创建与连接池泄漏）
+        //     / DownloadSaver 拒绝 0 字节源（避免发布空的"已下载"文件）
+        //  ④ **下载引擎可切换**：TurboDL（默认）/ 内置兼容引擎 / aria2 原生引擎（实验，仅 arm64）
+        //     内置官方 aria2c 1.37.0 aarch64（全静态、仅需 1 个文件），
+        //     需 packaging.jniLibs.useLegacyPackaging=true 才能在 nativeLibraryDir 执行；
+        //     设置页 → 下载 → 下载引擎，可先"检测 aria2 是否可用"再切换。
+        //  ⑤ 诊断日志落盘（DiagLog）：修"logcat 缓冲只有几秒、导出文件里没有本应用日志"
+        //  ⑥ aria2 进度双通道 + 正则修正（实测：原正则匹配不到真实输出，24 行 0 命中）
+        //  ⑦ App 启动时自动自检 aria2 并落盘（无需用户点按钮）
+        //  ⑧ aria2 HTTPS 修复：拼装系统 CA 成 bundle 并传 --ca-certificate。
+        //     真机实测（OnePlus/Android 16）：不传时 aria2 对所有 HTTPS 报
+        //     "unable to get local issuer certificate"（Android 没有它默认查找的路径）。
+        //  ⑨ **【数据安全，重要】探测失败时不再删旧分片**：原先 `changed = prev != now`
+        //     把"探测没拿到信息（无法取证）"误判成"服务器换了文件（确证）"，
+        //     实测因此删掉了用户 14.75MB 已下载分片。现在只有新令牌**本身可用**
+        //     （含 len=/etag=/lm=）时才允许判定 changed。
+        versionName = "2.6.9"
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
     }
@@ -49,6 +70,24 @@ android {
 
     buildFeatures {
         compose = true
+    }
+
+    packaging {
+        jniLibs {
+            /**
+             * 必须为 true，否则 `jniLibs` 里的 aria2c 无法执行。
+             *
+             * AGP 8.x 默认 `useLegacyPackaging = false`（等价 `extractNativeLibs=false`）：
+             * .so 不落盘，以未压缩页对齐形式留在 APK 内由 linker 直接从 APK 加载。
+             * 后果是 `applicationInfo.nativeLibraryDir` 目录里**没有文件** →
+             * `Runtime.exec()` 必然 `ENOENT`，aria2 引擎永远起不来。
+             *
+             * 置 true 后安装时会把这些库解压到 nativeLibraryDir（应用可执行），
+             * 代价是安装后多占一份磁盘（arm64 的 aria2c 约 6MB）。
+             * 这是"APK 内自带可执行文件"路线的硬前提，不是可选优化。
+             */
+            useLegacyPackaging = true
+        }
     }
 
     buildTypes {
@@ -149,10 +188,10 @@ dependencies {
     implementation("com.squareup.okhttp3:okhttp:4.12.0")
 
     // TurboDL SDK（纯 JVM 多线程下载引擎 + 可选插件框架），从 mavenLocal 解析 dev.turbodl:*:0.2.0-rc16
-    implementation("dev.turbodl:turbodl-core:0.2.0-rc22")
-    implementation("dev.turbodl:turbo-plugin-runtime:0.2.0-rc22")
-    implementation("dev.turbodl:turbo-plugin-bootstrap:0.2.0-rc22")
-    implementation("dev.turbodl:turbo-plugin-hls:0.2.0-rc22")
+    implementation("dev.turbodl:turbodl-core:0.2.0-rc23")
+    implementation("dev.turbodl:turbo-plugin-runtime:0.2.0-rc23")
+    implementation("dev.turbodl:turbo-plugin-bootstrap:0.2.0-rc23")
+    implementation("dev.turbodl:turbo-plugin-hls:0.2.0-rc23")
 
     implementation(libs.material)   // 原 libs.material.color.utilities -> 改为官方 Material 主库（含 color.utilities 包）
 

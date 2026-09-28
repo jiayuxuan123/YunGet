@@ -105,6 +105,7 @@ import com.yunget.app.ui.viewmodel.BaiduAccountViewModel
 import com.yunget.app.ui.viewmodel.BaiduCloudViewModel
 import com.yunget.app.ui.viewmodel.C139AccountViewModel
 import com.yunget.app.ui.viewmodel.C139CloudViewModel
+import com.yunget.app.ui.viewmodel.DownloadManagerViewModel
 import com.yunget.app.ui.viewmodel.DownloadViewModel
 import com.yunget.app.ui.viewmodel.DriveQuotaViewModel
 import com.yunget.app.ui.viewmodel.Pan123AccountViewModel
@@ -212,34 +213,23 @@ fun MainScreen() {
             db.pan123AccountDao()
         )
     }
-    // 下载管理器：OkHttp 分片下载器 + Room 任务持久化 + 可配置线程数（设置页动态生效）
-    // 下载内核由 TurboDL SDK（dev.turbodl）驱动：多线程 Range 分片 / 动态分段 / 分片级重试 /
-    // 全局限速 / 断点续传 / HLS（插件路由）/ 合并与完整性校验。
-    // YunGet 侧仍自持 Room 持久化 / 前台服务 / DownloadSaver 保存（MediaStore/SAF）。
-    // 「忽略 SSL 证书」隐藏菜单开关直接映射到引擎 TurboConfig.trustAllCerts，动态生效。
-    val downloadManager = remember {
-        DownloadManager(
-            context = context,
-            dao = db.downloadTaskDao(),
-            threadProvider = settings::downloadThreads,
-            // 自定义下载保存目录（SAF tree Uri），设置页可选，动态生效
-            saveDirProvider = { settings.downloadDirUri },
-            // 网络与下载策略（设置页可调，动态生效）：并发任务数 / 全局限速 / 失败重试
-            concurrencyProvider = { settings.maxConcurrentDownloads },
-            speedLimitProvider = { settings.downloadSpeedLimit },
-            retryCountProvider = { settings.downloadRetryCount },
-            // 锁屏保持下载 / 通知栏速度开关
-            keepWhenLockedProvider = { settings.keepDownloadWhenLocked },
-            showSpeedProvider = { settings.notificationShowSpeed },
-            // 忽略 SSL 证书（隐藏菜单）
-            ignoreSslProvider = { settings.ignoreSslCert },
-            // 自定义 DoH（设置页可配）
-            dohUrlProvider = { settings.dohUrl },
-            // 连接预热 / 慢启动（设置页可配，默认开）
-            warmUpProvider = { settings.warmUpConnections },
-            slowStartProvider = { settings.slowStart },
-        )
-    }
+    // 下载管理器：交给 ViewModel 持有，生命周期与 Activity 真正结束对齐。
+    //
+    // 【为什么不用 `remember {}`】`remember` 无 key，Activity 重建（旋转屏幕/改主题/改图标）
+    // 就会新建一个管理器；而 7 个业务 ViewModel 在构造时强引用管理器、且配置变更时被保留
+    // → 旧 ViewModel 指着旧管理器、界面用着新管理器，**两套引擎同时活着**，
+    // 且旧实例的 OkHttp 线程池/连接池与事件协程永不释放（原先全项目无 shutdown 调用）。
+    // 放进 ViewModel：配置变更时保留（不重建、不误关），Activity 真正结束时 onCleared 释放。
+    //
+    // 设置项生效时机（两条不同路径，别混淆）：
+    //  - 下载业务调参（线程数/并发/限速/重试/预热/慢启动）→ 每次 `start()` 走
+    //    `refreshConfigIfChanged()` 热更新，**下一个任务**即生效；
+    //  - 传输层设置（忽略SSL / DoH / 代理 / 超时）→ 引擎侧 TransportClientHolder
+    //    按传输层签名惰性重建 OkHttpClient，同样**下一个任务**生效（原先必须重启进程）。
+    val managerViewModel: DownloadManagerViewModel = viewModel(
+        factory = DownloadManagerViewModel.Factory(settings, db.downloadTaskDao(), context.applicationContext)
+    )
+    val downloadManager = managerViewModel.manager
     // Android 9- 写公共 Download 需要 WRITE_EXTERNAL_STORAGE 运行时授权：
     // 下载完成保存前由 DownloadManager.storagePermissionProvider 触发动态申请，授权后自动继续保存
     var pendingStoragePermission by remember { mutableStateOf<CompletableDeferred<Boolean>?>(null) }
@@ -646,6 +636,9 @@ fun MainScreen() {
                         onSupportClick = { showSupport = true },
                         backupManager = backupManager,
                         onConnectionDiagnose = { downloadManager.diagnoseConnections() },
+                        onConcurrentDiagnose = { downloadManager.diagnoseConcurrentTasks() },
+                        diagStatusProvider = { downloadManager.diagnoseStatus },
+                        diagResultProvider = { downloadManager.diagnoseLastResult },
                         onDownloadUpdateApk = { url, name ->
                             scope.launch {
                                 downloadManager.enqueue(url = url, fileName = name)

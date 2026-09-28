@@ -83,8 +83,23 @@ object LogExporter {
             writer.write("系统：Android ${Build.VERSION.RELEASE}（SDK ${Build.VERSION.SDK_INT}）\n")
             writer.write("\n")
 
+            writer.write("\n")
+            writer.write("========== 关键诊断（落盘副本，含启动/续传判定）==========\n")
+            val diag = DiagLog.readAll(context)
+            if (diag.isNullOrBlank()) {
+                writer.write("（暂无。该文件只记录关键诊断行；跑过一次下载/诊断后即会有内容）\n")
+            } else {
+                writer.write(diag)
+            }
+
             // ---------- 运行日志：当前应用进程（logcat 按 pid 过滤，只保留本应用） ----------
+            // 注意：这一段**放在关键诊断之后**。实测在 OnePlus/ColorOS/Android 16 上，
+            // logcat 的环形缓冲只保留数秒，用户按提示操作时这里往往一行本应用日志都没有
+            // （全是 VRI/BufferQueue 等系统噪声）。把可靠的那段放前面，避免打开文件先看到一堆噪声。
+            writer.write("\n")
             writer.write("========== 运行日志（logcat -d -v time --pid=${Process.myPid()}）==========\n")
+            writer.write("（提示：本段依赖系统日志缓冲，新系统上可能只覆盖最近几秒；\n")
+            writer.write("  请以上面的「关键诊断」为准）\n")
             dumpLogcat(
                 writer,
                 listOf("logcat", "-d", "-v", "time", "--pid=${Process.myPid()}")

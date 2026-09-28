@@ -23,3 +23,6 @@ local.properties
 /keystore/
 /keystore.properties
 local.properties
+
+# 安全钩子运行时状态（非源码）
+.mimosa/

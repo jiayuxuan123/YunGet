@@ -65,8 +65,17 @@ class LegacyDownloadManager(
     /** 锁屏后保持下载开关（开启时获取 WakeLock 维持 Wi-Fi/CPU） */
     private val keepWhenLockedProvider: () -> Boolean = { true },
     /** 通知栏显示下载速度开关（false 时仅显示通知，隐藏速度） */
-    private val showSpeedProvider: () -> Boolean = { true }
-) {
+    private val showSpeedProvider: () -> Boolean = { true },
+    /**
+     * 下载执行器：把「下载字节到分片目录」这一层替换掉。
+     *
+     * null = 用内置 [AdaptiveDownloadEngine]（默认，行为与历史版本一致）；
+     * 传入 [Aria2Runner] 即得到"aria2 引擎" —— **上层逻辑（Room 持久化 / 进度节流 /
+     * 前台服务与通知 / WakeLock / 合并 / 大小校验 / 保存到 MediaStore/SAF / 续传）
+     * 完全复用**，不必复制第二份（两份必然漂移）。
+     */
+    private val runner: DownloadEngineRunner? = null,
+) : DownloadManager {
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
 
     /** 当前实际下载中的任务数（用于最大同时下载任务数限制） */
@@ -80,7 +89,7 @@ class LegacyDownloadManager(
      * UI 层注入：无权限时动态申请并等待授权结果；已授权/Android 10+ 直接返回 true。
      * 授权后会自动继续保存（同一协程 await 授权结果再往下走）。
      */
-    var storagePermissionProvider: suspend () -> Boolean = { true }
+    override var storagePermissionProvider: suspend () -> Boolean = { true }
 
     /**
      * 运行中的任务 Job：value 为 CompletableDeferred，注册/移除全程由 jobsLock 保护，
@@ -134,22 +143,22 @@ class LegacyDownloadManager(
 
     /** 实时下载统计（速度/剩余时间/线程数） */
     private val _stats = MutableStateFlow<Map<Long, DownloadStats>>(emptyMap())
-    val stats: StateFlow<Map<Long, DownloadStats>> = _stats.asStateFlow()
+    override val stats: StateFlow<Map<Long, DownloadStats>> = _stats.asStateFlow()
 
     /** 进度上报节流阈值（字节）：256KB，大文件时进度条更平滑 */
     private val progressThrottle = 256 * 1024L
 
-    val tasks: Flow<List<DownloadTaskEntity>> = dao.observeAll()
+    override val tasks: Flow<List<DownloadTaskEntity>> = dao.observeAll()
 
     /** 入队并立即开始下载 */
-    suspend fun enqueue(
+    override suspend fun enqueue(
         url: String,
         fileName: String,
-        headers: Map<String, String> = emptyMap(),
+        headers: Map<String, String>,
         /** 已知文件大小（字节）；-1 表示未知，需探测 */
-        size: Long = -1L,
+        size: Long,
         /** 下载成功完成后的清理回调（如删除网盘临时转存文件）；失败/取消不触发 */
-        onComplete: suspend () -> Unit = {}
+        onComplete: suspend () -> Unit,
     ): Long {
         // 文件名兜底：空白时从 URL 推导，避免保存时变成时间戳
         val safeName = fileName.ifBlank {
@@ -172,7 +181,7 @@ class LegacyDownloadManager(
     }
 
     /** 开始/恢复下载（断点续传） */
-    fun start(id: Long, headers: Map<String, String> = emptyMap()) {
+    override fun start(id: Long, headers: Map<String, String>) {
         // 恢复时未传 headers：沿用入队时保存的（Cookie/UA 对直链下载是必需的）
         val effectiveHeaders = headers.ifEmpty { taskHeaders[id] ?: emptyMap() }
         Log.d(TAG, "start: id=$id headers=${effectiveHeaders.keys}")
@@ -267,7 +276,7 @@ class LegacyDownloadManager(
     }
 
     /** 暂停下载（保留 part 文件与请求头） */
-    fun pause(id: Long) {
+    override fun pause(id: Long) {
         Log.d(TAG, "pause: id=$id")
         // 立即中断该任务所有分片网络请求（不依赖协程取消传播，阻塞 IO 马上停止）
         downloader.cancelCalls(id)
@@ -296,7 +305,7 @@ class LegacyDownloadManager(
      * 删除任务：取消下载 + 清 DB + 清 part 文件。
      * @param deleteLocal 同时删除已保存到本地的文件（savePath）
      */
-    fun remove(id: Long, deleteLocal: Boolean = false) {
+    override fun remove(id: Long, deleteLocal: Boolean) {
         Log.d(TAG, "remove: id=$id deleteLocal=$deleteLocal")
         // 立即中断该任务所有分片网络请求
         downloader.cancelCalls(id)
@@ -431,6 +440,64 @@ class LegacyDownloadManager(
 
         val engine = AdaptiveDownloadEngine(downloader)
         val taskJob = coroutineContext[Job]
+
+        // 可替换执行器：aria2 等外部引擎走这里，其余逻辑（进度/持久化/合并/保存）完全复用。
+        // 若 runner 存在则优先用它；它不支持的输入（如服务器忽略 Range）由它自己报失败，
+        // 由下方 Failed 分支统一回退到单流整文件下载。
+        val customRunner = runner
+        if (customRunner != null) {
+            val outcome = customRunner.run(
+                DownloadEngineRunner.RunSpec(
+                    taskId = id,
+                    url = task.url,
+                    total = total,
+                    headers = headers,
+                    chunkDir = chunkDir,
+                    targetWorkers = threadCount,
+                    resumeFrom = 0L,
+                    speedLimitBytesPerSec = speedLimitProvider(),
+                    onBytes = { delta, absolute ->
+                        speedLimiter.awaitAllow(delta)
+                        // 任务已取消时不再更新进度（与内置引擎分支保持同一语义）。
+                        if (isTaskActive()) {
+                            speedRecorder.onBytes(absolute)?.let { speed ->
+                                val remain = if (speed > 0) (total - absolute) * 1000 / speed else -1L
+                                _stats.update { it + (id to DownloadStats(speed, remain, liveWorkers.get())) }
+                            }
+                            notifyProgress(id, task.fileName, absolute, total)
+                            val last = lastUpdate.get()
+                            if (absolute - last >= progressThrottle || absolute >= total) {
+                                if (lastUpdate.compareAndSet(last, absolute)) {
+                                    dao.updateProgress(id, DownloadTaskEntity.STATUS_DOWNLOADING, absolute, total)
+                                }
+                            }
+                        }
+                    },
+                    onWorkers = { w ->
+                        liveWorkers.set(w)
+                        val cur = _stats.value[id]
+                        _stats.update { it + (id to DownloadStats(cur?.speed ?: 0L, cur?.remainMillis ?: -1L, w)) }
+                    },
+                    isActive = { taskJob?.isActive == true },
+                )
+            )
+            when (outcome) {
+                is DownloadEngineRunner.Outcome.Completed -> {
+                    Log.d(TAG, "runTask: id=$id ${customRunner.name} 完成，开始合并")
+                    finishDownload(id, chunkDir, outcome.parts, task.fileName, total)
+                }
+                is DownloadEngineRunner.Outcome.Failed -> {
+                    if (!isTaskActive()) return
+                    Log.w(TAG, "runTask: id=$id ${customRunner.name} 失败（${outcome.reason}），回退单流整文件下载")
+                    singleStreamFallback(
+                        id, task, headers, total, chunkDir,
+                        java.util.concurrent.atomic.AtomicReference(outcome.reason)
+                    )
+                }
+            }
+            return
+        }
+
         val outcome = engine.download(
             taskId = id,
             url = task.url,

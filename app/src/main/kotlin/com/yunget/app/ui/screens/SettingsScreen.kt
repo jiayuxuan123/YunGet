@@ -10,6 +10,7 @@ import android.os.PowerManager
 import android.provider.Settings
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -29,6 +30,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.outlined.Article
 import androidx.compose.material.icons.outlined.Backup
 import androidx.compose.material.icons.outlined.ChevronRight
+import androidx.compose.material.icons.outlined.SettingsSuggest
 import androidx.compose.material.icons.outlined.Bolt
 import androidx.compose.material.icons.outlined.Dns
 import androidx.compose.material.icons.outlined.FolderOpen
@@ -50,6 +52,7 @@ import androidx.compose.material3.Button
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
@@ -78,13 +81,18 @@ import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.unit.dp
 import com.yunget.app.data.backup.AuthBackupManager
 import com.yunget.app.data.backup.AuthCrypto
+import com.yunget.app.data.download.Aria2Executor
+import com.yunget.app.data.download.Aria2ProbeResult
+import com.yunget.app.data.download.DownloadEngine
 import com.yunget.app.data.download.DownloadSaver
 import com.yunget.app.data.network.HttpClients
 import com.yunget.app.data.prefs.SettingsRepository
 import com.yunget.app.data.update.UpdateChecker
 import com.yunget.app.ui.SnackbarController
+import com.yunget.app.util.DiagLog
 import com.yunget.app.util.LogExporter
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 
@@ -107,10 +115,17 @@ fun SettingsScreen(
     /** 用应用内置下载器下载更新 APK（URL + 文件名），由 MainScreen 注入 DownloadManager */
     onDownloadUpdateApk: (url: String, fileName: String) -> Unit,
     /**
-     * 【开发诊断】用最近一个任务的真实链接做连接数扫描，返回可读报告。
-     * 由 MainScreen 注入 DownloadManager 实现；只在隐藏开发菜单里调用。
+     * 【开发诊断】连接数扫描。
+     *  - [onConnectionDiagnose] 启动一次（约 1 分钟，内部会更新下面两个 provider 的值）
+     *  - [diagStatusProvider]  状态行：null=从未运行；"运行中 2/4：…"；"✅ 已完成 …"
+     *  - [diagResultProvider]  上次结果全文（进程内保留，切页面不丢）
+     * 由 MainScreen 注入 DownloadManager 的状态；只在隐藏开发菜单里调用。
      */
-    onConnectionDiagnose: suspend () -> String,
+    onConnectionDiagnose: suspend () -> Unit,
+    /** 并发任务扫描（1/2/3 任务并行）：回答"多任务能不能叠加速度"。 */
+    onConcurrentDiagnose: suspend () -> Unit,
+    diagStatusProvider: () -> String?,
+    diagResultProvider: () -> String?,
     modifier: Modifier = Modifier
 ) {
     var showThreadsDialog by remember { mutableStateOf(false) }
@@ -133,9 +148,20 @@ fun SettingsScreen(
     // 隐藏开发调试：忽略 SSL 证书（抓包用，长按「关于云取」打开菜单）
     var ignoreSsl by remember { mutableStateOf(settingsRepo.ignoreSslCert) }
     var showDevMenu by remember { mutableStateOf(false) }
-    // 【开发诊断】连接数扫描：运行中 / 结果文本
-    var diagRunning by remember { mutableStateOf(false) }
+    // 【开发诊断】连接数扫描。
+    // 状态与结果**由管理器持有**，这里只做轮询展示 —— 否则用户切页面/退出设置页，
+    // remember 里的状态就没了，"跑没跑完"根本无从判断（用户实报的正是这一点）。
+    var diagStatus by remember { mutableStateOf<String?>(null) }
     var diagResult by remember { mutableStateOf<String?>(null) }
+    var showDiagResultDialog by remember { mutableStateOf(false) }
+    val diagRunning = diagStatus?.startsWith("运行中") == true
+    LaunchedEffect(Unit) {
+        while (true) {
+            diagStatus = diagStatusProvider()
+            diagResult = diagResultProvider()
+            delay(700)
+        }
+    }
     LaunchedEffect(Unit) { ignoreSsl = settingsRepo.ignoreSslCert }
     // 网络与下载策略（本地状态驱动 UI，同时同步 SharedPreferences）
     var maxConcurrent by remember { mutableStateOf(settingsRepo.maxConcurrentDownloads) }
@@ -144,6 +170,9 @@ fun SettingsScreen(
     var dohUrl by remember { mutableStateOf(settingsRepo.dohUrl) }
     var warmUp by remember { mutableStateOf(settingsRepo.warmUpConnections) }
     var slowStartOn by remember { mutableStateOf(settingsRepo.slowStart) }
+    // 下载引擎选择（切换需重启 App 生效，见该设置项描述）
+    var currentEngine by remember { mutableStateOf(DownloadEngine.fromId(settingsRepo.downloadEngineId)) }
+    var showEngineDialog by remember { mutableStateOf(false) }
     var showConcurrencyDialog by remember { mutableStateOf(false) }
     var showSpeedDialog by remember { mutableStateOf(false) }
     var showRetryDialog by remember { mutableStateOf(false) }
@@ -320,6 +349,24 @@ fun SettingsScreen(
 
         Spacer(modifier = Modifier.height(8.dp))
 
+        // 下载引擎选择：TurboDL（默认） / 内置兼容引擎（兜底）
+        SettingsItem(
+            icon = Icons.Outlined.SettingsSuggest,
+            title = "下载引擎",
+            description = "当前：${currentEngine.displayName}" +
+                if (currentEngine != DownloadEngine.TURBODL) "（需重启 App 生效）" else "",
+            onClick = { showEngineDialog = true },
+            trailing = {
+                Icon(
+                    Icons.Outlined.ChevronRight,
+                    contentDescription = null,
+                    tint = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+            }
+        )
+
+        Spacer(modifier = Modifier.height(8.dp))
+
         // 用户体验与系统适配：锁屏保持下载 / 通知栏进度样式
         SettingsItem(
             icon = Icons.Outlined.Power,
@@ -457,6 +504,13 @@ fun SettingsScreen(
                         style = MaterialTheme.typography.bodyMedium,
                         color = MaterialTheme.colorScheme.onSurfaceVariant
                     )
+                    Spacer(modifier = Modifier.height(6.dp))
+                    Text(
+                        text = "「关键诊断」段落会记录每次下载的启动信息（探测耗时、是否复用断点分片等），" +
+                            "不受系统日志缓冲影响。若要排查断点续传，请先点一次「继续下载」再导出。",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
                     Spacer(modifier = Modifier.height(8.dp))
                     TextButton(
                         onClick = {
@@ -581,16 +635,9 @@ fun SettingsScreen(
                         onClick = {
                             showDevMenu = false
                             if (!diagRunning) {
-                                diagRunning = true
-                                diagResult = null
-                                // 用最近一个任务的**真实链接**扫连接数：8/16/64/128，每档 15s。
-                                // 结果同时进 logcat（可随"导出日志"回传），并弹窗展示判读。
-                                scope.launch {
-                                    val text = runCatching { onConnectionDiagnose() }
-                                        .getOrElse { "诊断失败：${it.message}" }
-                                    diagResult = text
-                                    diagRunning = false
-                                }
+                                // 状态由管理器更新，界面轮询显示；跑完会自动出现"查看结果"按钮。
+                                scope.launch { runCatching { onConnectionDiagnose() } }
+                                SnackbarController.show("连接数诊断已开始（约 1 分钟），跑完会提示")
                             }
                         },
                         enabled = !diagRunning,
@@ -598,10 +645,52 @@ fun SettingsScreen(
                     ) {
                         Text(if (diagRunning) "连接数诊断运行中…（约 1 分钟）" else "连接数诊断（用最近任务）")
                     }
-                    Spacer(modifier = Modifier.height(4.dp))
+                    // 进度/完成状态：必须一直可见，用户才能知道"跑完了没有"。
+                    diagStatus?.let { st ->
+                        Spacer(modifier = Modifier.height(6.dp))
+                        Text(
+                            text = st,
+                            style = MaterialTheme.typography.bodySmall,
+                            color = if (st.startsWith("❌")) MaterialTheme.colorScheme.error
+                            else MaterialTheme.colorScheme.primary
+                        )
+                    }
+                    Spacer(modifier = Modifier.height(6.dp))
+                    Button(
+                        onClick = {
+                            showDevMenu = false
+                            if (!diagRunning) {
+                                scope.launch { runCatching { onConcurrentDiagnose() } }
+                                SnackbarController.show("并发任务诊断已开始（约 1 分钟），跑完会提示")
+                            }
+                        },
+                        enabled = !diagRunning,
+                        modifier = Modifier.fillMaxWidth()
+                    ) {
+                        Text(if (diagRunning) "运行中…" else "并发任务诊断（1/2/3 任务并行）")
+                    }
+                    Spacer(modifier = Modifier.height(6.dp))
+                    Text(
+                        text = "并发任务诊断看「多开任务能不能叠加速度」。" +
+                            "注意：本扫描固定每任务连接数，任务数增加时**总连接数也在增加**；" +
+                            "判读会同时对照两者——增益与连接数同步＝提速来自连接；" +
+                            "连接数涨而吞吐不动＝限速按 IP/账户（换来源才有用）。",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                    Spacer(modifier = Modifier.height(6.dp))
+                    Button(
+                        onClick = { showDevMenu = false; showDiagResultDialog = true },
+                        enabled = diagResult != null,
+                        modifier = Modifier.fillMaxWidth()
+                    ) {
+                        Text(if (diagResult == null) "查看上次诊断结果（暂无）" else "查看/分享上次诊断结果")
+                    }
+                    Spacer(modifier = Modifier.height(6.dp))
                     Text(
                         text = "只改连接数、每档只跑 15 秒即取消，不会下完整个文件。" +
-                            "结果用于判断服务器是「每连接限速」还是「按 IP 聚合限速」还是「对并发有惩罚」。",
+                            "结果用于判断服务器是「每连接限速」还是「按 IP 聚合限速」还是「对并发有惩罚」。" +
+                            "结果会同时落到文件与日志里。",
                         style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant
                     )
@@ -613,18 +702,48 @@ fun SettingsScreen(
         )
     }
 
-    // 连接数诊断结果（只读文本，可直接复制）
-    diagResult?.let { text ->
+    // 连接数诊断结果：可选择复制、可直接分享（发给别人/发给自己都行）
+    if (showDiagResultDialog) {
+        val text = diagResult ?: "(暂无结果)"
         AlertDialog(
-            onDismissRequest = { diagResult = null },
-            title = { Text("连接数诊断") },
+            onDismissRequest = { showDiagResultDialog = false },
+            title = { Text("连接数诊断结果") },
             text = {
-                Column(modifier = Modifier.verticalScroll(rememberScrollState())) {
-                    Text(text = text, style = MaterialTheme.typography.bodySmall)
+                Column(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .heightIn(max = 420.dp)
+                        .verticalScroll(rememberScrollState())
+                ) {
+                    Text(
+                        text = text,
+                        style = MaterialTheme.typography.bodySmall,
+                        modifier = Modifier.fillMaxWidth()
+                    )
                 }
             },
             confirmButton = {
-                TextButton(onClick = { diagResult = null }) { Text("关闭") }
+                Row {
+                    TextButton(onClick = {
+                        val cm = context.getSystemService(android.content.Context.CLIPBOARD_SERVICE)
+                            as android.content.ClipboardManager
+                        cm.setPrimaryClip(android.content.ClipData.newPlainText("连接数诊断", text))
+                        SnackbarController.show("已复制诊断结果")
+                    }) { Text("复制") }
+                    TextButton(onClick = {
+                        val send = android.content.Intent(android.content.Intent.ACTION_SEND).apply {
+                            type = "text/plain"
+                            putExtra(android.content.Intent.EXTRA_SUBJECT, "云取 · 连接数诊断结果")
+                            putExtra(android.content.Intent.EXTRA_TEXT, text)
+                        }
+                        runCatching {
+                            context.startActivity(
+                                android.content.Intent.createChooser(send, "分享诊断结果")
+                            )
+                        }
+                    }) { Text("分享") }
+                    TextButton(onClick = { showDiagResultDialog = false }) { Text("关闭") }
+                }
             }
         )
     }
@@ -776,6 +895,104 @@ fun SettingsScreen(
     }
 
     // 最大同时下载任务数
+    // 下载引擎选择：切换后需重启 App（管理器由 ViewModel 持有，热切换会让旧 ViewModel
+    // 继续指向旧管理器 → 两套引擎同时活着），故弹窗内明确提示。
+    if (showEngineDialog) {
+        AlertDialog(
+            onDismissRequest = { showEngineDialog = false },
+            title = { Text("下载引擎") },
+            text = {
+                Column {
+                    DownloadEngine.entries.forEach { engine ->
+                        Row(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .clickable {
+                                    currentEngine = engine
+                                    settingsRepo.downloadEngineId = engine.id
+                                    showEngineDialog = false
+                                    SnackbarController.show(
+                                        if (engine == DownloadEngine.TURBODL)
+                                            "已切换到 TurboDL 内核，重启 App 后生效"
+                                        else
+                                            "已切换到${engine.displayName}，重启 App 后生效"
+                                    )
+                                }
+                                .padding(vertical = 6.dp),
+                            verticalAlignment = Alignment.Top
+                        ) {
+                            RadioButton(
+                                selected = currentEngine == engine,
+                                onClick = null
+                            )
+                            Spacer(modifier = Modifier.width(8.dp))
+                            Column {
+                                Text(engine.displayName, style = MaterialTheme.typography.bodyLarge)
+                                Text(
+                                    engine.description,
+                                    style = MaterialTheme.typography.bodySmall,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                                )
+                            }
+                        }
+                    }
+                    Spacer(modifier = Modifier.height(10.dp))
+                    Text(
+                        text = "⚠ 切换引擎需重启 App 才生效（当前设置不影响正在运行的任务）。" +
+                            "内置兼容引擎为兜底选项：不支持现场诊断，且不持久化请求头，" +
+                            "部分网盘链接在进程重启后可能无法续传。",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.error
+                    )
+                    Spacer(modifier = Modifier.height(12.dp))
+                    HorizontalDivider()
+                    Spacer(modifier = Modifier.height(12.dp))
+                    // aria2 可用性检测：让用户先确认"这台设备能不能跑"，再决定切不切。
+                    // 结果含确切失败原因（ENOENT / EACCES / ENOEXEC 语义完全不同），
+                    // 避免"切过去发现不能用、却不知道为什么"。
+                    Text("aria2 引擎可用性", style = MaterialTheme.typography.titleSmall)
+                    Spacer(modifier = Modifier.height(6.dp))
+                    val aria2Result = remember { mutableStateOf<Aria2ProbeResult?>(null) }
+                    var aria2Checking by remember { mutableStateOf(false) }
+                    Button(
+                        onClick = {
+                            aria2Checking = true
+                            scope.launch {
+                                val r = withContext(Dispatchers.IO) { Aria2Executor.probe(context) }
+                                aria2Result.value = r
+                                aria2Checking = false
+                                // 落盘：让"检测结果"也能随「导出日志」一起回传，
+                                // 否则又是一次"我测了但你拿不到证据"。
+                                withContext(Dispatchers.IO) {
+                                    DiagLog.i(
+                                        context, "aria2检测",
+                                        if (r.available) "可用: ${r.detail}" else "不可用: ${r.detail}"
+                                    )
+                                }
+                            }
+                        },
+                        enabled = !aria2Checking,
+                        modifier = Modifier.fillMaxWidth()
+                    ) {
+                        Text(if (aria2Checking) "检测中…" else "检测 aria2 是否可用")
+                    }
+                    aria2Result.value?.let { r ->
+                        Spacer(modifier = Modifier.height(6.dp))
+                        Text(
+                            text = if (r.available) "✅ 可用：${r.detail}" else "❌ 不可用：${r.detail}",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = if (r.available) MaterialTheme.colorScheme.primary
+                            else MaterialTheme.colorScheme.error
+                        )
+                    }
+                }
+            },
+            confirmButton = {
+                TextButton(onClick = { showEngineDialog = false }) { Text("取消") }
+            }
+        )
+    }
+
     if (showConcurrencyDialog) {
         val options = listOf(1, 2, 3, 5, 8)
         AlertDialog(
