@@ -10,8 +10,8 @@ import com.yunget.app.data.security.AndroidKeystoreCredentialCipher
 import com.yunget.app.data.security.CredentialCipher
 
 @Database(
-    entities = [QuarkAccountEntity::class, DownloadTaskEntity::class, UCAccountEntity::class, XunleiAccountEntity::class, BaiduAccountEntity::class, C139AccountEntity::class, Pan123AccountEntity::class],
-    version = 10,
+    entities = [QuarkAccountEntity::class, DownloadTaskEntity::class, UCAccountEntity::class, XunleiAccountEntity::class, BaiduAccountEntity::class, C139AccountEntity::class, Pan123AccountEntity::class, BookmarkEntity::class],
+    version = 11,
     exportSchema = false
 )
 abstract class AppDatabase : RoomDatabase() {
@@ -33,6 +33,9 @@ abstract class AppDatabase : RoomDatabase() {
     protected abstract fun rawC139AccountDao(): C139AccountDao
 
     protected abstract fun rawPan123AccountDao(): Pan123AccountDao
+
+    /** 网盘链接收藏（无凭证内容，无需加密装饰器）。 */
+    abstract fun bookmarkDao(): BookmarkDao
 
     /** 凭证加密器，由 [get] 在构造后注入。 */
     private lateinit var credentialCipher: CredentialCipher
@@ -68,7 +71,7 @@ abstract class AppDatabase : RoomDatabase() {
                     AppDatabase::class.java,
                     "yunget.db"
                 )
-                    .addMigrations(MIGRATION_9_10)
+                    .addMigrations(MIGRATION_9_10, MIGRATION_10_11)
                     // 早期开发版（1-8）无可靠 schema；从 v9 起必须保留凭证和下载任务
                     .fallbackToDestructiveMigrationFrom(1, 2, 3, 4, 5, 6, 7, 8)
                     .build()
@@ -84,6 +87,27 @@ abstract class AppDatabase : RoomDatabase() {
                 db.execSQL("ALTER TABLE download_task ADD COLUMN chunkCount INTEGER NOT NULL DEFAULT 0")
                 db.execSQL("ALTER TABLE download_task ADD COLUMN plannedTotalSize INTEGER NOT NULL DEFAULT 0")
                 db.execSQL("ALTER TABLE download_task ADD COLUMN cleanupId TEXT NOT NULL DEFAULT ''")
+            }
+        }
+
+        /**
+         * v11：新增网盘链接收藏表。
+         *
+         * 表结构与上游 YunX 一致（含 `IF NOT EXISTS`），便于两侧数据互通与后续同步。
+         * 全部字段 `NOT NULL` + 默认值，避免历史行出现 null 导致读取崩溃。
+         */
+        private val MIGRATION_10_11 = object : Migration(10, 11) {
+            override fun migrate(db: SupportSQLiteDatabase) {
+                db.execSQL(
+                    "CREATE TABLE IF NOT EXISTS `bookmark` (" +
+                        "`id` INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL, " +
+                        "`link` TEXT NOT NULL, " +
+                        "`title` TEXT NOT NULL, " +
+                        "`platform` TEXT NOT NULL, " +
+                        "`pwd` TEXT NOT NULL, " +
+                        "`category` TEXT NOT NULL, " +
+                        "`createTime` INTEGER NOT NULL)"
+                )
             }
         }
     }

@@ -12,6 +12,9 @@ import com.yunget.app.data.network.BaiduApi
 import com.yunget.app.data.network.BaiduConstants
 import com.yunget.app.data.network.model.ShareFile
 import com.yunget.app.data.network.model.ShareInfo
+import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.drop
+import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -38,7 +41,9 @@ sealed interface BaiduCloudUiState {
 class BaiduCloudViewModel(
     private val api: BaiduApi,
     private val cookieProvider: suspend () -> String?,
-    private val downloadManager: DownloadManager
+    private val downloadManager: DownloadManager,
+    /** 登录态（true=已登录）。登录成功后自动重载根目录，避免停在「请先登录」错误页。 */
+    private val loginState: Flow<Boolean>
 ) : ViewModel() {
 
     private val _uiState = MutableStateFlow<BaiduCloudUiState>(BaiduCloudUiState.Loading)
@@ -74,6 +79,18 @@ class BaiduCloudViewModel(
 
     init {
         loadRoot()
+        // 登录成功后自动重载根目录。
+        // 【为什么需要】本 VM 在未登录时也会被创建并执行 init{loadRoot()}，那时拿到的是
+        // Error("请先登录…")。用户随后登录成功，但没有任何机制触发重载 →
+        // 网盘页一直停在「请先登录」，必须手动点「重试」才恢复。
+        // drop(1) 跳过 VM 创建时的登录态快照（init 已加载过一次，避免冷启动重复请求）；
+        // distinctUntilChanged 过滤登录后凭证刷新等重复 upsert。
+        viewModelScope.launch {
+            loginState
+                .drop(1)
+                .distinctUntilChanged()
+                .collect { loggedIn -> if (loggedIn) loadRoot() }
+        }
     }
 
     private suspend fun cookie(): String =
@@ -573,10 +590,11 @@ class BaiduCloudViewModel(
     class Factory(
         private val api: BaiduApi,
         private val cookieProvider: suspend () -> String?,
-        private val downloadManager: DownloadManager
+        private val downloadManager: DownloadManager,
+        private val loginState: Flow<Boolean>
     ) : ViewModelProvider.Factory {
         @Suppress("UNCHECKED_CAST")
         override fun <T : ViewModel> create(modelClass: Class<T>): T =
-            BaiduCloudViewModel(api, cookieProvider, downloadManager) as T
+            BaiduCloudViewModel(api, cookieProvider, downloadManager, loginState) as T
     }
 }

@@ -138,6 +138,17 @@ class TurboDownloadManager(
     private val lastDbWriteTs = ConcurrentHashMap<Long, Long>()
     private val lastDbWriteBytes = ConcurrentHashMap<Long, Long>()
 
+    companion object {
+        /**
+         * 进度落盘的时间间隔（毫秒）。**这是唯一节流条件**。
+         *
+         * 每次写库都会触发 `observeAll()` 的 Flow 重发 → 主线程重组整个下载列表。
+         * 取 800ms：既让「杀掉进程后重进」看到的进度足够新，又把列表重组频率
+         * 压到人眼无感的水平（约 1.25 次/秒，与下载速度无关）。
+         */
+        private const val DB_WRITE_INTERVAL_MS = 800L
+    }
+
     /** 启动阶段诊断：Metadata(探测完成)时刻，用于在首个 Progress 时算出「首字节耗时」。任务结束即清。 */
     private val metadataAtMs = ConcurrentHashMap<Long, Long>()
 
@@ -681,17 +692,37 @@ class TurboDownloadManager(
         }
     }
 
-    /** 进度写库节流：时间（800ms）或字节（1MB）阈值任一达到即写；完成/暂停由各自分支强制写。 */
+    /**
+     * 进度落盘节流判定（原子）。**纯时间节流**；完成/暂停由各自分支强制写。
+     *
+     * 【为什么必须原子】多个 worker 的进度回调可能**并发**进入这里。
+     * 原先的「读 map → 判断 → 写 map」不是原子操作：两个线程可以同时读到过期的
+     * lastTs、同时通过判断、同时写库（重复 UPDATE + 两次全表 Flow 重发）。
+     *
+     * 【为什么首次要用 putIfAbsent】`ConcurrentHashMap.replace(k, old, new)` 在**键不存在**时
+     * 返回 false。若首次调用也走 replace 分支（以 `?: 0L` 作 old），CAS 必然失败 →
+     * 该任务**永远不写库**，进度永不落盘。（由 `ProgressPersistThrottleTest` 抓出。）
+     *
+     * 【为什么不能加"字节阈值"】曾用「800ms 或增长 1MB」双条件。但高速下载（50MB/s）下
+     * 1MB 阈值先于时间触发 → 每秒写库约 50 次 → 每次写库都让 `observeAll()` 重发整表 →
+     * 主线程反复重组下载列表 → **ANR**。这正是上游 #64 报告的问题。
+     * 故改为纯时间节流：无论多快，写库频率恒定为每秒约 1.25 次。
+     * 进度条由内存 `_stats` 高频刷新，数据库只是持久化（重启最多回退几百毫秒进度）。
+     */
     private fun shouldWriteDb(roomId: Long, downloaded: Long): Boolean {
         val now = System.currentTimeMillis()
-        val lastTs = lastDbWriteTs[roomId] ?: 0L
-        val lastBytes = lastDbWriteBytes[roomId] ?: 0L
-        if (now - lastTs >= 800 || downloaded - lastBytes >= 1L * 1024 * 1024) {
-            lastDbWriteTs[roomId] = now
+        val prev = lastDbWriteTs[roomId]
+        // 首次：原子占位，成功者负责写库
+        if (prev == null) {
+            if (lastDbWriteTs.putIfAbsent(roomId, now) != null) return false
             lastDbWriteBytes[roomId] = downloaded
             return true
         }
-        return false
+        if (now - prev < DB_WRITE_INTERVAL_MS) return false
+        // CAS 占位：并发下只有一个线程能把 prev 换成 now
+        if (!lastDbWriteTs.replace(roomId, prev, now)) return false
+        lastDbWriteBytes[roomId] = downloaded
+        return true
     }
 
     // ---------- 前台服务 / 通知 / WakeLock ----------

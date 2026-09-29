@@ -19,6 +19,9 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
+import androidx.compose.material.icons.Icons
+import androidx.compose.material3.IconButton
+import androidx.compose.material.icons.outlined.Bookmarks
 import androidx.compose.material3.LargeTopAppBar
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.MaterialTheme
@@ -116,11 +119,14 @@ import com.yunget.app.ui.viewmodel.Pan123AccountViewModel
 import com.yunget.app.ui.viewmodel.Pan123CloudViewModel
 import com.yunget.app.ui.viewmodel.QuarkAccountViewModel
 import com.yunget.app.ui.viewmodel.QuarkCloudViewModel
+import com.yunget.app.ui.screens.BookmarkScreen
+import com.yunget.app.ui.viewmodel.BookmarkViewModel
 import com.yunget.app.ui.viewmodel.ResolveViewModel
 import com.yunget.app.ui.viewmodel.UCCoudViewModel
 import com.yunget.app.ui.viewmodel.UCAccountViewModel
 import com.yunget.app.ui.viewmodel.XunleiAccountViewModel
 import com.yunget.app.ui.viewmodel.XunleiCloudViewModel
+import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
@@ -150,6 +156,8 @@ fun MainScreen() {
     var showAbout by rememberSaveable { mutableStateOf(false) }
     var showSupport by rememberSaveable { mutableStateOf(false) }
     var showTheme by rememberSaveable { mutableStateOf(false) }
+    /** 网盘链接收藏（解析页标题栏入口，独立覆盖层）。 */
+    var showBookmarks by rememberSaveable { mutableStateOf(false) }
     val saveableStateHolder = rememberSaveableStateHolder()
 
     val context = LocalContext.current
@@ -284,7 +292,8 @@ fun MainScreen() {
         factory = QuarkCloudViewModel.Factory(
             api,
             { repository.getFreshCookie() },
-            downloadManager
+            downloadManager,
+            loginState = repository.observeAccount().map { it != null }
         )
     )
     // UC 网盘云盘浏览：点击已登录的 UC 卡片打开（cookie 从数据库读取）；
@@ -293,7 +302,8 @@ fun MainScreen() {
         factory = UCCoudViewModel.Factory(
             ucApi,
             { ucRepository.getFreshCookie() },
-            downloadManager
+            downloadManager,
+            loginState = ucRepository.observeAccount().map { it != null }
         )
     )
     // 迅雷 access_token 过期（401 unauthenticated）自动刷新：refresh_token 换新并持久化（对齐官方 /v1/auth/token 抓包）
@@ -311,7 +321,8 @@ fun MainScreen() {
             { xunleiRepository.getAccount()?.accessToken },
             { xunleiRepository.getAccount()?.deviceId },
             { xunleiRepository.getAccount()?.captchaToken },
-            downloadManager
+            downloadManager,
+            loginState = xunleiRepository.observeAccount().map { it != null }
         )
     )
     // 百度网盘云盘浏览：点击已登录的百度卡片打开（cookie 从数据库读取）
@@ -319,7 +330,8 @@ fun MainScreen() {
         factory = BaiduCloudViewModel.Factory(
             baiduApi,
             { baiduRepository.getAccount()?.cookie },
-            downloadManager
+            downloadManager,
+            loginState = baiduRepository.observeAccount().map { it != null }
         )
     )
     // 139 网盘云盘浏览：点击已登录的 139 卡片打开（cookie 从数据库读取）
@@ -327,7 +339,8 @@ fun MainScreen() {
         factory = C139CloudViewModel.Factory(
             c139Api,
             { c139Repository.getAccount()?.cookie },
-            downloadManager
+            downloadManager,
+            loginState = c139Repository.observeAccount().map { it != null }
         )
     )
     // 123 云盘浏览：点击已登录的 123 卡片打开（token 从数据库读取）
@@ -335,7 +348,8 @@ fun MainScreen() {
         factory = Pan123CloudViewModel.Factory(
             pan123Api,
             { pan123Repository.getAccount()?.accessToken },
-            downloadManager
+            downloadManager,
+            loginState = pan123Repository.observeAccount().map { it != null }
         )
     )
     // 网盘空间详情：网盘页顶部「空间总览」展示 6 平台容量使用
@@ -380,6 +394,10 @@ fun MainScreen() {
             tokenProvider = { pan123Repository.getAccount()?.accessToken }
         )
     }
+    /** 网盘链接收藏：只依赖 bookmarkDao（无凭证内容，无需加密装饰器）。 */
+    val bookmarkViewModel: BookmarkViewModel = viewModel(
+        factory = BookmarkViewModel.Factory(db.bookmarkDao())
+    )
     val resolveViewModel: ResolveViewModel = viewModel(
         factory = ResolveViewModel.Factory(
             repository,
@@ -564,6 +582,14 @@ fun MainScreen() {
                     style = MaterialTheme.typography.headlineMedium,
                     fontWeight = FontWeight.SemiBold
                 )
+            },
+            actions = {
+                // 解析页标题右上角：收藏网盘链接入口
+                if (currentTab == MainTab.Resolve) {
+                    IconButton(onClick = { showBookmarks = true }) {
+                        Icon(Icons.Outlined.Bookmarks, contentDescription = "收藏网盘链接")
+                    }
+                }
             },
             scrollBehavior = scrollBehavior,
             colors = TopAppBarDefaults.largeTopAppBarColors(
@@ -753,6 +779,24 @@ fun MainScreen() {
     ) {
         ThemeScreen(
             onBack = { showTheme = false }
+        )
+    }
+
+    // 网盘链接收藏：叠加覆盖层。选中条目后关闭本层并跳到解析页开始解析。
+    AnimatedVisibility(
+        visible = showBookmarks,
+        enter = fadeIn(effectsDefault()) + scaleIn(tween(220), initialScale = 0.96f),
+        exit = fadeOut(effectsFast()) + scaleOut(tween(160), targetScale = 0.96f),
+        modifier = Modifier.fillMaxSize()
+    ) {
+        BookmarkScreen(
+            viewModel = bookmarkViewModel,
+            onBack = { showBookmarks = false },
+            onResolve = { link, pwd ->
+                showBookmarks = false
+                currentTab = MainTab.Resolve
+                resolveViewModel.startResolve(link, pwd)
+            }
         )
     }
     }
