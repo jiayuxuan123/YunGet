@@ -26,7 +26,7 @@ android {
         applicationId = "com.yunget.app"
         minSdk = 23
         targetSdk = 34
-        versionCode = 37
+        versionCode = 38
         // 2.6.12 内容（继续同步上游：收藏功能、登录态修复、进度写库节流修正）：
         //  ① **网盘链接收藏**（取自上游 #71）：解析页标题栏新增入口，
         //     可保存分享链接/提取码并按分类管理，点击条目直接回到解析页开始解析。
@@ -78,7 +78,7 @@ android {
         //     - 分片请求带 `If-Range`：防止 CDN 中途换文件时新旧字节拼出混杂文件
         //       （那种情况长度校验会通过，损坏会静默落地）。
         //     - 401/403/410 不再触发背压降并发（是授权/时效信号，不是"你太快了"）。
-        versionName = "2.6.12"
+        versionName = "2.6.13"
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
     }
@@ -217,11 +217,11 @@ dependencies {
     implementation("androidx.lifecycle:lifecycle-viewmodel-compose:2.8.7")
     implementation("com.squareup.okhttp3:okhttp:4.12.0")
 
-    // TurboDL SDK（纯 JVM 多线程下载引擎 + 可选插件框架），从 mavenLocal 解析 dev.turbodl:*:0.2.0.1
-    implementation("dev.turbodl:turbodl-core:0.2.0.1")
-    implementation("dev.turbodl:turbo-plugin-runtime:0.2.0.1")
-    implementation("dev.turbodl:turbo-plugin-bootstrap:0.2.0.1")
-    implementation("dev.turbodl:turbo-plugin-hls:0.2.0.1")
+    // TurboDL SDK（纯 JVM 多线程下载引擎 + 可选插件框架），从 mavenLocal 解析 dev.turbodl:*:0.2.0.2
+    implementation("dev.turbodl:turbodl-core:0.2.0.2")
+    implementation("dev.turbodl:turbo-plugin-runtime:0.2.0.2")
+    implementation("dev.turbodl:turbo-plugin-bootstrap:0.2.0.2")
+    implementation("dev.turbodl:turbo-plugin-hls:0.2.0.2")
 
     implementation(libs.material)   // 原 libs.material.color.utilities -> 改为官方 Material 主库（含 color.utilities 包）
 

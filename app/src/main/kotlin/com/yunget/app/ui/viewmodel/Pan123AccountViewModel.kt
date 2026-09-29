@@ -55,6 +55,16 @@ class Pan123AccountViewModel(
         }
     }
 
+    /**
+     * 保存网页登录得到的 token（从 localStorage 的 `authorToken` 提取）。
+     *
+     * 与账号密码登录并列的**主路径**：用户不再向 App 提供密码，
+     * 从而避免官方把「频繁调用 sign_in 接口」判定为异常客户端而风控。
+     *
+     * @return 校验并落库成功返回 true
+     */
+    suspend fun saveToken(token: String): Boolean = repository.saveToken(token)
+
     fun logout() {
         viewModelScope.launch { repository.logout() }
     }

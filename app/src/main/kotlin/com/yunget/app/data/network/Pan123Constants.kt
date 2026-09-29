@@ -72,6 +72,24 @@ object Pan123Constants {
     /** platform：android（分享下载信息 www.123865.com） */
     const val PLATFORM_ANDROID = "android"
 
+    // ---------- 网页登录（避免账号密码接口触发风控） ----------
+
+    /**
+     * 网页登录入口：123 云盘个人盘主页。
+     *
+     * 用**桌面版**地址（`yun.123pan.cn`）：个人盘是桌面 SPA，
+     * 移动 UA 会被重定向到功能不完整的移动版页面，且登录态写入位置不同。
+     */
+    const val WEB_LOGIN_URL = "https://yun.123pan.cn/"
+
+    /**
+     * 网页登录态在 localStorage 中的键名（值为裸 Bearer JWT）。
+     *
+     * ⚠️ 依赖 123 站点的私有实现，官网改版可能失效。
+     * 故登录页保留「粘贴 Token」手动兜底入口，失效时用户仍可登录。
+     */
+    const val LOCAL_STORAGE_TOKEN_KEY = "authorToken"
+
     /** app-version：web 系 */
     const val APP_VERSION_WEB = "3"
 
