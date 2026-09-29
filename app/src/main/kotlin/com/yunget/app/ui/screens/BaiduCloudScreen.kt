@@ -1,5 +1,10 @@
 package com.yunget.app.ui.screens
 
+import com.yunget.app.ui.theme.spatialDefault
+import com.yunget.app.ui.theme.spatialFast
+import com.yunget.app.ui.theme.effectsDefault
+import com.yunget.app.ui.theme.effectsFast
+import com.yunget.app.ui.components.YunGetLoading
 import com.yunget.app.ui.SnackbarController
 import androidx.activity.compose.BackHandler
 import androidx.compose.animation.AnimatedContent
@@ -151,7 +156,7 @@ fun BaiduCloudScreen(
         AnimatedContent(
             targetState = state,
             transitionSpec = {
-                fadeIn(tween(200)) togetherWith fadeOut(tween(140))
+                fadeIn(effectsDefault()) togetherWith fadeOut(effectsFast())
             },
             label = "baiduCloudState"
         ) { s ->
@@ -317,8 +322,8 @@ fun BaiduCloudScreen(
 
                     AnimatedVisibility(
                         visible = viewModel.multiSelectMode,
-                        enter = slideInVertically(tween(220)) { it } + fadeIn(tween(220)),
-                        exit = slideOutVertically(tween(180)) { it } + fadeOut(tween(180)),
+                        enter = slideInVertically(spatialDefault()) { it } + fadeIn(effectsDefault()),
+                        exit = slideOutVertically(spatialFast()) { it } + fadeOut(effectsFast()),
                         modifier = Modifier.align(Alignment.BottomCenter)
                     ) {
                         MultiSelectBar(
@@ -449,7 +454,7 @@ fun BaiduCloudScreen(
             title = { Text("处理中") },
             text = {
                 Row(verticalAlignment = Alignment.CenterVertically) {
-                    CircularProgressIndicator(modifier = Modifier.size(24.dp), strokeWidth = 2.dp)
+                    YunGetLoading(modifier = Modifier.size(24.dp))
                     Spacer(modifier = Modifier.width(12.dp))
                     Text(
                         text = viewModel.folderProgress ?: "正在处理，请稍候…",
@@ -668,7 +673,7 @@ private fun BaiduMoveSheet(
             }
             AnimatedContent(
                 targetState = moveState,
-                transitionSpec = { fadeIn(tween(180)) togetherWith fadeOut(tween(140)) },
+                transitionSpec = { fadeIn(effectsDefault()) togetherWith fadeOut(effectsFast()) },
                 label = "baiduMoveState"
             ) { s ->
                 when (s) {

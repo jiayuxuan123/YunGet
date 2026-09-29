@@ -7,6 +7,7 @@ import android.webkit.WebView
 import android.webkit.WebViewClient
 import androidx.activity.compose.BackHandler
 import androidx.compose.material3.SnackbarHost
+import com.yunget.app.ui.components.YunGetLoading
 import com.yunget.app.ui.SnackbarController
 import com.yunget.app.ui.rememberGlobalSnackbarHostState
 import androidx.compose.foundation.layout.Arrangement
@@ -24,7 +25,6 @@ import androidx.compose.material.icons.outlined.ContentPaste
 import androidx.compose.material.icons.outlined.Info
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
-import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
@@ -159,9 +159,7 @@ fun QuarkLoginScreen(
                         enabled = !isSaving && !isSavingManual
                     ) {
                         if (isSaving) {
-                            CircularProgressIndicator(
-                                modifier = Modifier.size(18.dp),
-                                strokeWidth = 2.dp
+                            YunGetLoading(modifier = Modifier.size(18.dp)
                             )
                         } else {
                             Text("保存")
@@ -264,9 +262,7 @@ fun QuarkLoginScreen(
                     enabled = cookieInput.isNotBlank() && !isSavingManual
                 ) {
                     if (isSavingManual) {
-                        CircularProgressIndicator(
-                            modifier = Modifier.size(18.dp),
-                            strokeWidth = 2.dp
+                        YunGetLoading(modifier = Modifier.size(18.dp)
                         )
                     } else {
                         Text("保存")

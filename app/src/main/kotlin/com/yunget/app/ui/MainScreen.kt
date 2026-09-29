@@ -60,6 +60,10 @@ import android.provider.Settings
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.core.content.ContextCompat
+import com.yunget.app.ui.theme.spatialDefault
+import com.yunget.app.ui.theme.spatialFast
+import com.yunget.app.ui.theme.effectsDefault
+import com.yunget.app.ui.theme.effectsFast
 import com.yunget.app.data.db.AppDatabase
 import com.yunget.app.data.db.DownloadTaskEntity
 import com.yunget.app.data.download.DownloadManager
@@ -576,11 +580,11 @@ fun MainScreen() {
                 // 根据 Tab 顺序决定滑动方向：向右切（新Tab在右边）→ 新页从右滑入；向左切反向
                 val forward = targetState.ordinal > initialState.ordinal
                 if (forward) {
-                    (fadeIn(tween(220)) + slideInHorizontally(tween(220)) { it / 4 })
-                        .togetherWith(fadeOut(tween(160)) + slideOutHorizontally(tween(160)) { -it / 4 })
+                    (fadeIn(effectsDefault()) + slideInHorizontally(spatialDefault()) { it / 4 })
+                        .togetherWith(fadeOut(effectsFast()) + slideOutHorizontally(spatialFast()) { -it / 4 })
                 } else {
-                    (fadeIn(tween(220)) + slideInHorizontally(tween(220)) { -it / 4 })
-                        .togetherWith(fadeOut(tween(160)) + slideOutHorizontally(tween(160)) { it / 4 })
+                    (fadeIn(effectsDefault()) + slideInHorizontally(spatialDefault()) { -it / 4 })
+                        .togetherWith(fadeOut(effectsFast()) + slideOutHorizontally(spatialFast()) { it / 4 })
                 }
             },
             label = "mainTab"
@@ -711,8 +715,8 @@ fun MainScreen() {
     // 关于云取：叠加覆盖层（淡入 + 轻微缩放过渡）
     AnimatedVisibility(
         visible = showAbout,
-        enter = fadeIn(tween(220)) + scaleIn(tween(220), initialScale = 0.96f),
-        exit = fadeOut(tween(160)) + scaleOut(tween(160), targetScale = 0.96f),
+        enter = fadeIn(effectsDefault()) + scaleIn(tween(220), initialScale = 0.96f),
+        exit = fadeOut(effectsFast()) + scaleOut(tween(160), targetScale = 0.96f),
         modifier = Modifier.fillMaxSize()
     ) {
         AboutScreen(
@@ -731,8 +735,8 @@ fun MainScreen() {
     // 支持开发：叠加覆盖层（淡入 + 轻微缩放过渡）
     AnimatedVisibility(
         visible = showSupport,
-        enter = fadeIn(tween(220)) + scaleIn(tween(220), initialScale = 0.96f),
-        exit = fadeOut(tween(160)) + scaleOut(tween(160), targetScale = 0.96f),
+        enter = fadeIn(effectsDefault()) + scaleIn(tween(220), initialScale = 0.96f),
+        exit = fadeOut(effectsFast()) + scaleOut(tween(160), targetScale = 0.96f),
         modifier = Modifier.fillMaxSize()
     ) {
         SupportScreen(
@@ -743,8 +747,8 @@ fun MainScreen() {
     // 主题与外观：叠加覆盖层（淡入 + 轻微缩放过渡）
     AnimatedVisibility(
         visible = showTheme,
-        enter = fadeIn(tween(220)) + scaleIn(tween(220), initialScale = 0.96f),
-        exit = fadeOut(tween(160)) + scaleOut(tween(160), targetScale = 0.96f),
+        enter = fadeIn(effectsDefault()) + scaleIn(tween(220), initialScale = 0.96f),
+        exit = fadeOut(effectsFast()) + scaleOut(tween(160), targetScale = 0.96f),
         modifier = Modifier.fillMaxSize()
     ) {
         ThemeScreen(

@@ -84,6 +84,8 @@ import com.yunget.app.data.download.DownloadStats
 import com.yunget.app.ui.SnackbarController
 import com.yunget.app.ui.viewmodel.DownloadViewModel
 import java.io.File
+import com.yunget.app.ui.theme.effectsDefault
+import com.yunget.app.ui.theme.effectsFast
 
 /**
  * 下载页：任务列表（分片多线程下载 / 断点续传）、进度展示、暂停/继续/删除/打开。
@@ -502,8 +504,8 @@ private fun FolderDownloadGroup(
             // 展开区：总体进度条 + 子任务紧凑列表
             AnimatedVisibility(
                 visible = expanded,
-                enter = fadeIn(tween(200)) + expandVertically(tween(200), expandFrom = Alignment.Top),
-                exit = fadeOut(tween(150)) + shrinkVertically(tween(150), shrinkTowards = Alignment.Top)
+                enter = fadeIn(effectsDefault()) + expandVertically(tween(200), expandFrom = Alignment.Top),
+                exit = fadeOut(effectsFast()) + shrinkVertically(tween(150), shrinkTowards = Alignment.Top)
             ) {
                 Column {
                     // 总体进度条（细条，圆角）

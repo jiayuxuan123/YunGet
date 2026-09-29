@@ -1,5 +1,10 @@
 package com.yunget.app.ui.screens
 
+import com.yunget.app.ui.theme.spatialDefault
+import com.yunget.app.ui.theme.spatialFast
+import com.yunget.app.ui.theme.effectsDefault
+import com.yunget.app.ui.theme.effectsFast
+import com.yunget.app.ui.components.YunGetLoading
 import com.yunget.app.ui.SnackbarController
 import androidx.activity.compose.BackHandler
 import androidx.compose.animation.AnimatedContent
@@ -122,7 +127,7 @@ fun CloudDriveScreen(
         AnimatedContent(
             targetState = state,
             transitionSpec = {
-                fadeIn(tween(200)) togetherWith fadeOut(tween(140))
+                fadeIn(effectsDefault()) togetherWith fadeOut(effectsFast())
             },
             label = "cloudState"
         ) { s ->
@@ -289,8 +294,8 @@ fun CloudDriveScreen(
                 // 多选模式：底部批量操作栏（底部滑入淡入，退出反向）
                 AnimatedVisibility(
                     visible = viewModel.multiSelectMode,
-                    enter = slideInVertically(tween(220)) { it } + fadeIn(tween(220)),
-                    exit = slideOutVertically(tween(180)) { it } + fadeOut(tween(180)),
+                    enter = slideInVertically(spatialDefault()) { it } + fadeIn(effectsDefault()),
+                    exit = slideOutVertically(spatialFast()) { it } + fadeOut(effectsFast()),
                     modifier = Modifier.align(Alignment.BottomCenter)
                 ) {
                     MultiSelectBar(
@@ -373,9 +378,7 @@ fun CloudDriveScreen(
             title = { Text("处理中") },
             text = {
                 Row(verticalAlignment = Alignment.CenterVertically) {
-                    CircularProgressIndicator(
-                        modifier = Modifier.size(24.dp),
-                        strokeWidth = 2.dp
+                    YunGetLoading(modifier = Modifier.size(24.dp)
                     )
                     Spacer(modifier = Modifier.width(12.dp))
                     Text(

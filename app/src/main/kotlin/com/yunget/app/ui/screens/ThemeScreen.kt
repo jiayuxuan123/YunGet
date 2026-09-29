@@ -1,3 +1,21 @@
+/*
+ * YunGet (云取) - A network drive share-link parser and high-speed downloader for Android.
+ * Copyright (C) 2026 CYQawa
+ *
+ * This program is free software: you can redistribute it and/or modify
+ * it under the terms of the GNU Affero General Public License as published by
+ * the Free Software Foundation, either version 3 of the License, or
+ * (at your option) any later version.
+ *
+ * This program is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+ * GNU Affero General Public License for more details.
+ *
+ * You should have received a copy of the GNU Affero General Public License
+ * along with this program.  If not, see <https://www.gnu.org/licenses/>.
+ */
+
 package com.yunget.app.ui.screens
 
 import android.content.ComponentName
@@ -101,6 +119,10 @@ import androidx.compose.ui.window.Dialog
 import com.yunget.app.R
 import com.yunget.app.data.prefs.SettingsRepository
 import com.yunget.app.ui.theme.ThemeController
+import com.yunget.app.ui.theme.effectsDefault
+import com.yunget.app.ui.theme.effectsFast
+import com.yunget.app.ui.theme.spatialDefault
+import com.yunget.app.ui.theme.spatialFast
 
 /** 预置主题色（Material 风格种子色） */
 private val presetColors = listOf(
@@ -142,7 +164,7 @@ fun ThemeScreen(
     LaunchedEffect(expanded) {
         expandProgress.animateTo(
             targetValue = if (expanded) 1f else 0f,
-            animationSpec = tween(250, easing = FastOutSlowInEasing)
+            animationSpec = spatialDefault()   // 折叠进度（高度+透明度）：改用 spatial 弹簧
         )
     }
 
@@ -159,15 +181,15 @@ fun ThemeScreen(
     var iconExpanded by rememberSaveable { mutableStateOf(true) }
     val switchAppIcon: (Int) -> Unit = { variant ->
         val pm = context.packageManager
-        val main = ComponentName(context, "com.yunget.app.MainActivity")            // 0 = 默认多线程下载图标
-        val alias1 = ComponentName(context, "com.yunget.app.MainActivityIcon1")     // 1 = 经典图标
-        val alias2 = ComponentName(context, "com.yunget.app.MainActivityIcon2")     // 2 = 云 X 图标
-        val enabled = PackageManager.COMPONENT_ENABLED_STATE_ENABLED
-        val disabled = PackageManager.COMPONENT_ENABLED_STATE_DISABLED
-        val keep = PackageManager.DONT_KILL_APP
-        pm.setComponentEnabledSetting(main, if (variant == 0) enabled else disabled, keep)
-        pm.setComponentEnabledSetting(alias1, if (variant == 1) enabled else disabled, keep)
-        pm.setComponentEnabledSetting(alias2, if (variant == 2) enabled else disabled, keep)
+        val main = ComponentName(context, "com.yunget.app.MainActivity")
+        val alias = ComponentName(context, "com.yunget.app.MainActivityIcon2")
+        if (variant == 1) {
+            pm.setComponentEnabledSetting(alias, PackageManager.COMPONENT_ENABLED_STATE_ENABLED, PackageManager.DONT_KILL_APP)
+            pm.setComponentEnabledSetting(main, PackageManager.COMPONENT_ENABLED_STATE_DISABLED, PackageManager.DONT_KILL_APP)
+        } else {
+            pm.setComponentEnabledSetting(main, PackageManager.COMPONENT_ENABLED_STATE_ENABLED, PackageManager.DONT_KILL_APP)
+            pm.setComponentEnabledSetting(alias, PackageManager.COMPONENT_ENABLED_STATE_DISABLED, PackageManager.DONT_KILL_APP)
+        }
         settingsRepo.appIconVariant = variant
     }
 
@@ -257,8 +279,8 @@ fun ThemeScreen(
                             )
                             AnimatedVisibility(
                                 visible = !expanded,
-                                enter = fadeIn(tween(200)) + expandVertically(tween(200), expandFrom = Alignment.Top),
-                                exit = fadeOut(tween(200)) + shrinkVertically(tween(200), shrinkTowards = Alignment.Top)
+                                enter = fadeIn(effectsDefault()) + expandVertically(spatialDefault(), expandFrom = Alignment.Top),
+                                exit = fadeOut(effectsFast()) + shrinkVertically(spatialFast(), shrinkTowards = Alignment.Top)
                             ) {
                                 Text(
                                     text = when {
@@ -275,7 +297,7 @@ fun ThemeScreen(
                         val rotation by animateFloatAsState(
                             targetValue = if (expanded) 180f else 0f,
                             label = "arrow",
-                            animationSpec = tween(expandDuration)
+                            animationSpec = spatialDefault()
                         )
                         Icon(
                             imageVector = Icons.Filled.ExpandMore,
@@ -405,15 +427,11 @@ fun ThemeScreen(
                             // 与主题色卡片一致的副标题动画：展开时隐藏、收起时显示
                             AnimatedVisibility(
                                 visible = !iconExpanded,
-                                enter = fadeIn(tween(200)) + expandVertically(tween(200), expandFrom = Alignment.Top),
-                                exit = fadeOut(tween(200)) + shrinkVertically(tween(200), shrinkTowards = Alignment.Top)
+                                enter = fadeIn(effectsDefault()) + expandVertically(spatialDefault(), expandFrom = Alignment.Top),
+                                exit = fadeOut(effectsFast()) + shrinkVertically(spatialFast(), shrinkTowards = Alignment.Top)
                             ) {
                                 Text(
-                                    text = when (appIconVariant) {
-                                        1 -> "经典图标"
-                                        2 -> "云 X 图标"
-                                        else -> "下载图标（默认）"
-                                    },
+                                    text = if (appIconVariant == 1) "新图标" else "经典图标",
                                     style = MaterialTheme.typography.bodySmall,
                                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                                     modifier = Modifier.padding(top = 2.dp)
@@ -423,7 +441,7 @@ fun ThemeScreen(
                         val iconRotation by animateFloatAsState(
                             targetValue = if (iconExpanded) 180f else 0f,
                             label = "iconArrow",
-                            animationSpec = tween(200)
+                            animationSpec = spatialDefault()
                         )
                         Icon(
                             imageVector = Icons.Filled.ExpandMore,
@@ -433,8 +451,8 @@ fun ThemeScreen(
                     }
                     AnimatedVisibility(
                         visible = iconExpanded,
-                        enter = fadeIn(tween(200)) + expandVertically(tween(200), expandFrom = Alignment.Top),
-                        exit = fadeOut(tween(150)) + shrinkVertically(tween(150), shrinkTowards = Alignment.Top)
+                        enter = fadeIn(effectsDefault()) + expandVertically(spatialDefault(), expandFrom = Alignment.Top),
+                        exit = fadeOut(effectsFast()) + shrinkVertically(spatialFast(), shrinkTowards = Alignment.Top)
                     ) {
                         Column(modifier = Modifier.padding(start = 16.dp, end = 16.dp, bottom = 16.dp)) {
                             HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f))
@@ -444,8 +462,8 @@ fun ThemeScreen(
                                 horizontalArrangement = Arrangement.spacedBy(24.dp)
                             ) {
                                 AppIconOption(
-                                    iconRes = R.drawable.icon_dl,
-                                    name = "下载图标",
+                                    iconRes = R.drawable.icon,
+                                    name = "经典图标",
                                     isSelected = appIconVariant == 0,
                                     onClick = {
                                         appIconVariant = 0
@@ -453,21 +471,12 @@ fun ThemeScreen(
                                     }
                                 )
                                 AppIconOption(
-                                    iconRes = R.drawable.icon,
-                                    name = "经典图标",
+                                    iconRes = R.drawable.icon2,
+                                    name = "新图标",
                                     isSelected = appIconVariant == 1,
                                     onClick = {
                                         appIconVariant = 1
                                         switchAppIcon(1)
-                                    }
-                                )
-                                AppIconOption(
-                                    iconRes = R.drawable.icon2,
-                                    name = "云 X 图标",
-                                    isSelected = appIconVariant == 2,
-                                    onClick = {
-                                        appIconVariant = 2
-                                        switchAppIcon(2)
                                     }
                                 )
                             }
@@ -510,7 +519,7 @@ private fun SmoothFilterChip(
     val duration = 200
     val containerColor by animateColorAsState(
         targetValue = if (selected) MaterialTheme.colorScheme.secondaryContainer else MaterialTheme.colorScheme.surface,
-        animationSpec = tween(durationMillis = duration, easing = LinearEasing),
+        animationSpec = tween(durationMillis = duration, easing = LinearEasing),   // 刻意线性：颜色扫过动画
         label = "container"
     )
     val contentColor by animateColorAsState(

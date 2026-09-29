@@ -1,7 +1,24 @@
+/*
+ * YunGet (云取) - A network drive share-link parser and high-speed downloader for Android.
+ * Copyright (C) 2026 CYQawa
+ *
+ * This program is free software: you can redistribute it and/or modify
+ * it under the terms of the GNU Affero General Public License as published by
+ * the Free Software Foundation, either version 3 of the License, or
+ * (at your option) any later version.
+ *
+ * This program is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+ * GNU Affero General Public License for more details.
+ *
+ * You should have received a copy of the GNU Affero General Public License
+ * along with this program.  If not, see <https://www.gnu.org/licenses/>.
+ */
+
 package com.yunget.app.ui.screens
 
 import androidx.compose.animation.AnimatedContent
-import androidx.compose.animation.core.tween
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
 import androidx.compose.animation.togetherWith
@@ -17,12 +34,11 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
-import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.outlined.Folder
 import androidx.compose.material.icons.outlined.SaveAlt
 import androidx.compose.material3.Button
-import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
@@ -50,6 +66,11 @@ import com.yunget.app.ui.resolve.ShareFileRow
 import com.yunget.app.ui.viewmodel.Pan123CloudUiState
 import com.yunget.app.ui.viewmodel.Pan123CloudViewModel
 import com.yunget.app.ui.viewmodel.ResolveViewModel
+import com.yunget.app.ui.components.YunGetLoading
+import com.yunget.app.ui.theme.effectsDefault
+import com.yunget.app.ui.theme.ListGroupGap
+import com.yunget.app.ui.theme.effectsFast
+import com.yunget.app.ui.theme.listGroupShape
 
 /**
  * 转存到 123 云盘弹窗：浏览 123 个人网盘目录（只进文件夹），确认后转存到当前目录。
@@ -142,7 +163,7 @@ fun Pan123SaveSheet(
             // 目录切换：淡入过渡（与网盘移动弹窗一致）
             AnimatedContent(
                 targetState = cloudState,
-                transitionSpec = { fadeIn(tween(180)) togetherWith fadeOut(tween(140)) },
+                transitionSpec = { fadeIn(effectsDefault()) togetherWith fadeOut(effectsFast()) },
                 label = "pan123SaveState"
             ) { s ->
                 when (s) {
@@ -152,7 +173,7 @@ fun Pan123SaveSheet(
                             .height(200.dp),
                         contentAlignment = Alignment.Center
                     ) {
-                        CircularProgressIndicator()
+                        YunGetLoading()
                     }
 
                     is Pan123CloudUiState.Error -> Box(
@@ -196,11 +217,13 @@ fun Pan123SaveSheet(
                                 modifier = Modifier
                                     .fillMaxWidth()
                                     .heightIn(max = 280.dp),
-                                verticalArrangement = Arrangement.spacedBy(4.dp)
+                                verticalArrangement = Arrangement.spacedBy(ListGroupGap)
                             ) {
-                                items(dirs, key = { it.fid }) { dir ->
+                                // 目录列表拼成一组：首/末项大圆角、中间项小圆角
+                                itemsIndexed(dirs, key = { _, d -> d.fid }) { index, dir ->
                                     ShareFileRow(
                                         file = dir,
+                                        shape = listGroupShape(index, dirs.size),
                                         onClick = { cloudViewModel.openFolder(dir) }
                                     )
                                 }
@@ -225,10 +248,7 @@ fun Pan123SaveSheet(
                     .height(50.dp)
             ) {
                 if (saving) {
-                    CircularProgressIndicator(
-                        modifier = Modifier.size(20.dp),
-                        strokeWidth = 2.dp,
-                        color = MaterialTheme.colorScheme.onPrimary
+                    YunGetLoading(modifier = Modifier.size(20.dp)
                     )
                 } else {
                     Icon(

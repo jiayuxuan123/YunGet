@@ -1,6 +1,7 @@
 package com.yunget.app.ui.login
 
 import androidx.activity.compose.BackHandler
+import com.yunget.app.ui.components.YunGetLoading
 import com.yunget.app.ui.SnackbarController
 import com.yunget.app.ui.rememberGlobalSnackbarHostState
 import androidx.compose.foundation.layout.*
@@ -112,7 +113,7 @@ fun Pan123LoginScreen(
                 enabled = username.isNotBlank() && password.isNotBlank() && !viewModel.isLoggingIn
             ) {
                 if (viewModel.isLoggingIn) {
-                    CircularProgressIndicator(modifier = Modifier.size(18.dp), strokeWidth = 2.dp)
+                    YunGetLoading(modifier = Modifier.size(18.dp))
                     Spacer(modifier = Modifier.width(8.dp))
                     Text("登录中…")
                 } else {

@@ -1,7 +1,24 @@
+/*
+ * YunGet (云取) - A network drive share-link parser and high-speed downloader for Android.
+ * Copyright (C) 2026 CYQawa
+ *
+ * This program is free software: you can redistribute it and/or modify
+ * it under the terms of the GNU Affero General Public License as published by
+ * the Free Software Foundation, either version 3 of the License, or
+ * (at your option) any later version.
+ *
+ * This program is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+ * GNU Affero General Public License for more details.
+ *
+ * You should have received a copy of the GNU Affero General Public License
+ * along with this program.  If not, see <https://www.gnu.org/licenses/>.
+ */
+
 package com.yunget.app.ui.components
 
 import androidx.compose.animation.AnimatedVisibility
-import androidx.compose.animation.core.tween
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
 import androidx.compose.animation.scaleIn
@@ -23,6 +40,10 @@ import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
 import kotlinx.coroutines.launch
+import com.yunget.app.ui.theme.effectsDefault
+import com.yunget.app.ui.theme.effectsFast
+import com.yunget.app.ui.theme.spatialDefault
+import com.yunget.app.ui.theme.spatialFast
 
 /**
  * 返回顶部按钮（Material3 规范）：
@@ -45,8 +66,8 @@ internal fun ScrollToTopButton(
     }
     AnimatedVisibility(
         visible = showButton,
-        enter = fadeIn(tween(200)) + scaleIn(tween(200), initialScale = 0.8f),
-        exit = fadeOut(tween(150)) + scaleOut(tween(150), targetScale = 0.8f),
+        enter = fadeIn(effectsDefault()) + scaleIn(spatialDefault(), initialScale = 0.8f),
+        exit = fadeOut(effectsFast()) + scaleOut(spatialFast(), targetScale = 0.8f),
         modifier = modifier
     ) {
         SmallFloatingActionButton(

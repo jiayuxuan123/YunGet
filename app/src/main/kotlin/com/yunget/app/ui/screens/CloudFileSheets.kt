@@ -64,6 +64,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import com.yunget.app.ui.components.YunGetLoading
 import com.yunget.app.data.network.model.ShareFile
 import com.yunget.app.ui.SnackbarController
 import com.yunget.app.ui.rememberGlobalSnackbarHostState
@@ -72,6 +73,8 @@ import com.yunget.app.ui.resolve.CrumbBar
 import com.yunget.app.ui.resolve.ShareFileRow
 import com.yunget.app.ui.viewmodel.QuarkCloudUiState
 import com.yunget.app.ui.viewmodel.QuarkCloudViewModel
+import com.yunget.app.ui.theme.effectsDefault
+import com.yunget.app.ui.theme.effectsFast
 
 /** 文件操作菜单类型（FileActionSheet 内切换） */
 private enum class ActionStep { MENU, MOVE, SHARE, RENAME, DELETE }
@@ -341,7 +344,7 @@ private fun MoveStep(
         // 移动目录切换：淡入过渡
         AnimatedContent(
             targetState = moveState,
-            transitionSpec = { fadeIn(tween(180)) togetherWith fadeOut(tween(140)) },
+            transitionSpec = { fadeIn(effectsDefault()) togetherWith fadeOut(effectsFast()) },
             label = "moveState"
         ) { s ->
             when (s) {
@@ -405,7 +408,7 @@ private fun MoveStep(
                 .height(50.dp)
         ) {
             if (operating) {
-                CircularProgressIndicator(modifier = Modifier.size(20.dp), strokeWidth = 2.dp)
+                YunGetLoading(modifier = Modifier.size(20.dp))
             } else {
                 Icon(Icons.Outlined.DriveFileMove, contentDescription = null, modifier = Modifier.size(18.dp))
                 Spacer(modifier = Modifier.width(8.dp))
@@ -499,7 +502,7 @@ private fun ShareStep(
                 .height(50.dp)
         ) {
             if (operating) {
-                CircularProgressIndicator(modifier = Modifier.size(20.dp), strokeWidth = 2.dp)
+                YunGetLoading(modifier = Modifier.size(20.dp))
             } else {
                 Icon(Icons.Outlined.Share, contentDescription = null, modifier = Modifier.size(18.dp))
                 Spacer(modifier = Modifier.width(8.dp))
@@ -932,7 +935,7 @@ private fun BatchShareStep(
                 .height(50.dp)
         ) {
             if (operating) {
-                CircularProgressIndicator(modifier = Modifier.size(20.dp), strokeWidth = 2.dp)
+                YunGetLoading(modifier = Modifier.size(20.dp))
             } else {
                 Icon(Icons.Outlined.Share, contentDescription = null, modifier = Modifier.size(18.dp))
                 Spacer(modifier = Modifier.width(8.dp))
@@ -978,7 +981,7 @@ private fun BatchMoveStep(
         // 移动目录切换：淡入过渡
         AnimatedContent(
             targetState = moveState,
-            transitionSpec = { fadeIn(tween(180)) togetherWith fadeOut(tween(140)) },
+            transitionSpec = { fadeIn(effectsDefault()) togetherWith fadeOut(effectsFast()) },
             label = "batchMoveState"
         ) { s ->
             when (s) {
@@ -1042,7 +1045,7 @@ private fun BatchMoveStep(
                 .height(50.dp)
         ) {
             if (operating) {
-                CircularProgressIndicator(modifier = Modifier.size(20.dp), strokeWidth = 2.dp)
+                YunGetLoading(modifier = Modifier.size(20.dp))
             } else {
                 Icon(Icons.Outlined.DriveFileMove, contentDescription = null, modifier = Modifier.size(18.dp))
                 Spacer(modifier = Modifier.width(8.dp))

@@ -37,7 +37,6 @@ import androidx.compose.material3.Button
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.Checkbox
-import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
@@ -61,6 +60,7 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.activity.compose.BackHandler
+import com.yunget.app.ui.components.YunGetLoading
 import com.yunget.app.data.network.model.ShareFile
 import com.yunget.app.data.network.model.ShareSession
 import com.yunget.app.data.prefs.SettingsRepository
@@ -341,9 +341,7 @@ fun ShareDetailScreen(
             title = { Text("批量处理中") },
             text = {
                 Row(verticalAlignment = Alignment.CenterVertically) {
-                    CircularProgressIndicator(
-                        modifier = Modifier.size(24.dp),
-                        strokeWidth = 2.dp
+                    YunGetLoading(modifier = Modifier.size(24.dp)
                     )
                     Spacer(modifier = Modifier.width(12.dp))
                     Text(
@@ -509,6 +507,12 @@ internal fun ShareFileRow(
     selected: Boolean = false,
     /** 是否显示行首复选框（仅多选模式列表传 true；移动/转存等选择器不显示） */
     showCheckbox: Boolean = false,
+    /**
+     * 行形状。网盘页的列表组传 `listGroupShape(index, count)`
+     * （首/末项大圆角、中间项小圆角，形成「整组一张卡片」的观感）；
+     * 不传时为整行统一大圆角。
+     */
+    shape: androidx.compose.ui.graphics.Shape = MaterialTheme.shapes.large,
     /** 列表项动画等（调用方传入 Modifier.animateItem()） */
     modifier: Modifier = Modifier
 ) {
@@ -519,7 +523,7 @@ internal fun ShareFileRow(
                 onClick = onClick,
                 onLongClick = onLongClick
             ),
-        shape = MaterialTheme.shapes.large,
+        shape = shape,
         colors = CardDefaults.cardColors(
             containerColor = if (selected) {
                 MaterialTheme.colorScheme.primaryContainer

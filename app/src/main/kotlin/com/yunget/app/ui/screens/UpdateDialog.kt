@@ -16,7 +16,6 @@ import androidx.compose.material.icons.outlined.Download
 import androidx.compose.material.icons.outlined.SystemUpdate
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
-import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
@@ -28,6 +27,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import com.yunget.app.ui.components.YunGetLoading
 import com.yunget.app.data.update.UpdateChecker
 
 /**
@@ -128,9 +128,7 @@ fun UpdateDialog(
                     modifier = Modifier.fillMaxWidth()
                 ) {
                     if (downloading) {
-                        CircularProgressIndicator(
-                            modifier = Modifier.size(16.dp),
-                            strokeWidth = 2.dp
+                        YunGetLoading(modifier = Modifier.size(16.dp)
                         )
                         Spacer(modifier = Modifier.width(6.dp))
                         Text("下载中…")

@@ -33,7 +33,11 @@ import androidx.compose.material.icons.outlined.Link
 import androidx.compose.material3.Button
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
-import androidx.compose.material3.CircularProgressIndicator
+import com.yunget.app.ui.components.YunGetLoading
+import com.yunget.app.ui.theme.effectsDefault
+import com.yunget.app.ui.theme.effectsFast
+import com.yunget.app.ui.theme.spatialDefault
+import com.yunget.app.ui.theme.spatialFast
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
@@ -181,8 +185,8 @@ fun ResolveScreen(
         AnimatedContent(
             targetState = state,
             transitionSpec = {
-                (fadeIn(tween(200)) + slideInVertically(tween(200)) { it / 20 })
-                    .togetherWith(fadeOut(tween(140)))
+                (fadeIn(effectsDefault()) + slideInVertically(spatialDefault()) { it / 20 })
+                    .togetherWith(fadeOut(effectsFast()))
             },
             label = "resolveState"
         ) { s ->
@@ -233,12 +237,12 @@ fun ResolveScreen(
         }
         AnimatedVisibility(
             visible = state is ResolveUiState.Idle && clipboardSuggestion != null,
-            enter = fadeIn(tween(200)) +
-                slideInVertically(tween(250)) { -it / 2 } +
-                scaleIn(tween(250, delayMillis = 60)),
-            exit = fadeOut(tween(150)) +
-                slideOutVertically(tween(200)) { -it / 2 } +
-                scaleOut(tween(200)),
+            enter = fadeIn(effectsDefault()) +
+                slideInVertically(spatialDefault()) { -it / 2 } +
+                scaleIn(spatialDefault()),
+            exit = fadeOut(effectsFast()) +
+                slideOutVertically(spatialFast()) { -it / 2 } +
+                scaleOut(spatialFast()),
             modifier = Modifier
                 .align(Alignment.TopCenter)
                 .fillMaxWidth()
@@ -274,10 +278,7 @@ fun ResolveScreen(
             title = { Text("获取下载链接") },
             text = {
                 Row(verticalAlignment = Alignment.CenterVertically) {
-                    CircularProgressIndicator(
-                        modifier = Modifier.size(24.dp),
-                        strokeWidth = 2.dp
-                    )
+                    YunGetLoading(modifier = Modifier.size(24.dp))
                     Spacer(modifier = Modifier.width(12.dp))
                     Text(
                         text = "正在获取下载链接，请稍候…",
@@ -372,10 +373,7 @@ private fun ResolveInputContent(
             enabled = link.isNotBlank() && !isLoading
         ) {
             if (isLoading) {
-                CircularProgressIndicator(
-                    modifier = Modifier.size(18.dp),
-                    strokeWidth = 2.dp
-                )
+                YunGetLoading(modifier = Modifier.size(18.dp))
                 Spacer(modifier = Modifier.width(8.dp))
                 Text("解析中…")
             } else {
@@ -419,7 +417,7 @@ private fun LoadingContent() {
         contentAlignment = Alignment.Center
     ) {
         Column(horizontalAlignment = Alignment.CenterHorizontally) {
-            CircularProgressIndicator(modifier = Modifier.size(28.dp), strokeWidth = 3.dp)
+            YunGetLoading(modifier = Modifier.size(28.dp))
             Spacer(modifier = Modifier.height(12.dp))
             Text(
                 text = "加载中…",

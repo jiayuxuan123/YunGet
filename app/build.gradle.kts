@@ -26,7 +26,26 @@ android {
         applicationId = "com.yunget.app"
         minSdk = 23
         targetSdk = 34
-        versionCode = 35
+        versionCode = 36
+        // 2.6.11 内容（同步上游 YunX 的安全加固与 UI 升级）：
+        //  ① **凭证加密**（取自上游 PR #53）：各网盘 cookie / accessToken 此前**明文存库**，
+        //     现改为 AES-GCM + Android Keystore 加密（密钥不可导出，AAD 绑定用途）。
+        //     读取时解密且放在 IO 线程（Keystore 是 Binder IPC，单次 30~75ms，
+        //     主线程解密会让网盘页并发刷新时整应用掉帧）。
+        //     老数据平滑迁移：读到明文自动加密回写，无需重新登录；
+        //     解密失败则清空该条凭证（宁可重登，也不留无法使用的脏数据）。
+        //  ② **日志脱敏**（LogRedactor）：URL 只保留 scheme+host，
+        //     抹掉 cookie / token / 签名参数后再写入日志与导出文件。
+        //  ③ **保存阶段流式落盘**（取自上游 #100）：DownloadSaver 直接向最终位置写入，
+        //     不再经过私有缓存副本，峰值存储占用从 3 份降到约 1 份，
+        //     并修复保存阶段 ENOSPC 与「文件已删但任务仍在」的幽灵任务。
+        //     新增 DownloadPathPolicy 做**路径穿越防护**（拒绝 .. 与绝对路径）。
+        //  ④ **Material 3 Expressive UI**（取自上游 #103）：material3 升到 1.5.0-alpha18，
+        //     全局动效改为弹簧物理规格（位移用 spatial / 透明度用 effects），
+        //     加载指示器统一为 Expressive 波浪形变（替换 40 处圆形进度圈）。
+        //  ⑤ 51 个文件补上 **AGPL-3.0 许可证头**（此前缺失，属合规缺口）。
+        //  ⑥ 版本比较与更新检测修复（同 2.6.10，见下）。
+        //
         // 2.6.10 内容（引擎调度与合并提速 + 更新检测修复）：
         //  ① **修「检查更新」看不到测试版**：原先用 GitHub 的 `/releases/latest`，
         //     该接口**按设计跳过预发布版**，于是装了 2.6.9 反而提示"已是最新"
@@ -44,7 +63,7 @@ android {
         //     - 分片请求带 `If-Range`：防止 CDN 中途换文件时新旧字节拼出混杂文件
         //       （那种情况长度校验会通过，损坏会静默落地）。
         //     - 401/403/410 不再触发背压降并发（是授权/时效信号，不是"你太快了"）。
-        versionName = "2.6.10"
+        versionName = "2.6.11"
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
     }

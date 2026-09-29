@@ -66,6 +66,8 @@ import com.yunget.app.ui.viewmodel.Pan123CloudViewModel
 import com.yunget.app.ui.viewmodel.QuarkCloudViewModel
 import com.yunget.app.ui.viewmodel.UCCoudViewModel
 import com.yunget.app.ui.viewmodel.XunleiCloudViewModel
+import com.yunget.app.ui.theme.effectsDefault
+import com.yunget.app.ui.theme.effectsFast
 
 /**
  * 网盘账号展示模型。
@@ -209,8 +211,8 @@ fun DriveScreen(
             else -> 0
         },
         transitionSpec = {
-            (fadeIn(tween(220)) + scaleIn(tween(220), initialScale = 0.98f))
-                .togetherWith(fadeOut(tween(150)) + scaleOut(tween(150), targetScale = 0.98f))
+            (fadeIn(effectsDefault()) + scaleIn(tween(220), initialScale = 0.98f))
+                .togetherWith(fadeOut(effectsFast()) + scaleOut(tween(150), targetScale = 0.98f))
         },
         label = "driveContent"
     ) { target ->
@@ -538,11 +540,11 @@ private fun DriveAccountCardContent(
             // 已登录且有空间数据：卡片内展示剩余空间进度条（出现时淡入 + 纵向展开，避免突兀）
             AnimatedVisibility(
                 visible = account.isLoggedIn && quota != null,
-                enter = fadeIn(tween(300)) + expandVertically(
+                enter = fadeIn(effectsDefault()) + expandVertically(
                     expandFrom = Alignment.Top,
                     animationSpec = tween(300)
                 ),
-                exit = fadeOut(tween(200)) + shrinkVertically(animationSpec = tween(200))
+                exit = fadeOut(effectsFast()) + shrinkVertically(animationSpec = tween(200))
             ) {
                 Column {
                     Spacer(modifier = Modifier.height(8.dp))
