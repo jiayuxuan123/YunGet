@@ -1,4 +1,7 @@
 package com.yunget.app.ui.screens
+
+import dev.turbodl.core.TurboHttpClients
+import dev.turbodl.core.DnsMode
 import android.Manifest
 import android.content.Context
 import android.content.pm.PackageManager
@@ -96,6 +99,16 @@ import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 
+/**
+ * 「自动 DNS」在设置里的哨兵值。
+ *
+ * 它不是合法 URL，因此不会与用户自定义输入的 DoH 地址冲突；
+ * 存进 SettingsRepository 后由下载管理器翻译成 `DnsMode.Auto`。
+ */
+private const val AUTO_DOH = "auto://best"
+
+
+
 /** 可选的最大下载线程数（引擎慢启动在 [4, 该值] 间动态爬升，最高 128） */
 private val threadOptions = listOf(1, 2, 4, 8, 16, 32, 64, 128)
 
@@ -121,7 +134,7 @@ fun SettingsScreen(
      *  - [diagResultProvider]  上次结果全文（进程内保留，切页面不丢）
      * 由 MainScreen 注入 DownloadManager 的状态；只在隐藏开发菜单里调用。
      */
-    onConnectionDiagnose: suspend () -> Unit,
+    onConnectionDiagnose: suspend (urlOverride: String?) -> Unit,
     /** 并发任务扫描（1/2/3 任务并行）：回答"多任务能不能叠加速度"。 */
     onConcurrentDiagnose: suspend () -> Unit,
     diagStatusProvider: () -> String?,
@@ -154,6 +167,14 @@ fun SettingsScreen(
     var diagStatus by remember { mutableStateOf<String?>(null) }
     var diagResult by remember { mutableStateOf<String?>(null) }
     var showDiagResultDialog by remember { mutableStateOf(false) }
+    /**
+     * 手动指定用于诊断的直链（可空）。
+     *
+     * 为什么需要：诊断要用一条**当前可用**的链接，而任务表存的是取链时刻的签名直链 ——
+     * 网盘直链短时有效（夸克约 3 小时），过期后诊断只会报"没有链接可用的任务"。
+     * 提供输入框后，用户可在"旧任务全过期"时贴一条新链接继续诊断。
+     */
+    var diagUrlInput by remember { mutableStateOf("") }
     val diagRunning = diagStatus?.startsWith("运行中") == true
     LaunchedEffect(Unit) {
         while (true) {
@@ -314,8 +335,12 @@ fun SettingsScreen(
         SettingsItem(
             icon = Icons.Outlined.Dns,
             title = "自定义 DNS (DoH)",
-            description = dohUrl?.let { "已启用：$it" }
-                ?: "使用系统 DNS（点击配置 DNS over HTTPS）",
+            description = when {
+                // 哨兵值不能直接展示（对用户是无意义的内部标记）
+                dohUrl == AUTO_DOH -> "自动（并发探测最快的公共 DoH）"
+                dohUrl != null -> "已启用：$dohUrl"
+                else -> "使用系统 DNS（点击配置 DNS over HTTPS）"
+            },
             onClick = { showDohDialog = true }
         )
 
@@ -631,19 +656,36 @@ fun SettingsScreen(
                     ) { Text("显示检查更新弹窗") }
 
                     Spacer(modifier = Modifier.height(12.dp))
+                    // 直链输入框（可空）：留空则自动从最近任务里挑一条可用的。
+                    // 任务存的是取链时刻的签名直链，网盘直链短时有效（如夸克约 3 小时）；
+                    // 全部过期时诊断只会报"没有链接可用的任务" —— 此时可在此粘贴一条新直链。
+                    OutlinedTextField(
+                        value = diagUrlInput,
+                        onValueChange = { diagUrlInput = it.trim() },
+                        modifier = Modifier.fillMaxWidth(),
+                        label = { Text("诊断用直链（留空则用最近任务）") },
+                        placeholder = { Text("粘贴一条当前有效的下载直链") },
+                        singleLine = true,
+                        textStyle = MaterialTheme.typography.bodySmall
+                    )
+                    Spacer(modifier = Modifier.height(8.dp))
                     Button(
                         onClick = {
                             showDevMenu = false
                             if (!diagRunning) {
                                 // 状态由管理器更新，界面轮询显示；跑完会自动出现"查看结果"按钮。
-                                scope.launch { runCatching { onConnectionDiagnose() } }
+                                scope.launch { runCatching { onConnectionDiagnose(diagUrlInput.takeIf { it.isNotBlank() }) } }
                                 SnackbarController.show("连接数诊断已开始（约 1 分钟），跑完会提示")
                             }
                         },
                         enabled = !diagRunning,
                         modifier = Modifier.fillMaxWidth()
                     ) {
-                        Text(if (diagRunning) "连接数诊断运行中…（约 1 分钟）" else "连接数诊断（用最近任务）")
+                        Text(
+                            if (diagRunning) "连接数诊断运行中…（约 1 分钟）"
+                            else if (diagUrlInput.isNotBlank()) "连接数诊断（用上方直链）"
+                            else "连接数诊断（用最近任务）"
+                        )
                     }
                     // 进度/完成状态：必须一直可见，用户才能知道"跑完了没有"。
                     diagStatus?.let { st ->
@@ -1159,9 +1201,13 @@ fun SettingsScreen(
     }
 
     // 自定义 DNS over HTTPS：预设公共 DoH + 自定义 URL
+    // 「自动」用哨兵值表示（不是合法 URL，故不会与自定义输入冲突）。
+    // 存进 settings 后由下载管理器翻译成 DnsMode.Auto。
+
     if (showDohDialog) {
         val presets = listOf(
             "" to "不使用（系统 DNS）",
+            AUTO_DOH to "自动（推荐：并发探测最快的公共 DoH）",
             "https://dns.alidns.com/dns-query" to "阿里 DoH（国内快）",
             "https://doh.pub/dns-query" to "腾讯 DoH（国内快）",
             "https://dns.google/dns-query" to "Google DoH（境外）",
@@ -1205,6 +1251,11 @@ fun SettingsScreen(
                             Spacer(modifier = Modifier.width(8.dp))
                             Text(label, style = MaterialTheme.typography.bodyMedium)
                         }
+                    }
+                    // 选中「自动」时才显示各端点延迟：让用户直观看到"自动"到底选了谁、有多快
+                    val autoSelected = (tempPick?.let { presets.getOrNull(it)?.first } ?: dohUrl) == AUTO_DOH
+                    if (autoSelected) {
+                        DohLatencyPanel()
                     }
                     Row(
                         modifier = Modifier.fillMaxWidth(),
@@ -1505,5 +1556,69 @@ private fun speedLimitText(bps: Long): String {
         if (mb >= 10) String.format("%.0f MB/s", mb) else String.format("%.1f MB/s", mb)
     } else {
         "${bps / 1024} KB/s"
+    }
+}
+
+
+/**
+ * 各公共 DoH 端点的实时延迟面板。
+ *
+ * 【为什么要有】用户此前只能二选一（系统 DNS / 手填一个 DoH），看不到"哪个快"。
+ * 开了自动模式后也想知道它到底选了谁。这里把每个端点的解析延迟画出来，
+ * 并把最快的那条标为已选中 —— 一眼能看出当前网络下哪个 DoH 可用。
+ *
+ * 【只测一次】进入面板时探测一次（并发，最多约 4 秒），不做定时轮询：
+ * 这是"看一眼"的信息，持续探测只会白耗流量与电量。
+ */
+@Composable
+private fun DohLatencyPanel() {
+    var results by remember { mutableStateOf<List<Pair<String, Long>>?>(null) }
+    var probing by remember { mutableStateOf(false) }
+    LaunchedEffect(Unit) {
+        if (results == null && !probing) {
+            probing = true
+            results = runCatching {
+                TurboHttpClients.probeDohLatency()
+            }.getOrDefault(emptyList())
+            probing = false
+        }
+    }
+    val list = results
+    Spacer(modifier = Modifier.height(4.dp))
+    Text(
+        text = if (probing) "正在测速…" else "各 DoH 端点延迟（越短越好）",
+        style = MaterialTheme.typography.labelMedium,
+        color = MaterialTheme.colorScheme.onSurfaceVariant
+    )
+    if (list != null) {
+        val best = list.filter { it.second >= 0 }.minByOrNull { it.second }
+        list.forEach { (url, ms) ->
+            val label = url.removePrefix("https://").substringBefore('/')
+            val isBest = best != null && url == best.first
+            Row(
+                modifier = Modifier.fillMaxWidth().padding(vertical = 1.dp),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Text(
+                    text = if (isBest) "✔ " else "   ",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.primary
+                )
+                Text(
+                    text = label,
+                    style = MaterialTheme.typography.bodySmall,
+                    modifier = Modifier.weight(1f)
+                )
+                Text(
+                    text = if (ms < 0) "不可用" else "${ms}ms",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = when {
+                        ms < 0 -> MaterialTheme.colorScheme.error
+                        isBest -> MaterialTheme.colorScheme.primary
+                        else -> MaterialTheme.colorScheme.onSurfaceVariant
+                    }
+                )
+            }
+        }
     }
 }

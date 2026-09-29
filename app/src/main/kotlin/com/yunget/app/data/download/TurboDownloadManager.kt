@@ -48,6 +48,14 @@ private const val TAG = "YunGet-DL"
 private const val DIAG_PROBE_MAX_CANDIDATES = 8
 
 /**
+ * 「自动 DNS」的哨兵值（与设置页 `AUTO_DOH` 必须一致）。
+ *
+ * 设置里只存字符串，这里把它翻译成引擎的 `DnsMode.Auto`。
+ * 用哨兵而非空串：空串已被「不使用 DoH」占用，两者语义不同。
+ */
+private const val AUTO_DOH_SENTINEL = "auto://best"
+
+/**
  * 下载任务管理器（TurboDL 内核版）。
  *
  * 对 UI / ViewModel 暴露与旧 [LegacyDownloadManager] 完全一致的公开 API
@@ -186,8 +194,15 @@ class TurboDownloadManager(
         // 分片临时目录放应用专属缓存，避免系统 tmpdir 被清理导致断点丢失。
         workDir = chunkWorkDir(),
         proxy = ProxyMode.System,
-        // DNS：配了 DoH 就用 DoH（可绕过本地 DNS 污染/加速解析），否则系统 DNS。
-        dns = dohUrlProvider()?.let { DnsMode.DoH(it) } ?: DnsMode.System,
+        // DNS：
+        //  - 设置为「自动」哨兵 → DnsMode.Auto（并发探测最快的公共 DoH，失败回退系统 DNS）
+        //  - 配了具体 DoH 地址 → DnsMode.DoH（用户显式指定）
+        //  - 未配置 → DnsMode.System
+        dns = when (val d = dohUrlProvider()?.takeIf { it.isNotBlank() }) {
+            null -> DnsMode.System
+            AUTO_DOH_SENTINEL -> DnsMode.Auto()
+            else -> DnsMode.DoH(d)
+        },
         warmUpConnections = warmUpProvider(),
         slowStart = slowStartProvider(),
         trustAllCerts = ignoreSslProvider(),
@@ -238,36 +253,57 @@ class TurboDownloadManager(
      * 实测事故：诊断拿这种死链连跑 4 档 × 15 秒，最后只给出"四档全 0 + 样本不足"，
      * 用户白等 1 分钟还看不出是链接的问题。
      *
-     * 现在：按大小降序**逐个探活**（每次只发 1 字节 Range 请求，几十毫秒），
-     * 用第一个通的；全都不通则把失败原因交回界面。
+     * 【为什么要重新取链】仅探活还不够：用户的旧任务**迟早全部过期**
+     * （网盘直链本就是短时的），那时诊断会一律报"没有链接可用的任务"——
+     * 表面看就是"功能用不了"。故先按任务里存的 URL 探活，
+     * 失败时通过 [freshUrlProvider] 用**当前登录态**重新取一次直链再探。
+     *
+     * 取到新链后**只用于本次诊断**，不回写任务表：任务的 URL 属于该任务自身的取链时刻，
+     * 擅自改写会让"暂停/续传"等操作落到用户没预期的地址上。
      */
-    private suspend fun pickAliveDiagTarget(): DiagTarget? {
+    private suspend fun pickAliveDiagTarget(
+        freshUrlProvider: suspend (taskId: Long) -> String? = { null },
+    ): DiagTarget? {
         val tasks = dao.getAllOnce()
         fun sizeOf(t: DownloadTaskEntity) = taskSizes[t.id] ?: t.totalSize.takeIf { it > 0 } ?: -1L
+        // 排序：先按"最新创建"（直链有时效，越新越可能还有效），再按大小降序
+        // （太小的文件在窗口内会下完，速率不可比）。
         val pool = tasks.filter { it.status != DownloadTaskEntity.STATUS_COMPLETED }
             .ifEmpty { tasks }
-            .sortedByDescending { sizeOf(it) }
+            .sortedWith(compareByDescending<DownloadTaskEntity> { it.createTime }
+                .thenByDescending { sizeOf(it) })
         if (pool.isEmpty()) return null
 
         var lastReason: String? = null
+        var refreshTried = 0
+        var refreshSucceeded = 0
         for (t in pool.take(DIAG_PROBE_MAX_CANDIDATES)) {
             val headers = taskHeaders[t.id] ?: parseHeadersJson(t.requestHeadersJson)
-            val bad = TurboDiagnostics.checkReachable(t.url, headers)
-            if (bad == null) {
-                return DiagTarget(
-                    id = t.id,
-                    fileName = t.fileName,
-                    url = t.url,
-                    headers = headers,
-                    knownSize = sizeOf(t),
-                )
+            val stored = TurboDiagnostics.checkReachable(t.url, headers)
+            if (stored == null) {
+                return DiagTarget(t.id, t.fileName, t.url, headers, sizeOf(t))
             }
-            lastReason = bad
-            Log.i(TAG, "诊断候选不可用 task=${t.id} ${t.fileName.take(40)} 原因=$bad")
+            lastReason = stored
+            Log.i(TAG, "诊断候选不可用（存库直链）task=${t.id} ${t.fileName.take(40)} 原因=$stored")
+
+            // 存库直链失效 → 用当前登录态重新取一次（这正是修复"功能用不了"的关键）
+            refreshTried++
+            val fresh = runCatching { freshUrlProvider(t.id) }.getOrNull()
+            if (fresh.isNullOrBlank()) continue
+            val freshBad = TurboDiagnostics.checkReachable(fresh, headers)
+            if (freshBad == null) {
+                refreshSucceeded++
+                Log.i(TAG, "诊断候选已重新取链 task=${t.id} ${t.fileName.take(40)}")
+                return DiagTarget(t.id, t.fileName, fresh, headers, sizeOf(t))
+            }
+            lastReason = freshBad
+            Log.i(TAG, "诊断候选重新取链后仍不可用 task=${t.id} 原因=$freshBad")
         }
-        diagnoseStatus = "❌ 没有链接可用的任务（共试了 ${minOf(pool.size, DIAG_PROBE_MAX_CANDIDATES)} 个）：" +
-            "${lastReason ?: "未知原因"}\n。任务的直链是取链时签发的，会过期；" +
-            "请重新解析该链接、新建下载任务后再诊断。"
+
+        diagnoseStatus = "❌ 没有链接可用的任务（试了 ${minOf(pool.size, DIAG_PROBE_MAX_CANDIDATES)} 个" +
+            if (refreshTried > 0) "，其中 $refreshTried 个尝试重新取链、成功 $refreshSucceeded 个" else "" +
+            "）：${lastReason ?: "未知原因"}\n。若刚解析过链接仍失败，可能是该网盘登录态已过期 —— " +
+            "请到「网盘」页确认登录状态，或换一个较大的分享文件新建下载任务后再诊断。"
         return null
     }
 
@@ -281,8 +317,9 @@ class TurboDownloadManager(
         taskCounts: List<Int>,
         connectionsPerTask: Int,
         windowMs: Long,
+        freshUrlProvider: suspend (taskId: Long) -> String?,
     ): String {
-        val target = pickAliveDiagTarget() ?: run {
+        val target = pickAliveDiagTarget(freshUrlProvider) ?: run {
             if (diagnoseStatus == null) {
                 diagnoseStatus = "❌ 没有可用的任务：先添加一个下载任务，再跑诊断。"
             }
@@ -362,8 +399,20 @@ class TurboDownloadManager(
         // 8/16/32/64 四点已足够看出单调性/平坦/拐点三种形状。
         tiers: List<Int>,
         windowMs: Long,
+        urlOverride: String?,
+        freshUrlProvider: suspend (taskId: Long) -> String?,
     ): String {
-        val target = pickAliveDiagTarget() ?: run {
+        // 指定了链接：直接探活并使用（用于"任务直链都已过期"时的兜底）
+        val overridden = urlOverride?.takeIf { it.isNotBlank() }?.let { url ->
+            val bad = TurboDiagnostics.checkReachable(url)
+            if (bad == null) {
+                DiagTarget(0L, "（指定链接）", url, emptyMap(), -1L)
+            } else {
+                diagnoseStatus = "❌ 指定的链接不可用：$bad"
+                return diagnoseStatus!!
+            }
+        }
+        val target = overridden ?: pickAliveDiagTarget(freshUrlProvider) ?: run {
             if (diagnoseStatus == null) {
                 diagnoseStatus = "❌ 没有可用的任务：先添加一个下载任务，再用它的链接做诊断。"
             }

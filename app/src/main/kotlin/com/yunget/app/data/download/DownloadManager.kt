@@ -91,6 +91,15 @@ interface DownloadManager {
     /**
      * 连接数扫描：用任务的真实链接测「吞吐随连接数的变化」，判定服务端限速模型。
      *
+     * 【为什么需要 [freshUrlProvider]】任务表里存的 URL 是**取链时刻的签名直链**：
+     * 网盘直链按设计短时有效（如夸克 `__puus` 约 3 小时），且分享转存类任务在下载完成后
+     * 会删除云端临时目录 —— 那条直链**永久失效**。
+     * 若不重新取链，诊断会在「所有任务都已过期」时直接报「没有链接可用的任务」，
+     * 用户看到的就是一片"用不了"。
+     *
+     * 宿主（App）通过该回调用**当前登录态**重新取一次直链；返回 null 表示无法取链
+     * （未登录 / 平台不支持），此时回退为直接使用任务里存的 URL。
+     *
      * @param tiers 连接数档位（默认 8/16/32/64；上限刻意压到 64 —— 连接数拉满容易触发网盘风控）
      * @param windowMs 每档测量窗口
      * @return 可读报告；引擎不支持时返回说明文本
@@ -98,6 +107,14 @@ interface DownloadManager {
     suspend fun diagnoseConnections(
         tiers: List<Int> = listOf(8, 16, 32, 64),
         windowMs: Long = 15_000,
+        /**
+         * 直接指定要测的链接（跳过"从任务里挑"）。
+         *
+         * 用途：当所有任务的直链都已过期时（网盘直链本就短时有效），
+         * 用户可粘贴一条**当前有效**的直链继续做诊断，而不必重新解析整个分享。
+         */
+        urlOverride: String? = null,
+        freshUrlProvider: suspend (taskId: Long) -> String? = { null },
     ): String = "当前下载引擎不支持连接数诊断（该功能需要 TurboDL 内核）。"
 
     /**
@@ -106,12 +123,14 @@ interface DownloadManager {
      * @param taskCounts 并行任务数档位
      * @param connectionsPerTask 每任务连接数（固定，只让任务数变化）
      * @param windowMs 每档测量窗口
+     * @param freshUrlProvider 同 [diagnoseConnections]：把过期直链换成新取的
      * @return 可读报告；引擎不支持时返回说明文本
      */
     suspend fun diagnoseConcurrentTasks(
         taskCounts: List<Int> = listOf(1, 2, 3),
         connectionsPerTask: Int = 16,
         windowMs: Long = 15_000,
+        freshUrlProvider: suspend (taskId: Long) -> String? = { null },
     ): String = "当前下载引擎不支持并发任务诊断（该功能需要 TurboDL 内核）。"
 }
 

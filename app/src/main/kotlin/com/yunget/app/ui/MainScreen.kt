@@ -665,7 +665,7 @@ fun MainScreen() {
                         onAboutClick = { showAbout = true },
                         onSupportClick = { showSupport = true },
                         backupManager = backupManager,
-                        onConnectionDiagnose = { downloadManager.diagnoseConnections() },
+                        onConnectionDiagnose = { urlOverride -> downloadManager.diagnoseConnections(urlOverride = urlOverride) },
                         onConcurrentDiagnose = { downloadManager.diagnoseConcurrentTasks() },
                         diagStatusProvider = { downloadManager.diagnoseStatus },
                         diagResultProvider = { downloadManager.diagnoseLastResult },

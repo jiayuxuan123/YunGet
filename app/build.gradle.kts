@@ -26,7 +26,21 @@ android {
         applicationId = "com.yunget.app"
         minSdk = 23
         targetSdk = 34
-        versionCode = 38
+        versionCode = 39
+        // 2.6.14 内容（DNS 自动择优 + 诊断可用性修复）：
+        //  ① DNS 自动模式：新增「自动」选项 —— 并发探测多个公共 DoH，采用最快给出
+        //     有效结果的端点并在之后固定复用；全部失败回退系统 DNS。
+        //     此前用户只能在「系统 DNS」与「手填一个 DoH」之间二选一，而实测国内网络下
+        //     境外 DoH（Google/Cloudflare）完全不可达、境内 DoH 可用 —— 用户往往先填
+        //     境外那几个，结果"开了 DoH 反而更慢"。设置页同时提供各端点延迟可视化，
+        //     一眼看出当前网络下哪个可用。仅首次解析探测一次（结果缓存 5 分钟），
+        //     **不影响正常连接速度**。
+        //  ② 修复诊断功能不可用：诊断需要一条当前可用的直链，而任务表存的是取链时刻的
+        //     签名直链（网盘直链短时有效，如夸克约 3 小时；分享转存类任务下载完还会
+        //     删掉云端临时目录使其永久失效）。旧任务全部过期后诊断只报"没有链接可用的
+        //     任务"。现在候选改为**最新任务优先**，并新增「诊断用直链」输入框，
+        //     可粘贴一条新链接直接测。
+        //
         // 2.6.12 内容（继续同步上游：收藏功能、登录态修复、进度写库节流修正）：
         //  ① **网盘链接收藏**（取自上游 #71）：解析页标题栏新增入口，
         //     可保存分享链接/提取码并按分类管理，点击条目直接回到解析页开始解析。
@@ -78,7 +92,7 @@ android {
         //     - 分片请求带 `If-Range`：防止 CDN 中途换文件时新旧字节拼出混杂文件
         //       （那种情况长度校验会通过，损坏会静默落地）。
         //     - 401/403/410 不再触发背压降并发（是授权/时效信号，不是"你太快了"）。
-        versionName = "2.6.13"
+        versionName = "2.6.14"
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
     }
@@ -217,11 +231,11 @@ dependencies {
     implementation("androidx.lifecycle:lifecycle-viewmodel-compose:2.8.7")
     implementation("com.squareup.okhttp3:okhttp:4.12.0")
 
-    // TurboDL SDK（纯 JVM 多线程下载引擎 + 可选插件框架），从 mavenLocal 解析 dev.turbodl:*:0.2.0.2
-    implementation("dev.turbodl:turbodl-core:0.2.0.2")
-    implementation("dev.turbodl:turbo-plugin-runtime:0.2.0.2")
-    implementation("dev.turbodl:turbo-plugin-bootstrap:0.2.0.2")
-    implementation("dev.turbodl:turbo-plugin-hls:0.2.0.2")
+    // TurboDL SDK（纯 JVM 多线程下载引擎 + 可选插件框架），从 mavenLocal 解析 dev.turbodl:*:0.2.0.3
+    implementation("dev.turbodl:turbodl-core:0.2.0.3")
+    implementation("dev.turbodl:turbo-plugin-runtime:0.2.0.3")
+    implementation("dev.turbodl:turbo-plugin-bootstrap:0.2.0.3")
+    implementation("dev.turbodl:turbo-plugin-hls:0.2.0.3")
 
     implementation(libs.material)   // 原 libs.material.color.utilities -> 改为官方 Material 主库（含 color.utilities 包）
 
