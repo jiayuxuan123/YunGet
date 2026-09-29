@@ -103,10 +103,18 @@ class Aria2Runner(private val context: Context) : DownloadEngineRunner {
         private const val TAG = "YunGet-Aria2"
         /** 固定输出名：续传依赖"同一路径"，改名会丢断点。 */
         const val OUT_NAME = "aria2.out"
-        /** aria2 单服务器连接数硬上限（超出直接 exit 28）。 */
+
+        /**
+         * 单文件连接数上限。
+         *
+         * 内置引擎已从 aria2 1.37 换为 **aria2-next 2.8.3**，其
+         * `--stream-max-connections` 的允许范围是 **1..256**（旧版 `-x` 硬上限只有 16）。
+         *
+         * 但这里**仍保守取 16**：不是受限于引擎，而是**避免网盘风控** ——
+         * 用户明确要求默认线程数不得拉满。若将来要在 aria2 引擎上放开，
+         * 应做成独立设置项并由用户显式选择，而不是改这个默认值。
+         */
         const val MAX_CONN_PER_SERVER = 16
-        /** 最小分片；实际分片门槛是它的 2 倍（aria2 语义）。 */
-        const val MIN_SPLIT = "4M"
     }
 
     override suspend fun run(spec: DownloadEngineRunner.RunSpec): DownloadEngineRunner.Outcome {
@@ -132,9 +140,14 @@ class Aria2Runner(private val context: Context) : DownloadEngineRunner {
             add("-d"); add(spec.chunkDir.absolutePath)
             add("-o"); add(OUT_NAME)
             add("-c")                                   // 续传
-            add("-s"); add(conns.toString())            // 分片数
-            add("-x"); add(conns.toString())            // 单服务器连接数
-            add("-k"); add(MIN_SPLIT)                   // 最小分片
+            // 【参数名必须用新的】内置的是 aria2-next 2.8.3（社区维护 fork），
+            // 它把分片策略重写为 `--stream-max-connections`：
+            //   - 旧的 `-s` / `-x` 会被"接受但归一化"（每次都打一条 warning 到输出）
+            //   - 旧的 `-k`（最小分片）已被**移除**：它明确会打
+            //     "accepted and skipped; the maintained native engine owns or retired this policy"
+            //     —— 发了也没用，只会刷日志。
+            // 故这里直接用新参数名，且不再传 -k（该 fork 自己决定分片粒度）。
+            add("--stream-max-connections=$conns")
             add("--file-allocation=none")               // Android 上预分配会长时间阻塞
             add("--auto-file-renaming=false")           // 否则破坏原地续传
             add("--allow-overwrite=true")               // 配合 -c：控制文件缺失时从头下
@@ -189,11 +202,19 @@ class Aria2Runner(private val context: Context) : DownloadEngineRunner {
         // 这里解析 aria2 自己的进度摘要行（`[#gid 已完成/总长(百分比) ...]`），
         // 与文件大小**取较大值**，保证进度单调不倒退。
         val aria2DoneBytes = java.util.concurrent.atomic.AtomicLong(baseBytes)
-        // 【正则必须与真实输出对齐】实测 aria2 1.37.0 在 `--human-readable=false` 下的行形如：
-        //   [#940138 65536B/67108864B(0%) CN:16 DL:95819B ETA:11m39s]
-        // 注意数字后带 `B` 后缀 —— 第一版正则写成 `(\d+)/(\d+)\(` 完全匹配不到（实测 24 行 0 命中）。
-        // 这里允许 `B?` 兼容两种写法（human-readable=true 时是 `64Mi/1.0Gi`，那种不必解析）。
-        val progressPattern = Regex("""\[#\w+\s+(\d+)B?/(\d+)B?\(""")
+        // 【正则必须与真实输出对齐】已踩过两次坑，这里把两种格式都覆盖：
+        //
+        //  aria2 1.37.0：`[#940138 65536B/67108864B(0%) CN:16 DL:95819B ETA:11m39s]`
+        //      ↑ 数字带 `B` 后缀 —— 第一版写成 `(\d+)/(\d+)\(` 完全匹配不到（24 行 0 命中）。
+        //
+        //  aria2-next 2.8.3：`[#027130 [=====>    ]  26% 17825792B/67108864B CN:8 DL:17807984B]`
+        //      ↑ **百分比挪到前面、进度条插在中间、末尾没有 `(`** ——
+        //        只认 1.37 格式的正则对它 0 命中（实测 3/3 全丢），
+        //        会导致进度永远显示 0%（因为文件大小那一路在 aria2 内存缓冲期间也是 0）。
+        //
+        // 故不再依赖"数字后紧跟 `(`"这个脆弱的锚点，改为直接匹配 `已完成/总长`：
+        // 该组合在两种格式里都存在且语义一致。
+        val progressPattern = Regex("""(\d+)B?/(\d+)B?""")
         val drain = Thread {
             runCatching {
                 proc.inputStream.bufferedReader().forEachLine { line ->

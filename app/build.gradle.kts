@@ -26,29 +26,25 @@ android {
         applicationId = "com.yunget.app"
         minSdk = 23
         targetSdk = 34
-        versionCode = 34
-        // 2.6.9 正式版内容（这是首个把下载引擎做成"可切换"的版本）：
-        //  ① 诊断：下完即停 / 无效数据拒绝给结论 / 自动选最大任务 / 并发判读不再误报"按文件限速"
-        //     / 档位上限压到 64 避免风控 / 开跑前探活（链接失效立刻报 HTTP 状态码）
-        //  ② 引擎：h2 客户端惰性创建（启动段 1.28s→0.66s）；插件后端传输层设置热更新
-        //     （改代理/DoH/忽略SSL 不再需要重启进程）
-        //  ③ App：管理器改由 ViewModel 持有（修配置变更时的引擎重复创建与连接池泄漏）
-        //     / DownloadSaver 拒绝 0 字节源（避免发布空的"已下载"文件）
-        //  ④ **下载引擎可切换**：TurboDL（默认）/ 内置兼容引擎 / aria2 原生引擎（实验，仅 arm64）
-        //     内置官方 aria2c 1.37.0 aarch64（全静态、仅需 1 个文件），
-        //     需 packaging.jniLibs.useLegacyPackaging=true 才能在 nativeLibraryDir 执行；
-        //     设置页 → 下载 → 下载引擎，可先"检测 aria2 是否可用"再切换。
-        //  ⑤ 诊断日志落盘（DiagLog）：修"logcat 缓冲只有几秒、导出文件里没有本应用日志"
-        //  ⑥ aria2 进度双通道 + 正则修正（实测：原正则匹配不到真实输出，24 行 0 命中）
-        //  ⑦ App 启动时自动自检 aria2 并落盘（无需用户点按钮）
-        //  ⑧ aria2 HTTPS 修复：拼装系统 CA 成 bundle 并传 --ca-certificate。
-        //     真机实测（OnePlus/Android 16）：不传时 aria2 对所有 HTTPS 报
-        //     "unable to get local issuer certificate"（Android 没有它默认查找的路径）。
-        //  ⑨ **【数据安全，重要】探测失败时不再删旧分片**：原先 `changed = prev != now`
-        //     把"探测没拿到信息（无法取证）"误判成"服务器换了文件（确证）"，
-        //     实测因此删掉了用户 14.75MB 已下载分片。现在只有新令牌**本身可用**
-        //     （含 len=/etag=/lm=）时才允许判定 changed。
-        versionName = "2.6.9"
+        versionCode = 35
+        // 2.6.10 内容（引擎调度与合并提速 + 更新检测修复）：
+        //  ① **修「检查更新」看不到测试版**：原先用 GitHub 的 `/releases/latest`，
+        //     该接口**按设计跳过预发布版**，于是装了 2.6.9 反而提示"已是最新"
+        //     （线上"最新"返回的是 2.6.7）。改用 releases 列表 + 按版本号取最大，
+        //     并支持 `-devN` / `-rcN` 后缀比较（dev9 < dev12，且 dev 版 < 同号正式版）。
+        //  ② 引擎升级到 TurboDL rc24：
+        //     - 慢启动改为「时间节拍 + 分片完成」双触发。原先爬升挂在"每 N 个分片成功"上，
+        //       而分片时长 = 块大小/速率 → **块越大爬得越慢**，最需要并发的场景最慢。
+        //       实测网络段 6.01s → 4.57s（512MB/16连接/每连接 8MB/s）。
+        //     - 合并改并行：MERGING 段原先只有 126 MB/s（刚下完时页缓存全是脏页，
+        //       单线程顺序合并在等回写），改为预分配 + 多线程按偏移直写。
+        //       实测 3.8s → 0.27~1.58s。
+        //     - 收尾托管（tail assist）：只在「队列空 + 有空闲 worker」时把在飞分片的
+        //       后半段让给空闲连接（思路来自 aria2-next 的 rebalanceEndgame）。
+        //     - 分片请求带 `If-Range`：防止 CDN 中途换文件时新旧字节拼出混杂文件
+        //       （那种情况长度校验会通过，损坏会静默落地）。
+        //     - 401/403/410 不再触发背压降并发（是授权/时效信号，不是"你太快了"）。
+        versionName = "2.6.10"
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
     }
@@ -187,11 +183,11 @@ dependencies {
     implementation("androidx.lifecycle:lifecycle-viewmodel-compose:2.8.7")
     implementation("com.squareup.okhttp3:okhttp:4.12.0")
 
-    // TurboDL SDK（纯 JVM 多线程下载引擎 + 可选插件框架），从 mavenLocal 解析 dev.turbodl:*:0.2.0-rc16
-    implementation("dev.turbodl:turbodl-core:0.2.0-rc23")
-    implementation("dev.turbodl:turbo-plugin-runtime:0.2.0-rc23")
-    implementation("dev.turbodl:turbo-plugin-bootstrap:0.2.0-rc23")
-    implementation("dev.turbodl:turbo-plugin-hls:0.2.0-rc23")
+    // TurboDL SDK（纯 JVM 多线程下载引擎 + 可选插件框架），从 mavenLocal 解析 dev.turbodl:*:0.2.0.1
+    implementation("dev.turbodl:turbodl-core:0.2.0.1")
+    implementation("dev.turbodl:turbo-plugin-runtime:0.2.0.1")
+    implementation("dev.turbodl:turbo-plugin-bootstrap:0.2.0.1")
+    implementation("dev.turbodl:turbo-plugin-hls:0.2.0.1")
 
     implementation(libs.material)   // 原 libs.material.color.utilities -> 改为官方 Material 主库（含 color.utilities 包）
 
