@@ -674,7 +674,19 @@ fun SettingsScreen(
                             showDevMenu = false
                             if (!diagRunning) {
                                 // 状态由管理器更新，界面轮询显示；跑完会自动出现"查看结果"按钮。
-                                scope.launch { runCatching { onConnectionDiagnose(diagUrlInput.takeIf { it.isNotBlank() }) } }
+                                //
+                                // 【不再静默吞掉异常】原先写的是 `runCatching { ... }`，
+                                // 于是任何异常（如曾出现的 NetworkOnMainThreadException）
+                                // 都被无声丢弃 —— 用户只看到"什么都没发生"，无从判断原因。
+                                // 这里至少把失败原因弹给用户。
+                                scope.launch {
+                                    runCatching { onConnectionDiagnose(diagUrlInput.takeIf { it.isNotBlank() }) }
+                                        .onFailure { e ->
+                                            SnackbarController.show(
+                                                "诊断启动失败：${e.message ?: e::class.simpleName}"
+                                            )
+                                        }
+                                }
                                 SnackbarController.show("连接数诊断已开始（约 1 分钟），跑完会提示")
                             }
                         },
@@ -702,7 +714,14 @@ fun SettingsScreen(
                         onClick = {
                             showDevMenu = false
                             if (!diagRunning) {
-                                scope.launch { runCatching { onConcurrentDiagnose() } }
+                                scope.launch {
+                                    runCatching { onConcurrentDiagnose() }
+                                        .onFailure { e ->
+                                            SnackbarController.show(
+                                                "诊断启动失败：${e.message ?: e::class.simpleName}"
+                                            )
+                                        }
+                                }
                                 SnackbarController.show("并发任务诊断已开始（约 1 分钟），跑完会提示")
                             }
                         },

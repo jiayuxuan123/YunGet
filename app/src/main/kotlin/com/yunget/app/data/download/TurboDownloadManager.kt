@@ -279,7 +279,7 @@ class TurboDownloadManager(
         var refreshSucceeded = 0
         for (t in pool.take(DIAG_PROBE_MAX_CANDIDATES)) {
             val headers = taskHeaders[t.id] ?: parseHeadersJson(t.requestHeadersJson)
-            val stored = TurboDiagnostics.checkReachable(t.url, headers)
+            val stored = TurboDiagnostics.checkReachableAsync(t.url, headers)
             if (stored == null) {
                 return DiagTarget(t.id, t.fileName, t.url, headers, sizeOf(t))
             }
@@ -290,7 +290,7 @@ class TurboDownloadManager(
             refreshTried++
             val fresh = runCatching { freshUrlProvider(t.id) }.getOrNull()
             if (fresh.isNullOrBlank()) continue
-            val freshBad = TurboDiagnostics.checkReachable(fresh, headers)
+            val freshBad = TurboDiagnostics.checkReachableAsync(fresh, headers)
             if (freshBad == null) {
                 refreshSucceeded++
                 Log.i(TAG, "诊断候选已重新取链 task=${t.id} ${t.fileName.take(40)}")
@@ -404,7 +404,7 @@ class TurboDownloadManager(
     ): String {
         // 指定了链接：直接探活并使用（用于"任务直链都已过期"时的兜底）
         val overridden = urlOverride?.takeIf { it.isNotBlank() }?.let { url ->
-            val bad = TurboDiagnostics.checkReachable(url)
+            val bad = TurboDiagnostics.checkReachableAsync(url)
             if (bad == null) {
                 DiagTarget(0L, "（指定链接）", url, emptyMap(), -1L)
             } else {

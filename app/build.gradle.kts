@@ -26,7 +26,18 @@ android {
         applicationId = "com.yunget.app"
         minSdk = 23
         targetSdk = 34
-        versionCode = 39
+        versionCode = 40
+        // 2.6.15 内容（修复开发诊断功能不可用）：
+        //  ① **修复诊断报「指定的链接不可用： NetworkOnMainThreadException」**：
+        //     诊断前的预检探活是阻塞网络调用，却被主线程协程直接调用 —— Android 禁止
+        //     主线程发网络请求，异常被 catch 后伪装成"链接不可用"，与真实链接好坏无关，
+        //     用户会误以为链接失效。现改为挂起版探活（内部强制切 IO 线程），
+        //     三处诊断调用点全部改用，扫描过程中的两处探活同步切 IO。
+        //  ② **诊断按钮不再静默吞异常**：原先 `runCatching { ... }` 把启动阶段的任何
+        //     异常无声丢弃，用户只看到"什么都没发生"。现在失败原因会以 Snackbar 弹出。
+        //  ③ 引擎 0.2.0.4：探活前先做**出站地址预检**（非 http/https、环回/内网/
+        //     链路本地/组播地址直接拒绝并给出可读原因），不再发起注定失败的网络请求。
+        //
         // 2.6.14 内容（DNS 自动择优 + 诊断可用性修复）：
         //  ① DNS 自动模式：新增「自动」选项 —— 并发探测多个公共 DoH，采用最快给出
         //     有效结果的端点并在之后固定复用；全部失败回退系统 DNS。
@@ -92,7 +103,7 @@ android {
         //     - 分片请求带 `If-Range`：防止 CDN 中途换文件时新旧字节拼出混杂文件
         //       （那种情况长度校验会通过，损坏会静默落地）。
         //     - 401/403/410 不再触发背压降并发（是授权/时效信号，不是"你太快了"）。
-        versionName = "2.6.14"
+        versionName = "2.6.15"
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
     }
@@ -231,11 +242,11 @@ dependencies {
     implementation("androidx.lifecycle:lifecycle-viewmodel-compose:2.8.7")
     implementation("com.squareup.okhttp3:okhttp:4.12.0")
 
-    // TurboDL SDK（纯 JVM 多线程下载引擎 + 可选插件框架），从 mavenLocal 解析 dev.turbodl:*:0.2.0.3
-    implementation("dev.turbodl:turbodl-core:0.2.0.3")
-    implementation("dev.turbodl:turbo-plugin-runtime:0.2.0.3")
-    implementation("dev.turbodl:turbo-plugin-bootstrap:0.2.0.3")
-    implementation("dev.turbodl:turbo-plugin-hls:0.2.0.3")
+    // TurboDL SDK（纯 JVM 多线程下载引擎 + 可选插件框架），从 mavenLocal 解析 dev.turbodl:*:0.2.0.4
+    implementation("dev.turbodl:turbodl-core:0.2.0.4")
+    implementation("dev.turbodl:turbo-plugin-runtime:0.2.0.4")
+    implementation("dev.turbodl:turbo-plugin-bootstrap:0.2.0.4")
+    implementation("dev.turbodl:turbo-plugin-hls:0.2.0.4")
 
     implementation(libs.material)   // 原 libs.material.color.utilities -> 改为官方 Material 主库（含 color.utilities 包）
 
