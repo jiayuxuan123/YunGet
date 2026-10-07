@@ -96,8 +96,18 @@ class DownloadManagerViewModel(
      * 引擎选择在**创建时**读取一次（不随设置热切换）：
      * 各业务 ViewModel 在构造时强引用管理器，热切换会让旧 ViewModel 继续指向旧管理器
      * （两套引擎同时活着）。设置页因此明确提示"重启 App 生效"。
+     *
+     * 两个设置项是**嵌套关系**，不要混为一谈：
+     *  - 新设置 `downloadEngine`（builtin / gopeed）决定「这一层用哪套下载器」；
+     *  - 旧设置 `downloadEngineId`（turbodl / legacy / aria2）只在 `builtin` 时决定**内置实现**用哪个。
+     *
+     * 选了 Gopeed 时固定由 [TurboDownloadManager] 承载：引擎路由（建任务 / 进度同步 / 暂停删除转发，
+     * 见 TurboDownloadManager 的「外部下载引擎（Gopeed）路由」一节）就写在它里面 —— 它在这里的角色
+     * 是「任务登记 + 引擎路由」的宿主，具体字节由 GopeedEngine 下载，TurboDL 完全不参与。
+     * 这样旧 engineId 选什么都不影响 Gopeed 生效，也就不会出现「设置说在用引擎、实际跑的是旧引擎」。
      */
     private fun createManager(): DownloadManager {
+        if (settings.downloadEngine == SettingsRepository.ENGINE_GOPEED) return createTurboManager()
         val engine = DownloadEngine.fromId(settings.downloadEngineId)
         return when (engine) {
             DownloadEngine.TURBODL -> createTurboManager()

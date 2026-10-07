@@ -842,6 +842,37 @@ class XunleiApi(
         return digest.joinToString("") { "%02x".format(it) }
     }
 
+    /**
+     * 中文口令 → 分享链接（如「张三丰资源」→ `https://pan.xunlei.com/s/xxx?pwd=yyyy`）。
+     *
+     * 打的是迅雷客户端在用的搜索跳转接口：响应 `ext.kouling_type == "share_page"` 时
+     * `location` 就是带提取码的分享页地址（提取码明文给出，无需再调别的接口）；
+     * 没有对应资源时只返回 `search_url`（搜索引擎结果页），此时按失败处理并给出可读原因。
+     * UA 必须带 Thunder/TBC 标识、且带 Origin/Referer —— 否则服务端会当成浏览器，
+     * 一律回落到搜索页（表现为"口令明明有效却解析不出"）。
+     */
+    suspend fun parseKouling(keyword: String): String = withContext(Dispatchers.IO) {
+        val request = Request.Builder()
+            .url(XunleiKouling.buildJumpUrl(keyword))
+            .header("User-Agent", XunleiKouling.USER_AGENT)
+            .header("Accept", "*/*")
+            .header("Origin", XunleiKouling.ORIGIN)
+            .header("Referer", XunleiKouling.REFERER)
+            .header("Accept-Language", "zh-CN")
+            .get()
+            .build()
+        client.newCall(request).execute().use { resp ->
+            val body = resp.body?.string().orEmpty()
+            if (!resp.isSuccessful) throw IllegalStateException("口令解析失败（HTTP ${resp.code}）")
+            val json = runCatching { JSONObject(body) }.getOrNull()
+                ?: throw IllegalStateException("口令解析失败：响应格式异常")
+            val type = json.optJSONObject("ext")?.optString("kouling_type").orEmpty()
+            if (type != "share_page") throw IllegalStateException("口令「$keyword」没有对应的网盘分享")
+            XunleiKouling.shareUrlFromLocation(json.optString("location"))
+                ?: throw IllegalStateException("口令「$keyword」没有对应的网盘分享")
+        }
+    }
+
     companion object {
         /** 设备 ID：动态生成的设备指纹（进程启动时由 Application 初始化并持久化） */
         fun newDeviceId(): String = XunleiDeviceFingerprint.deviceId()

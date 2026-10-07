@@ -142,5 +142,25 @@ class DownloadService : Service() {
         fun stop(context: Context) {
             context.stopService(Intent(context, DownloadService::class.java))
         }
+
+        /** 引用计数（跨来源共享：内置下载器的任务 + Gopeed 内核包下载，见 KernelProvisioner） */
+        private val keepAliveUsers = java.util.concurrent.atomic.AtomicInteger(0)
+
+        /**
+         * 申请保活：**第一个**申请者才真正拉起前台服务（后续的只加计数，不动通知）。
+         * 与 [release] 必须配对，调用方自己保证（内置下载管理器用它的任务计数配对，
+         * Gopeed 内核包下载用自己的 try/finally 配对）。
+         */
+        fun acquire(context: Context, title: String) {
+            if (keepAliveUsers.incrementAndGet() == 1) start(context, title)
+        }
+
+        /** 释放保活：最后一个走的才关掉服务，避免把别人的保活一起关掉 */
+        fun release(context: Context) {
+            if (keepAliveUsers.decrementAndGet() <= 0) {
+                keepAliveUsers.set(0)
+                stop(context)
+            }
+        }
     }
 }

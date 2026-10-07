@@ -19,8 +19,10 @@
 package com.yunget.app.data.db
 
 import com.yunget.app.data.security.CredentialCipher
+import com.yunget.app.data.security.CredentialStore
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.catch
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.withContext
 
@@ -30,77 +32,148 @@ import kotlinx.coroutines.withContext
  * 性能修复（v1.2.6）：解密/加密全部切到 `Dispatchers.IO`。
  * 之前的实现里 Room suspend 查询返回后，`decrypt*` 在**调用方协程上下文**（viewModelScope = 主线程）执行
  * AndroidKeyStore（Binder IPC，单次 30~75ms）→ 网盘页下拉刷新时 6 平台并发把主线程占死 400~500ms → 全应用掉帧。
+ *
+ * 稳定性修复（同步上游 v1.2.9）：原来每处都是 `stored?.let { decryptXxx(...) }`，而 `decryptXxx` 是
+ * suspend 函数——**接收者表达式先于 `withContext` 求值**，所以 `key()` 抛出的 Keystore 异常
+ * （改锁屏密码后密钥失效）根本没进 `withContext` 里的 try，直接从 `getAccount()` 冒到主线程
+ * 把 App 打崩。现在统一用 [decryptGuarded] 兜住，并把「本机密钥失效」与「密文坏了」分开处理：
+ * 前者清凭证 + 提示重登，后者沿用原先的静默清理。同时 `observeAccount()` 的 Flow 补 `.catch`，
+ * 否则数据库变更流里的解密异常会直接取消收集者。
  */
 internal object SecureAccountDaos {
     fun quark(raw: QuarkAccountDao, cipher: CredentialCipher): QuarkAccountDao = object : QuarkAccountDao {
         override fun observeAccount(): Flow<QuarkAccountEntity?> = raw.observeAccount().map { value ->
             value?.let { decryptQuark(raw, cipher, it) }
-        }
+        }.catch { emit(null) }
         override suspend fun upsert(account: QuarkAccountEntity) = withContext(Dispatchers.IO) {
             raw.upsert(encryptQuark(cipher, account))
         }
-        override suspend fun getAccount(): QuarkAccountEntity? = raw.getAccount()?.let { decryptQuark(raw, cipher, it) }
+        override suspend fun getAccount(): QuarkAccountEntity? = decryptGuarded(raw::clear) {
+            raw.getAccount()?.let { decryptQuark(raw, cipher, it) }
+        }
         override suspend fun clear() = raw.clear()
     }
 
     fun uc(raw: UCAccountDao, cipher: CredentialCipher): UCAccountDao = object : UCAccountDao {
         override fun observeAccount(): Flow<UCAccountEntity?> = raw.observeAccount().map { value ->
             value?.let { decryptUc(raw, cipher, it) }
-        }
+        }.catch { emit(null) }
         override suspend fun upsert(account: UCAccountEntity) = withContext(Dispatchers.IO) {
             raw.upsert(encryptUc(cipher, account))
         }
-        override suspend fun getAccount(): UCAccountEntity? = raw.getAccount()?.let { decryptUc(raw, cipher, it) }
+        override suspend fun getAccount(): UCAccountEntity? = decryptGuarded(raw::clear) {
+            raw.getAccount()?.let { decryptUc(raw, cipher, it) }
+        }
         override suspend fun clear() = raw.clear()
     }
 
     fun baidu(raw: BaiduAccountDao, cipher: CredentialCipher): BaiduAccountDao = object : BaiduAccountDao {
         override fun observeAccount(): Flow<BaiduAccountEntity?> = raw.observeAccount().map { value ->
             value?.let { decryptBaidu(raw, cipher, it) }
-        }
+        }.catch { emit(null) }
         override suspend fun upsert(account: BaiduAccountEntity) = withContext(Dispatchers.IO) {
             raw.upsert(encryptBaidu(cipher, account))
         }
-        override suspend fun getAccount(): BaiduAccountEntity? = raw.getAccount()?.let { decryptBaidu(raw, cipher, it) }
+        override suspend fun getAccount(): BaiduAccountEntity? = decryptGuarded(raw::clear) {
+            raw.getAccount()?.let { decryptBaidu(raw, cipher, it) }
+        }
         override suspend fun clear() = raw.clear()
     }
 
     fun c139(raw: C139AccountDao, cipher: CredentialCipher): C139AccountDao = object : C139AccountDao {
         override fun observeAccount(): Flow<C139AccountEntity?> = raw.observeAccount().map { value ->
             value?.let { decryptC139(raw, cipher, it) }
-        }
+        }.catch { emit(null) }
         override suspend fun upsert(account: C139AccountEntity) = withContext(Dispatchers.IO) {
             raw.upsert(encryptC139(cipher, account))
         }
-        override suspend fun getAccount(): C139AccountEntity? = raw.getAccount()?.let { decryptC139(raw, cipher, it) }
+        override suspend fun getAccount(): C139AccountEntity? = decryptGuarded(raw::clear) {
+            raw.getAccount()?.let { decryptC139(raw, cipher, it) }
+        }
         override suspend fun clear() = raw.clear()
     }
 
     fun pan123(raw: Pan123AccountDao, cipher: CredentialCipher): Pan123AccountDao = object : Pan123AccountDao {
         override fun observeAccount(): Flow<Pan123AccountEntity?> = raw.observeAccount().map { value ->
             value?.let { decryptPan123(raw, cipher, it) }
-        }
+        }.catch { emit(null) }
         override suspend fun upsert(account: Pan123AccountEntity) = withContext(Dispatchers.IO) {
             raw.upsert(encryptPan123(cipher, account))
         }
-        override suspend fun getAccount(): Pan123AccountEntity? = raw.getAccount()?.let { decryptPan123(raw, cipher, it) }
+        override suspend fun getAccount(): Pan123AccountEntity? = decryptGuarded(raw::clear) {
+            raw.getAccount()?.let { decryptPan123(raw, cipher, it) }
+        }
         override suspend fun clear() = raw.clear()
     }
 
     fun xunlei(raw: XunleiAccountDao, cipher: CredentialCipher): XunleiAccountDao = object : XunleiAccountDao {
         override fun observeAccount(): Flow<XunleiAccountEntity?> = raw.observeAccount().map { value ->
             value?.let { decryptXunlei(raw, cipher, it) }
-        }
+        }.catch { emit(null) }
         override suspend fun upsert(account: XunleiAccountEntity) = withContext(Dispatchers.IO) {
             raw.upsert(encryptXunlei(cipher, account))
         }
-        override suspend fun getAccount(): XunleiAccountEntity? = raw.getAccount()?.let { decryptXunlei(raw, cipher, it) }
+        override suspend fun getAccount(): XunleiAccountEntity? = decryptGuarded(raw::clear) {
+            raw.getAccount()?.let { decryptXunlei(raw, cipher, it) }
+        }
+        override suspend fun clear() = raw.clear()
+    }
+
+    fun pan115(raw: Pan115AccountDao, cipher: CredentialCipher): Pan115AccountDao = object : Pan115AccountDao {
+        override fun observeAccount(): Flow<Pan115AccountEntity?> = raw.observeAccount().map { value ->
+            value?.let { decryptPan115(raw, cipher, it) }
+        }.catch { emit(null) }
+        override suspend fun upsert(account: Pan115AccountEntity) = withContext(Dispatchers.IO) {
+            raw.upsert(encryptPan115(cipher, account))
+        }
+        override suspend fun getAccount(): Pan115AccountEntity? = decryptGuarded(raw::clear) {
+            raw.getAccount()?.let { decryptPan115(raw, cipher, it) }
+        }
+        override suspend fun clear() = raw.clear()
+    }
+
+    fun guangYa(raw: GuangYaAccountDao, cipher: CredentialCipher): GuangYaAccountDao = object : GuangYaAccountDao {
+        override fun observeAccount(): Flow<GuangYaAccountEntity?> = raw.observeAccount().map { value ->
+            value?.let { decryptGuangYa(raw, cipher, it) }
+        }.catch { emit(null) }
+        override suspend fun upsert(account: GuangYaAccountEntity) = withContext(Dispatchers.IO) {
+            raw.upsert(encryptGuangYa(cipher, account))
+        }
+        override suspend fun getAccount(): GuangYaAccountEntity? = decryptGuarded(raw::clear) {
+            raw.getAccount()?.let { decryptGuangYa(raw, cipher, it) }
+        }
+        override suspend fun clear() = raw.clear()
+    }
+
+    fun iLanzou(raw: ILanzouAccountDao, cipher: CredentialCipher): ILanzouAccountDao = object : ILanzouAccountDao {
+        override fun observeAccount(): Flow<ILanzouAccountEntity?> = raw.observeAccount().map { value ->
+            value?.let { decryptILanzou(raw, cipher, it) }
+        }.catch { emit(null) }
+        override suspend fun upsert(account: ILanzouAccountEntity) = withContext(Dispatchers.IO) {
+            raw.upsert(encryptILanzou(cipher, account))
+        }
+        override suspend fun getAccount(): ILanzouAccountEntity? = decryptGuarded(raw::clear) {
+            raw.getAccount()?.let { decryptILanzou(raw, cipher, it) }
+        }
+        override suspend fun clear() = raw.clear()
+    }
+
+    fun lanzou(raw: LanzouAccountDao, cipher: CredentialCipher): LanzouAccountDao = object : LanzouAccountDao {
+        override fun observeAccount(): Flow<LanzouAccountEntity?> = raw.observeAccount().map { value ->
+            value?.let { decryptLanzou(raw, cipher, it) }
+        }.catch { emit(null) }
+        override suspend fun upsert(account: LanzouAccountEntity) = withContext(Dispatchers.IO) {
+            raw.upsert(encryptLanzou(cipher, account))
+        }
+        override suspend fun getAccount(): LanzouAccountEntity? = decryptGuarded(raw::clear) {
+            raw.getAccount()?.let { decryptLanzou(raw, cipher, it) }
+        }
         override suspend fun clear() = raw.clear()
     }
 
     private suspend fun decryptQuark(raw: QuarkAccountDao, cipher: CredentialCipher, stored: QuarkAccountEntity): QuarkAccountEntity? =
         withContext(Dispatchers.IO) {
-            decryptOrClear(raw::clear) {
+            decryptGuarded(raw::clear) {
                 val plain = stored.copy(cookie = cipher.decrypt(stored.cookie, "quark.cookie"))
                 if (!cipher.isEncrypted(stored.cookie)) raw.upsert(encryptQuark(cipher, plain))
                 plain
@@ -109,7 +182,7 @@ internal object SecureAccountDaos {
 
     private suspend fun decryptUc(raw: UCAccountDao, cipher: CredentialCipher, stored: UCAccountEntity): UCAccountEntity? =
         withContext(Dispatchers.IO) {
-            decryptOrClear(raw::clear) {
+            decryptGuarded(raw::clear) {
                 val plain = stored.copy(cookie = cipher.decrypt(stored.cookie, "uc.cookie"))
                 if (!cipher.isEncrypted(stored.cookie)) raw.upsert(encryptUc(cipher, plain))
                 plain
@@ -118,7 +191,7 @@ internal object SecureAccountDaos {
 
     private suspend fun decryptBaidu(raw: BaiduAccountDao, cipher: CredentialCipher, stored: BaiduAccountEntity): BaiduAccountEntity? =
         withContext(Dispatchers.IO) {
-            decryptOrClear(raw::clear) {
+            decryptGuarded(raw::clear) {
                 val plain = stored.copy(cookie = cipher.decrypt(stored.cookie, "baidu.cookie"))
                 if (!cipher.isEncrypted(stored.cookie)) raw.upsert(encryptBaidu(cipher, plain))
                 plain
@@ -127,7 +200,7 @@ internal object SecureAccountDaos {
 
     private suspend fun decryptC139(raw: C139AccountDao, cipher: CredentialCipher, stored: C139AccountEntity): C139AccountEntity? =
         withContext(Dispatchers.IO) {
-            decryptOrClear(raw::clear) {
+            decryptGuarded(raw::clear) {
                 val plain = stored.copy(
                     cookie = cipher.decrypt(stored.cookie, "c139.cookie"),
                     authorization = cipher.decrypt(stored.authorization, "c139.authorization")
@@ -141,7 +214,7 @@ internal object SecureAccountDaos {
 
     private suspend fun decryptPan123(raw: Pan123AccountDao, cipher: CredentialCipher, stored: Pan123AccountEntity): Pan123AccountEntity? =
         withContext(Dispatchers.IO) {
-            decryptOrClear(raw::clear) {
+            decryptGuarded(raw::clear) {
                 val plain = stored.copy(accessToken = cipher.decrypt(stored.accessToken, "pan123.accessToken"))
                 if (!cipher.isEncrypted(stored.accessToken)) raw.upsert(encryptPan123(cipher, plain))
                 plain
@@ -150,7 +223,7 @@ internal object SecureAccountDaos {
 
     private suspend fun decryptXunlei(raw: XunleiAccountDao, cipher: CredentialCipher, stored: XunleiAccountEntity): XunleiAccountEntity? =
         withContext(Dispatchers.IO) {
-            decryptOrClear(raw::clear) {
+            decryptGuarded(raw::clear) {
                 val plain = stored.copy(
                     accessToken = cipher.decrypt(stored.accessToken, "xunlei.accessToken"),
                     refreshToken = cipher.decrypt(stored.refreshToken, "xunlei.refreshToken"),
@@ -160,6 +233,55 @@ internal object SecureAccountDaos {
                 if (listOf(stored.accessToken, stored.refreshToken, stored.deviceId, stored.captchaToken).any { !cipher.isEncrypted(it) }) {
                     raw.upsert(encryptXunlei(cipher, plain))
                 }
+                plain
+            }
+        }
+
+    private suspend fun decryptPan115(raw: Pan115AccountDao, cipher: CredentialCipher, stored: Pan115AccountEntity): Pan115AccountEntity? =
+        withContext(Dispatchers.IO) {
+            decryptGuarded(raw::clear) {
+                val plain = stored.copy(cookie = cipher.decrypt(stored.cookie, "pan115.cookie"))
+                if (!cipher.isEncrypted(stored.cookie)) raw.upsert(encryptPan115(cipher, plain))
+                plain
+            }
+        }
+
+    private suspend fun decryptGuangYa(raw: GuangYaAccountDao, cipher: CredentialCipher, stored: GuangYaAccountEntity): GuangYaAccountEntity? =
+        withContext(Dispatchers.IO) {
+            decryptGuarded(raw::clear) {
+                val plain = stored.copy(
+                    accessToken = cipher.decrypt(stored.accessToken, "guangya.accessToken"),
+                    refreshToken = cipher.decrypt(stored.refreshToken, "guangya.refreshToken"),
+                    deviceId = cipher.decrypt(stored.deviceId, "guangya.deviceId"),
+                    deviceSign = cipher.decrypt(stored.deviceSign, "guangya.deviceSign")
+                )
+                if (listOf(stored.accessToken, stored.refreshToken, stored.deviceId, stored.deviceSign).any { !cipher.isEncrypted(it) }) {
+                    raw.upsert(encryptGuangYa(cipher, plain))
+                }
+                plain
+            }
+        }
+
+    private suspend fun decryptILanzou(raw: ILanzouAccountDao, cipher: CredentialCipher, stored: ILanzouAccountEntity): ILanzouAccountEntity? =
+        withContext(Dispatchers.IO) {
+            decryptGuarded(raw::clear) {
+                val plain = stored.copy(
+                    appToken = cipher.decrypt(stored.appToken, "ilanzou.appToken"),
+                    // 密码也必须加密：它用于 appToken 失效后自动重新登录，泄露等同于账号泄露
+                    password = cipher.decrypt(stored.password, "ilanzou.password")
+                )
+                if (!cipher.isEncrypted(stored.appToken) || !cipher.isEncrypted(stored.password)) {
+                    raw.upsert(encryptILanzou(cipher, plain))
+                }
+                plain
+            }
+        }
+
+    private suspend fun decryptLanzou(raw: LanzouAccountDao, cipher: CredentialCipher, stored: LanzouAccountEntity): LanzouAccountEntity? =
+        withContext(Dispatchers.IO) {
+            decryptGuarded(raw::clear) {
+                val plain = stored.copy(cookie = cipher.decrypt(stored.cookie, "lanzou.cookie"))
+                if (!cipher.isEncrypted(stored.cookie)) raw.upsert(encryptLanzou(cipher, plain))
                 plain
             }
         }
@@ -182,12 +304,37 @@ internal object SecureAccountDaos {
         deviceId = cipher.encrypt(value.deviceId, "xunlei.deviceId"),
         captchaToken = cipher.encrypt(value.captchaToken, "xunlei.captchaToken")
     )
+    private fun encryptPan115(cipher: CredentialCipher, value: Pan115AccountEntity) =
+        value.copy(cookie = cipher.encrypt(value.cookie, "pan115.cookie"))
+    private fun encryptGuangYa(cipher: CredentialCipher, value: GuangYaAccountEntity) = value.copy(
+        accessToken = cipher.encrypt(value.accessToken, "guangya.accessToken"),
+        refreshToken = cipher.encrypt(value.refreshToken, "guangya.refreshToken"),
+        deviceId = cipher.encrypt(value.deviceId, "guangya.deviceId"),
+        deviceSign = cipher.encrypt(value.deviceSign, "guangya.deviceSign")
+    )
+    private fun encryptILanzou(cipher: CredentialCipher, value: ILanzouAccountEntity) = value.copy(
+        appToken = cipher.encrypt(value.appToken, "ilanzou.appToken"),
+        password = cipher.encrypt(value.password, "ilanzou.password")
+    )
+    private fun encryptLanzou(cipher: CredentialCipher, value: LanzouAccountEntity) =
+        value.copy(cookie = cipher.encrypt(value.cookie, "lanzou.cookie"))
 
-    private suspend fun <T> decryptOrClear(clear: suspend () -> Unit, block: suspend () -> T): T? =
+    private suspend fun <T> decryptGuarded(clear: suspend () -> Unit, block: suspend () -> T?): T? =
         try {
             block()
-        } catch (error: Exception) {
-            clear()
+        } catch (error: Throwable) {
+            // 【区分两种「密钥不可用」】此前一律 clear()，于是「设备刚重启还没解锁」这种
+            // **暂时**取不到密钥的情况也会把用户凭证清掉 —— 用户下次解锁后莫名要求重登。
+            // 现在只有「条目永久失效」（改锁屏密码等）才清，暂时不可用原样返回 null、不动数据。
+            if (CredentialStore.isKeyFailure(error)) {
+                if (CredentialStore.isKeyLost(error)) {
+                    runCatching { clear() }
+                    CredentialStore.markKeyLost()
+                }
+            } else {
+                // 密文损坏 / 格式不支持等：沿用原先的静默清理口径
+                runCatching { clear() }
+            }
             null
         }
 }

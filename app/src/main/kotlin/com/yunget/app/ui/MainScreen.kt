@@ -63,6 +63,7 @@ import android.provider.Settings
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.core.content.ContextCompat
+import com.yunget.app.data.security.CredentialStore
 import com.yunget.app.ui.theme.spatialDefault
 import com.yunget.app.ui.theme.spatialFast
 import com.yunget.app.ui.theme.effectsDefault
@@ -73,6 +74,10 @@ import com.yunget.app.data.download.DownloadManager
 import com.yunget.app.data.backup.AuthBackupManager
 import com.yunget.app.data.network.BaiduApi
 import com.yunget.app.data.network.C139Api
+import com.yunget.app.data.network.GuangYaApi
+import com.yunget.app.data.network.ILanzouApi
+import com.yunget.app.data.network.LanzouApi
+import com.yunget.app.data.network.Pan115Api
 import com.yunget.app.data.network.Pan123Api
 import com.yunget.app.data.network.QuarkApi
 import com.yunget.app.data.network.UCApi
@@ -83,6 +88,14 @@ import com.yunget.app.data.repository.BaiduAccountRepository
 import com.yunget.app.data.repository.BaiduResolveRepository
 import com.yunget.app.data.repository.C139AccountRepository
 import com.yunget.app.data.repository.C139ResolveRepository
+import com.yunget.app.data.repository.GuangYaAccountRepository
+import com.yunget.app.data.repository.GuangYaResolveRepository
+import com.yunget.app.data.repository.ILanzouAccountRepository
+import com.yunget.app.data.repository.ILanzouResolveRepository
+import com.yunget.app.data.repository.LanzouAccountRepository
+import com.yunget.app.data.repository.LanzouResolveRepository
+import com.yunget.app.data.repository.Pan115AccountRepository
+import com.yunget.app.data.repository.Pan115ResolveRepository
 import com.yunget.app.data.repository.Pan123AccountRepository
 import com.yunget.app.data.repository.Pan123ResolveRepository
 import com.yunget.app.data.repository.QuarkAccountRepository
@@ -93,6 +106,10 @@ import com.yunget.app.data.repository.XunleiAccountRepository
 import com.yunget.app.data.repository.XunleiResolveRepository
 import com.yunget.app.ui.login.BaiduLoginScreen
 import com.yunget.app.ui.login.C139LoginScreen
+import com.yunget.app.ui.login.GuangYaLoginScreen
+import com.yunget.app.ui.login.ILanzouLoginScreen
+import com.yunget.app.ui.login.LanzouLoginScreen
+import com.yunget.app.ui.login.Pan115LoginScreen
 import com.yunget.app.ui.login.Pan123LoginScreen
 import com.yunget.app.ui.login.QuarkLoginScreen
 import com.yunget.app.ui.login.UCLoginScreen
@@ -115,6 +132,14 @@ import com.yunget.app.ui.viewmodel.C139CloudViewModel
 import com.yunget.app.ui.viewmodel.DownloadManagerViewModel
 import com.yunget.app.ui.viewmodel.DownloadViewModel
 import com.yunget.app.ui.viewmodel.DriveQuotaViewModel
+import com.yunget.app.ui.viewmodel.GuangYaAccountViewModel
+import com.yunget.app.ui.viewmodel.GuangYaCloudViewModel
+import com.yunget.app.ui.viewmodel.ILanzouAccountViewModel
+import com.yunget.app.ui.viewmodel.ILanzouCloudViewModel
+import com.yunget.app.ui.viewmodel.LanzouAccountViewModel
+import com.yunget.app.ui.viewmodel.LanzouCloudViewModel
+import com.yunget.app.ui.viewmodel.Pan115AccountViewModel
+import com.yunget.app.ui.viewmodel.Pan115CloudViewModel
 import com.yunget.app.ui.viewmodel.Pan123AccountViewModel
 import com.yunget.app.ui.viewmodel.Pan123CloudViewModel
 import com.yunget.app.ui.viewmodel.QuarkAccountViewModel
@@ -153,6 +178,10 @@ fun MainScreen() {
     var showBaiduLogin by rememberSaveable { mutableStateOf(false) }
     var showC139Login by rememberSaveable { mutableStateOf(false) }
     var showPan123Login by rememberSaveable { mutableStateOf(false) }
+    var showPan115Login by rememberSaveable { mutableStateOf(false) }
+    var showGuangYaLogin by rememberSaveable { mutableStateOf(false) }
+    var showILanzouLogin by rememberSaveable { mutableStateOf(false) }
+    var showLanzouLogin by rememberSaveable { mutableStateOf(false) }
     var showAbout by rememberSaveable { mutableStateOf(false) }
     var showSupport by rememberSaveable { mutableStateOf(false) }
     var showTheme by rememberSaveable { mutableStateOf(false) }
@@ -192,8 +221,20 @@ fun MainScreen() {
     val baiduApi = remember { BaiduApi() }
     val c139Api = remember { C139Api() }
     val pan123Api = remember { Pan123Api() }
+    val pan115Api = remember { Pan115Api() }
+    val guangyaApi = remember { GuangYaApi() }
+    val ilanzouApi = remember { ILanzouApi() }
+    val lanzouApi = remember { LanzouApi() }
     val db = remember { AppDatabase.get(context) }
     val settings = remember { SettingsRepository(context) }
+    // 本机密钥失效提示：改锁屏密码/指纹、系统升级等会让 Android Keystore 里的密钥永久作废，
+    // 此时加密保存的网盘凭证解不开了。数据层已把失效的那条清掉，这里负责**告诉用户
+    // 为什么突然要重新登录**（不然就是「账号莫名其妙没了」）。
+    //
+    // 位置必须在 AppDatabase.get() **之后**：注册「密钥被重建」监听、以及第一次读账号
+    // 都发生在建库那一步，之前读标记只会读到旧值，导致本次启动不弹、要等下次启动才弹。
+    // 标记写在 SharedPreferences 里，所以进程被杀后重启仍会补弹，直到用户点「知道了」。
+    var credentialLostNotice by remember { mutableStateOf(CredentialStore.hasKeyLostNotice(context)) }
     // 启动时同步「忽略 SSL 证书」开关（设置页隐藏菜单持久化，全局客户端即时生效）
     LaunchedEffect(Unit) { HttpClients.ignoreSsl = settings.ignoreSslCert }
     val repository = remember {
@@ -214,6 +255,20 @@ fun MainScreen() {
     val pan123Repository = remember {
         Pan123AccountRepository(db.pan123AccountDao(), pan123Api)
     }
+    val pan115Repository = remember {
+        Pan115AccountRepository(db.pan115AccountDao(), pan115Api)
+    }
+    val guangyaRepository = remember {
+        GuangYaAccountRepository(db.guangYaAccountDao(), guangyaApi)
+    }
+    // 光鸭业务 API（个人盘 / 分享）必须带 did 设备头：从仓库缓存的 deviceId 同步注入
+    guangyaApi.deviceIdProvider = { guangyaRepository.cachedDeviceId() }
+    val ilanzouRepository = remember {
+        ILanzouAccountRepository(db.iLanzouAccountDao(), ilanzouApi)
+    }
+    val lanzouRepository = remember {
+        LanzouAccountRepository(db.lanzouAccountDao(), lanzouApi)
+    }
     // 网盘认证备份：打包/恢复各平台凭证
     val backupManager = remember {
         AuthBackupManager(
@@ -222,7 +277,11 @@ fun MainScreen() {
             db.xunleiAccountDao(),
             db.baiduAccountDao(),
             db.c139AccountDao(),
-            db.pan123AccountDao()
+            db.pan123AccountDao(),
+            db.pan115AccountDao(),
+            db.guangYaAccountDao(),
+            db.iLanzouAccountDao(),
+            db.lanzouAccountDao()
         )
     }
     // 下载管理器：交给 ViewModel 持有，生命周期与 Activity 真正结束对齐。
@@ -285,6 +344,18 @@ fun MainScreen() {
     )
     val pan123ViewModel: Pan123AccountViewModel = viewModel(
         factory = Pan123AccountViewModel.Factory(pan123Repository)
+    )
+    val pan115ViewModel: Pan115AccountViewModel = viewModel(
+        factory = Pan115AccountViewModel.Factory(pan115Repository)
+    )
+    val guangyaViewModel: GuangYaAccountViewModel = viewModel(
+        factory = GuangYaAccountViewModel.Factory(guangyaRepository)
+    )
+    val ilanzouViewModel: ILanzouAccountViewModel = viewModel(
+        factory = ILanzouAccountViewModel.Factory(ilanzouRepository)
+    )
+    val lanzouViewModel: LanzouAccountViewModel = viewModel(
+        factory = LanzouAccountViewModel.Factory(lanzouRepository)
     )
     // 夸克云盘浏览：作为网盘 Tab 内容展示（非全屏），cookie 从数据库读取（避免 StateFlow 初始值为空的竞态）；
     // 下载前经 getFreshCookie 惰性刷新 __puus（修复 AlistGo/alist#830 下载 412）
@@ -352,6 +423,42 @@ fun MainScreen() {
             loginState = pan123Repository.observeAccount().map { it != null }
         )
     )
+    // 115 网盘浏览：点击已登录的 115 卡片打开（Cookie 从数据库读取）
+    val pan115CloudViewModel: Pan115CloudViewModel = viewModel(
+        factory = Pan115CloudViewModel.Factory(
+            pan115Api,
+            { pan115Repository.getAccount()?.cookie },
+            downloadManager,
+            loginState = pan115Repository.observeAccount().map { it != null }
+        )
+    )
+    // 光鸭云盘浏览：点击已登录的光鸭卡片打开（access token / 设备标识从数据库读取）
+    val guangyaCloudViewModel: GuangYaCloudViewModel = viewModel(
+        factory = GuangYaCloudViewModel.Factory(
+            guangyaApi,
+            guangyaRepository,
+            downloadManager,
+            loginState = guangyaRepository.observeAccount().map { it != null }
+        )
+    )
+    // 蓝奏云优享版浏览：点击已登录的蓝奏优享卡片打开（appToken + uuid 从数据库读取）
+    val ilanzouCloudViewModel: ILanzouCloudViewModel = viewModel(
+        factory = ILanzouCloudViewModel.Factory(
+            ilanzouApi,
+            ilanzouRepository,
+            downloadManager,
+            loginState = ilanzouRepository.observeAccount().map { it != null }
+        )
+    )
+    // 蓝奏云浏览：点击已登录的蓝奏云卡片打开（Cookie 从数据库读取）
+    val lanzouCloudViewModel: LanzouCloudViewModel = viewModel(
+        factory = LanzouCloudViewModel.Factory(
+            lanzouApi,
+            lanzouRepository,
+            downloadManager,
+            loginState = lanzouRepository.observeAccount().map { it != null }
+        )
+    )
     // 网盘空间详情：网盘页顶部「空间总览」展示 6 平台容量使用
     val driveQuotaViewModel: DriveQuotaViewModel = viewModel(
         factory = DriveQuotaViewModel.Factory(
@@ -394,6 +501,22 @@ fun MainScreen() {
             tokenProvider = { pan123Repository.getAccount()?.accessToken }
         )
     }
+    val pan115ResolveRepository = remember {
+        Pan115ResolveRepository(pan115Api)
+    }
+    val guangyaResolveRepository = remember {
+        GuangYaResolveRepository(
+            api = guangyaApi,
+            // 转存取链需要有效 access：用 ensureAccessToken（临近过期会先刷新）
+            tokenProvider = { guangyaRepository.ensureAccessToken() }
+        )
+    }
+    val ilanzouResolveRepository = remember {
+        ILanzouResolveRepository(ilanzouApi, ilanzouRepository)
+    }
+    val lanzouResolveRepository = remember {
+        LanzouResolveRepository(lanzouApi)
+    }
     /** 网盘链接收藏：只依赖 bookmarkDao（无凭证内容，无需加密装饰器）。 */
     val bookmarkViewModel: BookmarkViewModel = viewModel(
         factory = BookmarkViewModel.Factory(db.bookmarkDao())
@@ -412,6 +535,14 @@ fun MainScreen() {
             c139ResolveRepository,
             pan123Repository,
             pan123ResolveRepository,
+            pan115Repository,
+            pan115ResolveRepository,
+            guangyaRepository,
+            guangyaResolveRepository,
+            ilanzouRepository,
+            ilanzouResolveRepository,
+            lanzouRepository,
+            lanzouResolveRepository,
             downloadManager
         )
     )
@@ -424,6 +555,10 @@ fun MainScreen() {
     val baiduAccount by baiduViewModel.baiduAccount.collectAsState()
     val c139Account by c139ViewModel.c139Account.collectAsState()
     val pan123Account by pan123ViewModel.pan123Account.collectAsState()
+    val pan115Account by pan115ViewModel.pan115Account.collectAsState()
+    val guangyaAccount by guangyaViewModel.guangyaAccount.collectAsState()
+    val ilanzouAccount by ilanzouViewModel.ilanzouAccount.collectAsState()
+    val lanzouAccount by lanzouViewModel.lanzouAccount.collectAsState()
 
     // 首次下载引导：锁屏保持下载默认开启，但新用户未加入「忽略电池优化」白名单 →引导一次
     var showBatteryGuide by remember { mutableStateOf(false) }
@@ -562,6 +697,46 @@ fun MainScreen() {
         return
     }
 
+    // 115 登录页：全屏覆盖（WebView 登录提取 Cookie）
+    if (showPan115Login) {
+        Pan115LoginScreen(
+            viewModel = pan115ViewModel,
+            onBack = { showPan115Login = false },
+            onSaved = { showPan115Login = false }
+        )
+        return
+    }
+
+    // 光鸭登录页：全屏覆盖（账号密码 / 短信验证码登录）
+    if (showGuangYaLogin) {
+        GuangYaLoginScreen(
+            viewModel = guangyaViewModel,
+            onBack = { showGuangYaLogin = false },
+            onSaved = { showGuangYaLogin = false }
+        )
+        return
+    }
+
+    // 蓝奏云优享版登录页：全屏覆盖（账号+密码表单登录换 appToken）
+    if (showILanzouLogin) {
+        ILanzouLoginScreen(
+            viewModel = ilanzouViewModel,
+            onBack = { showILanzouLogin = false },
+            onSaved = { showILanzouLogin = false }
+        )
+        return
+    }
+
+    // 蓝奏云登录页：全屏覆盖（账号+密码登录提取 Cookie）
+    if (showLanzouLogin) {
+        LanzouLoginScreen(
+            viewModel = lanzouViewModel,
+            onBack = { showLanzouLogin = false },
+            onSaved = { showLanzouLogin = false }
+        )
+        return
+    }
+
     // 折叠标题状态提升到本层：跨页面共享，页面切换时折叠/展开状态保持不变
     // 用 exitUntilCollapsed（默认实现，含松手吸附）：滚动时标题先收起再滚内容；
     // 向上滚动回顶部过程中标题保持收起，只有列表到达最顶部后继续下拉（overscroll）才重新展开
@@ -625,7 +800,13 @@ fun MainScreen() {
                         baiduCloudViewModel,
                         c139CloudViewModel,
                         ucCloudViewModel,
-                        pan123CloudViewModel
+                        pan123CloudViewModel,
+                        pan115CloudViewModel,
+                        guangyaCloudViewModel,
+                        ilanzouCloudViewModel,
+                        lanzouCloudViewModel,
+                        bookmarkViewModel = bookmarkViewModel,
+                        onOpenBookmarks = { showBookmarks = true }
                     )
                     MainTab.Drive -> DriveScreen(
                         scrollBehavior = scrollBehavior,
@@ -635,12 +816,20 @@ fun MainScreen() {
                         baiduAccount = baiduAccount,
                         c139Account = c139Account,
                         pan123Account = pan123Account,
+                        pan115Account = pan115Account,
+                        guangyaAccount = guangyaAccount,
+                        ilanzouAccount = ilanzouAccount,
+                        lanzouAccount = lanzouAccount,
                         quarkCloudViewModel = quarkCloudViewModel,
                         ucCloudViewModel = ucCloudViewModel,
                         xunleiCloudViewModel = xunleiCloudViewModel,
                         baiduCloudViewModel = baiduCloudViewModel,
                         c139CloudViewModel = c139CloudViewModel,
                         pan123CloudViewModel = pan123CloudViewModel,
+                        pan115CloudViewModel = pan115CloudViewModel,
+                        guangyaCloudViewModel = guangyaCloudViewModel,
+                        ilanzouCloudViewModel = ilanzouCloudViewModel,
+                        lanzouCloudViewModel = lanzouCloudViewModel,
                         driveQuotaViewModel = driveQuotaViewModel,
                         onQuarkLogin = { showQuarkLogin = true },
                         onQuarkLogout = { viewModel.logout() },
@@ -654,7 +843,15 @@ fun MainScreen() {
                         onC139Login = { showC139Login = true },
                         onC139Logout = { c139ViewModel.logout() },
                         onPan123Login = { showPan123Login = true },
-                        onPan123Logout = { pan123ViewModel.logout() }
+                        onPan123Logout = { pan123ViewModel.logout() },
+                        onPan115Login = { showPan115Login = true },
+                        onPan115Logout = { pan115ViewModel.logout() },
+                        onGuangYaLogin = { showGuangYaLogin = true },
+                        onGuangYaLogout = { guangyaViewModel.logout() },
+                        onILanzouLogin = { showILanzouLogin = true },
+                        onILanzouLogout = { ilanzouViewModel.logout() },
+                        onLanzouLogin = { showLanzouLogin = true },
+                        onLanzouLogout = { lanzouViewModel.logout() }
                     )
                     MainTab.Download -> DownloadScreen(scrollBehavior, downloadViewModel)
                     MainTab.Settings -> SettingsScreen(
@@ -877,6 +1074,23 @@ fun MainScreen() {
                 }
             )
         }
+    }
+
+    // 本机密钥失效提示：只在「真的丢了密钥、凭证已被清空」时弹一次（标记由数据层写入）。
+    // 这里**不可关闭**（onDismissRequest 为空）：用户必须看到「为什么突然要重新登录」，
+    // 否则只会觉得账号莫名消失。
+    if (credentialLostNotice) {
+        AlertDialog(
+            onDismissRequest = { },
+            title = { Text(CredentialStore.LOST_TITLE) },
+            text = { Text(CredentialStore.LOST_MESSAGE) },
+            confirmButton = {
+                TextButton(onClick = {
+                    CredentialStore.consumeKeyLostNotice(context)
+                    credentialLostNotice = false
+                }) { Text("知道了") }
+            }
+        )
     }
 }
 

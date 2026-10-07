@@ -54,6 +54,10 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import com.yunget.app.data.db.BaiduAccountEntity
 import com.yunget.app.data.db.C139AccountEntity
+import com.yunget.app.data.db.GuangYaAccountEntity
+import com.yunget.app.data.db.ILanzouAccountEntity
+import com.yunget.app.data.db.LanzouAccountEntity
+import com.yunget.app.data.db.Pan115AccountEntity
 import com.yunget.app.data.db.Pan123AccountEntity
 import com.yunget.app.data.db.QuarkAccountEntity
 import com.yunget.app.data.db.UCAccountEntity
@@ -62,6 +66,10 @@ import com.yunget.app.data.network.model.QuotaInfo
 import com.yunget.app.ui.viewmodel.BaiduCloudViewModel
 import com.yunget.app.ui.viewmodel.C139CloudViewModel
 import com.yunget.app.ui.viewmodel.DriveQuotaViewModel
+import com.yunget.app.ui.viewmodel.GuangYaCloudViewModel
+import com.yunget.app.ui.viewmodel.ILanzouCloudViewModel
+import com.yunget.app.ui.viewmodel.LanzouCloudViewModel
+import com.yunget.app.ui.viewmodel.Pan115CloudViewModel
 import com.yunget.app.ui.viewmodel.Pan123CloudViewModel
 import com.yunget.app.ui.viewmodel.QuarkCloudViewModel
 import com.yunget.app.ui.viewmodel.UCCoudViewModel
@@ -96,6 +104,14 @@ fun DriveScreen(
     baiduAccount: BaiduAccountEntity?,
     c139Account: C139AccountEntity?,
     pan123Account: Pan123AccountEntity?,
+    /** 115 网盘账号（MainScreen 接线后传入；默认 null 时卡片按未接线状态展示） */
+    pan115Account: Pan115AccountEntity? = null,
+    /** 光鸭云盘账号（同上） */
+    guangyaAccount: GuangYaAccountEntity? = null,
+    /** 蓝奏云优享版账号（同上） */
+    ilanzouAccount: ILanzouAccountEntity? = null,
+    /** 蓝奏云账号（同上） */
+    lanzouAccount: LanzouAccountEntity? = null,
     /** 夸克云盘浏览 ViewModel（网盘 Tab 内切换展示，非全屏） */
     quarkCloudViewModel: QuarkCloudViewModel,
     /** UC 网盘云盘浏览 ViewModel */
@@ -108,6 +124,14 @@ fun DriveScreen(
     c139CloudViewModel: C139CloudViewModel,
     /** 123 云盘浏览 ViewModel */
     pan123CloudViewModel: Pan123CloudViewModel,
+    /** 115 网盘浏览 ViewModel（MainScreen 尚未接线时为 null：卡片不进入浏览页，点击退回账号弹窗） */
+    pan115CloudViewModel: Pan115CloudViewModel? = null,
+    /** 光鸭云盘浏览 ViewModel（同上） */
+    guangyaCloudViewModel: GuangYaCloudViewModel? = null,
+    /** 蓝奏云优享版浏览 ViewModel（同上） */
+    ilanzouCloudViewModel: ILanzouCloudViewModel? = null,
+    /** 蓝奏云浏览 ViewModel（同上） */
+    lanzouCloudViewModel: LanzouCloudViewModel? = null,
     /** 网盘空间详情 ViewModel（顶部空间总览） */
     driveQuotaViewModel: DriveQuotaViewModel,
     onQuarkLogin: () -> Unit,
@@ -124,6 +148,18 @@ fun DriveScreen(
     onC139Logout: () -> Unit,
     onPan123Login: () -> Unit,
     onPan123Logout: () -> Unit,
+    /** 115 网盘登录/退出（MainScreen 接线后接管，默认空实现保证旧调用点仍可编译） */
+    onPan115Login: () -> Unit = {},
+    onPan115Logout: () -> Unit = {},
+    /** 光鸭云盘登录/退出 */
+    onGuangYaLogin: () -> Unit = {},
+    onGuangYaLogout: () -> Unit = {},
+    /** 蓝奏云优享版登录/退出 */
+    onILanzouLogin: () -> Unit = {},
+    onILanzouLogout: () -> Unit = {},
+    /** 蓝奏云登录/退出 */
+    onLanzouLogin: () -> Unit = {},
+    onLanzouLogout: () -> Unit = {},
     modifier: Modifier = Modifier
 ) {
     var showQuarkSheet by remember { mutableStateOf(false) }
@@ -132,6 +168,10 @@ fun DriveScreen(
     var showBaiduSheet by remember { mutableStateOf(false) }
     var showC139Sheet by remember { mutableStateOf(false) }
     var showPan123Sheet by remember { mutableStateOf(false) }
+    var showPan115Sheet by remember { mutableStateOf(false) }
+    var showGuangYaSheet by remember { mutableStateOf(false) }
+    var showILanzouSheet by remember { mutableStateOf(false) }
+    var showLanzouSheet by remember { mutableStateOf(false) }
     // 夸克云盘浏览：网盘 Tab 内切换（非全屏），切 Tab 再回来仍保留
     var showCloud by rememberSaveable { mutableStateOf(false) }
     // UC 网盘云盘浏览：网盘 Tab 内切换（非全屏）
@@ -144,6 +184,14 @@ fun DriveScreen(
     var showC139Cloud by rememberSaveable { mutableStateOf(false) }
     // 123 云盘浏览：网盘 Tab 内切换（非全屏）
     var showPan123Cloud by rememberSaveable { mutableStateOf(false) }
+    // 115 网盘浏览：网盘 Tab 内切换（非全屏）
+    var showPan115Cloud by rememberSaveable { mutableStateOf(false) }
+    // 光鸭云盘浏览：网盘 Tab 内切换（非全屏）
+    var showGuangYaCloud by rememberSaveable { mutableStateOf(false) }
+    // 蓝奏云优享版浏览：网盘 Tab 内切换（非全屏）
+    var showILanzouCloud by rememberSaveable { mutableStateOf(false) }
+    // 蓝奏云浏览：网盘 Tab 内切换（非全屏）
+    var showLanzouCloud by rememberSaveable { mutableStateOf(false) }
 
     // 夸克：登录态由数据库驱动；已登录则副标题显示昵称
     val quark = DriveAccount(
@@ -188,6 +236,34 @@ fun DriveScreen(
         avatarText = "123",
         isLoggedIn = pan123Account != null
     )
+    val pan115 = DriveAccount(
+        id = "pan115",
+        name = "115网盘",
+        description = pan115Account?.nickname ?: "点击登录，支持解析下载",
+        avatarText = "115",
+        isLoggedIn = pan115Account != null
+    )
+    val guangya = DriveAccount(
+        id = "guangya",
+        name = "光鸭云盘",
+        description = guangyaAccount?.nickname ?: "点击登录，支持解析下载",
+        avatarText = "光",
+        isLoggedIn = guangyaAccount != null
+    )
+    val ilanzou = DriveAccount(
+        id = "ilanzou",
+        name = "蓝奏云优享版",
+        description = ilanzouAccount?.nickname?.let { maskAccount(it) } ?: "点击登录，支持解析下载",
+        avatarText = "蓝优",
+        isLoggedIn = ilanzouAccount != null
+    )
+    val lanzou = DriveAccount(
+        id = "lanzou",
+        name = "蓝奏云",
+        description = lanzouAccount?.nickname?.let { maskAccount(it) } ?: "点击登录，支持解析下载",
+        avatarText = "蓝",
+        isLoggedIn = lanzouAccount != null
+    )
     val others = remember {
         emptyList<DriveAccount>()
     }
@@ -199,7 +275,7 @@ fun DriveScreen(
     // 下拉刷新状态：绑定空间配额加载中状态
     val isRefreshing by driveQuotaViewModel.loading.collectAsState()
 
-    // 账号列表 ↔ 夸克云盘 ↔ UC 云盘 ↔ 迅雷云盘 ↔ 百度云盘 ↔ 139 云盘 ↔ 123 云盘：平滑过渡（淡入 + 轻微缩放，不僵硬）
+    // 账号列表 ↔ 夸克云盘 ↔ UC 云盘 ↔ 迅雷云盘 ↔ 百度云盘 ↔ 139 云盘 ↔ 123 云盘 ↔ 115 云盘 ↔ 光鸭云盘 ↔ 蓝奏云优享版 ↔ 蓝奏云：平滑过渡（淡入 + 轻微缩放，不僵硬）
     AnimatedContent(
         targetState = when {
             showCloud -> 1
@@ -208,6 +284,11 @@ fun DriveScreen(
             showBaiduCloud -> 4
             showC139Cloud -> 5
             showPan123Cloud -> 6
+            // 新平台浏览页需要对应 ViewModel 已接线，否则停留在账号列表（避免进入空白页）
+            showPan115Cloud && pan115CloudViewModel != null -> 7
+            showGuangYaCloud && guangyaCloudViewModel != null -> 8
+            showILanzouCloud && ilanzouCloudViewModel != null -> 9
+            showLanzouCloud && lanzouCloudViewModel != null -> 10
             else -> 0
         },
         transitionSpec = {
@@ -253,6 +334,38 @@ fun DriveScreen(
             onExit = { showPan123Cloud = false },
             onDownloadStarted = onDownloadStarted
         )
+        7 -> pan115CloudViewModel?.let { vm ->
+            Pan115CloudScreen(
+                viewModel = vm,
+                scrollBehavior = scrollBehavior,
+                onExit = { showPan115Cloud = false },
+                onDownloadStarted = onDownloadStarted
+            )
+        }
+        8 -> guangyaCloudViewModel?.let { vm ->
+            GuangYaCloudScreen(
+                viewModel = vm,
+                scrollBehavior = scrollBehavior,
+                onExit = { showGuangYaCloud = false },
+                onDownloadStarted = onDownloadStarted
+            )
+        }
+        9 -> ilanzouCloudViewModel?.let { vm ->
+            ILanzouCloudScreen(
+                viewModel = vm,
+                scrollBehavior = scrollBehavior,
+                onExit = { showILanzouCloud = false },
+                onDownloadStarted = onDownloadStarted
+            )
+        }
+        10 -> lanzouCloudViewModel?.let { vm ->
+            LanzouCloudScreen(
+                viewModel = vm,
+                scrollBehavior = scrollBehavior,
+                onExit = { showLanzouCloud = false },
+                onDownloadStarted = onDownloadStarted
+            )
+        }
             else -> PullToRefreshBox(
                 isRefreshing = isRefreshing,
                 onRefresh = { driveQuotaViewModel.loadAll() },
@@ -369,6 +482,68 @@ fun DriveScreen(
                         }
                     )
                 }
+                // 以下 4 个平台暂未接入空间配额（DriveQuotaViewModel 只有 6 个平台），故不传 quota
+                item(key = pan115.id) {
+                    DriveAccountCard(
+                        account = pan115,
+                        onClick = when {
+                            !pan115.isLoggedIn -> onPan115Login
+                            pan115CloudViewModel != null -> ({ showPan115Cloud = true })
+                            // 浏览 ViewModel 未接线：退回账号信息弹窗，避免进入空白页
+                            else -> ({ showPan115Sheet = true })
+                        },
+                        onMoreClick = if (pan115.isLoggedIn) {
+                            { showPan115Sheet = true }
+                        } else {
+                            null
+                        }
+                    )
+                }
+                item(key = guangya.id) {
+                    DriveAccountCard(
+                        account = guangya,
+                        onClick = when {
+                            !guangya.isLoggedIn -> onGuangYaLogin
+                            guangyaCloudViewModel != null -> ({ showGuangYaCloud = true })
+                            else -> ({ showGuangYaSheet = true })
+                        },
+                        onMoreClick = if (guangya.isLoggedIn) {
+                            { showGuangYaSheet = true }
+                        } else {
+                            null
+                        }
+                    )
+                }
+                item(key = ilanzou.id) {
+                    DriveAccountCard(
+                        account = ilanzou,
+                        onClick = when {
+                            !ilanzou.isLoggedIn -> onILanzouLogin
+                            ilanzouCloudViewModel != null -> ({ showILanzouCloud = true })
+                            else -> ({ showILanzouSheet = true })
+                        },
+                        onMoreClick = if (ilanzou.isLoggedIn) {
+                            { showILanzouSheet = true }
+                        } else {
+                            null
+                        }
+                    )
+                }
+                item(key = lanzou.id) {
+                    DriveAccountCard(
+                        account = lanzou,
+                        onClick = when {
+                            !lanzou.isLoggedIn -> onLanzouLogin
+                            lanzouCloudViewModel != null -> ({ showLanzouCloud = true })
+                            else -> ({ showLanzouSheet = true })
+                        },
+                        onMoreClick = if (lanzou.isLoggedIn) {
+                            { showLanzouSheet = true }
+                        } else {
+                            null
+                        }
+                    )
+                }
                 items(others, key = { it.id }) { account ->
                     DriveAccountCard(account = account)
                 }
@@ -446,6 +621,54 @@ fun DriveScreen(
                 showPan123Sheet = false
             },
             onDismiss = { showPan123Sheet = false }
+        )
+    }
+
+    // 已登录 115：点击卡片弹出账号信息底部弹窗
+    if (showPan115Sheet && pan115Account != null) {
+        Pan115AccountSheet(
+            account = pan115Account,
+            onLogout = {
+                onPan115Logout()
+                showPan115Sheet = false
+            },
+            onDismiss = { showPan115Sheet = false }
+        )
+    }
+
+    // 已登录光鸭：点击卡片弹出账号信息底部弹窗
+    if (showGuangYaSheet && guangyaAccount != null) {
+        GuangYaAccountSheet(
+            account = guangyaAccount,
+            onLogout = {
+                onGuangYaLogout()
+                showGuangYaSheet = false
+            },
+            onDismiss = { showGuangYaSheet = false }
+        )
+    }
+
+    // 已登录蓝奏云优享版：点击卡片弹出账号信息底部弹窗
+    if (showILanzouSheet && ilanzouAccount != null) {
+        ILanzouAccountSheet(
+            account = ilanzouAccount,
+            onLogout = {
+                onILanzouLogout()
+                showILanzouSheet = false
+            },
+            onDismiss = { showILanzouSheet = false }
+        )
+    }
+
+    // 已登录蓝奏云：点击卡片弹出账号信息底部弹窗
+    if (showLanzouSheet && lanzouAccount != null) {
+        LanzouAccountSheet(
+            account = lanzouAccount,
+            onLogout = {
+                onLanzouLogout()
+                showLanzouSheet = false
+            },
+            onDismiss = { showLanzouSheet = false }
         )
     }
 }

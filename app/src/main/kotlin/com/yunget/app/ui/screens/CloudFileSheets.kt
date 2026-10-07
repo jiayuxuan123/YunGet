@@ -1,10 +1,31 @@
+/*
+ * YunGet - 网盘分享链接解析与高速下载的 Android 应用
+ * 本文件取自上游 YunX (https://github.com/CYQawa/YunX)
+ * Copyright (C) 2026 CYQawa
+ *
+ * This program is free software: you can redistribute it and/or modify
+ * it under the terms of the GNU Affero General Public License as published by
+ * the Free Software Foundation, either version 3 of the License, or
+ * (at your option) any later version.
+ *
+ * This program is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+ * GNU Affero General Public License for more details.
+ *
+ * You should have received a copy of the GNU Affero General Public License
+ * along with this program.  If not, see <https://www.gnu.org/licenses/>.
+ */
+
 package com.yunget.app.ui.screens
 
 import android.content.ClipData
 import android.content.ClipboardManager
 import android.content.Context
 import androidx.compose.animation.AnimatedContent
-import androidx.compose.animation.core.tween
+import androidx.compose.animation.shrinkVertically
+import androidx.compose.animation.expandVertically
+import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
 import androidx.compose.animation.togetherWith
@@ -12,6 +33,8 @@ import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.ExperimentalLayoutApi
+import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -21,21 +44,32 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
-import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.lazy.itemsIndexed
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
+import androidx.compose.material.icons.outlined.Add
 import androidx.compose.material.icons.outlined.ContentCopy
 import androidx.compose.material.icons.outlined.CheckCircle
+import androidx.compose.material.icons.outlined.CreateNewFolder
 import androidx.compose.material.icons.outlined.Delete
 import androidx.compose.material.icons.outlined.Download
 import androidx.compose.material.icons.outlined.DriveFileMove
 import androidx.compose.material.icons.outlined.Edit
 import androidx.compose.material.icons.outlined.Folder
 import androidx.compose.material.icons.outlined.Share
+import androidx.compose.material.icons.outlined.UploadFile
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
+import androidx.compose.material3.ButtonDefaults
+import androidx.compose.material3.ButtonGroup
+import androidx.compose.material3.ButtonGroupDefaults
 import androidx.compose.material3.CircularProgressIndicator
+import androidx.compose.material3.DropdownMenu
+import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.ExperimentalMaterial3ExpressiveApi
 import androidx.compose.material3.FilterChip
 import androidx.compose.material3.FilterChipDefaults
 import androidx.compose.material3.HorizontalDivider
@@ -48,6 +82,7 @@ import androidx.compose.material3.SnackbarHost
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
+import androidx.compose.material3.ToggleButton
 import androidx.compose.material3.rememberModalBottomSheetState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
@@ -61,47 +96,61 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import com.yunget.app.ui.components.YunGetLoading
+import com.yunget.app.data.network.model.ShareExpire
 import com.yunget.app.data.network.model.ShareFile
 import com.yunget.app.ui.SnackbarController
+import com.yunget.app.ui.components.FileNameText
 import com.yunget.app.ui.rememberGlobalSnackbarHostState
 import com.yunget.app.ui.resolve.BackToParentItem
 import com.yunget.app.ui.resolve.CrumbBar
 import com.yunget.app.ui.resolve.ShareFileRow
 import com.yunget.app.ui.viewmodel.QuarkCloudUiState
 import com.yunget.app.ui.viewmodel.QuarkCloudViewModel
+import com.yunget.app.ui.components.YunGetLoading
 import com.yunget.app.ui.theme.effectsDefault
 import com.yunget.app.ui.theme.effectsFast
+import com.yunget.app.ui.theme.ListGroupGap
+import com.yunget.app.ui.theme.listGroupShape
+import com.yunget.app.ui.theme.spatialDefault
+import com.yunget.app.ui.theme.spatialFast
 
 /** 文件操作菜单类型（FileActionSheet 内切换） */
 private enum class ActionStep { MENU, MOVE, SHARE, RENAME, DELETE }
 
-/** 有效期选项：名称 + expired_type 值 */
-private val expireOptions = listOf(
-    "永久有效" to 1,
-    "1 天" to 2,
-    "7 天" to 3,
-    "30 天" to 4
+/**
+ * 默认有效期选项：名称 + UI 中性码（[ShareExpire]；各平台 API 取值不同，由 ViewModel 负责转换，Agent.md §3.20）。
+ * 115 的档位与中性码不同（长期/1 天/3 天/7 天/15 天），由 115 云盘页传入 `ShareExpire.PAN115_OPTIONS`。
+ */
+private val defaultExpireOptions = listOf(
+    "永久有效" to ShareExpire.FOREVER,
+    "1 天" to ShareExpire.ONE_DAY,
+    "7 天" to ShareExpire.SEVEN_DAYS,
+    "30 天" to ShareExpire.THIRTY_DAYS
 )
 
-/**
- * 夸克云盘文件操作弹窗：更多按钮 → 操作菜单（下载/分享/移动/重命名/删除），
- * 内部按步骤切换：移动选目录 / 分享设置 / 重命名输入 / 删除确认。
- */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun FileActionSheet(
+internal fun FileActionSheet(
     file: ShareFile,
-    viewModel: QuarkCloudViewModel,
-    onDismiss: () -> Unit
+    operating: Boolean,
+    onDownload: () -> Unit,
+    onDownloadFolder: () -> Unit,
+    onShare: (withPassword: Boolean, passcode: String, expiredType: Int) -> Unit,
+    onRename: (String) -> Unit,
+    /** 确认删除后执行（页面的 deleteFile()）：确认步骤在本弹窗内部完成 */
+    onConfirmDelete: () -> Unit,
+    onDismiss: () -> Unit,
+    /** 提取码规则（各平台不同，见 [PasscodeMode]） */
+    passcodeMode: PasscodeMode = PasscodeMode.OPTIONAL,
+    /** 有效期档位（默认六平台通用档；115 传 [ShareExpire.PAN115_OPTIONS]） */
+    expireOptions: List<Pair<String, Int>> = defaultExpireOptions,
+    moveStep: @Composable (onBack: () -> Unit, onDone: () -> Unit) -> Unit
 ) {
     var step by remember { mutableStateOf(ActionStep.MENU) }
-    // 移动目标浏览用独立状态（moveUiState），不影响主列表
-    val moveState by viewModel.moveUiState.collectAsState()
-    val operating = viewModel.isOperating
 
     val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
 
@@ -112,67 +161,222 @@ fun FileActionSheet(
         sheetState = sheetState,
         containerColor = MaterialTheme.colorScheme.surface
     ) {
-        when (step) {
-            ActionStep.MENU -> ActionMenu(
-                file = file,
-                onDownload = {
-                    viewModel.downloadFile()
-                    onDismiss()
-                },
-                onDownloadFolder = {
-                    viewModel.downloadFolder()
-                    onDismiss()
-                },
-                onShare = { step = ActionStep.SHARE },
-                onMove = {
-                    viewModel.openMoveRoot()
-                    step = ActionStep.MOVE
-                },
-                onRename = { step = ActionStep.RENAME },
-                onDelete = { step = ActionStep.DELETE }
-            )
+        // 步骤切换统一带过渡（六平台一致）
+        AnimatedContent(
+            targetState = step,
+            transitionSpec = { fadeIn(effectsDefault()) togetherWith fadeOut(effectsFast()) },
+            label = "fileActionStep"
+        ) { current ->
+            when (current) {
+                ActionStep.MENU -> ActionMenu(
+                    file = file,
+                    onDownload = {
+                        onDownload()
+                        onDismiss()
+                    },
+                    onDownloadFolder = if (file.isdir) {
+                        {
+                            onDownloadFolder()
+                            onDismiss()
+                        }
+                    } else {
+                        null
+                    },
+                    onShare = { step = ActionStep.SHARE },
+                    onMove = { step = ActionStep.MOVE },
+                    onRename = { step = ActionStep.RENAME },
+                    // 删除是弹窗内的第二级步骤：这样过渡与分享/重命名完全一致，也不会像另开底部弹窗那样
+                    // 让本弹窗瞬间消失（页面的确认目标是从 actionFile 推导的，关掉它会把 actionFile 清空）
+                    onDelete = { step = ActionStep.DELETE }
+                )
 
-            ActionStep.MOVE -> MoveStep(
-                file = file,
-                viewModel = viewModel,
-                moveState = moveState,
-                operating = operating,
-                onBack = { step = ActionStep.MENU },
-                onDone = onDismiss
-            )
+                ActionStep.MOVE -> moveStep({ step = ActionStep.MENU }, onDismiss)
 
-            ActionStep.SHARE -> ShareStep(
-                file = file,
-                viewModel = viewModel,
-                operating = operating,
-                onBack = { step = ActionStep.MENU }
-            )
+                ActionStep.SHARE -> ShareStep(
+                    title = "分享文件",
+                    subtitle = file.fname,
+                    operating = operating,
+                    passcodeMode = passcodeMode,
+                    expireOptions = expireOptions,
+                    onBack = { step = ActionStep.MENU },
+                    onCreateShare = onShare
+                )
 
-            ActionStep.RENAME -> RenameStep(
-                file = file,
-                viewModel = viewModel,
-                operating = operating,
-                onBack = { step = ActionStep.MENU },
-                onDone = onDismiss
-            )
+                ActionStep.RENAME -> RenameStep(
+                    file = file,
+                    operating = operating,
+                    onBack = { step = ActionStep.MENU },
+                    onDone = onDismiss,
+                    onRename = onRename
+                )
 
-            ActionStep.DELETE -> DeleteStep(
-                file = file,
-                viewModel = viewModel,
-                operating = operating,
-                onBack = { step = ActionStep.MENU },
-                onDone = onDismiss
+                // 删除确认：与批量删除共用同一份确认 UI，取消则退回菜单
+                ActionStep.DELETE -> ConfirmDeleteContent(
+                    target = "「${file.fname}」",
+                    operating = operating,
+                    onCancel = { step = ActionStep.MENU },
+                    onConfirm = {
+                        onConfirmDelete()
+                        onDismiss()
+                    }
+                )
+            }
+        }
+    }
+}
+
+/**
+ * 底部弹窗顶部：图标 + 文件名 + 类型（文件夹/文件）。
+ * 网盘页文件操作弹窗（[FileActionSheet]）与解析页文件操作弹窗
+ * （`com.yunget.app.ui.resolve.ResolveFileActionSheet`）共用，保证两处形态一致。
+ */
+@Composable
+internal fun FileSheetHeader(file: ShareFile) {
+    Row(verticalAlignment = Alignment.CenterVertically) {
+        Surface(
+            modifier = Modifier.size(40.dp),
+            shape = MaterialTheme.shapes.large,
+            color = MaterialTheme.colorScheme.primaryContainer
+        ) {
+            Box(contentAlignment = Alignment.Center) {
+                Icon(
+                    imageVector = if (file.isdir) Icons.Outlined.Folder else Icons.Outlined.Download,
+                    contentDescription = null,
+                    tint = MaterialTheme.colorScheme.onPrimaryContainer
+                )
+            }
+        }
+        Spacer(modifier = Modifier.width(12.dp))
+        Column(modifier = Modifier.weight(1f)) {
+            FileNameText(
+                text = file.fname,
+                style = MaterialTheme.typography.titleMedium,
+                fontWeight = FontWeight.Medium
+            )
+            Text(
+                text = if (file.isdir) "文件夹" else "文件",
+                style = MaterialTheme.typography.bodyMedium,
+                color = MaterialTheme.colorScheme.onSurfaceVariant
             )
         }
     }
+}
 
-    // 分享创建成功：展示链接与提取码（可复制）
-    viewModel.shareResult?.let { info ->
-        ShareResultDialog(
-            info = info,
-            onDismiss = { viewModel.dismissShareResult() }
-        )
+/**
+ * 网盘页顶栏的「+」按钮 + 下拉菜单（七个云盘页共用，Agent.md §3.26）。
+ *
+ * 只挂在**个人盘**页面：各家文档都写明「新建目录 / 上传」必须在个人盘模式下可用，
+ * 分享浏览页（`ShareDetailScreen`）不挂这个入口。
+ *
+ * @param onUploadFile 上传协议尚未接入时的占位：传 null（默认）时菜单项置灰并标「开发中」，
+ *   等上传落地后由各页把真实回调接上即可，不用改这个组件。
+ */
+@Composable
+internal fun CloudAddMenu(
+    onCreateFolder: () -> Unit,
+    onUploadFile: (() -> Unit)? = null
+) {
+    var expanded by remember { mutableStateOf(false) }
+    Box {
+        IconButton(onClick = { expanded = true }) {
+            Icon(
+                imageVector = Icons.Outlined.Add,
+                contentDescription = "新建",
+                tint = MaterialTheme.colorScheme.onSurfaceVariant
+            )
+        }
+        DropdownMenu(expanded = expanded, onDismissRequest = { expanded = false }) {
+            DropdownMenuItem(
+                text = { Text("创建文件夹") },
+                leadingIcon = { Icon(Icons.Outlined.CreateNewFolder, contentDescription = null) },
+                onClick = {
+                    expanded = false
+                    onCreateFolder()
+                }
+            )
+            DropdownMenuItem(
+                // 上传未接入前把「开发中」写在文案里：比灰掉一个没有说明的菜单项更容易看懂
+                text = { Text(if (onUploadFile == null) "上传文件（开发中）" else "上传文件") },
+                leadingIcon = { Icon(Icons.Outlined.UploadFile, contentDescription = null) },
+                onClick = {
+                    expanded = false
+                    onUploadFile?.invoke()
+                },
+                enabled = onUploadFile != null
+            )
+        }
     }
+}
+
+/**
+ * 文件夹名校验（各平台文档的建目录小节只给了这套客户端规则）：
+ * 非空、不是 `.` / `..`、不含 `/` `\` 与控制字符；长度上限各家文档都没写，这里只挡 255 防呆。
+ *
+ * @return 不合法的原因（给用户看）；合法返回 null
+ */
+internal fun cloudNameError(raw: String): String? {
+    val name = raw.trim()
+    return when {
+        name.isEmpty() -> "名称不能为空"
+        name == "." || name == ".." -> "名称不能是 . 或 .."
+        name.length > 255 -> "名称最多 255 个字符"
+        name.any { it == '/' || it == '\\' || it.code < 0x20 } -> "名称不能含 / \\ 或控制字符"
+        else -> null
+    }
+}
+
+/**
+ * 新建文件夹弹窗（七个云盘页共用）：只做本地名称校验，创建请求由各页 ViewModel 发出。
+ * 失败与成功提示统一走各页既有的 `cloudMessage` → Snackbar 通道，所以这里确认后立刻关闭。
+ */
+@Composable
+internal fun CreateFolderDialog(
+    onDismiss: () -> Unit,
+    onConfirm: (String) -> Unit
+) {
+    var name by remember { mutableStateOf("") }
+    var touched by remember { mutableStateOf(false) }
+    val error = cloudNameError(name)
+    val showError = touched && error != null
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text("创建文件夹") },
+        text = {
+            Column {
+                OutlinedTextField(
+                    value = name,
+                    onValueChange = {
+                        name = it
+                        touched = true
+                    },
+                    label = { Text("文件夹名称") },
+                    singleLine = true,
+                    isError = showError,
+                    supportingText = {
+                        Text(
+                            text = if (showError) error!! else "创建在当前目录下",
+                            color = if (showError) {
+                                MaterialTheme.colorScheme.error
+                            } else {
+                                MaterialTheme.colorScheme.onSurfaceVariant
+                            }
+                        )
+                    }
+                )
+            }
+        },
+        confirmButton = {
+            TextButton(
+                onClick = { onConfirm(name.trim()) },
+                enabled = error == null
+            ) {
+                Text("创建")
+            }
+        },
+        dismissButton = {
+            TextButton(onClick = onDismiss) { Text("取消") }
+        }
+    )
 }
 
 /** 操作菜单主界面 */
@@ -192,35 +396,7 @@ private fun ActionMenu(
             .padding(start = 24.dp, end = 24.dp, top = 4.dp, bottom = 32.dp)
     ) {
         // 标题
-        Row(verticalAlignment = Alignment.CenterVertically) {
-            Surface(
-                modifier = Modifier.size(40.dp),
-                shape = MaterialTheme.shapes.large,
-                color = MaterialTheme.colorScheme.primaryContainer
-            ) {
-                Box(contentAlignment = Alignment.Center) {
-                    Icon(
-                        imageVector = if (file.isdir) Icons.Outlined.Folder else Icons.Outlined.Download,
-                        contentDescription = null,
-                        tint = MaterialTheme.colorScheme.onPrimaryContainer
-                    )
-                }
-            }
-            Spacer(modifier = Modifier.width(12.dp))
-            Column(modifier = Modifier.weight(1f)) {
-                Text(
-                    text = file.fname,
-                    style = MaterialTheme.typography.titleMedium,
-                    fontWeight = FontWeight.Medium,
-                    maxLines = 1
-                )
-                Text(
-                    text = if (file.isdir) "文件夹" else "文件",
-                    style = MaterialTheme.typography.bodyMedium,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant
-                )
-            }
-        }
+        FileSheetHeader(file = file)
 
         Spacer(modifier = Modifier.height(16.dp))
         HorizontalDivider()
@@ -268,16 +444,19 @@ private fun ActionMenu(
         ActionItem(
             icon = Icons.Outlined.Delete,
             title = "删除",
-            desc = "移入回收站",
+            desc = "删除网盘文件",
             tint = MaterialTheme.colorScheme.error,
             onClick = onDelete
         )
     }
 }
 
-/** 操作项行 */
+/**
+ * 操作项行（图标 + 标题 + 说明）。
+ * 网盘页与解析页的文件操作弹窗共用，新增操作项请沿用本组件，不要再手写一份。
+ */
 @Composable
-private fun ActionItem(
+internal fun ActionItem(
     icon: androidx.compose.ui.graphics.vector.ImageVector,
     title: String,
     desc: String,
@@ -314,20 +493,23 @@ private fun ActionItem(
 
 /** 移动：浏览目标目录并确认（独立浏览状态 moveUiState，不影响主列表） */
 @Composable
-private fun MoveStep(
-    file: ShareFile,
+internal fun QuarkMoveStep(
+    /** 副标题：单文件传文件名，批量传"已选 N 项" */
+    subtitle: String,
     viewModel: QuarkCloudViewModel,
-    moveState: QuarkCloudUiState,
     operating: Boolean,
     onBack: () -> Unit,
     onDone: () -> Unit
 ) {
+    // 进入「移动到」步骤即加载根目录（与其余五个平台的移动步骤一致，调用方不必先触发）
+    val moveState by viewModel.moveUiState.collectAsState()
+    LaunchedEffect(Unit) { viewModel.openMoveRoot() }
     Column(
         modifier = Modifier
             .fillMaxWidth()
             .padding(start = 24.dp, end = 24.dp, top = 4.dp, bottom = 32.dp)
     ) {
-        StepHeader(title = "移动到", subtitle = file.fname, onBack = onBack)
+        StepHeader(title = "移动到", subtitle = subtitle, onBack = onBack)
 
         Spacer(modifier = Modifier.height(8.dp))
         CrumbBar(
@@ -353,7 +535,7 @@ private fun MoveStep(
                         .fillMaxWidth()
                         .height(200.dp),
                     contentAlignment = Alignment.Center
-                ) { CircularProgressIndicator() }
+                ) { YunGetLoading() }
 
                 is QuarkCloudUiState.Error -> Box(
                     modifier = Modifier
@@ -383,10 +565,15 @@ private fun MoveStep(
                         modifier = Modifier
                             .fillMaxWidth()
                             .heightIn(max = 260.dp),
-                        verticalArrangement = Arrangement.spacedBy(4.dp)
+                        // 目录列表同样拼成一组
+                        verticalArrangement = Arrangement.spacedBy(ListGroupGap)
                     ) {
-                        items(dirs, key = { it.fid }) { dir ->
-                            ShareFileRow(file = dir, onClick = { viewModel.openMoveFolder(dir) })
+                        itemsIndexed(dirs, key = { _, d -> d.fid }) { index, dir ->
+                            ShareFileRow(
+                                file = dir,
+                                onClick = { viewModel.openMoveFolder(dir) },
+                                shape = listGroupShape(index, dirs.size)
+                            )
                         }
                     }
                 }
@@ -408,7 +595,7 @@ private fun MoveStep(
                 .height(50.dp)
         ) {
             if (operating) {
-                YunGetLoading(modifier = Modifier.size(20.dp))
+                CircularProgressIndicator(modifier = Modifier.size(20.dp), strokeWidth = 2.dp)
             } else {
                 Icon(Icons.Outlined.DriveFileMove, contentDescription = null, modifier = Modifier.size(18.dp))
                 Spacer(modifier = Modifier.width(8.dp))
@@ -418,63 +605,129 @@ private fun MoveStep(
     }
 }
 
-/** 分享：提取码 + 有效期设置 */
+/**
+ * 提取码规则：**各平台不同，必须区分**（不能一律给"无提取码 / 设置提取码"二选一）：
+ * - [OPTIONAL] 可选：夸克 / UC / 123
+ * - [REQUIRED] 必填 4 位：百度
+ * - [REQUIRED_OR_AUTO] 必填但可留空由服务端生成：迅雷
+ * - [SERVER_GENERATED] 服务端自动生成、不可设置：139
+ */
+internal enum class PasscodeMode { OPTIONAL, REQUIRED, REQUIRED_OR_AUTO, SERVER_GENERATED }
+
+/** 分享：提取码 + 有效期设置（六大网盘页共用，提交走 [onCreateShare]） */
+@OptIn(ExperimentalMaterial3ExpressiveApi::class, ExperimentalLayoutApi::class)
 @Composable
 private fun ShareStep(
-    file: ShareFile,
-    viewModel: QuarkCloudViewModel,
+    title: String,
+    subtitle: String,
     operating: Boolean,
-    onBack: () -> Unit
+    passcodeMode: PasscodeMode,
+    expireOptions: List<Pair<String, Int>> = defaultExpireOptions,
+    onBack: () -> Unit,
+    onCreateShare: (withPassword: Boolean, passcode: String, expiredType: Int) -> Unit
 ) {
     var withPassword by remember { mutableStateOf(false) }
     var passcode by remember { mutableStateOf("") }
-    var expiredType by remember { mutableStateOf(1) }
+    // 默认选中第一档：各平台的第一档都是「永久有效」，但 115 的档位码是 101..105（不是中性码），
+    // 所以不能写死 ShareExpire.FOREVER，否则 115 弹窗打开时五个档位一个都没选中（2026-10 的 bug）。
+    // 用 remember（不带 key）：列表实例每次组合都可能重建，带 key 会把用户已选的档位重置回第一档。
+    var expiredType by remember { mutableStateOf(expireOptions.firstOrNull()?.second ?: ShareExpire.FOREVER) }
 
     Column(
         modifier = Modifier
             .fillMaxWidth()
             .padding(start = 24.dp, end = 24.dp, top = 4.dp, bottom = 32.dp)
     ) {
-        StepHeader(title = "分享文件", subtitle = file.fname, onBack = onBack)
+        StepHeader(title = title, subtitle = subtitle, onBack = onBack)
 
         Spacer(modifier = Modifier.height(16.dp))
 
-        Text("提取码", style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
-        Spacer(modifier = Modifier.height(6.dp))
-        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-            FilterChip(
-                selected = !withPassword,
-                onClick = { withPassword = false },
-                label = { Text("无提取码") },
-                colors = FilterChipDefaults.filterChipColors()
-            )
-            FilterChip(
-                selected = withPassword,
-                onClick = {
-                    withPassword = true
-                    if (passcode.isBlank()) passcode = randomPasscode()
-                },
-                label = { Text("设置提取码") },
-                colors = FilterChipDefaults.filterChipColors()
-            )
-        }
-        if (withPassword) {
-            Spacer(modifier = Modifier.height(8.dp))
-            OutlinedTextField(
-                value = passcode,
-                onValueChange = { passcode = it.take(4).filter { c -> c.isLetterOrDigit() } },
-                modifier = Modifier.fillMaxWidth(),
-                label = { Text("4 位提取码") },
-                singleLine = true,
-                shape = MaterialTheme.shapes.large
-            )
+        // 提取码：按平台规则渲染（四种规则见 PasscodeMode）
+        when (passcodeMode) {
+            PasscodeMode.OPTIONAL -> {
+                Text("提取码", style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                Spacer(modifier = Modifier.height(6.dp))
+                // 间距置 0 + checkedShape 指回未选中形状：避免两段之间出现缝/豁口（选中态由填充色表达）
+                ButtonGroup(horizontalArrangement = Arrangement.spacedBy(0.dp)) {
+                    ToggleButton(
+                        checked = !withPassword,
+                        onCheckedChange = { withPassword = false },
+                        shapes = ButtonGroupDefaults.connectedLeadingButtonShapes(
+                            checkedShape = ButtonGroupDefaults.connectedLeadingButtonShape
+                        )
+                    ) {
+                        Text("无提取码")
+                    }
+                    ToggleButton(
+                        checked = withPassword,
+                        onCheckedChange = {
+                            withPassword = true
+                            if (passcode.isBlank()) passcode = randomPasscode()
+                        },
+                        shapes = ButtonGroupDefaults.connectedTrailingButtonShapes(
+                            checkedShape = ButtonGroupDefaults.connectedTrailingButtonShape
+                        )
+                    ) {
+                        Text("设置提取码")
+                    }
+                }
+                // 切到「设置提取码」时输入框淡入 + 展开（收起时反向），不再突然出现/消失
+                AnimatedVisibility(
+                    visible = withPassword,
+                    enter = fadeIn(effectsDefault()) + expandVertically(spatialDefault()),
+                    exit = fadeOut(effectsFast()) + shrinkVertically(spatialFast())
+                ) {
+                    Column {
+                        Spacer(modifier = Modifier.height(8.dp))
+                        PasscodeField(
+                            passcode = passcode,
+                            onPasscodeChange = { passcode = it },
+                            label = "4 位提取码"
+                        )
+                    }
+                }
+            }
+
+            PasscodeMode.REQUIRED, PasscodeMode.REQUIRED_OR_AUTO -> {
+                val allowBlank = passcodeMode == PasscodeMode.REQUIRED_OR_AUTO
+                Text(
+                    text = if (allowBlank) {
+                        "分享必须带提取码，可自定义 4 位（留空由服务端生成）"
+                    } else {
+                        "分享必须带 4 位提取码"
+                    },
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+                Spacer(modifier = Modifier.height(8.dp))
+                PasscodeField(
+                    passcode = passcode,
+                    onPasscodeChange = { passcode = it },
+                    label = if (allowBlank) "提取码（4 位字母数字，可留空）" else "提取码（4 位字母数字）"
+                )
+            }
+
+            PasscodeMode.SERVER_GENERATED -> {
+                Text("提取码", style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                Spacer(modifier = Modifier.height(6.dp))
+                Text(
+                    text = "提取码由服务端自动生成，分享创建后可在结果里查看",
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+            }
         }
 
         Spacer(modifier = Modifier.height(16.dp))
 
         Text("有效期", style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
         Spacer(modifier = Modifier.height(6.dp))
-        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+        // FlowRow 而不是 Row：115 有 5 档（永久/1/3/7/15 天），一行放不下会把最右一档压扁，
+        // 换行后每档都保持自然宽度；其余平台的 4 档也照常一行显示。
+        FlowRow(
+            horizontalArrangement = Arrangement.spacedBy(8.dp),
+            verticalArrangement = Arrangement.spacedBy(8.dp)
+        ) {
             expireOptions.forEach { (name, value) ->
                 FilterChip(
                     selected = expiredType == value,
@@ -489,20 +742,30 @@ private fun ShareStep(
 
         Button(
             onClick = {
-                viewModel.shareFile(
-                    urlType = if (withPassword) 2 else 1,
-                    passcode = passcode,
-                    expiredType = expiredType
-                )
+                // 提取码规则决定提交内容：
+                // - OPTIONAL：按用户选择决定是否带提取码
+                // - REQUIRED / REQUIRED_OR_AUTO：一定带（迅雷可留空，由服务端生成）
+                // - SERVER_GENERATED：不传提取码
+                val withPwd = when (passcodeMode) {
+                    PasscodeMode.OPTIONAL -> withPassword
+                    PasscodeMode.SERVER_GENERATED -> false
+                    else -> true
+                }
+                onCreateShare(withPwd, passcode, expiredType)
                 // 不在此关闭：保留弹窗，等 shareResult 弹出分享结果
             },
-            enabled = !operating && (!withPassword || passcode.length == 4),
+            enabled = !operating && when (passcodeMode) {
+                PasscodeMode.OPTIONAL -> !withPassword || passcode.length == 4
+                PasscodeMode.REQUIRED -> passcode.length == 4
+                PasscodeMode.REQUIRED_OR_AUTO -> passcode.isEmpty() || passcode.length == 4
+                PasscodeMode.SERVER_GENERATED -> true
+            },
             modifier = Modifier
                 .fillMaxWidth()
                 .height(50.dp)
         ) {
             if (operating) {
-                YunGetLoading(modifier = Modifier.size(20.dp))
+                CircularProgressIndicator(modifier = Modifier.size(20.dp), strokeWidth = 2.dp)
             } else {
                 Icon(Icons.Outlined.Share, contentDescription = null, modifier = Modifier.size(18.dp))
                 Spacer(modifier = Modifier.width(8.dp))
@@ -512,14 +775,31 @@ private fun ShareStep(
     }
 }
 
-/** 重命名输入 */
+/** 提取码输入框（分享步骤内共用）：限 4 位字母数字 */
+@Composable
+private fun PasscodeField(
+    passcode: String,
+    onPasscodeChange: (String) -> Unit,
+    label: String
+) {
+    OutlinedTextField(
+        value = passcode,
+        onValueChange = { onPasscodeChange(it.take(4).filter { c -> c.isLetterOrDigit() }) },
+        modifier = Modifier.fillMaxWidth(),
+        label = { Text(label) },
+        singleLine = true,
+        shape = MaterialTheme.shapes.large
+    )
+}
+
+/** 重命名输入（六大网盘页共用，提交走 [onRename]） */
 @Composable
 private fun RenameStep(
     file: ShareFile,
-    viewModel: QuarkCloudViewModel,
     operating: Boolean,
     onBack: () -> Unit,
-    onDone: () -> Unit
+    onDone: () -> Unit,
+    onRename: (String) -> Unit
 ) {
     var name by remember { mutableStateOf(file.fname) }
     Column(
@@ -541,7 +821,7 @@ private fun RenameStep(
         Button(
             onClick = {
                 if (name.isNotBlank() && name != file.fname) {
-                    viewModel.renameFile(name.trim())
+                    onRename(name.trim())
                     onDone()
                 } else {
                     onBack()
@@ -557,34 +837,95 @@ private fun RenameStep(
     }
 }
 
-/** 删除确认 */
+/**
+ * 删除确认内容（**全项目唯一的删除确认实现**）。
+ *
+ * 两处承载：网盘页单文件删除把它当作 [FileActionSheet] 的第二级步骤
+ * （与分享/重命名同一套切换过渡），多选批量删除则包在 [ConfirmDeleteSheet] 这个独立底部弹窗里。
+ *
+ * @param target 删除对象描述，如「文件名.mp4」或 "选中的 3 项"
+ */
 @Composable
-private fun DeleteStep(
-    file: ShareFile,
-    viewModel: QuarkCloudViewModel,
+private fun ConfirmDeleteContent(
+    target: String,
     operating: Boolean,
-    onBack: () -> Unit,
-    onDone: () -> Unit
+    onCancel: () -> Unit,
+    onConfirm: () -> Unit
 ) {
-    AlertDialog(
-        onDismissRequest = { if (!operating) onBack() },
-        title = { Text("删除文件") },
-        text = { Text("确定要删除「${file.fname}」吗？删除后将移入回收站。") },
-        confirmButton = {
-            TextButton(
-                onClick = {
-                    viewModel.deleteFile()
-                    onDone()
-                },
-                enabled = !operating
-            ) {
-                Text("删除", color = MaterialTheme.colorScheme.error)
-            }
-        },
-        dismissButton = {
-            TextButton(onClick = onBack) { Text("取消") }
+    Column(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(start = 24.dp, end = 24.dp, top = 4.dp, bottom = 32.dp)
+    ) {
+        Text("删除文件", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Medium)
+        Spacer(modifier = Modifier.height(6.dp))
+        Text(
+            text = "确定要删除$target 吗？",
+            style = MaterialTheme.typography.bodyMedium,
+            color = MaterialTheme.colorScheme.onSurfaceVariant
+        )
+        Spacer(modifier = Modifier.height(20.dp))
+        Button(
+            onClick = onConfirm,
+            enabled = !operating,
+            colors = ButtonDefaults.buttonColors(
+                containerColor = MaterialTheme.colorScheme.error,
+                contentColor = MaterialTheme.colorScheme.onError
+            ),
+            modifier = Modifier
+                .fillMaxWidth()
+                .height(50.dp)
+        ) {
+            Text("删除")
         }
-    )
+        Spacer(modifier = Modifier.height(8.dp))
+        TextButton(
+            onClick = onCancel,
+            enabled = !operating,
+            modifier = Modifier
+                .fillMaxWidth()
+                .height(48.dp)
+        ) {
+            Text("取消")
+        }
+    }
+}
+
+/**
+ * 删除确认底部弹窗：多选批量删除等**没有可复用的父弹窗**的入口用它
+ * （单文件删除已改为 [FileActionSheet] 内部的 [ActionStep.DELETE] 步骤，过渡与分享/重命名一致）。
+ *
+ * 原先是 6 份 AlertDialog（其中夸克的两份还"弹在底部弹窗之上"），形态与层叠都不一致；
+ * 现统一为底部弹窗 + 共用 [ConfirmDeleteContent] —— 自带滑入/淡出过渡，且不会出现"弹窗套弹窗"。
+ *
+ * @param target 删除对象描述，如「文件名.mp4」或 "选中的 3 项"
+ */
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+internal fun ConfirmDeleteSheet(
+    target: String,
+    operating: Boolean,
+    onDismiss: () -> Unit,
+    onConfirm: () -> Unit
+) {
+    val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
+
+    ModalBottomSheet(
+        // 操作进行中禁止下滑关闭：避免请求已发出、弹窗却先消失造成的状态错乱
+        onDismissRequest = { if (!operating) onDismiss() },
+        sheetState = sheetState,
+        containerColor = MaterialTheme.colorScheme.surface
+    ) {
+        ConfirmDeleteContent(
+            target = target,
+            operating = operating,
+            onCancel = onDismiss,
+            onConfirm = {
+                onConfirm()
+                onDismiss()
+            }
+        )
+    }
 }
 
 /** 分享结果：链接 + 提取码 + 复制 */
@@ -596,13 +937,14 @@ internal fun ShareResultDialog(
     val context = LocalContext.current
     // Dialog 内提示宿主（AlertDialog 为独立窗口）
     val snackbarHostState = rememberGlobalSnackbarHostState()
-    // 拼接分享文案（按平台区分：139 / 123 / UC / 迅雷 / 百度 / 夸克）
+    // 拼接分享文案（按平台区分：139 / 123 / UC / 迅雷 / 百度 / 115 / 夸克）
     val platformName = when {
         info.shareUrl.contains("139.com") -> "139网盘"
         info.shareUrl.contains("123pan") || info.shareUrl.contains("123865") -> "123云盘"
         info.shareUrl.contains("uc.cn") -> "UC网盘"
         info.shareUrl.contains("xunlei.com") -> "迅雷网盘"
         info.shareUrl.contains("baidu.com") -> "百度网盘"
+        info.shareUrl.contains("115") -> "115网盘"
         else -> "夸克网盘"
     }
     val shareText = buildString {
@@ -616,7 +958,13 @@ internal fun ShareResultDialog(
         onDismissRequest = onDismiss,
         title = { Text("分享成功") },
         text = {
-            Column {
+            // 横屏/小屏时内容超高可滚动，避免按钮被挤出屏幕
+            Column(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .heightIn(max = 420.dp)
+                    .verticalScroll(rememberScrollState())
+            ) {
                 // 等宽展示分享文案，便于整段复制
                 Text(
                     text = shareText,
@@ -631,6 +979,15 @@ internal fun ShareResultDialog(
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
+                // 非致命提示（如 115 分享已建但有效期没改成功），不打断分享结果展示
+                info.warning?.takeIf { it.isNotBlank() }?.let { warning ->
+                    Spacer(modifier = Modifier.height(8.dp))
+                    Text(
+                        text = warning,
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.error
+                    )
+                }
                 // Dialog 内提示（AlertDialog 为独立窗口，需自带 Snackbar 宿主）
                 SnackbarHost(hostState = snackbarHostState)
             }
@@ -654,10 +1011,15 @@ internal fun ShareResultDialog(
     )
 }
 
-/** 步骤头部：返回按钮 + 标题 */
+/** 步骤头部：返回按钮 + 标题 + 副标题（六大网盘页的移动步骤与解析页转存步骤都用它，故为 internal） */
 @Composable
-private fun StepHeader(title: String, subtitle: String, onBack: () -> Unit) {
-    Row(verticalAlignment = Alignment.CenterVertically) {
+internal fun StepHeader(
+    title: String,
+    subtitle: String,
+    onBack: () -> Unit,
+    modifier: Modifier = Modifier
+) {
+    Row(modifier = modifier, verticalAlignment = Alignment.CenterVertically) {
         IconButton(onClick = onBack) {
             Icon(
                 imageVector = Icons.AutoMirrored.Filled.ArrowBack,
@@ -671,13 +1033,38 @@ private fun StepHeader(title: String, subtitle: String, onBack: () -> Unit) {
                 style = MaterialTheme.typography.titleMedium,
                 fontWeight = FontWeight.Medium
             )
-            Text(
+            // 副标题是文件名（单文件传文件名，批量传"已选 N 项"）→ 走 FileNameText，跟随文件名显示设置
+            FileNameText(
                 text = subtitle,
                 style = MaterialTheme.typography.bodySmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                maxLines = 1
+                color = MaterialTheme.colorScheme.onSurfaceVariant
             )
         }
+    }
+}
+
+/**
+ * 「转存」步骤外框（解析页文件操作弹窗内的二级步骤）。
+ *
+ * 六大平台的转存目录选择器（`XxxSaveContent`）共用：顶部是带返回箭头的 [StepHeader]，
+ * 下面直接放各自的内容（内容自带 24dp 内边距），因此切换步骤时只有内容淡入淡出，
+ * 不会像另开一个 [androidx.compose.material3.ModalBottomSheet] 那样整块弹窗重新升起。
+ */
+@Composable
+internal fun SaveStepScaffold(
+    title: String,
+    subtitle: String,
+    onBack: () -> Unit,
+    content: @Composable () -> Unit
+) {
+    Column(modifier = Modifier.fillMaxWidth()) {
+        StepHeader(
+            title = title,
+            subtitle = subtitle,
+            onBack = onBack,
+            modifier = Modifier.padding(start = 24.dp, end = 24.dp, top = 4.dp)
+        )
+        content()
     }
 }
 
@@ -686,15 +1073,22 @@ private fun randomPasscode(): String {
     return (1..4).map { chars.random() }.joinToString("")
 }
 
-private fun expireLabel(type: Int): String = when (type) {
-    2 -> "1 天"
-    3 -> "7 天"
-    4 -> "30 天"
-    else -> "永久有效"
+/** 中性码 → 展示文案；未知值显示「未知」而不是 fail-open 成「永久有效」（115 用自己的 101..105 码位） */
+internal fun expireLabel(type: Int): String = when (type) {
+    ShareExpire.FOREVER -> "永久有效"
+    ShareExpire.ONE_DAY -> "1 天"
+    ShareExpire.SEVEN_DAYS -> "7 天"
+    ShareExpire.THIRTY_DAYS -> "30 天"
+    ShareExpire.PAN115_FOREVER -> "永久有效"
+    ShareExpire.PAN115_ONE_DAY -> "1 天"
+    ShareExpire.PAN115_THREE_DAYS -> "3 天"
+    ShareExpire.PAN115_SEVEN_DAYS -> "7 天"
+    ShareExpire.PAN115_FIFTEEN_DAYS -> "15 天"
+    else -> "未知"
 }
 
 /** 批量操作步骤类型 */
-internal enum class BatchStep { MENU, SHARE, MOVE, DELETE }
+internal enum class BatchStep { MENU, SHARE, MOVE }
 
 /**
  * 批量操作弹窗（长按多选后）：下载 / 分享 / 移动 / 删除。
@@ -704,14 +1098,20 @@ internal enum class BatchStep { MENU, SHARE, MOVE, DELETE }
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 internal fun BatchActionSheet(
-    viewModel: QuarkCloudViewModel,
+    count: Int,
+    operating: Boolean,
+    onDownload: () -> Unit,
+    onShare: (withPassword: Boolean, passcode: String, expiredType: Int) -> Unit,
+    onDelete: () -> Unit,
     onDismiss: () -> Unit,
-    initialStep: BatchStep = BatchStep.MENU
+    /** 提取码规则（各平台不同，见 [PasscodeMode]） */
+    passcodeMode: PasscodeMode = PasscodeMode.OPTIONAL,
+    /** 有效期档位（默认六平台通用档；115 传 [ShareExpire.PAN115_OPTIONS]） */
+    expireOptions: List<Pair<String, Int>> = defaultExpireOptions,
+    initialStep: BatchStep = BatchStep.MENU,
+    moveStep: @Composable (onBack: () -> Unit, onDone: () -> Unit) -> Unit
 ) {
     var step by remember { mutableStateOf(initialStep) }
-    val moveState by viewModel.moveUiState.collectAsState()
-    val operating = viewModel.isOperating
-    val count = viewModel.selected.size
 
     val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
 
@@ -722,53 +1122,40 @@ internal fun BatchActionSheet(
         sheetState = sheetState,
         containerColor = MaterialTheme.colorScheme.surface
     ) {
-        when (step) {
-            BatchStep.MENU -> BatchMenu(
-                count = count,
-                onDownload = {
-                    viewModel.downloadSelected()
-                    onDismiss()
-                },
-                onShare = { step = BatchStep.SHARE },
-                onMove = {
-                    viewModel.openMoveRoot()
-                    step = BatchStep.MOVE
-                },
-                onDelete = { step = BatchStep.DELETE }
-            )
+        // 步骤切换带过渡：与单文件弹窗一致
+        AnimatedContent(
+            targetState = step,
+            transitionSpec = { fadeIn(effectsDefault()) togetherWith fadeOut(effectsFast()) },
+            label = "batchActionStep"
+        ) { current ->
+            when (current) {
+                BatchStep.MENU -> BatchMenu(
+                    count = count,
+                    onDownload = {
+                        onDownload()
+                        onDismiss()
+                    },
+                    onShare = { step = BatchStep.SHARE },
+                    onMove = { step = BatchStep.MOVE },
+                    onDelete = {
+                        onDelete()
+                        onDismiss()
+                    }
+                )
 
-            BatchStep.SHARE -> BatchShareStep(
-                count = count,
-                viewModel = viewModel,
-                operating = operating,
-                onBack = { step = BatchStep.MENU }
-            )
+                BatchStep.SHARE -> ShareStep(
+                    title = "分享文件",
+                    subtitle = "已选 $count 项",
+                    operating = operating,
+                    passcodeMode = passcodeMode,
+                    expireOptions = expireOptions,
+                    onBack = { step = BatchStep.MENU },
+                    onCreateShare = onShare
+                )
 
-            BatchStep.MOVE -> BatchMoveStep(
-                count = count,
-                viewModel = viewModel,
-                moveState = moveState,
-                operating = operating,
-                onBack = { step = BatchStep.MENU },
-                onDone = onDismiss
-            )
-
-            BatchStep.DELETE -> BatchDeleteStep(
-                count = count,
-                viewModel = viewModel,
-                operating = operating,
-                onBack = { step = BatchStep.MENU },
-                onDone = onDismiss
-            )
+                BatchStep.MOVE -> moveStep({ step = BatchStep.MENU }, onDismiss)
+            }
         }
-    }
-
-    // 分享创建成功：展示链接与提取码（保留弹窗以正常显示）
-    viewModel.shareResult?.let { info ->
-        ShareResultDialog(
-            info = info,
-            onDismiss = { viewModel.dismissShareResult() }
-        )
     }
 }
 
@@ -844,243 +1231,9 @@ private fun BatchMenu(
         ActionItem(
             icon = Icons.Outlined.Delete,
             title = "删除",
-            desc = "批量移入回收站",
+            desc = "批量删除网盘文件",
             tint = MaterialTheme.colorScheme.error,
             onClick = onDelete
         )
     }
-}
-
-/** 批量分享：提取码 + 有效期 */
-@Composable
-private fun BatchShareStep(
-    count: Int,
-    viewModel: QuarkCloudViewModel,
-    operating: Boolean,
-    onBack: () -> Unit
-) {
-    var withPassword by remember { mutableStateOf(false) }
-    var passcode by remember { mutableStateOf("") }
-    var expiredType by remember { mutableStateOf(1) }
-
-    Column(
-        modifier = Modifier
-            .fillMaxWidth()
-            .padding(start = 24.dp, end = 24.dp, top = 4.dp, bottom = 32.dp)
-    ) {
-        StepHeader(title = "分享文件", subtitle = "已选 $count 项", onBack = onBack)
-
-        Spacer(modifier = Modifier.height(16.dp))
-
-        Text("提取码", style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
-        Spacer(modifier = Modifier.height(6.dp))
-        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-            FilterChip(
-                selected = !withPassword,
-                onClick = { withPassword = false },
-                label = { Text("无提取码") },
-                colors = FilterChipDefaults.filterChipColors()
-            )
-            FilterChip(
-                selected = withPassword,
-                onClick = {
-                    withPassword = true
-                    if (passcode.isBlank()) passcode = randomPasscode()
-                },
-                label = { Text("设置提取码") },
-                colors = FilterChipDefaults.filterChipColors()
-            )
-        }
-        if (withPassword) {
-            Spacer(modifier = Modifier.height(8.dp))
-            OutlinedTextField(
-                value = passcode,
-                onValueChange = { passcode = it.take(4).filter { c -> c.isLetterOrDigit() } },
-                modifier = Modifier.fillMaxWidth(),
-                label = { Text("4 位提取码") },
-                singleLine = true,
-                shape = MaterialTheme.shapes.large
-            )
-        }
-
-        Spacer(modifier = Modifier.height(16.dp))
-
-        Text("有效期", style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
-        Spacer(modifier = Modifier.height(6.dp))
-        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-            expireOptions.forEach { (name, value) ->
-                FilterChip(
-                    selected = expiredType == value,
-                    onClick = { expiredType = value },
-                    label = { Text(name) },
-                    colors = FilterChipDefaults.filterChipColors()
-                )
-            }
-        }
-
-        Spacer(modifier = Modifier.height(20.dp))
-
-        Button(
-            onClick = {
-                viewModel.shareSelected(
-                    urlType = if (withPassword) 2 else 1,
-                    passcode = passcode,
-                    expiredType = expiredType
-                )
-                // 不关闭：等 shareResult 弹出分享结果
-            },
-            enabled = !operating && (!withPassword || passcode.length == 4),
-            modifier = Modifier
-                .fillMaxWidth()
-                .height(50.dp)
-        ) {
-            if (operating) {
-                YunGetLoading(modifier = Modifier.size(20.dp))
-            } else {
-                Icon(Icons.Outlined.Share, contentDescription = null, modifier = Modifier.size(18.dp))
-                Spacer(modifier = Modifier.width(8.dp))
-                Text("创建分享")
-            }
-        }
-    }
-}
-
-/** 批量移动：浏览目标目录并确认 */
-@Composable
-private fun BatchMoveStep(
-    count: Int,
-    viewModel: QuarkCloudViewModel,
-    moveState: QuarkCloudUiState,
-    operating: Boolean,
-    onBack: () -> Unit,
-    onDone: () -> Unit
-) {
-    // 首次进入该步骤：加载移动目标根目录（否则 moveUiState 停留在 Loading 一直转圈）
-    LaunchedEffect(Unit) {
-        viewModel.openMoveRoot()
-    }
-    Column(
-        modifier = Modifier
-            .fillMaxWidth()
-            .padding(start = 24.dp, end = 24.dp, top = 4.dp, bottom = 32.dp)
-    ) {
-        StepHeader(title = "移动到", subtitle = "已选 $count 项", onBack = onBack)
-
-        Spacer(modifier = Modifier.height(8.dp))
-        CrumbBar(
-            rootTitle = "根目录",
-            pathNames = (moveState as? QuarkCloudUiState.Loaded)?.pathNames ?: emptyList(),
-            onNavigate = { viewModel.moveNavigateToLevel(it) }
-        )
-        Spacer(modifier = Modifier.height(8.dp))
-        // 返回上一级：固定在目录区上方（不参与 AnimatedContent 过渡，避免与目录内容交叉叠加）
-        if ((moveState as? QuarkCloudUiState.Loaded)?.pathNames?.isNotEmpty() == true) {
-            BackToParentItem(onClick = { viewModel.moveBack() })
-            Spacer(modifier = Modifier.height(4.dp))
-        }
-        // 移动目录切换：淡入过渡
-        AnimatedContent(
-            targetState = moveState,
-            transitionSpec = { fadeIn(effectsDefault()) togetherWith fadeOut(effectsFast()) },
-            label = "batchMoveState"
-        ) { s ->
-            when (s) {
-                is QuarkCloudUiState.Loading -> Box(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .height(200.dp),
-                    contentAlignment = Alignment.Center
-                ) { CircularProgressIndicator() }
-
-                is QuarkCloudUiState.Error -> Box(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .height(160.dp),
-                    contentAlignment = Alignment.Center
-                ) { Text(s.message, color = MaterialTheme.colorScheme.onSurfaceVariant) }
-
-                is QuarkCloudUiState.Loaded -> {
-                    val dirs = s.files.filter { it.isdir }
-                if (dirs.isEmpty()) {
-                    Box(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .height(100.dp),
-                        contentAlignment = Alignment.Center
-                    ) {
-                        Text(
-                            "当前目录没有子文件夹，可直接移动到此处",
-                            style = MaterialTheme.typography.bodyMedium,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant,
-                            textAlign = TextAlign.Center
-                        )
-                    }
-                } else {
-                    LazyColumn(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .heightIn(max = 260.dp),
-                        verticalArrangement = Arrangement.spacedBy(4.dp)
-                    ) {
-                        items(dirs, key = { it.fid }) { dir ->
-                            ShareFileRow(file = dir, onClick = { viewModel.openMoveFolder(dir) })
-                        }
-                    }
-                }
-            }
-            }
-        }
-
-        Spacer(modifier = Modifier.height(16.dp))
-        val dirName = (moveState as? QuarkCloudUiState.Loaded)?.pathNames?.lastOrNull() ?: "根目录"
-        Button(
-            onClick = {
-                val to = (moveState as? QuarkCloudUiState.Loaded)?.dirFid ?: "0"
-                viewModel.moveSelected(to)
-                onDone()
-            },
-            enabled = !operating,
-            modifier = Modifier
-                .fillMaxWidth()
-                .height(50.dp)
-        ) {
-            if (operating) {
-                YunGetLoading(modifier = Modifier.size(20.dp))
-            } else {
-                Icon(Icons.Outlined.DriveFileMove, contentDescription = null, modifier = Modifier.size(18.dp))
-                Spacer(modifier = Modifier.width(8.dp))
-                Text("移动到此处（$dirName）")
-            }
-        }
-    }
-}
-
-/** 批量删除确认 */
-@Composable
-private fun BatchDeleteStep(
-    count: Int,
-    viewModel: QuarkCloudViewModel,
-    operating: Boolean,
-    onBack: () -> Unit,
-    onDone: () -> Unit
-) {
-    AlertDialog(
-        onDismissRequest = { if (!operating) onBack() },
-        title = { Text("删除文件") },
-        text = { Text("确定要删除选中的 $count 项吗？删除后将移入回收站。") },
-        confirmButton = {
-            TextButton(
-                onClick = {
-                    viewModel.deleteSelected()
-                    onDone()
-                },
-                enabled = !operating
-            ) {
-                Text("删除", color = MaterialTheme.colorScheme.error)
-            }
-        },
-        dismissButton = {
-            TextButton(onClick = onBack) { Text("取消") }
-        }
-    )
 }

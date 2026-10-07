@@ -17,6 +17,20 @@ class SettingsRepository(context: Context) {
             prefs.edit().putInt("download_threads", value.coerceIn(1, 128)).apply()
         }
 
+    /**
+     * 指定平台的下载线程数（上游口径：各平台可分别设置，见 `DownloadPlatform`）。
+     *
+     * ★ 本项目的设置页只有**一个**全局线程数（[downloadThreads]），没有做「按平台分别设置」。
+     *   这里保留上游的方法签名（Gopeed 内核包下载会按 GitHub 通道取线程数），
+     *   内部直接返回那个全局值 —— 语义一致且不会出现「设置页显示 16、实际用了 32」的错位。
+     */
+    fun downloadThreadsFor(platform: String): Int = downloadThreads
+
+    /** 设置指定平台的下载线程数；本项目只有一个全局值，故与 [downloadThreads] 同义 */
+    fun setDownloadThreads(platform: String, value: Int) {
+        downloadThreads = value
+    }
+
     /** 自定义下载保存目录（SAF tree Uri，content://...）；null/空 = 系统默认 Download 目录 */
     var downloadDirUri: String?
         get() = prefs.getString("download_dir_uri", null)
@@ -24,11 +38,51 @@ class SettingsRepository(context: Context) {
             prefs.edit().putString("download_dir_uri", value).apply()
         }
 
+    /**
+     * Gopeed 引擎的下载目录（**真实文件系统路径**，如 `/storage/emulated/0/Download/YunGet`）；
+     * 空 = 默认目录（公共 `Download` 根目录，与内置下载器同一口径，见 `StorageDirs`）。
+     *
+     * 为什么不复用 [downloadDirUri]：引擎是原生核心，写不了 SAF 的 `content://` 目录，只能拿真实路径。
+     * 用户在「下载引擎」页选目录时走 SAF（从 tree Uri 反解真实路径），反解不到才让他手输。
+     */
+    var engineDownloadDir: String
+        get() = prefs.getString("engine_download_dir", "") ?: ""
+        set(value) {
+            prefs.edit().putString("engine_download_dir", value.trim()).apply()
+        }
+
+    /**
+     * 下载引擎：`ENGINE_BUILTIN`（默认，项目自带的 Kotlin 分片下载器）
+     * 或 `ENGINE_GOPEED`（内置 Gopeed 引擎，需先在「下载引擎」页导入 AAR）。
+     *
+     * 取值非法（手改 prefs 等）时按内置下载器处理；引擎没就绪时下载管理器也会自动回退，
+     * 不会因为设置项把下载功能弄坏。
+     */
+    var downloadEngine: String
+        get() = prefs.getString("download_engine", ENGINE_BUILTIN)?.takeIf {
+            it == ENGINE_BUILTIN || it == ENGINE_GOPEED
+        } ?: ENGINE_BUILTIN
+        set(value) {
+            prefs.edit().putString("download_engine", value).apply()
+        }
+
     /** 最大同时下载任务数（默认 1：前台任务吃满带宽，其余排队；参考 IDM 默认单任务满速） */
     var maxConcurrentDownloads: Int
         get() = prefs.getInt("max_concurrent_downloads", DEFAULT_MAX_CONCURRENT_DOWNLOADS)
         set(value) {
             prefs.edit().putInt("max_concurrent_downloads", value.coerceIn(1, 10)).apply()
+        }
+
+    /**
+     * 最大同时下载任务数（引擎侧的叫法）：**同一个值的别名**，见 [maxConcurrentDownloads]。
+     *
+     * 上游把「内置下载器并发闸门」与「Gopeed 引擎配置顶层的 maxRunning」都挂在同一个设置项上，
+     * 引擎侧代码读的是这个名字；本项目沿用同一口径，避免出现两个并发上限各说各话。
+     */
+    var maxRunningTasks: Int
+        get() = maxConcurrentDownloads
+        set(value) {
+            maxConcurrentDownloads = value
         }
 
     /** 下载速度限制（字节/秒；0 = 不限速） */
@@ -87,6 +141,20 @@ class SettingsRepository(context: Context) {
             prefs.edit().putString("doh_url", value?.trim().orEmpty()).apply()
         }
 
+    /**
+     * 自定义 GitHub 下载镜像前缀（如 `https://gh.dpik.top/`）。
+     * null/空字符串表示使用内置默认镜像（`UpdateChecker.MIRROR_PREFIX`）。
+     *
+     * ★ 本项目设置页目前没有暴露这一项，本字段为移植 Gopeed 内核包下载
+     *   （`KernelProvisioner.mirrorUrl`）而补入：内核包的 GitHub 镜像通道读它，
+     *   未配置时回落到内置默认前缀，与「检查更新」的镜像下载同一口径。
+     */
+    var githubMirrorPrefix: String?
+        get() = prefs.getString("github_mirror_prefix", null)
+        set(value) {
+            prefs.edit().putString("github_mirror_prefix", value).apply()
+        }
+
     /** 连接预热 / DNS 预解析（默认开）：下载前预建连接池，起步更快 */
     var warmUpConnections: Boolean
         get() = prefs.getBoolean("warm_up_connections", true)
@@ -138,6 +206,13 @@ class SettingsRepository(context: Context) {
             prefs.edit().putLong("theme_seed_color", value).apply()
         }
 
+    /** 文件名显示方式：false=单行跑马灯滚动（默认，保持原有观感），true=多行折行显示 */
+    var fileNameMultiLine: Boolean
+        get() = prefs.getBoolean("file_name_multi_line", false)
+        set(value) {
+            prefs.edit().putBoolean("file_name_multi_line", value).apply()
+        }
+
     companion object {
         const val DEFAULT_DOWNLOAD_THREADS = 16
         const val DEFAULT_MAX_CONCURRENT_DOWNLOADS = 1
@@ -145,6 +220,12 @@ class SettingsRepository(context: Context) {
 
         /** 默认下载引擎：TurboDL 内核 */
         const val DEFAULT_DOWNLOAD_ENGINE = "turbodl"
+
+        /** 下载引擎标识（[downloadEngine] 的取值）：内置 Kotlin 分片下载器 */
+        const val ENGINE_BUILTIN = "builtin"
+
+        /** 下载引擎标识：内置 Gopeed 引擎（gomobile 核心，需用户导入 AAR） */
+        const val ENGINE_GOPEED = "gopeed"
 
         /** 默认主题种子色：Material Blue（与内置默认方案一致） */
         const val DEFAULT_SEED_COLOR = 0xFF415F91L

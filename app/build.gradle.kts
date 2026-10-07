@@ -26,7 +26,49 @@ android {
         applicationId = "com.yunget.app"
         minSdk = 23
         targetSdk = 34
-        versionCode = 40
+        versionCode = 42
+        // 2.6.17 内容（全量同步上游 YunX 一周的更新：4 个新网盘 + 新下载引擎 + 一批修复）：
+        //  ① **新增 4 个网盘**：115 网盘、光鸭云盘、蓝奏云优享版、蓝奏云。
+        //     每个平台含登录（部分为网页登录/账号密码登录）、云盘管理、分享解析、
+        //     转存、下载全链路；凭证同样走 Keystore 加密（数据库 v11→v19，含 4 张新表）。
+        //  ② **内置 Gopeed 下载引擎**（可选，需在「设置 → 下载引擎」导入内核）：
+        //     支持磁力/BT 这类内置分片下载器做不到的任务；引擎内核从 Release 下载后
+        //     运行时导入（不进 APK，避免安装包膨胀 56MB）。与内置下载器可切换。
+        //  ③ **磁力链接支持**：解析 magnet 链接的显示名与 info hash，交由 Gopeed 引擎执行。
+        //  ④ **迅雷中文口令**：粘贴如「张三丰资源」这类口令，自动换成带提取码的分享链接。
+        //  ⑤ **修复分享有效期错位**（上游 #127）：139/百度/123 三个平台此前把界面的
+        //     中性码（1/2/3/4）当成天数直接下发，导致「选永久建成 1 天」「选 7 天建成 3 天」。
+        //     现在统一经 ShareExpire 转换，未知码位直接抛错（宁可报错也不建错分享）。
+        //  ⑥ **修复下载目录选择器崩溃**（上游 #122）：系统文件选择器被卸载/冻结时
+        //     点击即崩溃，现在给出可读提示。
+        //  ⑦ **文件删除支持目录**、**内存压力回收空闲连接**、**Room 的 R8 保留规则**、
+        //     **Android 16 实时更新权限**（详见 2.6.16 段）。
+        //  ⑧ 认证备份扩展到这 10 个平台；分享链接解析新增蓝奏系的域名族识别与
+        //     115 口令形式（含「ilanzou 不能被误判为 lanzou」的顺序保护）。
+        //
+        // 2.6.16 内容（同步上游 YunX v1.2.9 的稳定性与安全修复）：
+        //  ① **修复「改锁屏密码后 App 崩溃」**（同步上游 v1.2.9，上游收到 3 份崩溃报告）：
+        //     Android Keystore 里的密钥会被系统**永久作废**（改锁屏密码/指纹、系统升级、
+        //     部分机型的 keyblob 升级路径），此时 `key()` 抛出的裸 Keystore 异常
+        //     （InvalidKeyException / KeyPermanentlyInvalidatedException / Invalid key blob）
+        //     会直接击穿主线程。现在三级处理：条目坏了 → 删坏条目 + 建新密钥 + **同一段
+        //     加解密流程重试一次**；条目只是暂时取不到（设备未解锁）→ 抛 Unavailable，
+        //     **绝不删键**；重试仍失败 → 抛 PermanentlyInvalid，由数据层清残留。
+        //  ② **修复「凭证被误删」**：数据层原先对所有解密异常一律 `clear()`，
+        //     于是「设备刚重启还没解锁」这种**暂时**取不到密钥的情况也会清掉凭证 ——
+        //     用户下次解锁后莫名要求重登。现在只有「永久失效」才清，暂时不可用不动数据。
+        //  ③ **新增密钥失效提示**：凭证真的失效时弹一次对话框说明原因（此前是"账号莫名没了"）。
+        //  ④ `observeAccount()` 的 Flow 补 `.catch`：否则数据库变更流里的解密异常
+        //     会直接取消收集者，表现为网盘页静默无数据。
+        //  ⑤ **内存压力回收**（`onTrimMemory`）：系统内存吃紧时释放空闲 HTTP 连接
+        //     及其 socket / TLS 缓冲（下载数据全部流式落盘、不在堆上缓存，不影响进行中的下载）。
+        //  ⑥ 删除本地文件时支持目录（`File.delete()` 对非空目录必然失败），
+        //     此前用户勾了「同时删除本地文件」可能是什么都没删掉。
+        //  ⑦ 补 Room 的 R8 保留规则（当前 release 未开混淆，属预先对齐，避免将来开混淆
+        //     后出现「表存在但字段找不到」这类只在 release 版复现的崩溃）。
+        //  ⑧ 补 Android 16 实时更新权限（POST_PROMOTED_NOTIFICATIONS），
+        //     下载进度可进入状态栏实时进度区域（OPPO ColorOS 流体云按此规范接入）。
+        //
         // 2.6.15 内容（修复开发诊断功能不可用）：
         //  ① **修复诊断报「指定的链接不可用： NetworkOnMainThreadException」**：
         //     诊断前的预检探活是阻塞网络调用，却被主线程协程直接调用 —— Android 禁止
@@ -103,7 +145,7 @@ android {
         //     - 分片请求带 `If-Range`：防止 CDN 中途换文件时新旧字节拼出混杂文件
         //       （那种情况长度校验会通过，损坏会静默落地）。
         //     - 401/403/410 不再触发背压降并发（是授权/时效信号，不是"你太快了"）。
-        versionName = "2.6.15"
+        versionName = "2.6.17"
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
     }
@@ -250,9 +292,18 @@ dependencies {
 
     implementation(libs.material)   // 原 libs.material.color.utilities -> 改为官方 Material 主库（含 color.utilities 包）
 
+    // Gopeed 内置下载引擎：gomobile 生成的 Java 桥接类（com/gopeed/libgopeed + go，合计 12 KB），
+    // 只为编译期拿到 Libgopeed / InvokeResultListener 等类型定义；真正的引擎
+    // libgojni.so（约 56 MB）不进仓库、不进 APK，由设置页导入 AAR 后运行时解出并 System.load。
+    // 来源：libgopeed-arm64-v8a.aar 内的 classes.jar（原样拷贝，未做任何修改）。
+    implementation(files("libs/gopeed-classes.jar"))
+
     implementation(libs.room.runtime)
     implementation(libs.room.ktx)          // 提供协程扩展，如 Flow、suspend
     ksp(libs.room.compiler)
+
+    // GitHub README 的 GFM 渲染（表格/嵌套列表/代码高亮/图片）
+    implementation(libs.markdown.renderer)
 
     implementation(libs.androidx.core.ktx)
     implementation(libs.androidx.lifecycle.runtime.ktx)

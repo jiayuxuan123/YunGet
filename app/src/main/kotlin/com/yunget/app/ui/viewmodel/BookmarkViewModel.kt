@@ -92,6 +92,35 @@ class BookmarkViewModel(private val dao: BookmarkDao) : ViewModel() {
         }
     }
 
+    /** 主页快捷方式（主页解析页下方的网格）已固定的收藏 */
+    val homePinned: StateFlow<List<BookmarkEntity>> = dao.observeHomePinned()
+        .stateIn(
+            scope = viewModelScope,
+            started = SharingStarted.WhileSubscribed(5000),
+            initialValue = emptyList()
+        )
+
+    /**
+     * 添加 / 移除主页快捷方式。
+     *
+     * 为什么不做上限：主页网格可横向滚动，且用户自己会控制数量；
+     * 硬编码上限（如 8 个）反而会在"我有 9 个常用链接"时逼用户二选一。
+     */
+    fun setHomePinned(id: Long, pinned: Boolean) {
+        viewModelScope.launch {
+            dao.updateHomePinned(id, pinned)
+            SnackbarController.show(if (pinned) "已添加到主页" else "已从主页移除")
+        }
+    }
+
+    /** 主页快捷方式色块的自定义文字（空串 = 自动取标题前几个字） */
+    fun setHomeLabel(id: Long, label: String) {
+        viewModelScope.launch {
+            dao.updateHomeLabel(id, label.trim())
+            SnackbarController.show(if (label.isBlank()) "已恢复自动文字" else "已更新显示文字")
+        }
+    }
+
     class Factory(private val dao: BookmarkDao) : ViewModelProvider.Factory {
         @Suppress("UNCHECKED_CAST")
         override fun <T : ViewModel> create(modelClass: Class<T>): T {

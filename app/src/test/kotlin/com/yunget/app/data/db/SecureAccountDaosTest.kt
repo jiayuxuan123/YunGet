@@ -39,6 +39,8 @@ class SecureAccountDaosTest {
         }
 
         override fun isEncrypted(stored: String): Boolean = stored.startsWith("enc(")
+
+        override fun onKeyProvisioned(listener: () -> Unit) = Unit
     }
 
     /** 内存 DAO：记录"数据库里"实际存了什么，供断言检查。 */

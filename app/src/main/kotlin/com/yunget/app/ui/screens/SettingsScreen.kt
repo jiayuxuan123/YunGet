@@ -3,6 +3,7 @@ package com.yunget.app.ui.screens
 import dev.turbodl.core.TurboHttpClients
 import dev.turbodl.core.DnsMode
 import android.Manifest
+import android.content.ActivityNotFoundException
 import android.content.Context
 import android.content.pm.PackageManager
 import android.os.Build
@@ -33,6 +34,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.outlined.Article
 import androidx.compose.material.icons.outlined.Backup
 import androidx.compose.material.icons.outlined.ChevronRight
+import androidx.compose.material.icons.outlined.Memory
 import androidx.compose.material.icons.outlined.SettingsSuggest
 import androidx.compose.material.icons.outlined.Bolt
 import androidx.compose.material.icons.outlined.Dns
@@ -161,6 +163,9 @@ fun SettingsScreen(
     // 隐藏开发调试：忽略 SSL 证书（抓包用，长按「关于云取」打开菜单）
     var ignoreSsl by remember { mutableStateOf(settingsRepo.ignoreSslCert) }
     var showDevMenu by remember { mutableStateOf(false) }
+    // 下载引擎页（两套下载器切换、导入内核、引擎启停与状态）：独立全屏页，返回时同步副标题
+    var showDownloadEngine by remember { mutableStateOf(false) }
+    var engineChoice by remember { mutableStateOf(settingsRepo.downloadEngine) }
     // 【开发诊断】连接数扫描。
     // 状态与结果**由管理器持有**，这里只做轮询展示 —— 否则用户切页面/退出设置页，
     // remember 里的状态就没了，"跑没跑完"根本无从判断（用户实报的正是这一点）。
@@ -278,7 +283,21 @@ fun SettingsScreen(
             title = "下载保存目录",
             description = downloadDirUri?.let { "已自定义：${DownloadSaver.safDirDisplay(it)}" }
                 ?: "系统默认 Download（点击自定义）",
-            onClick = { dirLauncher.launch(null) },
+            onClick = {
+                // 系统选择器被卸载或禁用时 launch 抛 ActivityNotFoundException：选中器的
+                // Activity 属于系统组件，ROM 精简 / 被冻结 / 无「文件」应用时都可能缺失。
+                // 不加这层兜底就是**点击即崩溃**，而用户只是想换个目录。
+                runCatching { dirLauncher.launch(null) }
+                    .onFailure { e ->
+                        SnackbarController.show(
+                            if (e is ActivityNotFoundException) {
+                                "本机没有可用的文件选择器，无法自定义目录"
+                            } else {
+                                "打开目录选择器失败：${e.message ?: e::class.simpleName}"
+                            }
+                        )
+                    }
+            },
             trailing = if (downloadDirUri != null) {
                 {
                     TextButton(
@@ -331,6 +350,20 @@ fun SettingsScreen(
 
         Spacer(modifier = Modifier.height(8.dp))
 
+        // 下载引擎（内置分片下载器 / Gopeed 引擎）：切换、导入内核、启停与状态都在独立页面里
+        SettingsItem(
+            icon = Icons.Outlined.Memory,
+            title = "下载引擎",
+            description = if (engineChoice == SettingsRepository.ENGINE_GOPEED) {
+                "Gopeed 引擎（支持磁力/BT，需导入内核）"
+            } else {
+                "内置分片下载器（点击可切换到 Gopeed 引擎）"
+            },
+            onClick = { showDownloadEngine = true }
+        )
+
+        Spacer(modifier = Modifier.height(8.dp))
+
         // 自定义 DNS over HTTPS：绕过本地 DNS 污染/加速域名解析
         SettingsItem(
             icon = Icons.Outlined.Dns,
@@ -374,10 +407,12 @@ fun SettingsScreen(
 
         Spacer(modifier = Modifier.height(8.dp))
 
-        // 下载引擎选择：TurboDL（默认） / 内置兼容引擎（兜底）
+        // 内置下载器的具体实现：TurboDL（默认） / 内置兼容引擎 / aria2（兜底）。
+        // 与上面「下载引擎」的关系：那一项选「用内置下载器还是 Gopeed 引擎」，
+        // 这一项只在选了内置下载器时有意义 —— 决定内置下载器内部用哪套实现。
         SettingsItem(
             icon = Icons.Outlined.SettingsSuggest,
-            title = "下载引擎",
+            title = "内置下载器实现",
             description = "当前：${currentEngine.displayName}" +
                 if (currentEngine != DownloadEngine.TURBODL) "（需重启 App 生效）" else "",
             onClick = { showEngineDialog = true },
@@ -1351,6 +1386,17 @@ fun SettingsScreen(
             },
             dismissButton = {
                 TextButton(onClick = { showBatteryDialog = false }) { Text("暂不") }
+            }
+        )
+    }
+
+    // 下载引擎页：独立全屏页（两套下载器切换、导入内核、引擎启停与状态）。
+    // 返回时重新读一次设置，让上面那一行的副标题立刻反映新选择。
+    if (showDownloadEngine) {
+        DownloadEngineScreen(
+            onBack = {
+                showDownloadEngine = false
+                engineChoice = settingsRepo.downloadEngine
             }
         )
     }

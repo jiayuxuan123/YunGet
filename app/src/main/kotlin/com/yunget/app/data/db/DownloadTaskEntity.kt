@@ -32,6 +32,14 @@ data class DownloadTaskEntity(
     /** 下载完成/删除任务后应清理的云端临时目录 ID（当前为夸克） */
     @ColumnInfo(defaultValue = "''")
     val cleanupId: String = "",
+    /**
+     * 外部下载引擎（Gopeed）的任务 ID；空串 = 由内置分片下载器执行。
+     *
+     * 为什么要落库：引擎是独立进程内组件，应用重启后要能按这个 ID 找回任务、
+     * 继续同步进度（否则重启后引擎里还在跑的任务在界面上就"消失"了）。
+     */
+    @ColumnInfo(defaultValue = "''")
+    val engineTaskId: String = "",
     val createTime: Long = System.currentTimeMillis()
 ) {
     companion object {

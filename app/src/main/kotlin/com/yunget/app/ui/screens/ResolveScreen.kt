@@ -33,6 +33,7 @@ import androidx.compose.material.icons.outlined.Link
 import androidx.compose.material3.Button
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
+import com.yunget.app.ui.components.HomeShortcutGrid
 import com.yunget.app.ui.components.YunGetLoading
 import com.yunget.app.ui.theme.effectsDefault
 import com.yunget.app.ui.theme.effectsFast
@@ -69,7 +70,12 @@ import com.yunget.app.ui.SnackbarController
 import com.yunget.app.ui.resolve.DownloadLinkDialog
 import com.yunget.app.ui.resolve.ShareDetailScreen
 import com.yunget.app.ui.viewmodel.BaiduCloudViewModel
+import com.yunget.app.ui.viewmodel.BookmarkViewModel
 import com.yunget.app.ui.viewmodel.C139CloudViewModel
+import com.yunget.app.ui.viewmodel.GuangYaCloudViewModel
+import com.yunget.app.ui.viewmodel.ILanzouCloudViewModel
+import com.yunget.app.ui.viewmodel.LanzouCloudViewModel
+import com.yunget.app.ui.viewmodel.Pan115CloudViewModel
 import com.yunget.app.ui.viewmodel.Pan123CloudViewModel
 import com.yunget.app.ui.viewmodel.QuarkCloudViewModel
 import com.yunget.app.ui.viewmodel.ResolveUiState
@@ -97,6 +103,18 @@ fun ResolveScreen(
     ucCloudViewModel: UCCoudViewModel,
     /** 123 云盘浏览 ViewModel（123 分享转存目录选择用） */
     pan123CloudViewModel: Pan123CloudViewModel,
+    /** 115 网盘浏览 ViewModel（115 分享转存目录选择用） */
+    pan115CloudViewModel: Pan115CloudViewModel,
+    /** 光鸭云盘浏览 ViewModel（光鸭分享转存目录选择用） */
+    guangyaCloudViewModel: GuangYaCloudViewModel,
+    /** 蓝奏云优享版浏览 ViewModel（转存目录选择用） */
+    ilanzouCloudViewModel: ILanzouCloudViewModel,
+    /** 蓝奏云浏览 ViewModel（转存目录选择用） */
+    lanzouCloudViewModel: LanzouCloudViewModel,
+    /** 收藏 ViewModel（主页快捷方式网格的数据源） */
+    bookmarkViewModel: BookmarkViewModel,
+    /** 点快捷方式网格的「管理」：切到收藏页 */
+    onOpenBookmarks: () -> Unit,
     modifier: Modifier = Modifier
 ) {
     val state = viewModel.uiState
@@ -224,7 +242,9 @@ fun ResolveScreen(
                         pwd = ""
                         pwdEdited = false
                     },
-                    onClearPwd = { pwd = "" }
+                    onClearPwd = { pwd = "" },
+                    bookmarkViewModel = bookmarkViewModel,
+                    onOpenBookmarks = onOpenBookmarks
                 )
             }
         }
@@ -310,7 +330,11 @@ private fun ResolveInputContent(
     pwd: String,
     onPwdChange: (String) -> Unit,
     onClearLink: () -> Unit,
-    onClearPwd: () -> Unit
+    onClearPwd: () -> Unit,
+    /** 收藏 ViewModel：主页快捷方式网格的数据源与「管理」入口 */
+    bookmarkViewModel: BookmarkViewModel,
+    /** 点「管理」：切到收藏页 */
+    onOpenBookmarks: () -> Unit
 ) {
     val isLoading = state is ResolveUiState.Loading
 
@@ -406,6 +430,19 @@ private fun ResolveInputContent(
                 }
             }
         }
+
+        // 主页快捷方式：已固定到主页的收藏，点一下直接解析。
+        // 放在输入区最后一个子项（错误卡片之后）—— 它是「快速入口」，
+        // 不该挤在输入框与解析按钮之间打断主流程。
+        HomeShortcutGrid(
+            viewModel = bookmarkViewModel,
+            onManage = onOpenBookmarks,
+            onOpen = { bookmark ->
+                onLinkChange(bookmark.link)
+                onPwdChange(bookmark.pwd)
+                viewModel.startResolve(bookmark.link, bookmark.pwd)
+            }
+        )
     }
 }
 
@@ -446,6 +483,11 @@ private fun platformLabel(platform: SharePlatform): String = when (platform) {
     SharePlatform.BAIDU -> "百度网盘"
     SharePlatform.C139 -> "139 网盘"
     SharePlatform.PAN123 -> "123云盘"
+    SharePlatform.PAN115 -> "115网盘"
+    SharePlatform.GUANGYA -> "光鸭云盘"
+    SharePlatform.ILANZOU -> "蓝奏云优享版"
+    SharePlatform.LANZOU -> "蓝奏云"
+    SharePlatform.GITHUB -> "GitHub"
 }
 
 /**

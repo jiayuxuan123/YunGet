@@ -11,7 +11,7 @@
 - 本仓库 fork 自上游 [CYQawa/YunX](https://github.com/CYQawa/YunX)，感谢原作者的工作。
 - 上游协议为 **GNU AGPL-3.0**，本项目同样以 **AGPL-3.0** 继续开源，并保留原始版权与协议声明。
 - 本项目在上游协议解析、网盘功能和 Android 应用结构基础上进行了二次开发。
-- 下载引擎已从项目内部实现迁移至独立的 [TurboDL](https://github.com/jiayuxuan123/TurboDL) SDK，以便将下载核心与具体应用解耦，并支持后续独立迭代。
+- 下载引擎已逐步从项目内部实现迁移至独立的 [TurboDL](https://github.com/jiayuxuan123/TurboDL) SDK，以便将下载核心与具体应用解耦，并支持后续独立迭代。
 - 当前 TurboDL 已用于 YunGet 的普通直链多线程下载，并逐步承担原有下载引擎的核心职责。
 - HLS 下载能力通过 TurboDL 的插件化机制接入，后续其他下载协议或能力也将以插件形式扩展。
 - **赞赏渠道说明**：应用内「支持开发」页的赞赏码仅面向**本二次开发版本**的维护；若想支持上游原项目作者，请移步 [上游仓库](https://github.com/CYQawa/YunX) 的捐赠渠道，避免权益混淆。

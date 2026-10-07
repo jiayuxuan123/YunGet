@@ -4,6 +4,8 @@ import android.content.Context
 import android.util.Log
 import com.yunget.app.data.db.DownloadTaskDao
 import com.yunget.app.data.db.DownloadTaskEntity
+import com.yunget.app.data.gopeed.GopeedEngine
+import com.yunget.app.data.prefs.SettingsRepository
 import dev.turbodl.core.DownloadRequest
 import dev.turbodl.core.DnsMode
 import dev.turbodl.core.ProxyMode
@@ -19,12 +21,16 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.cancel
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.update
+import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.sync.Mutex
+import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withContext
 import java.io.File
 import java.util.concurrent.ConcurrentHashMap
@@ -137,6 +143,62 @@ class TurboDownloadManager(
     /** roomId → TurboDL 下载到的临时文件 */
     private val turboOutputs = ConcurrentHashMap<Long, File>()
 
+    // ---------- 外部下载引擎（Gopeed）路由状态 ----------
+    //
+    // 为什么要有这一套：设置页的 `downloadEngine` 选了 Gopeed 时，「执行」这一层交给 Gopeed 内核
+    // （进程内 gomobile 核心），TurboDL 完全不参与；但任务登记/落库/进度/前台服务/清理回调
+    // 与内置路径**完全一致**，所以这里只加路由与同步，不改动既有的 TurboDL 路径。
+
+    /** 下载设置（引擎选择等）；管理器是长生命周期对象，懒读一次即可 */
+    private val settings by lazy { SettingsRepository(context) }
+
+    /**
+     * roomId → Gopeed 引擎任务 ID 的内存索引。
+     *
+     * DB 的 `engineTaskId` 才是持久化真源（进程重启后靠它找回任务），这里只给
+     * pause/remove 这类**同步**入口做判断，避免在主线程上查库。
+     */
+    private val taskEngineIds = ConcurrentHashMap<Long, String>()
+
+    /**
+     * roomId → 引擎任务的落盘目录（建任务时确定）。
+     *
+     * 完成时要拼「真实保存路径」，而 [GopeedEngine.resolveDownloadDir] 可能因为用户中途改设置
+     * 或权限变化而返回**另一个**目录 —— 引擎产物在哪个目录是建任务那一刻定下的，必须记住。
+     */
+    private val taskEngineDirs = ConcurrentHashMap<Long, File>()
+
+    /**
+     * 已经计入「前台服务保活」的引擎任务。
+     *
+     * 引擎任务不走 TurboDL 的事件回调路径，保活必须自己配对：**加入时**才拉起前台服务 + WakeLock，
+     * **移除时**才允许释放。用集合的 add/remove 返回值去重，保证无论从哪条路径终结
+     * （完成 / 失败 / 用户暂停 / 用户删除 / 引擎侧自己变 pause）都只扣一次。
+     */
+    private val engineKeepAliveIds = java.util.concurrent.ConcurrentHashMap.newKeySet<Long>()
+
+    /** 引擎任务进度同步协程（同一时刻只跑一个；没有可同步任务时自己退出） */
+    private var engineSyncJob: Job? = null
+
+    /**
+     * roomId → 引擎侧最近一次被处理的状态（"running"/"pause"/"wait"…）。
+     *
+     * 只用于「状态没变就不写库」：引擎的 pause/wait 会持续多轮，每轮都写库等于每 700ms
+     * 触发一次全表 Flow 重发 → 主线程重组整个下载列表。
+     */
+    private val engineLastEngineStatus = ConcurrentHashMap<Long, String>()
+
+    /** 引擎任务同步间隔（毫秒）：调用是本进程内分发、不走网络，可以问得勤一点 */
+    private val engineSyncIntervalMs = 700L
+
+    /**
+     * 引擎「启动 + 建任务」的串行锁。
+     *
+     * [GopeedEngine.start] 的幂等判断是「先读状态、再启动」，不是原子的：并发进入会重复加载 .so、
+     * 重复启动（Go 侧直接报错）。整目录批量入队时多条任务会并发走到这里，必须有这道闸。
+     */
+    private val engineLock = Mutex()
+
     /** 前台服务任务计数 */
     private val activeTaskCount = java.util.concurrent.atomic.AtomicInteger(0)
     /** 通知节流：按 roomId 分别记录上次通知时间，避免多任务互相干扰 */
@@ -168,6 +230,9 @@ class TurboDownloadManager(
         scope.launch {
             client.events.collect { ev -> onTurboEvent(ev) }
         }
+        // 引擎任务也接上进度同步：应用重启后引擎里未完成的任务（引擎自己持久化在它的 store 里）
+        // 必须继续回写本地记录，否则界面上的进度会永远停在重启前那一刻。
+        startEngineSync()
     }
 
     // ---------- 配置映射 ----------
@@ -514,7 +579,10 @@ class TurboDownloadManager(
         runCatching { scope.cancel() }
         runCatching { bootstrap.shutdown() }
         runCatching { releaseWakeLock() }
-        runCatching { DownloadService.stop(context) }
+        // 保活引用要**归还**而不是直接 stopService：引用计数是跨来源共享的
+        // （Gopeed 内核包下载 KernelProvisioner 也在用同一条前台服务），直接停会把别人的保活一起关掉。
+        // getAndSet(0) 的旧值 > 0 说明本管理器确实持有一份（acquire 只在 0→1 时真正拉起服务）。
+        if (activeTaskCount.getAndSet(0) > 0) runCatching { DownloadService.release(context) }
         turboIds.clear()
         turboIdToRoomId.clear()
         taskHeaders.clear()
@@ -557,7 +625,13 @@ class TurboDownloadManager(
         if (size > 0) taskSizes[id] = size
         taskNames[id] = safeName
         taskCallbacks[id] = onComplete
-        start(id, headers)
+        // 引擎路由：选了 Gopeed 且内核已导入 → 「执行」交给引擎，任务登记/写库/回调与内置路径一致；
+        // 否则一行不改地走原来的 TurboDL 路径。
+        if (shouldUseEngine()) {
+            startViaEngine(id, url, safeName, headers)
+        } else {
+            start(id, headers)
+        }
         return id
     }
 
@@ -570,6 +644,14 @@ class TurboDownloadManager(
         refreshConfigIfChanged()
         scope.launch {
             val task = dao.get(id) ?: return@launch
+            // 引擎任务分流：DB 里的 engineTaskId 非空说明这条任务由 Gopeed 引擎执行。
+            // ★ 绝不能落到下面的 TurboDL 路径 —— 同一个 URL 会被两套引擎重复下载。
+            // 走 DB 而不是内存索引：进程重启后索引是空的，而库里的记录还在。
+            if (task.engineTaskId.isNotBlank()) {
+                taskNames[id] = task.fileName
+                resumeEngineTask(id, task.engineTaskId)
+                return@launch
+            }
             taskNames[id] = task.fileName
             // 请求头：优先用传入的，其次内存缓存，最后从 DB 恢复（进程重启后）。
             val restoredHeaders = effectiveHeaders.ifEmpty {
@@ -602,6 +684,13 @@ class TurboDownloadManager(
     /** 暂停下载（保留断点）。 */
     override fun pause(id: Long) {
         Log.d(TAG, "pause: id=$id")
+        // 引擎任务分流：内存索引命中说明该任务由 Gopeed 引擎执行 —— 转发引擎暂停后直接返回。
+        // 引擎任务没有分片/临时文件，也不在 turboIds 里，下面的 TurboDL 清理对它全是无操作，
+        // 但会多扣一次保活计数（把还在下载的其它任务的前台服务一起关掉），所以必须分流。
+        taskEngineIds[id]?.let { engineId ->
+            pauseEngineTask(id, engineId)
+            return
+        }
         val turboId = turboIds.remove(id)
         if (turboId != null) turboIdToRoomId.remove(turboId)
         _stats.update { it - id }
@@ -615,6 +704,18 @@ class TurboDownloadManager(
     /** 删除任务（可选删除本地文件），并触发清理回调。 */
     override fun remove(id: Long, deleteLocal: Boolean) {
         Log.d(TAG, "remove: id=$id deleteLocal=$deleteLocal")
+        // 引擎任务分流（只做「额外」的事）：通知引擎把任务删掉；本地清理（DB 记录、已下载文件、
+        // 清理回调）继续走下面的原逻辑 —— 语义与内置路径完全一致。
+        val engineId = taskEngineIds.remove(id)
+        if (engineId != null) {
+            releaseEngineTaskMemory(id)
+            // 保活按集合精确配对：可能从未计入（进程重启后才发现的历史任务），那时不扣。
+            if (engineKeepAliveIds.remove(id)) onTaskFinished()
+            scope.launch {
+                runCatching { withContext(Dispatchers.IO) { GopeedEngine.deleteTask(engineId) } }
+                    .onFailure { Log.e(TAG, "引擎任务删除失败：id=$id ${it.message}", it) }
+            }
+        }
         val turboId = turboIds.remove(id)
         if (turboId != null) turboIdToRoomId.remove(turboId)
         _stats.update { it - id }
@@ -632,7 +733,9 @@ class TurboDownloadManager(
             }
             dao.delete(id)
             cleanup?.let { runCatching { it() } }
-            onTaskFinished()
+            // 引擎任务的保活已在上面的分流里按集合精确配对过，这里不能再扣（否则会多扣一次，
+            // 把其它仍在下载的任务的前台服务一起关掉）
+            if (engineId == null) onTaskFinished()
         }
     }
 
@@ -655,6 +758,254 @@ class TurboDownloadManager(
             val obj = JSONObject(json)
             buildMap { obj.keys().forEach { k -> put(k, obj.optString(k)) } }
         }.getOrDefault(emptyMap())
+
+    // ---------- 外部下载引擎（Gopeed）路由 ----------
+
+    /**
+     * 是否把任务交给 Gopeed 引擎：设置里选了引擎 + 内核已导入。
+     *
+     * 内核不存在时这里**不静默改设置**（自愈在应用启动时做一次，见 `YunGetApp.autoStartGopeedIfSelected`），
+     * 只让这条任务按内置路径走 —— 「内核被删了」不该让下载功能整个失效。
+     */
+    private fun shouldUseEngine(): Boolean =
+        settings.downloadEngine == SettingsRepository.ENGINE_GOPEED && GopeedEngine.isInstalled(context)
+
+    /**
+     * 用 Gopeed 引擎开始下载：确保引擎在跑 → 建任务 → 引擎任务 ID 写回本地记录 → 拉起进度同步。
+     *
+     * 建任务失败按普通失败任务落库（errorMsg 写引擎原文），**不做静默回退到内置下载器** ——
+     * 用户明确选了引擎，悄悄换下载器比报错更难排查。
+     */
+    private suspend fun startViaEngine(
+        id: Long,
+        url: String,
+        fileName: String,
+        headers: Map<String, String>,
+    ) {
+        val created = try {
+            engineLock.withLock {
+                withContext(Dispatchers.IO) {
+                    val dir = GopeedEngine.resolveDownloadDir(context)
+                    if (GopeedEngine.state.value != GopeedEngine.State.RUNNING) {
+                        GopeedEngine.start(context, dir)
+                    }
+                    val engineTaskId = GopeedEngine.createTask(
+                        url = url,
+                        saveDir = dir,
+                        headers = headers,
+                        // 连接数用与内置路径同一个设置值（同一个「下载线程数」口径，避免两套设置各说各话）
+                        connections = threadProvider().coerceIn(1, 128),
+                        name = fileName,
+                        // 任务侧 id 塞进标签：出了问题时能在引擎侧直接反查是本地哪条任务
+                        labels = mapOf("yungetTaskId" to id.toString()),
+                    )
+                    dir to engineTaskId
+                }
+            }
+        } catch (e: Throwable) {
+            Log.e(TAG, "引擎建任务失败：id=$id ${e.message}", e)
+            dao.updateStatus(id, DownloadTaskEntity.STATUS_FAILED)
+            dao.updateError(id, e.message ?: e.toString())
+            return
+        }
+        val dir = created.first
+        val engineTaskId = created.second
+        Log.d(TAG, "引擎任务已创建：roomId=$id engineId=$engineTaskId dir=${dir.absolutePath}")
+        taskEngineIds[id] = engineTaskId
+        taskEngineDirs[id] = dir
+        // 保活：第一个引擎任务拉起前台服务 + WakeLock，锁屏/退后台引擎才不会被系统收掉
+        if (engineKeepAliveIds.add(id)) onTaskStarted(id)
+        dao.updateEngineTaskId(id, engineTaskId)
+        dao.updateStatus(id, DownloadTaskEntity.STATUS_DOWNLOADING)
+        startEngineSync()
+    }
+
+    /**
+     * 引擎任务进度同步：把引擎侧状态回写到本地记录（下载页读的是 Room，所以必须回写），
+     * 完成时触发 onComplete 清理回调。没有可同步任务就自动退出，下次建引擎任务时再拉起。
+     *
+     * 每轮先确保引擎在运行：进程重启后引擎里可能还有未完成任务（引擎自己持久化在它的 store 里），
+     * 引擎重启后这些任务一般是 pause，会被回写成本地「已暂停」，由用户决定是否继续。
+     */
+    private fun startEngineSync() {
+        if (engineSyncJob?.isActive == true) return
+        engineSyncJob = scope.launch {
+            while (isActive) {
+                val pending = runCatching { dao.listSyncableEngineTasks() }.getOrDefault(emptyList())
+                if (pending.isEmpty()) return@launch
+                if (GopeedEngine.state.value != GopeedEngine.State.RUNNING && GopeedEngine.isInstalled(context)) {
+                    runCatching {
+                        engineLock.withLock {
+                            withContext(Dispatchers.IO) {
+                                GopeedEngine.start(context, GopeedEngine.resolveDownloadDir(context))
+                            }
+                        }
+                    }.onFailure { Log.e(TAG, "引擎同步时启动引擎失败：${it.message}", it) }
+                }
+                for (task in pending) {
+                    // 索引每轮补一次：进程重启后的历史引擎任务靠它进入 pause/remove 的分流判据
+                    taskEngineIds[task.id] = task.engineTaskId
+                    taskNames[task.id] = task.fileName
+                    val status = runCatching {
+                        withContext(Dispatchers.IO) { GopeedEngine.taskStatus(task.engineTaskId) }
+                    }.getOrNull() ?: continue
+                    when (status.status) {
+                        "done" -> completeEngineTask(task, status.total)
+                        "error" -> {
+                            Log.e(TAG, "引擎任务失败：roomId=${task.id} engineId=${task.engineTaskId}")
+                            dao.updateStatus(task.id, DownloadTaskEntity.STATUS_FAILED)
+                            dao.updateError(task.id, "Gopeed 引擎下载失败")
+                            _stats.update { it - task.id }
+                            taskEngineIds.remove(task.id)
+                            releaseEngineTaskMemory(task.id)
+                            if (engineKeepAliveIds.remove(task.id)) onTaskFinished()
+                        }
+                        "pause" -> {
+                            // 引擎侧自己变暂停（进程重启后未续传等）：保活到此为止，用户点继续时会重新拉起。
+                            // ★ 状态没变就不写库：暂停中的任务每轮都会读回 "pause"，不加这道闸就是
+                            //   每 700ms 一次全表 Flow 重发 → 下载列表整表重组。
+                            if (engineStatusChanged(task.id, "pause")) {
+                                dao.updateStatus(task.id, DownloadTaskEntity.STATUS_PAUSED)
+                            }
+                            _stats.update { it - task.id }
+                            if (engineKeepAliveIds.remove(task.id)) onTaskFinished()
+                        }
+                        "wait" -> {
+                            // 超出「最大同时下载任务数」，被引擎排进 waitTasks 等空位
+                            // （上限见 GopeedEngine.applyRuntimeConfig）→ 本地记成「等待中」。
+                            // ★ 不能落到下面的 else：那会显示成 0% 的「下载中」，看着像卡死；
+                            //   进度一律不动，任务重新上车时库里的进度还是上次那份。
+                            if (engineStatusChanged(task.id, "wait")) {
+                                dao.updateStatus(task.id, DownloadTaskEntity.STATUS_PENDING)
+                            }
+                            _stats.update { it - task.id }
+                        }
+                        else -> {
+                            // 其余（running/ready…）按「正在下载」处理；记一次基准供上面的状态比较使用
+                            engineStatusChanged(task.id, "running")
+                            val total = if (status.total > 0L) status.total else task.totalSize
+                            // 复用 TurboDL 那条写库节流（纯时间节流）：引擎每 700ms 报一次，
+                            // 不节流的话每次写库都会让 observeAll() 重发整表、主线程重组下载列表
+                            if (shouldWriteDb(task.id, status.downloaded)) {
+                                dao.updateProgress(
+                                    task.id,
+                                    DownloadTaskEntity.STATUS_DOWNLOADING,
+                                    status.downloaded,
+                                    total,
+                                )
+                            }
+                            // 实时速度直接取引擎给的，剩余时间自己算
+                            _stats.update {
+                                it + (task.id to DownloadStats(
+                                    speed = status.speed,
+                                    remainMillis = if (status.speed > 0L && total > status.downloaded) {
+                                        (total - status.downloaded) * 1000L / status.speed
+                                    } else {
+                                        -1L
+                                    },
+                                    chunkCount = threadProvider().coerceAtLeast(1),
+                                ))
+                            }
+                            // 前台通知：与内置路径共用同一条节流与速度来源（_stats），故写在 _stats 之后
+                            notifyProgress(task.id, task.fileName, status.downloaded, total)
+                        }
+                    }
+                }
+                delay(engineSyncIntervalMs)
+            }
+        }
+    }
+
+    /**
+     * 引擎状态变化判定（原子）。引擎任务的「暂停/排队」会持续多轮，状态没变就不该写库。
+     *
+     * 返回值被忽略的调用点（"running" 分支）只是把基准刷新成当下状态，
+     * 这样「运行 → 暂停」在下一次真实变化时仍能触发写入。
+     */
+    private fun engineStatusChanged(id: Long, status: String): Boolean =
+        engineLastEngineStatus.put(id, status) != status
+
+    /**
+     * 引擎任务完成：读一次任务详情拿**真实文件名**（BT/磁力的名字要等引擎解析完元数据才有），
+     * 把保存路径与真实落盘大小落库，再走与内置路径一致的收尾（清理回调 / 保活 / 统计）。
+     *
+     * 与内置路径的区别：引擎**直接写进最终目录**（不经过应用缓存再交 DownloadSaver），
+     * 所以这里没有「保存到 MediaStore」这一步，savePath 就是引擎产物路径。
+     */
+    private suspend fun completeEngineTask(task: DownloadTaskEntity, size: Long) {
+        // 建任务时记下的目录优先（引擎产物就在那儿）；索引没有（进程重启后）才重新解析
+        val dir = taskEngineDirs.remove(task.id)
+            ?: runCatching { GopeedEngine.resolveDownloadDir(context) }
+                .getOrElse { File(context.getExternalFilesDir(null) ?: context.filesDir, "gopeed") }
+        val detail = runCatching { withContext(Dispatchers.IO) { GopeedEngine.taskDetail(task.engineTaskId) } }
+            .onFailure { Log.w(TAG, "读取引擎任务详情失败，用本地文件名兜底：id=${task.id} ${it.message}") }
+            .getOrNull()
+        val realName = detail?.name?.takeIf { it.isNotBlank() } ?: task.fileName
+        val savedPath = File(dir, realName).absolutePath
+        // 完成时用**实际落盘大小**修正进度（与内置路径同一口径）：进度是节流写库的，
+        // 只写 status 会让界面停在「已完成 · 99%」。多文件种子（folder=true）落盘是目录，
+        // length() 没有意义，此时退回引擎给出的总大小。
+        val landed = File(savedPath)
+        val actualSize = if (landed.isFile) landed.length() else size
+        val finalTotal = maxOf(if (size > 0) size else 0L, actualSize)
+        dao.complete(task.id, DownloadTaskEntity.STATUS_COMPLETED, savedPath, actualSize, finalTotal)
+        Log.d(
+            TAG,
+            "引擎任务完成：roomId=${task.id} engineId=${task.engineTaskId} path=$savedPath " +
+                "size=$actualSize total=$finalTotal files=${detail?.fileCount ?: -1} folder=${detail?.folder ?: false}"
+        )
+        _stats.update { it - task.id }
+        if (realName != task.fileName) {
+            // 引擎命名与本地占位名不同（BT 种子名 / 服务器建议名）：回写，失败只记日志、不影响已完成状态
+            runCatching { dao.updateFileName(task.id, realName) }
+                .onFailure { Log.w(TAG, "回写引擎文件名失败：id=${task.id} ${it.message}") }
+        }
+        taskEngineIds.remove(task.id)
+        releaseEngineTaskMemory(task.id)
+        // 保活收尾（可能从未计入，见 engineKeepAliveIds 注释）
+        if (engineKeepAliveIds.remove(task.id)) onTaskFinished()
+        // 保存成功才触发清理回调（如删除网盘临时转存文件），语义与内置路径一致
+        taskCallbacks.remove(task.id)?.let { cb -> runCatching { cb() } }
+    }
+
+    /** 清掉只服务于某个引擎任务的内存数据（请求头/大小来自入队，引擎侧不用它们） */
+    private fun releaseEngineTaskMemory(id: Long) {
+        taskHeaders.remove(id)
+        taskSizes.remove(id)
+        taskEngineDirs.remove(id)
+        engineLastEngineStatus.remove(id)
+    }
+
+    /**
+     * 引擎任务暂停（用户点击）：转发给引擎，并把本地状态写成「已暂停」。
+     *
+     * 保活在**这里**配对收尾，且下面的 TurboDL 收尾不会执行（见 [pause] 的分流），
+     * 因此每个引擎任务的 保活 +1 恰好对应一次 -1。
+     */
+    private fun pauseEngineTask(id: Long, engineId: String) {
+        Log.d(TAG, "引擎任务暂停：id=$id engineId=$engineId")
+        _stats.update { it - id }
+        if (engineKeepAliveIds.remove(id)) onTaskFinished()
+        scope.launch {
+            runCatching { withContext(Dispatchers.IO) { GopeedEngine.pauseTask(engineId) } }
+                .onFailure { Log.e(TAG, "引擎暂停失败：id=$id ${it.message}", it) }
+            dao.updateStatus(id, DownloadTaskEntity.STATUS_PAUSED)
+        }
+    }
+
+    /** 引擎任务继续：转发 continue 并重新拉起同步循环 */
+    private fun resumeEngineTask(id: Long, engineId: String) {
+        Log.d(TAG, "引擎任务继续：id=$id engineId=$engineId")
+        taskEngineIds[id] = engineId
+        // 继续下载：重新拉起前台服务保活（暂停/完成时刚收尾过）
+        if (engineKeepAliveIds.add(id)) onTaskStarted(id)
+        scope.launch {
+            runCatching { withContext(Dispatchers.IO) { GopeedEngine.continueTask(engineId) } }
+                .onFailure { Log.e(TAG, "引擎继续失败：id=$id ${it.message}", it) }
+            dao.updateStatus(id, DownloadTaskEntity.STATUS_DOWNLOADING)
+            startEngineSync()
+        }
+    }
 
     // ---------- TurboDL 事件桥接 ----------
 
@@ -779,7 +1130,9 @@ class TurboDownloadManager(
     private fun onTaskStarted(id: Long) {
         if (activeTaskCount.getAndIncrement() == 0) {
             val name = taskNames[id] ?: "下载任务"
-            DownloadService.start(context, name)
+            // 走引用计数版：Gopeed 内核包下载（KernelProvisioner）也在用同一条前台服务，
+            // 谁都不能直接把服务停掉（详见 DownloadService.acquire/release）
+            DownloadService.acquire(context, name)
         }
         acquireWakeLockIfNeeded()
     }
@@ -787,7 +1140,7 @@ class TurboDownloadManager(
     private fun onTaskFinished() {
         if (activeTaskCount.decrementAndGet() <= 0) {
             activeTaskCount.set(0)
-            DownloadService.stop(context)
+            DownloadService.release(context)
             releaseWakeLock()
         }
     }

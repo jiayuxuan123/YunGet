@@ -39,6 +39,8 @@ class SecureCredentialContractTest {
         }
 
         override fun isEncrypted(stored: String): Boolean = stored.startsWith("yunx:v1:")
+
+        override fun onKeyProvisioned(listener: () -> Unit) = Unit
     }
 
     /** 解密即失败的替身（模拟密钥丢失 / 数据损坏）。 */
@@ -48,6 +50,8 @@ class SecureCredentialContractTest {
             throw IllegalStateException("keystore key unavailable")
 
         override fun isEncrypted(stored: String): Boolean = stored.startsWith("yunx:v1:")
+
+        override fun onKeyProvisioned(listener: () -> Unit) = Unit
     }
 
     private val cipher = FakeCipher()
@@ -113,5 +117,79 @@ class SecureCredentialContractTest {
             threw = true
         }
         assertTrue("purpose 不匹配时必须解密失败", threw)
+    }
+
+    // ------------------------------------------- 密钥故障判定（同步上游 v1.2.9）
+
+    /**
+     * 「哪些异常算密钥故障」这个判定决定了两件事：**会不会把好密钥删掉**（误判为 true
+     * 时删键重建 ⇒ 全部账号真的作废），以及**会不会在该自愈时不动**（漏判为 false 时
+     * 用户永远读不到凭证）。两个方向都会造成实际损害，所以逐条钉死。
+     */
+    @Test
+    fun onlyPermanentKeyFailureCountsAsLost() {
+        // 只有「条目永久失效」才算丢了 —— 这是唯一允许清数据的情形
+        assertTrue(
+            "永久失效必须判为已丢失",
+            CredentialStore.isKeyLost(
+                CredentialKeyException.PermanentlyInvalid("Key not found")
+            )
+        )
+        assertFalse(
+            "『暂时取不到』绝不能判为已丢失 —— 那会把用户本来还能解开的账号清掉",
+            CredentialStore.isKeyLost(CredentialKeyException.Unavailable("设备尚未解锁"))
+        )
+    }
+
+    @Test
+    fun ciphertextDamageIsNotAKeyFailure() {
+        // AEADBadTagException 是 GeneralSecurityException 的子类：若判定顺序写反，
+        // 「密文被改 / 跨版本残留」会被误认成密钥故障 → 删掉好密钥 → 用户凭证全废。
+        val badTag = javax.crypto.AEADBadTagException("tag mismatch")
+        assertFalse(
+            "GCM 认证失败属于密文损坏，不得触发换密钥",
+            AndroidKeystoreCredentialCipher.isKeyProblem(badTag)
+        )
+        assertFalse(
+            "同一原因经由 CredentialStore 判定也必须为 false",
+            CredentialStore.isKeyFailure(badTag)
+        )
+    }
+
+    @Test
+    fun algorithmUnsupportedIsNotAKeyFailure() {
+        assertFalse(
+            "环境不支持该算法/填充时换密钥同样无效，不得删键",
+            AndroidKeystoreCredentialCipher.isKeyProblem(
+                java.security.NoSuchAlgorithmException("AES/GCM/NoPadding")
+            )
+        )
+    }
+
+    @Test
+    fun keystoreErrorsAreRecognizedAsKeyFailures() {
+        // 三条崩溃报告对应的异常类型，都必须被识别（否则又走回「裸异常击穿主线程」）
+        assertTrue(
+            "InvalidKeyException（Keystore operation failed）必须被识别",
+            AndroidKeystoreCredentialCipher.isKeyProblem(
+                java.security.InvalidKeyException("Keystore operation failed")
+            )
+        )
+        assertTrue(
+            "KeyStoreException: Invalid key blob 必须被识别",
+            AndroidKeystoreCredentialCipher.isKeyProblem(
+                java.security.KeyStoreException("Invalid key blob")
+            )
+        )
+        assertTrue(
+            "只有消息文本、没有可判定类型的机型也必须被识别",
+            AndroidKeystoreCredentialCipher.isKeyProblem(
+                IllegalStateException("key blob is invalid")
+            )
+        )
+        assertFalse(
+            "普通业务异常不得被当成密钥故障",
+            AndroidKeystoreCredentialCipher.isKeyProblem(IllegalStateException("网络超时"))
+        )
     }
 }

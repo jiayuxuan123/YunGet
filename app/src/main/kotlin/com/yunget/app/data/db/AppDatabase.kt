@@ -10,8 +10,8 @@ import com.yunget.app.data.security.AndroidKeystoreCredentialCipher
 import com.yunget.app.data.security.CredentialCipher
 
 @Database(
-    entities = [QuarkAccountEntity::class, DownloadTaskEntity::class, UCAccountEntity::class, XunleiAccountEntity::class, BaiduAccountEntity::class, C139AccountEntity::class, Pan123AccountEntity::class, BookmarkEntity::class],
-    version = 11,
+    entities = [QuarkAccountEntity::class, DownloadTaskEntity::class, UCAccountEntity::class, XunleiAccountEntity::class, BaiduAccountEntity::class, C139AccountEntity::class, Pan123AccountEntity::class, BookmarkEntity::class, Pan115AccountEntity::class, GuangYaAccountEntity::class, ILanzouAccountEntity::class, LanzouAccountEntity::class],
+    version = 19,
     exportSchema = false
 )
 abstract class AppDatabase : RoomDatabase() {
@@ -33,6 +33,14 @@ abstract class AppDatabase : RoomDatabase() {
     protected abstract fun rawC139AccountDao(): C139AccountDao
 
     protected abstract fun rawPan123AccountDao(): Pan123AccountDao
+
+    protected abstract fun rawPan115AccountDao(): Pan115AccountDao
+
+    protected abstract fun rawGuangYaAccountDao(): GuangYaAccountDao
+
+    protected abstract fun rawILanzouAccountDao(): ILanzouAccountDao
+
+    protected abstract fun rawLanzouAccountDao(): LanzouAccountDao
 
     /** 网盘链接收藏（无凭证内容，无需加密装饰器）。 */
     abstract fun bookmarkDao(): BookmarkDao
@@ -60,6 +68,14 @@ abstract class AppDatabase : RoomDatabase() {
 
     fun pan123AccountDao(): Pan123AccountDao = SecureAccountDaos.pan123(rawPan123AccountDao(), credentialCipher)
 
+    fun pan115AccountDao(): Pan115AccountDao = SecureAccountDaos.pan115(rawPan115AccountDao(), credentialCipher)
+
+    fun guangYaAccountDao(): GuangYaAccountDao = SecureAccountDaos.guangYa(rawGuangYaAccountDao(), credentialCipher)
+
+    fun iLanzouAccountDao(): ILanzouAccountDao = SecureAccountDaos.iLanzou(rawILanzouAccountDao(), credentialCipher)
+
+    fun lanzouAccountDao(): LanzouAccountDao = SecureAccountDaos.lanzou(rawLanzouAccountDao(), credentialCipher)
+
     companion object {
         @Volatile
         private var instance: AppDatabase? = null
@@ -71,12 +87,26 @@ abstract class AppDatabase : RoomDatabase() {
                     AppDatabase::class.java,
                     "yunget.db"
                 )
-                    .addMigrations(MIGRATION_9_10, MIGRATION_10_11)
+                    .addMigrations(
+                        MIGRATION_9_10,
+                        MIGRATION_10_11,
+                        MIGRATION_11_12,
+                        MIGRATION_12_13,
+                        MIGRATION_13_14,
+                        MIGRATION_14_15,
+                        MIGRATION_15_16,
+                        MIGRATION_16_17,
+                        MIGRATION_17_18,
+                        MIGRATION_18_19,
+                    )
                     // 早期开发版（1-8）无可靠 schema；从 v9 起必须保留凭证和下载任务
                     .fallbackToDestructiveMigrationFrom(1, 2, 3, 4, 5, 6, 7, 8)
                     .build()
                     .also {
-                        it.credentialCipher = AndroidKeystoreCredentialCipher()
+                        // 用**全进程唯一**实例（不是 new 一个）：密钥重建的通知
+                        // （provisionedListener）只有构造者那一个实例能收到，
+                        // 各 new 一份会让「密钥刚被重建」的判断在实例之间错位。
+                        it.credentialCipher = AndroidKeystoreCredentialCipher.shared
                         instance = it
                     }
             }
@@ -110,5 +140,148 @@ abstract class AppDatabase : RoomDatabase() {
                 )
             }
         }
+
+        /**
+         * v12：下载任务记录平均速度。
+         *
+         * 与上游 YunX 的迁移链**对齐版本号**：上游 v12 是这个字段、v13 才是收藏表，
+         * 而本项目此前把收藏直接做在 v11。这里补齐 v12/v13 两跳，
+         * 使后续版本号与上游一致 —— 否则同一个 `version = N` 在两边的表结构不同，
+         * 将来若要合并或参考上游迁移会踩错。
+         *
+         * `addColumn` 对已存在的列会抛异常，故先探测。
+         */
+        private val MIGRATION_11_12 = object : Migration(11, 12) {
+            override fun migrate(db: SupportSQLiteDatabase) {
+                if (!db.hasColumn("download_task", "avgSpeed")) {
+                    db.execSQL("ALTER TABLE download_task ADD COLUMN avgSpeed INTEGER NOT NULL DEFAULT 0")
+                }
+            }
+        }
+
+        /** v13：收藏表（本项目在 v11 已建，这里做存在性保护，老库走到这跳时不会重复建表）。 */
+        private val MIGRATION_12_13 = object : Migration(12, 13) {
+            override fun migrate(db: SupportSQLiteDatabase) {
+                db.execSQL(
+                    "CREATE TABLE IF NOT EXISTS `bookmark` (" +
+                        "`id` INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL, " +
+                        "`link` TEXT NOT NULL, " +
+                        "`title` TEXT NOT NULL, " +
+                        "`platform` TEXT NOT NULL, " +
+                        "`pwd` TEXT NOT NULL, " +
+                        "`category` TEXT NOT NULL, " +
+                        "`createTime` INTEGER NOT NULL)"
+                )
+            }
+        }
+
+        /** v14：收藏支持「主页快捷方式」标记（0/1）；老收藏默认不在主页显示。 */
+        private val MIGRATION_13_14 = object : Migration(13, 14) {
+            override fun migrate(db: SupportSQLiteDatabase) {
+                if (!db.hasColumn("bookmark", "homePinned")) {
+                    db.execSQL("ALTER TABLE bookmark ADD COLUMN homePinned INTEGER NOT NULL DEFAULT 0")
+                }
+            }
+        }
+
+        /** v15：主页快捷方式色块的自定义文字；空串 = 自动取标题前几个字。 */
+        private val MIGRATION_14_15 = object : Migration(14, 15) {
+            override fun migrate(db: SupportSQLiteDatabase) {
+                if (!db.hasColumn("bookmark", "homeLabel")) {
+                    db.execSQL("ALTER TABLE bookmark ADD COLUMN homeLabel TEXT NOT NULL DEFAULT ''")
+                }
+            }
+        }
+
+        /** v16：115 网盘登录凭证（Cookie 落库前在 SecureAccountDaos 里加密）。 */
+        private val MIGRATION_15_16 = object : Migration(15, 16) {
+            override fun migrate(db: SupportSQLiteDatabase) {
+                db.execSQL(
+                    "CREATE TABLE IF NOT EXISTS `pan115_account` (" +
+                        "`id` TEXT NOT NULL, " +
+                        "`cookie` TEXT NOT NULL, " +
+                        "`nickname` TEXT NOT NULL, " +
+                        "`updatedAt` INTEGER NOT NULL, " +
+                        "PRIMARY KEY(`id`))"
+                )
+            }
+        }
+
+        /** v17：下载任务记录外部引擎任务 ID（空串 = 内置分片下载器）。 */
+        private val MIGRATION_16_17 = object : Migration(16, 17) {
+            override fun migrate(db: SupportSQLiteDatabase) {
+                if (!db.hasColumn("download_task", "engineTaskId")) {
+                    db.execSQL(
+                        "ALTER TABLE `download_task` ADD COLUMN `engineTaskId` TEXT NOT NULL DEFAULT ''"
+                    )
+                }
+            }
+        }
+
+        /** v18：新增光鸭云盘 / 蓝奏云优享版 / 蓝奏云登录凭证表（落库前加密）。 */
+        private val MIGRATION_17_18 = object : Migration(17, 18) {
+            override fun migrate(db: SupportSQLiteDatabase) {
+                db.execSQL(
+                    "CREATE TABLE IF NOT EXISTS `guangya_account` (" +
+                        "`id` TEXT NOT NULL, " +
+                        "`accessToken` TEXT NOT NULL, " +
+                        "`refreshToken` TEXT NOT NULL, " +
+                        "`deviceId` TEXT NOT NULL, " +
+                        "`deviceSign` TEXT NOT NULL, " +
+                        "`account` TEXT NOT NULL, " +
+                        "`nickname` TEXT NOT NULL, " +
+                        "`updatedAt` INTEGER NOT NULL, " +
+                        "PRIMARY KEY(`id`))"
+                )
+                db.execSQL(
+                    "CREATE TABLE IF NOT EXISTS `ilanzou_account` (" +
+                        "`id` TEXT NOT NULL, " +
+                        "`appToken` TEXT NOT NULL, " +
+                        "`uuid` TEXT NOT NULL, " +
+                        "`account` TEXT NOT NULL, " +
+                        "`password` TEXT NOT NULL, " +
+                        "`userId` TEXT NOT NULL, " +
+                        "`nickname` TEXT NOT NULL, " +
+                        "`updatedAt` INTEGER NOT NULL, " +
+                        "PRIMARY KEY(`id`))"
+                )
+                db.execSQL(
+                    "CREATE TABLE IF NOT EXISTS `lanzou_account` (" +
+                        "`id` TEXT NOT NULL, " +
+                        "`cookie` TEXT NOT NULL, " +
+                        "`nickname` TEXT NOT NULL, " +
+                        "`updatedAt` INTEGER NOT NULL, " +
+                        "PRIMARY KEY(`id`))"
+                )
+            }
+        }
+
+        /**
+         * v19：迅雷登录方式标记（区分 App 通道与网页登录）。
+         *
+         * 两种登录方式拿到的 refresh token **必须用各自的 OAuth 客户端去刷新**，
+         * 混用必然失败 —— 表现为「刚登录就提示过期」。
+         */
+        private val MIGRATION_18_19 = object : Migration(18, 19) {
+            override fun migrate(db: SupportSQLiteDatabase) {
+                if (!db.hasColumn("xunlei_account", "authType")) {
+                    db.execSQL(
+                        "ALTER TABLE `xunlei_account` ADD COLUMN `authType` TEXT NOT NULL DEFAULT ''"
+                    )
+                }
+            }
+        }
+
+        /** 列是否存在：迁移里加列前先探测，避免「重复加列」把升级路径炸掉。 */
+        private fun SupportSQLiteDatabase.hasColumn(table: String, column: String): Boolean =
+            runCatching {
+                query("PRAGMA table_info(`$table`)").use { cursor ->
+                    val nameIndex = cursor.getColumnIndex("name")
+                    while (cursor.moveToNext()) {
+                        if (nameIndex >= 0 && cursor.getString(nameIndex) == column) return true
+                    }
+                }
+                false
+            }.getOrDefault(false)
     }
 }

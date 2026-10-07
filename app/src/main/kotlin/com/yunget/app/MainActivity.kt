@@ -1,41 +1,26 @@
 package com.yunget.app
 
-import android.Manifest
-import android.content.pm.PackageManager
-import android.os.Build
 import android.os.Bundle
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
-import androidx.activity.result.contract.ActivityResultContracts
-import androidx.core.content.ContextCompat
 import com.yunget.app.ui.MainScreen
+import com.yunget.app.ui.screens.SafetyNoticeDialog
 import com.yunget.app.ui.theme.ComposeEmptyActivityTheme
 
 class MainActivity : ComponentActivity() {
 
-    // Android 13+：下载前台服务通知需要动态授权，首次启动即引导（无论通知栏开关状态，授权后通知才可见）
-    private val notificationPermLauncher =
-        registerForActivityResult(ActivityResultContracts.RequestPermission()) { }
-
+    // ★ 通知权限不再在启动时申请/引导：统一收到引导页第 3 页（见 ui/screens/OnboardingPermissionPage.kt），
+    //   之后只有设置页里的手动入口（「通知栏下载进度」）会再申请，避免每次启动都弹窗打扰。
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         enableEdgeToEdge()
-        requestNotificationPermissionIfNeeded()
         setContent {
             ComposeEmptyActivityTheme {
                 MainScreen()
+                // 首次启动的安全提示（确认过就写标记，之后不再弹，见 SafetyNoticeDialog）
+                SafetyNoticeDialog()
             }
-        }
-    }
-
-    /** Android 13+ 申请通知权限；低版本（<33）系统自动授予，无需申请 */
-    private fun requestNotificationPermissionIfNeeded() {
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU &&
-            ContextCompat.checkSelfPermission(this, Manifest.permission.POST_NOTIFICATIONS) !=
-            PackageManager.PERMISSION_GRANTED
-        ) {
-            notificationPermLauncher.launch(Manifest.permission.POST_NOTIFICATIONS)
         }
     }
 }

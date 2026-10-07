@@ -37,15 +37,43 @@ object UpdateChecker {
     private const val RELEASES_LIST_URL =
         "https://api.github.com/repos/jiayuxuan123/YunGet/releases?per_page=30"
 
+    /**
+     * 任意仓库的 Release 列表接口（Gopeed 内核仓库等参数化调用用）。
+     * @param repo `owner/name` 形式
+     */
+    private fun releasesListUrl(repo: String): String =
+        "https://api.github.com/repos/$repo/releases?per_page=30"
+
     /** GitHub 下载加速镜像站前缀（国内直连 GitHub 慢/失败时的兜底下载通道） */
     const val MIRROR_PREFIX = "https://cdn.gh-proxy.org/"
 
-    /** 把 GitHub release 直链转成镜像站直链：https://cdn.gh-proxy.org/<原直链> */
-    fun mirrorUrl(url: String): String = MIRROR_PREFIX + url
+    /** 把 GitHub release 直链转成镜像站直链：`<前缀><原直链>`；前缀未配置时用内置默认 */
+    fun mirrorUrl(url: String, prefix: String = MIRROR_PREFIX): String = prefix + url
+
+    /**
+     * Release 说明里「网盘下载」条目的匹配规则，形如：
+     * `[网盘下载](https://pan.quark.cn/s/a7287ee935cb)`
+     * 命中时客户端把主按钮切成「网盘更新」（走内置解析下载），GitHub 直链退到次级入口。
+     *
+     * Gopeed 内核仓库同样用这个约定发布网盘镜像，所以这条规则不只服务于应用自身更新。
+     */
+    private val NETDISK_LINK_REGEX = Regex("""\[网盘下载\]\s*\(\s*(https?://[^)\s]+?)\s*\)""")
+
+    /** 从 Release 说明正文里提取「网盘下载」链接；没有该条目时返回 null */
+    fun netdiskDownloadUrl(body: String): String? =
+        NETDISK_LINK_REGEX.find(body)
+            ?.groupValues
+            ?.getOrNull(1)
+            ?.trim()
+            ?.takeIf { it.isNotBlank() }
 
     data class Asset(
         val name: String,
-        val downloadUrl: String
+        val downloadUrl: String,
+        /** 资产大小（GitHub API 的 size，字节）；缺省 0 = 未知（旧调用点不传） */
+        val size: Long = 0L,
+        /** 资产摘要，形如 `sha256:xxxx`；缺省空串 = 未知（GitHub 只在较新的响应里给） */
+        val digest: String = ""
     )
 
     data class Release(
@@ -55,7 +83,15 @@ object UpdateChecker {
         val publishedAt: String,
         /** 是否为预发布（测试版）。宿主可据此在提示里标明"测试版"。 */
         val prerelease: Boolean = false,
+        /** Release 页面地址（html_url），供「打开 GitHub 页面」跳浏览器；缺省空串 */
+        val htmlUrl: String = "",
     )
+
+    /** 更新检测结果：失败时带上可读原因（HTTP 码 / 异常信息），既写 E 级日志也直接给用户提示 */
+    sealed class CheckResult {
+        data class Success(val release: Release) : CheckResult()
+        data class Failure(val reason: String) : CheckResult()
+    }
 
     /**
      * 比较两个版本号：v1 > v2 返回正数，v1 < v2 返回负数，相等返回 0。
@@ -140,14 +176,17 @@ object UpdateChecker {
      *
      * @param includePrerelease 是否把预发布版纳入候选。默认 true ——
      *   本项目的测试版就是预发布，用户需要能收到它们。
+     * @param repo 目标仓库（`owner/name`）。默认本项目仓库；
+     *   Gopeed 内核仓库（KernelProvisioner）等参数化调用走这里。
      */
     suspend fun fetchLatestRelease(
         includePrerelease: Boolean = true,
+        repo: String? = null,
     ): Release? = withContext(Dispatchers.IO) {
         runCatching {
             val client = HttpClients.apiClient()
             val request = Request.Builder()
-                .url(RELEASES_LIST_URL)
+                .url(if (repo.isNullOrBlank()) RELEASES_LIST_URL else releasesListUrl(repo))
                 .header("Accept", "application/vnd.github+json")
                 .header("User-Agent", "YunGet")
                 .get()
@@ -169,7 +208,14 @@ object UpdateChecker {
                         json.optJSONArray("assets")?.let { a ->
                             for (j in 0 until a.length()) {
                                 val obj = a.optJSONObject(j) ?: continue
-                                add(Asset(obj.optString("name"), obj.optString("browser_download_url")))
+                                add(
+                                    Asset(
+                                        name = obj.optString("name"),
+                                        downloadUrl = obj.optString("browser_download_url"),
+                                        size = obj.optLong("size"),
+                                        digest = obj.optString("digest"),
+                                    )
+                                )
                             }
                         }
                     }
@@ -180,6 +226,7 @@ object UpdateChecker {
                             assets = assets,
                             publishedAt = json.optString("published_at"),
                             prerelease = json.optBoolean("prerelease"),
+                            htmlUrl = json.optString("html_url"),
                         )
                     )
                 }

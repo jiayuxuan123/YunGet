@@ -63,6 +63,19 @@ object HttpClients {
         }
     }
 
+    /**
+     * 释放两套客户端的空闲连接（连接及其 socket / TLS 缓冲）。
+     *
+     * 用途：`Application.onTrimMemory` 时调用。分片下载的数据全部流式落盘、不在堆上缓存，
+     * 所以丢弃空闲连接不会影响进行中的下载，但能在系统内存吃紧时让出一块可观的内存
+     * （连接池最多 64 条空闲连接，每条都带 socket 与 TLS 缓冲）。
+     * 只对**已创建**的实例生效：不因为一次内存回收就把懒加载的客户端提前唤醒。
+     */
+    fun evictIdleConnections() {
+        apiCache?.connectionPool?.evictAll()
+        downloadCache?.connectionPool?.evictAll()
+    }
+
     private fun buildApi(): OkHttpClient {
         val builder = OkHttpClient.Builder()
             .connectTimeout(15, TimeUnit.SECONDS)

@@ -44,6 +44,16 @@ object ThemeController {
     var seedColor by mutableStateOf(SettingsRepository.DEFAULT_SEED_COLOR)
         private set
 
+    /**
+     * 文件名显示方式：false=单行跑马灯滚动（默认），true=多行折行。
+     *
+     * ★ 本项由移植上游 `FileNameText`（云盘页/解析页/下载列表共用的文件名组件）而补入：
+     *   组件按此开关决定单行跑马灯还是多行折行。本项目的「主题与外观」页暂未暴露该开关，
+     *   默认值（单行跑马灯）与改动前各页的观感完全一致。
+     */
+    var fileNameMultiLine by mutableStateOf(false)
+        private set
+
     private var initialized = false
 
     /** 从持久化存储加载（幂等；首次调用有效） */
@@ -53,6 +63,7 @@ object ThemeController {
         darkMode = s.darkMode
         colorMode = s.themeColorMode
         seedColor = s.themeSeedColor
+        fileNameMultiLine = s.fileNameMultiLine
         initialized = true
     }
 
@@ -76,5 +87,11 @@ object ThemeController {
             themeSeedColor = argb
             themeColorMode = 2
         }
+    }
+
+    /** 设置文件名显示方式（false=跑马灯 / true=多行）并持久化 */
+    fun setFileNameMultiLine(context: Context, value: Boolean) {
+        fileNameMultiLine = value
+        SettingsRepository(context).fileNameMultiLine = value
     }
 }

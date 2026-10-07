@@ -1,17 +1,32 @@
+/*
+ * YunGet - 网盘分享链接解析与高速下载的 Android 应用
+ * 本文件取自上游 YunX (https://github.com/CYQawa/YunX)
+ * Copyright (C) 2026 CYQawa
+ *
+ * This program is free software: you can redistribute it and/or modify
+ * it under the terms of the GNU Affero General Public License as published by
+ * the Free Software Foundation, either version 3 of the License, or
+ * (at your option) any later version.
+ *
+ * This program is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+ * GNU Affero General Public License for more details.
+ *
+ * You should have received a copy of the GNU Affero General Public License
+ * along with this program.  If not, see <https://www.gnu.org/licenses/>.
+ */
+
 package com.yunget.app.ui.screens
 
-import com.yunget.app.ui.theme.spatialDefault
-import com.yunget.app.ui.theme.spatialFast
-import com.yunget.app.ui.theme.effectsDefault
-import com.yunget.app.ui.theme.effectsFast
-import com.yunget.app.ui.components.YunGetLoading
 import com.yunget.app.ui.SnackbarController
 import androidx.activity.compose.BackHandler
 import androidx.compose.animation.AnimatedContent
 import androidx.compose.animation.AnimatedVisibility
-import androidx.compose.animation.core.tween
+import androidx.compose.animation.expandVertically
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
+import androidx.compose.animation.shrinkVertically
 import androidx.compose.animation.slideInVertically
 import androidx.compose.animation.slideOutVertically
 import androidx.compose.animation.togetherWith
@@ -29,20 +44,22 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
-import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
+import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.outlined.Delete
 import androidx.compose.material.icons.outlined.Download
 import androidx.compose.material.icons.outlined.DriveFileMove
 import androidx.compose.material.icons.outlined.Share
+import androidx.compose.material.icons.outlined.Search
 import androidx.compose.material3.AlertDialog
-import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.OutlinedButton
@@ -53,8 +70,10 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateMapOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -67,11 +86,19 @@ import androidx.compose.ui.unit.dp
 import com.yunget.app.ui.items.MultiSelectAction
 import com.yunget.app.ui.items.MultiSelectBar
 import com.yunget.app.ui.components.ScrollToTopButton
+import com.yunget.app.ui.components.YunGetLoading
+import com.yunget.app.ui.resolve.DownloadLinkDialog
 import com.yunget.app.ui.resolve.BackToParentItem
 import com.yunget.app.ui.resolve.CrumbBar
 import com.yunget.app.ui.resolve.ShareFileRow
 import com.yunget.app.ui.viewmodel.QuarkCloudUiState
 import com.yunget.app.ui.viewmodel.QuarkCloudViewModel
+import com.yunget.app.ui.theme.effectsDefault
+import com.yunget.app.ui.theme.effectsFast
+import com.yunget.app.ui.theme.ListGroupGap
+import com.yunget.app.ui.theme.listGroupShape
+import com.yunget.app.ui.theme.spatialDefault
+import com.yunget.app.ui.theme.spatialFast
 
 /**
  * 夸克云盘浏览页：展示个人网盘文件，支持进入文件夹 / 返回 / 面包屑回退。
@@ -89,18 +116,40 @@ fun CloudDriveScreen(
 ) {
     val context = LocalContext.current
     val state by viewModel.uiState.collectAsState()
-    // 系统返回键 → 子目录返回上一级，根目录返回账号列表（对齐解析页返回行为）
+    // 系统返回键：多选模式下先退出多选；否则子目录返回上一级，根目录返回账号列表
     BackHandler {
-        val s = state
-        if (s is QuarkCloudUiState.Loaded && s.pathNames.isNotEmpty()) viewModel.back() else onExit()
+        if (viewModel.multiSelectMode) {
+            viewModel.exitMultiSelect()
+        } else {
+            val s = state
+            if (s is QuarkCloudUiState.Loaded && s.pathNames.isNotEmpty()) viewModel.back() else onExit()
+        }
     }
     // 文件列表滚动状态（返回顶部按钮用）
     val listState = rememberLazyListState()
+    // 搜索过滤（本地过滤当前目录文件）
+    var searchQuery by rememberSaveable { mutableStateOf("") }
+    var showSearch by rememberSaveable { mutableStateOf(false) }
+    // 各目录滚动位置记忆：进入文件夹/返回时按目录路径恢复，避免返回后列表回到顶部
+    val scrollPositions = remember { mutableStateMapOf<String, Int>() }
+    val loadedState = state as? QuarkCloudUiState.Loaded
+    val displayFiles = remember(loadedState?.files, searchQuery) {
+        val files = loadedState?.files ?: emptyList()
+        val q = searchQuery.trim()
+        if (q.isEmpty()) files else files.filter { it.fname.contains(q, ignoreCase = true) }
+    }
+    val currentDirKey = remember(loadedState?.pathNames) {
+        loadedState?.pathNames?.joinToString("/") ?: ""
+    }
+    // 各目录滚动位置保存/恢复：恢复动作放在 Loaded 分支内（列表挂载后执行），
+    // 避免 Loading 阶段（loadedState==null、key 变 ""）误触发导致返回后回顶
     // 批量操作弹窗（多选模式底部栏触发：分享/移动需要设置或选目录，下载/删除直接执行）
     var showBatchActions by remember { mutableStateOf(false) }
     var batchInitial by remember { mutableStateOf(com.yunget.app.ui.screens.BatchStep.MENU) }
     // 批量删除二次确认
     var showDeleteConfirm by remember { mutableStateOf(false) }
+    // 「+」菜单的「创建文件夹」弹窗（「上传文件」项目前是占位，见 CloudAddMenu）
+    var showCreateFolder by remember { mutableStateOf(false) }
 
     // 操作结果 Toast（放在本层：弹窗关闭后仍能正常弹出）
     LaunchedEffect(viewModel.cloudMessage) {
@@ -116,6 +165,15 @@ fun CloudDriveScreen(
             viewModel.consumeDownloadTriggered()
             onDownloadStarted()
         }
+    }
+
+    // 单文件下载确认弹窗（对齐解析页：展示直链，长按可复制）
+    viewModel.downloadLink?.let { link ->
+        DownloadLinkDialog(
+            link = link,
+            onDownload = { viewModel.startDownload() },
+            onDismiss = { viewModel.dismissDownloadDialog() }
+        )
     }
 
     // 不透明背景包裹：避免 Tab 内切换时透出下层内容（账号列表）导致视觉重叠
@@ -136,7 +194,7 @@ fun CloudDriveScreen(
                 modifier = Modifier.fillMaxSize(),
                 contentAlignment = Alignment.Center
             ) {
-                CircularProgressIndicator()
+                YunGetLoading()
             }
 
             is QuarkCloudUiState.Error -> Box(
@@ -160,6 +218,11 @@ fun CloudDriveScreen(
             }
 
             is QuarkCloudUiState.Loaded -> Box(modifier = Modifier.fillMaxSize()) {
+                // 目录加载完成、列表挂载后恢复该目录上次滚动位置（避免 Loading 阶段误触发）
+                val loadedKey = remember(s.pathNames) { s.pathNames.joinToString("/") }
+                LaunchedEffect(loadedKey) {
+                    listState.scrollToItem(scrollPositions[loadedKey] ?: 0)
+                }
                 PullToRefreshBox(
                     isRefreshing = viewModel.refreshing,
                     onRefresh = { viewModel.refresh() },
@@ -174,10 +237,11 @@ fun CloudDriveScreen(
                                 start = 16.dp, end = 16.dp, top = 16.dp,
                                 bottom = if (viewModel.multiSelectMode) 96.dp else 16.dp
                             ),
-                    verticalArrangement = Arrangement.spacedBy(8.dp)
+                    // 列表组：各项首尾相接（只留 1dp 发丝缝区分行），行圆角按首/中/末分段给
+                    verticalArrangement = Arrangement.spacedBy(ListGroupGap)
                 ) {
             item {
-                Column {
+                Column(modifier = Modifier.padding(bottom = 8.dp)) {
                     Row(verticalAlignment = Alignment.CenterVertically) {
                         if (viewModel.multiSelectMode) {
                             // 多选模式：取消选择
@@ -191,13 +255,13 @@ fun CloudDriveScreen(
                                     fontWeight = FontWeight.Medium
                                 )
                                 Text(
-                                    text = if (viewModel.selected.size == s.files.size) "已全选" else "点击选择更多文件",
+                                    text = if (viewModel.selected.size == displayFiles.size) "已全选" else "点击选择更多文件",
                                     style = MaterialTheme.typography.bodyMedium,
                                     color = MaterialTheme.colorScheme.onSurfaceVariant
                                 )
                             }
-                            TextButton(onClick = { viewModel.toggleSelectAll(s.files) }) {
-                                Text(if (viewModel.selected.size == s.files.size) "取消全选" else "全选")
+                            TextButton(onClick = { viewModel.toggleSelectAll(displayFiles) }) {
+                                Text(if (viewModel.selected.size == displayFiles.size) "取消全选" else "全选")
                             }
                         } else {
                             IconButton(onClick = onExit) {
@@ -212,11 +276,26 @@ fun CloudDriveScreen(
                                     overflow = TextOverflow.Ellipsis
                                 )
                                 Text(
-                                    text = "共 ${s.files.size} 项",
+                                    text = if (searchQuery.isBlank()) "共 ${s.files.size} 项"
+                                    else "匹配 ${displayFiles.size} / ${s.files.size} 项",
                                     style = MaterialTheme.typography.bodyMedium,
                                     color = MaterialTheme.colorScheme.onSurfaceVariant
                                 )
                             }
+                            // 放大镜：点击展开/收起搜索框
+                            IconButton(onClick = { showSearch = !showSearch }) {
+                                Icon(
+                                    imageVector = Icons.Outlined.Search,
+                                    contentDescription = if (showSearch) "关闭搜索" else "搜索文件",
+                                    tint = if (showSearch) {
+                                        MaterialTheme.colorScheme.primary
+                                    } else {
+                                        MaterialTheme.colorScheme.onSurfaceVariant
+                                    }
+                                )
+                            }
+                            // 「+」新建菜单（创建文件夹 / 上传文件，Agent.md §3.26）
+                            CloudAddMenu(onCreateFolder = { showCreateFolder = true })
                         }
                     }
                     // 可点击面包屑（多选模式下隐藏）
@@ -224,23 +303,58 @@ fun CloudDriveScreen(
                         CrumbBar(
                             rootTitle = "夸克网盘",
                             pathNames = s.pathNames,
-                            onNavigate = { viewModel.navigateToLevel(it) }
+                            onNavigate = { level ->
+                                scrollPositions[currentDirKey] = listState.firstVisibleItemIndex
+                                viewModel.navigateToLevel(level)
+                            }
                         )
+                    }
+                    // 搜索框（点击放大镜展开；与面包屑保持间距 + 展开/收起动画）
+                    AnimatedVisibility(
+                        visible = showSearch && !viewModel.multiSelectMode,
+                        enter = expandVertically(spatialDefault()) + fadeIn(effectsDefault()),
+                        exit = shrinkVertically(spatialFast()) + fadeOut(effectsFast())
+                    ) {
+                        Column {
+                            Spacer(modifier = Modifier.height(10.dp))
+                            OutlinedTextField(
+                                value = searchQuery,
+                                onValueChange = { searchQuery = it },
+                                modifier = Modifier.fillMaxWidth(),
+                                placeholder = { Text("搜索当前目录文件") },
+                                leadingIcon = { Icon(Icons.Outlined.Search, contentDescription = null) },
+                                trailingIcon = {
+                                    if (searchQuery.isNotEmpty()) {
+                                        IconButton(onClick = { searchQuery = "" }) {
+                                            Icon(Icons.Filled.Close, contentDescription = "清空搜索")
+                                        }
+                                    }
+                                },
+                                singleLine = true,
+                                shape = MaterialTheme.shapes.large
+                            )
+                        }
                     }
                 }
             }
 
-            // 返回上一级（根目录时不显示）
+            // 返回上一级（根目录时不显示；独立于文件列表组，故自带下间距）
             if (s.pathNames.isNotEmpty()) {
                 item {
-                    BackToParentItem(onClick = { viewModel.back() })
+                    Column(modifier = Modifier.padding(bottom = 8.dp)) {
+                        BackToParentItem(onClick = {
+                            // 记录当前目录滚动位置，返回上级后恢复上级位置
+                            scrollPositions[currentDirKey] = listState.firstVisibleItemIndex
+                            viewModel.back()
+                        })
+                    }
                 }
             }
 
-            if (s.files.isEmpty()) {
+            if (displayFiles.isEmpty()) {
                 item {
                     Text(
-                        text = "此目录为空",
+                        text = if (s.files.isEmpty()) "此目录为空" else "未找到匹配「${searchQuery.trim()}」的文件",
                         style = MaterialTheme.typography.bodyMedium,
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                         modifier = Modifier
@@ -251,14 +365,16 @@ fun CloudDriveScreen(
                 }
             }
 
-            items(s.files, key = { it.fid }) { file ->
+            itemsIndexed(displayFiles, key = { _, f -> f.fid }) { index, file ->
                 ShareFileRow(
                     file = file,
-                    modifier = Modifier.animateItem(),
+                    shape = listGroupShape(index, displayFiles.size),
                     onClick = {
                         if (viewModel.multiSelectMode) {
                             viewModel.toggleSelect(file)
                         } else if (file.isdir) {
+                            // 记录当前目录滚动位置，进入子目录后恢复子目录位置
+                            scrollPositions[currentDirKey] = listState.firstVisibleItemIndex
                             viewModel.openFolder(file)
                         } else {
                             viewModel.openActions(file)
@@ -325,43 +441,103 @@ fun CloudDriveScreen(
     }
     }
 
-    // 文件操作弹窗（更多按钮/点击文件 → 下载/分享/移动/重命名/删除）
-    viewModel.actionFile?.let { file ->
-        FileActionSheet(
-            file = file,
-            viewModel = viewModel,
-            onDismiss = { viewModel.dismissActions() }
+    // 文件操作弹窗（更多按钮 → 下载/分享/移动/重命名/删除）
+    // ★ 删除确认与操作弹窗互斥展示：确认期间不关掉操作弹窗，否则 dismissActions() 会清空 actionFile，
+    //   确认弹窗再点删除就找不到目标文件了（原来的 AlertDialog 叠在弹窗之上，现统一为独立的底部弹窗）
+    val pendingDeleteTarget = when {
+        !showDeleteConfirm -> null
+        viewModel.multiSelectMode -> "选中的 ${viewModel.selected.size} 项"
+        else -> viewModel.actionFile?.let { "「${it.fname}」" }
+    }
+    if (pendingDeleteTarget != null) {
+        ConfirmDeleteSheet(
+            target = pendingDeleteTarget,
+            operating = viewModel.isOperating,
+            onDismiss = {
+                showDeleteConfirm = false
+                viewModel.dismissActions()
+            },
+            onConfirm = {
+                if (viewModel.multiSelectMode) viewModel.deleteSelected() else viewModel.deleteFile()
+            }
         )
+    } else {
+        viewModel.actionFile?.let { file ->
+            FileActionSheet(
+                file = file,
+                operating = viewModel.isOperating,
+                onDownload = { viewModel.downloadFile() },
+                onDownloadFolder = { viewModel.downloadFolder() },
+                onShare = { withPassword, passcode, expiredType ->
+                    viewModel.shareFile(
+                        urlType = if (withPassword) 2 else 1,
+                        passcode = passcode,
+                        expiredType = expiredType
+                    )
+                },
+                onRename = { viewModel.renameFile(it) },
+                onConfirmDelete = { viewModel.deleteFile() },
+                onDismiss = { viewModel.dismissActions() },
+                moveStep = { onBack, onDone ->
+                    QuarkMoveStep(
+                        subtitle = file.fname,
+                        viewModel = viewModel,
+                        operating = viewModel.isOperating,
+                        onBack = onBack,
+                        onDone = onDone
+                    )
+                }
+            )
+        }
     }
 
-    // 批量操作弹窗（长按多选 → 底部栏分享/移动）
+    // 批量操作弹窗（长按多选 → 底部栏分享/移动/删除）
     if (showBatchActions) {
         BatchActionSheet(
-            viewModel = viewModel,
+            count = viewModel.selected.size,
+            operating = viewModel.isOperating,
+            onDownload = { viewModel.downloadSelected() },
+            onShare = { withPassword, passcode, expiredType ->
+                viewModel.shareSelected(
+                    urlType = if (withPassword) 2 else 1,
+                    passcode = passcode,
+                    expiredType = expiredType
+                )
+            },
+            onDelete = {
+                showBatchActions = false
+                showDeleteConfirm = true
+            },
+            onDismiss = { showBatchActions = false },
             initialStep = batchInitial,
-            onDismiss = { showBatchActions = false }
+            moveStep = { onBack, onDone ->
+                QuarkMoveStep(
+                    subtitle = "已选 ${viewModel.selected.size} 项",
+                    viewModel = viewModel,
+                    operating = viewModel.isOperating,
+                    onBack = onBack,
+                    onDone = onDone
+                )
+            }
         )
     }
 
-    // 批量删除二次确认（底部栏点删除直接弹确认）
-    if (showDeleteConfirm) {
-        AlertDialog(
-            onDismissRequest = { showDeleteConfirm = false },
-            title = { Text("删除文件") },
-            text = { Text("确定要删除选中的 ${viewModel.selected.size} 项吗？删除后将移入回收站。") },
-            confirmButton = {
-                TextButton(
-                    onClick = {
-                        showDeleteConfirm = false
-                        viewModel.deleteSelected()
-                    }
-                ) {
-                    Text("删除", color = MaterialTheme.colorScheme.error)
-                }
-            },
-            dismissButton = {
-                TextButton(onClick = { showDeleteConfirm = false }) { Text("取消") }
+    // 新建文件夹：名称校验在弹窗内完成，创建请求交给各页 ViewModel
+    if (showCreateFolder) {
+        CreateFolderDialog(
+            onDismiss = { showCreateFolder = false },
+            onConfirm = { name ->
+                showCreateFolder = false
+                viewModel.createFolder(name)
             }
+        )
+    }
+
+    // 分享创建成功：展示链接与提取码（单文件/批量共用）
+    viewModel.shareResult?.let { info ->
+        ShareResultDialog(
+            info = info,
+            onDismiss = { viewModel.dismissShareResult() }
         )
     }
 
@@ -378,8 +554,7 @@ fun CloudDriveScreen(
             title = { Text("处理中") },
             text = {
                 Row(verticalAlignment = Alignment.CenterVertically) {
-                    YunGetLoading(modifier = Modifier.size(24.dp)
-                    )
+                    YunGetLoading(modifier = Modifier.size(24.dp))
                     Spacer(modifier = Modifier.width(12.dp))
                     Text(
                         text = viewModel.folderProgress ?: "正在处理，请稍候…",
