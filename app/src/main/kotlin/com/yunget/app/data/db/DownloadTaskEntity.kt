@@ -40,6 +40,17 @@ data class DownloadTaskEntity(
      */
     @ColumnInfo(defaultValue = "''")
     val engineTaskId: String = "",
+    /**
+     * 平均速度（字节/秒），任务结束后用于列表展示。
+     *
+     * 【必须与迁移 `MIGRATION_11_12` 保持一致】该迁移会给老库加这一列，
+     * 若实体里没有对应字段，Room 打开库时校验表结构**多出一列**就会直接抛
+     * `Migration didn't properly handle`，**应用启动即崩**（2.6.17 的真实事故）。
+     * 加列时"实体 + 迁移 + 版本号"三者必须同时改，缺一不可 ——
+     * `DatabaseMigrationContractTest` 会拦住这类疏漏。
+     */
+    @ColumnInfo(defaultValue = "0")
+    val avgSpeed: Long = 0,
     val createTime: Long = System.currentTimeMillis()
 ) {
     companion object {

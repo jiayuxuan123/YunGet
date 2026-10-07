@@ -26,7 +26,23 @@ android {
         applicationId = "com.yunget.app"
         minSdk = 23
         targetSdk = 34
-        versionCode = 42
+        versionCode = 43
+        // 2.6.18 内容（**紧急修复**：2.6.17 升级用户启动即崩）：
+        //  ① **修复数据库迁移与实体不一致导致的启动崩溃**：
+        //     2.6.17 为了对齐上游版本号，在迁移里补了两列 —— `download_task.avgSpeed`
+        //     与 `xunlei_account.authType`，但**忘了把这两个字段加进对应的 Entity**。
+        //     Room 在迁移后会校验表结构，发现库里多出一列就抛
+        //     `IllegalStateException: Migration didn't properly handle` ——
+        //     **所有从旧版本升级上来的用户，打开应用立刻崩溃**
+        //     （开发机是新装库、走建表路径不经迁移，所以本地测不出来）。
+        //     现已给两个实体补上同名字段（默认值与迁移的 DEFAULT 一致）。
+        //  ② **新增迁移契约测试**（`DatabaseMigrationContractTest`）：
+        //     直接从源码解析迁移 SQL 与实体字段并双向比对，钉死三类疏漏 ——
+        //     迁移加了列但实体没声明（本次事故）、建表列与实体字段不一致、
+        //     迁移链断裂或未注册。已验证该测试在事故代码上**必定失败**。
+        //  ③ 该测试同时替代了原先手抄 SQL 的旧版契约测试（抄一份的话，
+        //     「改迁移忘改测试」与「改迁移忘改实体」是同一类错误，测试会跟着一起错）。
+        //
         // 2.6.17 内容（全量同步上游 YunX 一周的更新：4 个新网盘 + 新下载引擎 + 一批修复）：
         //  ① **新增 4 个网盘**：115 网盘、光鸭云盘、蓝奏云优享版、蓝奏云。
         //     每个平台含登录（部分为网页登录/账号密码登录）、云盘管理、分享解析、
@@ -145,7 +161,7 @@ android {
         //     - 分片请求带 `If-Range`：防止 CDN 中途换文件时新旧字节拼出混杂文件
         //       （那种情况长度校验会通过，损坏会静默落地）。
         //     - 401/403/410 不再触发背压降并发（是授权/时效信号，不是"你太快了"）。
-        versionName = "2.6.17"
+        versionName = "2.6.18"
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
     }

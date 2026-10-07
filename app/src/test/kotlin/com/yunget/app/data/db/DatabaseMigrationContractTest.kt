@@ -3,122 +3,214 @@ package com.yunget.app.data.db
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
 import org.junit.Test
+import java.io.File
 
 /**
  * 数据库迁移的**结构契约**测试。
  *
- * ## 为什么必须测
+ * ## 为什么必须测（这里有一次真实事故的记录）
  *
- * 本次把 DB 版本从 10 升到 11（新增 `bookmark` 表）。迁移写错的后果是：
- *  - 遗漏迁移 → Room 在启动时抛 `IllegalStateException`，**应用直接打不开**
- *  - SQL 与实体定义不一致 → 迁移成功但查询报错，收藏页/下载页崩溃
- *  - 破坏既有表 → 用户**丢失登录凭证与下载任务**
+ * 2.6.17 的事件：为了让版本号与上游对齐，`AppDatabase` 里补了 `MIGRATION_11_12`
+ * （给 `download_task` 加 `avgSpeed`）与 `MIGRATION_18_19`（给 `xunlei_account` 加 `authType`），
+ * **但忘了把这两个字段加进对应的 Entity**。
  *
- * 纯 JVM 单测无法真的跑 Room 迁移（需要 Android 运行时），因此这里守住能守的部分：
- *  **迁移 SQL 与实体定义的一致性** —— 字段名/类型/非空约束必须逐一对应。
- * 这正是最易出错、且出错后最难在开发期发现的地方（迁移只在真实升级时执行一次）。
+ * 结果：Room 在迁移后校验表结构，发现库里**多出一列**，抛
+ * `IllegalStateException: Migration didn't properly handle: download_task` ——
+ * **所有从旧版本升级上来的用户，启动即崩**。而开发机的库是新装的（走的是建表路径，
+ * 不经过迁移），所以本地一点问题都没有 —— 这类错误**只在真实升级时暴露**，
+ * 出事时用户已经装不回去了。
+ *
+ * ## 本测试守什么
+ *
+ * 迁移 SQL 与实体定义必须**双向一致**：
+ *  ① 迁移里 ALTER 出来的列，实体里必须有同名字段（本次事故就是这条）；
+ *  ② 迁移建的表，列集合要与实体字段集合一致（多/少都算不同步）；
+ *  ③ 迁移链连续，且终点等于 `@Database(version = ...)`（否则 Room 找不到升级路径）。
+ *
+ * 纯 JVM 单测跑不了真的 Room 迁移（需要 Android 运行时），所以这里**直接读源码**做静态核对 ——
+ * 对"实体与迁移不一致"这一类问题是完备的，而这正是最易错、最难在开发期发现的地方。
  */
 class DatabaseMigrationContractTest {
 
     /**
-     * v11 迁移建表语句（与 [AppDatabase] 中的 `MIGRATION_10_11` 保持一致）。
-     * 若那边改了 SQL，这里必须同步 —— 差异会被下面的测试发现。
+     * 源码位置：单测的工作目录是模块根（`app/`），故从 `src/main/kotlin/...` 起找。
+     *
+     * 为什么读源码而不是把 SQL 抄一份进测试：抄一份的话，**改迁移忘改测试**与
+     * **改迁移忘改实体**是同一类错误 —— 测试会跟着一起错，等于没测。
      */
-    private val createBookmarkSql =
-        "CREATE TABLE IF NOT EXISTS `bookmark` (" +
-            "`id` INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL, " +
-            "`link` TEXT NOT NULL, " +
-            "`title` TEXT NOT NULL, " +
-            "`platform` TEXT NOT NULL, " +
-            "`pwd` TEXT NOT NULL, " +
-            "`category` TEXT NOT NULL, " +
-            "`createTime` INTEGER NOT NULL)"
+    private val dbDir = File("src/main/kotlin/com/yunget/app/data/db")
 
-    /** 从建表 SQL 里抽出 (列名 → 类型声明) 映射。 */
-    private fun columnsOf(sql: String): Map<String, String> {
-        val body = sql.substringAfter('(').substringBeforeLast(')')
-        return body.split(',')
-            .map { it.trim() }
-            .filter { it.isNotBlank() }
-            .associate { part ->
-                val tokens = part.split(Regex("\\s+"))
-                val name = tokens[0].trim('`')
-                name to part
+    private val appDatabaseSrc: String by lazy {
+        File(dbDir, "AppDatabase.kt").readText()
+    }
+
+    /** 从迁移源码里抽出「表 → 新增列集合」（所有 `ALTER TABLE x ADD COLUMN y`）。 */
+    private fun columnsAddedByMigrations(): Map<String, Set<String>> {
+        val re = Regex("""ALTER\s+TABLE\s+`?(\w+)`?\s+ADD\s+COLUMN\s+`?(\w+)`?""", RegexOption.IGNORE_CASE)
+        val out = mutableMapOf<String, MutableSet<String>>()
+        for (m in re.findAll(appDatabaseSrc)) {
+            out.getOrPut(m.groupValues[1]) { mutableSetOf() }.add(m.groupValues[2])
+        }
+        return out
+    }
+
+    /** 从迁移源码里抽出「表 → 建表语句」。 */
+    private fun tablesCreatedByMigrations(): Map<String, String> {
+        // 形如 "CREATE TABLE IF NOT EXISTS `bookmark` (" + "..." + "..."
+        val re = Regex("""CREATE TABLE IF NOT EXISTS `(\w+)` \(""", RegexOption.IGNORE_CASE)
+        val out = mutableMapOf<String, String>()
+        for (m in re.findAll(appDatabaseSrc)) {
+            val start = m.range.last + 1
+            // 抓到该表建表语句的结尾：下一个 "CREATE TABLE" 或迁移声明结束
+            val rest = appDatabaseSrc.substring(start)
+            val end = listOf(
+                rest.indexOf("CREATE TABLE"),
+                rest.indexOf("private val MIGRATION"),
+                rest.indexOf("/**"),
+            ).filter { it > 0 }.minOrNull() ?: rest.length
+            out[m.groupValues[1]] = rest.substring(0, end)
+        }
+        return out
+    }
+
+    /** 从实体源码里抽出字段名集合（@ColumnInfo 未改名时，属性名即列名）。 */
+    private fun entityFieldsOf(table: String): Set<String>? {
+        val file = dbDir.listFiles { f -> f.name.endsWith("Entity.kt") }
+            ?.firstOrNull { f ->
+                Regex("""@Entity\(tableName\s*=\s*"${Regex.escape(table)}"""").containsMatchIn(f.readText())
+            } ?: return null
+        val src = file.readText()
+        // 只取主构造参数区（@Entity data class XxxEntity( ... )）
+        val ctor = src.substringAfter("data class", "").substringAfter('(', "")
+            .substringBeforeLast(')')
+        return Regex("""^\s*val\s+(\w+)\s*:""", RegexOption.MULTILINE)
+            .findAll(ctor)
+            .map { it.groupValues[1] }
+            .toSet()
+    }
+
+    /** 建表 SQL 的列名集合（跳过 PRIMARY KEY(...) 之类的表级约束）。 */
+    private fun sqlColumns(createSql: String): Set<String> =
+        Regex("""`(\w+)`\s+(TEXT|INTEGER|REAL|BLOB)""")
+            .findAll(createSql)
+            .map { it.groupValues[1] }
+            .toSet()
+
+    // ---------------------------------------------- ① 迁移加列必须有实体字段（本次事故）
+
+    @Test
+    fun everyColumnAddedByMigrationExistsInEntity() {
+        val added = columnsAddedByMigrations()
+        assertTrue(
+            "没有解析到任何 ALTER TABLE —— 说明本测试的正则与 AppDatabase 的写法已脱节，测试形同虚设",
+            added.isNotEmpty(),
+        )
+        val problems = mutableListOf<String>()
+        for ((table, cols) in added) {
+            val fields = entityFieldsOf(table)
+            if (fields == null) {
+                problems += "表 `$table`：迁移给它加了列，但找不到对应 Entity 数据类"
+                continue
             }
-    }
-
-    // ---------------------------------------------------------------- 字段一致性
-
-    @Test
-    fun bookmarkMigrationCoversAllEntityFields() {
-        // 与 BookmarkEntity 的主构造参数一一对应（改实体必须同步改迁移，否则运行时报错）
-        val entityFields = listOf("id", "link", "title", "platform", "pwd", "category", "createTime")
-        val cols = columnsOf(createBookmarkSql).keys
-        for (f in entityFields) {
-            assertTrue(
-                "迁移建表缺少字段 `$f` —— 与 BookmarkEntity 不一致，Room 启动时会校验失败",
-                f in cols,
-            )
+            val missing = cols - fields
+            if (missing.isNotEmpty()) {
+                problems += "表 `$table`：迁移加了列 $missing，但实体里没有这些字段"
+            }
         }
-        assertEquals(
-            "迁移建表的字段数应与实体一致（多出/缺少都说明两边已不同步）",
-            entityFields.size, cols.size,
-        )
-    }
-
-    @Test
-    fun nonNullableFieldsDeclareNotNull() {
-        val cols = columnsOf(createBookmarkSql)
-        // 这些在实体里都是非空（String 无 ? 后缀 / 基本类型），迁移必须同样 NOT NULL
-        for (f in listOf("link", "title", "platform", "pwd", "category", "createTime")) {
-            assertTrue(
-                "字段 `$f` 必须声明 NOT NULL（实体里为非空类型）",
-                cols[f]?.contains("NOT NULL") == true,
-            )
-        }
-    }
-
-    @Test
-    fun idIsAutoincrementPrimaryKey() {
-        val id = columnsOf(createBookmarkSql)["id"] ?: error("缺少 id 列")
-        assertTrue("id 必须是主键", id.contains("PRIMARY KEY"))
         assertTrue(
-            "id 必须是 AUTOINCREMENT —— 实体默认值 0 表示「由数据库分配」，" +
-                "缺 AUTOINCREMENT 会导致多条记录 id 冲突",
-            id.contains("AUTOINCREMENT"),
+            "【2.6.17 启动即崩的根因】迁移里 ALTER 出来的列，实体必须声明同名字段。\n" +
+                "否则 Room 迁移后校验表结构发现多出一列，抛 " +
+                "`Migration didn't properly handle`，**升级用户启动即崩**。\n" +
+                "修法：给对应 Entity 补 `val x: T = 默认值`（默认值要与迁移的 DEFAULT 一致）。\n" +
+                "问题：\n" + problems.joinToString("\n"),
+            problems.isEmpty(),
         )
     }
 
+    // ---------------------------------------------- ② 迁移建表必须与实体字段一致
+
     @Test
-    fun migrationIsIdempotent() {
+    fun everyTableCreatedByMigrationMatchEntityFields() {
+        val created = tablesCreatedByMigrations()
+        assertTrue("没有解析到任何 CREATE TABLE", created.isNotEmpty())
+        // 建表只是起点：后续迁移会继续 ALTER 加列，所以要比对的是**最终形态**
+        // （建表列 ∪ 该表被 ALTER 加过的列）。否则「迁移分两步加列」会被误判为不一致。
+        val altered = columnsAddedByMigrations()
+        val problems = mutableListOf<String>()
+        for ((table, sql) in created) {
+            val fields = entityFieldsOf(table)
+            if (fields == null) {
+                problems += "表 `$table`：迁移建了表，但找不到对应 Entity"
+                continue
+            }
+            val finalCols = sqlColumns(sql) + altered.getOrDefault(table, emptySet())
+            val missing = fields - finalCols
+            val extra = finalCols - fields
+            if (missing.isNotEmpty()) problems += "表 `$table`：实体有字段 $missing，迁移链里没有对应列"
+            if (extra.isNotEmpty()) problems += "表 `$table`：迁移链里有列 $extra，实体里没有"
+        }
         assertTrue(
-            "建表须带 IF NOT EXISTS：迁移可能因进程被杀而重跑，" +
-                "缺它会抛「table already exists」导致应用起不来",
-            createBookmarkSql.contains("IF NOT EXISTS"),
+            "迁移建表 SQL 与实体字段必须一一对应（多一列/少一列 Room 都会在启动时校验失败）。\n" +
+                "问题：\n" + problems.joinToString("\n"),
+            problems.isEmpty(),
         )
     }
 
-    // ---------------------------------------------------------------- 版本推进
+    // ---------------------------------------------- ③ 迁移链必须连续且抵达当前版本
 
     @Test
-    fun databaseVersionMatchesLatestMigrationTarget() {
-        // 迁移链必须以当前 @Database(version=...) 为终点；否则 Room 找不到升级路径
-        val chain = listOf(9 to 10, 10 to 11)
-        val tos = chain.map { it.second }.sorted()
-        assertEquals(
-            "迁移链终点应与 @Database 的 version 一致（否则升级路径断裂）",
-            11, tos.last(),
-        )
-        // 链必须连续：每一环的 from 等于上一环的 to（9→10→11，不能跳号）
-        for (i in 1 until tos.size) {
+    fun migrationChainIsContinuousAndReachesDatabaseVersion() {
+        val pairs = Regex("""Migration\((\d+),\s*(\d+)\)""")
+            .findAll(appDatabaseSrc)
+            .map { it.groupValues[1].toInt() to it.groupValues[2].toInt() }
+            .toList()
+        assertTrue("没有解析到 Migration(...) 声明", pairs.isNotEmpty())
+
+        val declaredVersion = Regex("""version\s*=\s*(\d+)""")
+            .find(appDatabaseSrc)?.groupValues?.get(1)?.toInt()
+            ?: error("未找到 @Database(version = ...)")
+
+        // 每条迁移都必须是 from -> from+1 的单步推进
+        for ((from, to) in pairs) {
+            assertEquals("迁移必须单步推进（$from → $to 跳号了）", from + 1, to)
+        }
+        // 按 from 排序后必须首尾相连
+        val sorted = pairs.sortedBy { it.first }
+        for (i in 1 until sorted.size) {
             assertEquals(
-                "迁移链出现跳号：第 $i 环从 ${tos[i - 1]} 起，但链条上只到 ${tos[i - 1]}",
-                tos[i - 1], chain[i - 1].second,
-            )
-            assertEquals(
-                "迁移链不连续：${chain[i].first} → ${chain[i].second} 未接在 ${tos[i - 1]} 之后",
-                tos[i - 1], chain[i].first,
+                "迁移链不连续：${sorted[i - 1].second} 之后应接 ${sorted[i - 1].second}，实际接 ${sorted[i].first}",
+                sorted[i - 1].second, sorted[i].first,
             )
         }
+        // 终点必须等于 @Database version —— 否则 Room 找不到升级路径，同样启动即崩
+        assertEquals(
+            "迁移链终点与 @Database(version=) 不一致 —— Room 会因找不到升级路径而抛异常",
+            declaredVersion, sorted.last().second,
+        )
+    }
+
+    @Test
+    fun migrationsAreRegisteredInBuilder() {
+        // 声明了迁移却没 addMigrations 也是常见疏漏（迁移永远不会执行）
+        for (name in Regex("""private val (MIGRATION_\d+_\d+)""").findAll(appDatabaseSrc)
+            .map { it.groupValues[1] }.toList()) {
+            assertTrue(
+                "迁移 $name 已声明但没有注册到 addMigrations —— 升级时不会执行，用户库结构停在旧版本",
+                appDatabaseSrc.contains("$name,") || appDatabaseSrc.contains("$name\n"),
+            )
+        }
+    }
+
+    @Test
+    fun addedColumnsDeclareDefaultValues() {
+        // ALTER TABLE ... ADD COLUMN 对已有行必须能给值：NOT NULL 就一定要带 DEFAULT
+        val re = Regex("""ALTER\s+TABLE\s+`?(\w+)`?\s+ADD\s+COLUMN\s+`?(\w+)`?\s+([^"]*)""", RegexOption.IGNORE_CASE)
+        val problems = re.findAll(appDatabaseSrc).mapNotNull { m ->
+            val (table, col, decl) = m.destructured
+            if (decl.contains("NOT NULL", true) && !decl.contains("DEFAULT", true)) {
+                "表 `$table` 的列 `$col` 声明了 NOT NULL 却没有 DEFAULT —— 老行无法填充，迁移会失败"
+            } else null
+        }.toList()
+        assertTrue(problems.joinToString("\n"), problems.isEmpty())
     }
 }
