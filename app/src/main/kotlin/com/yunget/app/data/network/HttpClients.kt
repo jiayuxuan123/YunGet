@@ -7,6 +7,7 @@ import okhttp3.Protocol
 import java.security.SecureRandom
 import java.security.cert.X509Certificate
 import java.util.concurrent.TimeUnit
+import java.util.concurrent.atomic.AtomicBoolean
 import javax.net.ssl.SSLContext
 import javax.net.ssl.TrustManager
 import javax.net.ssl.X509TrustManager
@@ -70,11 +71,46 @@ object HttpClients {
      * 所以丢弃空闲连接不会影响进行中的下载，但能在系统内存吃紧时让出一块可观的内存
      * （连接池最多 64 条空闲连接，每条都带 socket 与 TLS 缓冲）。
      * 只对**已创建**的实例生效：不因为一次内存回收就把懒加载的客户端提前唤醒。
+     *
+     * ## 为什么必须是异步的（不是"加个 try/catch"就够）
+     *
+     * 真实崩溃（用户实测，2.6.18）：
+     * ```
+     * android.os.NetworkOnMainThreadException
+     *   at HttpClients.evictIdleConnections(HttpClients.kt:75)
+     *   at YunGetApp.onTrimMemory(YunGetApp.kt:47)
+     * ```
+     * `onTrimMemory` 是**主线程**回调，而 `evictAll()` 不是"清空一个列表"这么无害 ——
+     * 它会真的 close 掉每条空闲连接的 socket（`RealConnectionPool.evictAll` → `Util.closeQuietly(socket)`）。
+     * 关闭 TLS 连接要把 `close_notify` 告警**写出去**，这是一次网络写；Android 因此在主线程上抛异常。
+     * 而 OkHttp 的 `closeQuietly` 只吞 `IOException`，`NetworkOnMainThreadException` 是
+     * `RuntimeException`，会**原样穿透**到调用方 —— 所以它崩掉了整个应用。
+     *
+     * 上游版本用 `runCatching` 包着这两句：那只让异常静默消失，**回收其实从未发生**
+     * （每次内存告急都白跑一趟）。真正的修法是换线程 —— 这里把调度器写死在实现里，
+     * 调用方（Application 回调 / 任何线程）都不再需要关心上下文。
+     *
+     * 用一次性线程而非共享线程池：本方法只在内存告急时被调用，频率极低；
+     * 为它常驻一个线程池不划算，而每次开一条短命线程的代价可以忽略。
+     * 线程内逐句 `runCatching`：一句失败不该让另一套客户端的回收被跳过。
+     *
+     * [evictInFlight] 是「在飞」闸门：`onTrimMemory` 在系统内存持续吃紧时会被反复回调，
+     * 没有闸门就会一次堆一串线程（回收本身是幂等的，重复跑纯属浪费）。
      */
     fun evictIdleConnections() {
-        apiCache?.connectionPool?.evictAll()
-        downloadCache?.connectionPool?.evictAll()
+        if (!evictInFlight.compareAndSet(false, true)) return
+        Thread({
+            try {
+                runCatching { apiCache?.connectionPool?.evictAll() }
+                runCatching { downloadCache?.connectionPool?.evictAll() }
+            } finally {
+                evictInFlight.set(false)
+            }
+        }, "yunget-idle-evict").apply { isDaemon = true }.start()
     }
+
+    /** 回收是否正在后台进行（防止内存告急时的重复回调堆出多条线程）。 */
+    private val evictInFlight = AtomicBoolean(false)
 
     private fun buildApi(): OkHttpClient {
         val builder = OkHttpClient.Builder()

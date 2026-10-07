@@ -234,9 +234,14 @@ fun SettingsScreen(
     ) { uri ->
         if (uri != null) {
             scope.launch {
-                val text = runCatching {
-                    context.contentResolver.openInputStream(uri)?.bufferedReader()?.use { it.readText() }
-                }.getOrNull()
+                // 【必须切 IO】读的是 DocumentsProvider（可能是网盘/远端），
+                // 一次 binder IPC + 整文件读取；scope 是 rememberCoroutineScope() = 主线程。
+                // 下面 importJson 本来就切了 IO，只有这里漏了。
+                val text = withContext(Dispatchers.IO) {
+                    runCatching {
+                        context.contentResolver.openInputStream(uri)?.bufferedReader()?.use { it.readText() }
+                    }.getOrNull()
+                }
                 if (text == null) {
                     SnackbarController.show("读取文件失败")
                     return@launch
@@ -1643,7 +1648,11 @@ private fun DohLatencyPanel() {
         if (results == null && !probing) {
             probing = true
             results = runCatching {
-                TurboHttpClients.probeDohLatency()
+                // 【必须切 IO】probeDohLatency 是**同步阻塞** API：内部把候选端点丢进线程池后，
+                // 用 futures[i].get(remaining) 阻塞调用线程，总期限 4 秒（网络 socket 在池线程上，
+                // 所以不抛 NetworkOnMainThreadException，但会直接冻住 UI）。
+                // LaunchedEffect 跑在主线程，必须自己切走。
+                withContext(Dispatchers.IO) { TurboHttpClients.probeDohLatency() }
             }.getOrDefault(emptyList())
             probing = false
         }

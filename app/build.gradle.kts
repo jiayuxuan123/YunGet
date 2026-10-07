@@ -26,7 +26,7 @@ android {
         applicationId = "com.yunget.app"
         minSdk = 23
         targetSdk = 34
-        versionCode = 43
+        versionCode = 44
         // 2.6.18 内容（**紧急修复**：2.6.17 升级用户启动即崩）：
         //  ① **修复数据库迁移与实体不一致导致的启动崩溃**：
         //     2.6.17 为了对齐上游版本号，在迁移里补了两列 —— `download_task.avgSpeed`
@@ -161,7 +161,7 @@ android {
         //     - 分片请求带 `If-Range`：防止 CDN 中途换文件时新旧字节拼出混杂文件
         //       （那种情况长度校验会通过，损坏会静默落地）。
         //     - 401/403/410 不再触发背压降并发（是授权/时效信号，不是"你太快了"）。
-        versionName = "2.6.18"
+        versionName = "2.6.19"
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
     }
@@ -300,11 +300,11 @@ dependencies {
     implementation("androidx.lifecycle:lifecycle-viewmodel-compose:2.8.7")
     implementation("com.squareup.okhttp3:okhttp:4.12.0")
 
-    // TurboDL SDK（纯 JVM 多线程下载引擎 + 可选插件框架），从 mavenLocal 解析 dev.turbodl:*:0.2.0.4
-    implementation("dev.turbodl:turbodl-core:0.2.0.4")
-    implementation("dev.turbodl:turbo-plugin-runtime:0.2.0.4")
-    implementation("dev.turbodl:turbo-plugin-bootstrap:0.2.0.4")
-    implementation("dev.turbodl:turbo-plugin-hls:0.2.0.4")
+    // TurboDL SDK（纯 JVM 多线程下载引擎 + 可选插件框架），从 mavenLocal 解析 dev.turbodl:*:0.2.0.5
+    implementation("dev.turbodl:turbodl-core:0.2.0.5")
+    implementation("dev.turbodl:turbo-plugin-runtime:0.2.0.5")
+    implementation("dev.turbodl:turbo-plugin-bootstrap:0.2.0.5")
+    implementation("dev.turbodl:turbo-plugin-hls:0.2.0.5")
 
     implementation(libs.material)   // 原 libs.material.color.utilities -> 改为官方 Material 主库（含 color.utilities 包）
 

@@ -84,6 +84,7 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.produceState
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
@@ -110,6 +111,7 @@ import com.yunget.app.util.PermissionState
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
+import java.io.File
 
 /**
  * 下载引擎页（设置 → 下载引擎）：一张卡片里上下两段，对应两套下载器（圆角图标块 + 标题 + 小标签 +
@@ -173,7 +175,15 @@ fun DownloadEngineScreen(onBack: () -> Unit, modifier: Modifier = Modifier) {
         lifecycleOwner.lifecycle.addObserver(observer)
         onDispose { lifecycleOwner.lifecycle.removeObserver(observer) }
     }
-    val downloadDir = remember(allFilesReady, legacyStorageReady) { GopeedEngine.resolveDownloadDir(context) }
+    // 【不能在组合期解析】resolveDownloadDir 内部会做「可写性探针」判断权限：
+    // mkdirs + 写一个 .yunget_write_probe 再删掉（自定义目录不可写时还会退到公共 Download/）。
+    // `remember {}` 是在**组合期**执行的（主线程）—— 慢速存储/可移动 SD 上会直接卡帧。
+    // 改成异步解析：完成前为 null，界面显示「解析中…」。
+    // 真正启动引擎时会在 IO 上下文里**重新解析**（见下面两处 start），
+    // 那比复用进页面时的快照更准 —— 用户可能刚在系统设置里给了权限。
+    val downloadDir by produceState<File?>(null, allFilesReady, legacyStorageReady) {
+        value = withContext(Dispatchers.IO) { GopeedEngine.resolveDownloadDir(context) }
+    }
 
     val engineOn = engineChoice == SettingsRepository.ENGINE_GOPEED
     val installed = soBytes > 0L
@@ -232,7 +242,10 @@ fun DownloadEngineScreen(onBack: () -> Unit, modifier: Modifier = Modifier) {
             notice = "已切换到 Gopeed 引擎"
             if (installed && !running) {
                 action {
-                    withContext(Dispatchers.IO) { GopeedEngine.start(context, downloadDir) }
+                    // 就地重解析而不是复用进页面时的快照：用户可能刚在系统设置里授了权，
+                    // 目录应当按「此刻」的真实权限决定（resolveDownloadDir 内部含写探针，必须在 IO 上）。
+                    val dir = withContext(Dispatchers.IO) { GopeedEngine.resolveDownloadDir(context) }
+                    withContext(Dispatchers.IO) { GopeedEngine.start(context, dir) }
                     engineVersion = withContext(Dispatchers.IO) {
                         runCatching { GopeedEngine.engineVersion() }.getOrDefault("")
                     }
@@ -466,7 +479,7 @@ fun DownloadEngineScreen(onBack: () -> Unit, modifier: Modifier = Modifier) {
                             ) {
                                 Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
                                     Text(
-                                        "下载目录：${downloadDir.absolutePath}",
+                                        "下载目录：${downloadDir?.absolutePath ?: "解析中…"}",
                                         style = MaterialTheme.typography.bodySmall,
                                         color = MaterialTheme.colorScheme.onSurfaceVariant
                                     )
@@ -568,7 +581,10 @@ fun DownloadEngineScreen(onBack: () -> Unit, modifier: Modifier = Modifier) {
                                             action {
                                                 withContext(Dispatchers.IO) {
                                                     GopeedEngine.stop()
-                                                    GopeedEngine.start(context, downloadDir)
+                                                    GopeedEngine.start(
+                                                        context,
+                                                        GopeedEngine.resolveDownloadDir(context)
+                                                    )
                                                 }
                                                 engineVersion = withContext(Dispatchers.IO) {
                                                     runCatching { GopeedEngine.engineVersion() }

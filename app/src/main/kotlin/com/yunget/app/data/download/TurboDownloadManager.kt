@@ -434,11 +434,14 @@ class TurboDownloadManager(
             append(verdict)
         }
         diagnoseLastResult = text
+        // 【必须切 IO】调用方（设置页 scope.launch）在主线程，这里 mkdirs + writeText 是磁盘 I/O。
         val savedPath = runCatching {
-            val dir = File(context.getExternalFilesDir(null), "diagnostics").apply { mkdirs() }
-            val f = File(dir, "concurrent-sweep-${System.currentTimeMillis()}.txt")
-            f.writeText(text)
-            f.absolutePath
+            withContext(Dispatchers.IO) {
+                val dir = File(context.getExternalFilesDir(null), "diagnostics").apply { mkdirs() }
+                val f = File(dir, "concurrent-sweep-${System.currentTimeMillis()}.txt")
+                f.writeText(text)
+                f.absolutePath
+            }
         }.getOrNull()
         Log.i(TAG, "并发任务诊断结果已写入：${savedPath ?: "(落盘失败)"}")
         diagnoseStatus = "✅ 已完成（并发任务 ${results.size} 档）" +
@@ -534,11 +537,14 @@ class TurboDownloadManager(
         diagnoseLastResult = text
 
         // 落盘：结果文件放在应用外部目录，文件管理器可直接取走（通知里会给路径）。
+        // 【必须切 IO】调用方（设置页 scope.launch）在主线程，这里 mkdirs + writeText 是磁盘 I/O。
         val savedPath = runCatching {
-            val dir = File(context.getExternalFilesDir(null), "diagnostics").apply { mkdirs() }
-            val f = File(dir, "conn-sweep-${System.currentTimeMillis()}.txt")
-            f.writeText(text)
-            f.absolutePath
+            withContext(Dispatchers.IO) {
+                val dir = File(context.getExternalFilesDir(null), "diagnostics").apply { mkdirs() }
+                val f = File(dir, "conn-sweep-${System.currentTimeMillis()}.txt")
+                f.writeText(text)
+                f.absolutePath
+            }
         }.getOrNull()
         Log.i(TAG, "连接数诊断结果已写入：${savedPath ?: "(落盘失败)"}")
 

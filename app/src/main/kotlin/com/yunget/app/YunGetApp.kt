@@ -40,6 +40,10 @@ class YunGetApp : Application() {
     /**
      * 内存压力回调：系统回收前先释放「可再生」的内存 —— 空闲 HTTP 连接及其 socket / TLS 缓冲。
      * 分片下载的数据全部流式落盘、不在堆上缓存，所以这里只丢弃空闲连接，不会影响进行中的下载。
+     *
+     * 【本回调在主线程】所以 [com.yunget.app.data.network.HttpClients.evictIdleConnections]
+     * 内部自己切到后台线程 —— 关 socket 是网络 I/O，在这里直接做会抛
+     * `NetworkOnMainThreadException`（2.6.18 的真实崩溃）。调用方无需再做线程处理。
      */
     override fun onTrimMemory(level: Int) {
         super.onTrimMemory(level)
