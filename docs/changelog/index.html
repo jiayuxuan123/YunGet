@@ -28,7 +28,16 @@
 </div>
 </header>
 <main id="main">
-<section><h1>更新日志</h1><p class="lead">由发布说明本身生成 —— 应用内的「检查更新」读的是同一份数据，所以两处看到的版本与内容永远一致。</p></section><section><div class="cards cols-2"><div class="card"><h3><span class="mono">v2.6.19</span></h3><p class="small">2026-10-07 · 1 个附件</p><p class="muted">YunGet 2.6.19：修复内存回收回调导致的崩溃（NetworkOnMainThreadException）
+<section><h1>更新日志</h1><p class="lead">由发布说明本身生成 —— 应用内的「检查更新」读的是同一份数据，所以两处看到的版本与内容永远一致。</p></section><section><div class="cards cols-2"><div class="card"><h3><span class="mono">v2.6.20</span></h3><p class="small">2026-10-08 · 1 个附件</p><p class="muted">YunGet 2.6.20：修复蓝奏分享点文件报「缺少下载参数」；四套引擎的入口合并到一处
+---
+修复：蓝奏分享里点文件就报错
+**现象**：文件夹分享解析出来了，文件也列出来了，点它取直链就弹「蓝奏分享页缺少下载参数，请重新解析」。
+**根因有三条，前两条各自都足以让它必现**：
+1. **取错了页面**。文件夹分享的分享页是一张**目录页**，上面根本没有下载参数 —— 参数在文件夹里
+   **每个文件自己的页面**上（`{host}/{文件key}`）。原实现在目录页上找 `sign`，找不到就报错。
+   现在先取文件自己的页面，再从那一页里找参数（与 alist 的 `GetFilesByShareUrl(file.GetID())` 同一做法）。
+2. **协议相对地址拼错了**。下载参数在同源 iframe 里，而蓝奏的 iframe `src` 常写成
+   `//ho…</p><p class="small"><a href="https://github.com/jiayuxuan123/YunGet/releases/tag/v2.6.20">发布页</a></p></div><div class="card"><h3><span class="mono">v2.6.19</span></h3><p class="small">2026-10-07 · 1 个附件</p><p class="muted">YunGet 2.6.19：修复内存回收回调导致的崩溃（NetworkOnMainThreadException）
 ---
 修复：应用在后台时偶发崩溃
 **现象**：切到后台、或系统内存吃紧时，应用**崩溃退出**。
@@ -148,20 +157,11 @@ Room 数据库中。设备被 root 或数据库文件被取出时，账号凭证
 判定改为**三值**：
 · **一致** → 保留旧分片，续传可用
 · **确证不同** → 丢弃（安全底线不变）
-· **取不到** → **保留**（…</p><p class="small"><a href="https://github.com/jiayuxuan123/YunGet/releases/tag/v2.6.7">发布页</a></p></div><div class="card"><h3><span class="mono">v2.6.6</span></h3><p class="small">2026-09-15 · 1 个附件</p><p class="muted">YunGet 2.6.6：修复「暂停就整包重下」+ 回退上一版的分片上限
-本版处理你反馈的三个问题。**其中两个是我自己造成的，一并说明。**
-&gt; 你反馈：「速度快不起来（要不还是修，或者回退吧）。用夸克链接暂停了，它**就重新下载了**；
-&gt;   而且现在**速度和线程上升都变慢了**；暂停后再点进来，卡在**已下载 0%** 然后才显示下载。」
-1. 「暂停就重新下载」——夸克这类链接一直是这样
-夸克 CDN **不给 ETag / Last-Modified**，引擎的续传校验只能拿到&quot;弱校验器&quot;，
-而旧策略规定「弱校验器不足以安全续传 → **丢弃全部已有分片**」。
-两者叠加就是：**一暂停，已下载的全没了，从头再来**。1.3GB 就是十几分钟白下。
-**现在改用「内容指纹」代替「一律丢弃」**：续传前取一个已存分片的前 **64KB**，
-和服务器请求同一区间逐字节比对 ——…</p><p class="small"><a href="https://github.com/jiayuxuan123/YunGet/releases/tag/v2.6.6">发布页</a></p></div></div></section><section><h2>完整历史</h2><div class="btn-row"><a class="btn" href="https://github.com/jiayuxuan123/YunGet/releases">全部发布</a><a class="btn" href="https://github.com/jiayuxuan123/YunGet/commits/main">代码提交</a></div></section></main>
+· **取不到** → **保留**（…</p><p class="small"><a href="https://github.com/jiayuxuan123/YunGet/releases/tag/v2.6.7">发布页</a></p></div></div></section><section><h2>完整历史</h2><div class="btn-row"><a class="btn" href="https://github.com/jiayuxuan123/YunGet/releases">全部发布</a><a class="btn" href="https://github.com/jiayuxuan123/YunGet/commits/main">代码提交</a></div></section></main>
 <footer class="site-foot">
 <div class="wrap">
 <div class="foot-cols"><div class="foot-col"><h4>项目</h4><ul><li><a href="https://github.com/jiayuxuan123/YunGet">GitHub</a></li><li><a href="../download/index.html">下载</a></li><li><a href="index.html">更新日志</a></li><li><a href="https://github.com/jiayuxuan123/YunGet/issues">问题反馈</a></li></ul></div><div class="foot-col"><h4>文档</h4><ul><li><a href="../docs/readme/index.html">项目说明</a></li><li><a href="../docs/guide/index.html">使用说明</a></li><li><a href="../docs/faq/index.html">常见问题</a></li><li><a href="../docs/engines/index.html">下载引擎</a></li><li><a href="../docs/build/index.html">从源码构建</a></li></ul></div><div class="foot-col"><h4>协议与说明</h4><ul><li><a href="../legal/license/index.html">AGPL-3.0 原文</a></li><li><a href="../legal/notice/index.html">署名与致谢</a></li><li><a href="../legal/privacy/index.html">隐私说明</a></li><li><a href="../legal/terms/index.html">使用条款</a></li><li><a href="../support/index.html">支持开发</a></li></ul></div><div class="foot-col"><h4>相关</h4><ul><li><a href="https://github.com/CYQawa/YunX">上游 CYQawa/YunX</a></li><li><a href="https://github.com/jiayuxuan123/TurboDL">下载引擎 TurboDL</a></li><li><a href="../community/index.html">社区</a></li></ul></div></div>
-<div class="foot-note"><p>云取 YunGet v2.6.19 · AGPL-3.0 · 内置 TurboDL 0.2.0.5 · Android 6.0（API 23）</p><p>本项目是 CYQawa/YunX（云析）的二次开发版本，与上游作者无隐性关联。仅供个人学习与技术交流，请勿用于商业用途；下载内容的版权归原作者及相关权利人所有。</p></div>
+<div class="foot-note"><p>云取 YunGet v2.6.20 · AGPL-3.0 · 内置 TurboDL 0.2.0.5 · Android 6.0（API 23）</p><p>本项目是 CYQawa/YunX（云析）的二次开发版本，与上游作者无隐性关联。仅供个人学习与技术交流，请勿用于商业用途；下载内容的版权归原作者及相关权利人所有。</p></div>
 </div>
 </footer>
 <script src="../assets/site.js" defer></script>

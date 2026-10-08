@@ -1,23 +1,40 @@
 {
   "repo": "jiayuxuan123/YunGet",
   "latest": {
-    "tag": "v2.6.19",
-    "name": "YunGet 2.6.19：修复内存回收回调导致的崩溃（NetworkOnMainThreadException）",
-    "published": "2026-10-07T16:52:47Z",
+    "tag": "v2.6.20",
+    "name": "YunGet 2.6.20",
+    "published": "2026-10-08T13:50:23Z",
     "prerelease": false,
-    "url": "https://github.com/jiayuxuan123/YunGet/releases/tag/v2.6.19",
-    "summary": "YunGet 2.6.19：修复内存回收回调导致的崩溃（NetworkOnMainThreadException）\n---\n修复：应用在后台时偶发崩溃\n**现象**：切到后台、或系统内存吃紧时，应用**崩溃退出**。\n**错误**：\n**根因**：`onTrimMemory` 是**主线程**回调，而 `connectionPool.evictAll()` 不是\n\"清空一个列表\"这么无害 —— 它真的会 close 每条空闲连接的 socket\n（`RealConnectionPool.evictAll` → `Util.closeQuietly(socket)`）。\n关闭 TLS 连接要把 `close_notify` 告警**写出去**，这是一次网络写，Android 因此在主线程抛异常。\n而 OkHttp 的 `closeQuietly` **只吞 `IOException`**：`…",
+    "url": "https://github.com/jiayuxuan123/YunGet/releases/tag/v2.6.20",
+    "summary": "YunGet 2.6.20：修复蓝奏分享点文件报「缺少下载参数」；四套引擎的入口合并到一处\n---\n修复：蓝奏分享里点文件就报错\n**现象**：文件夹分享解析出来了，文件也列出来了，点它取直链就弹「蓝奏分享页缺少下载参数，请重新解析」。\n**根因有三条，前两条各自都足以让它必现**：\n1. **取错了页面**。文件夹分享的分享页是一张**目录页**，上面根本没有下载参数 —— 参数在文件夹里\n   **每个文件自己的页面**上（`{host}/{文件key}`）。原实现在目录页上找 `sign`，找不到就报错。\n   现在先取文件自己的页面，再从那一页里找参数（与 alist 的 `GetFilesByShareUrl(file.GetID())` 同一做法）。\n2. **协议相对地址拼错了**。下载参数在同源 iframe 里，而蓝奏的 iframe `src` 常写成\n   `//ho…",
     "assets": [
       {
-        "name": "YunGet-2.6.19-release.apk",
-        "size": 29251699,
-        "url": "https://github.com/jiayuxuan123/YunGet/releases/download/v2.6.19/YunGet-2.6.19-release.apk",
-        "downloads": 489,
-        "sha256": "d01180c164fd9fc7af2dc6cda9ad48485c66a741aa877139dc2809f02886ea70"
+        "name": "YunGet-2.6.20-release.apk",
+        "size": 29253022,
+        "url": "https://github.com/jiayuxuan123/YunGet/releases/download/v2.6.20/YunGet-2.6.20-release.apk",
+        "downloads": 0,
+        "sha256": "80b5ddf11f8751f2685887a8fc080f8035504c273eb17d7429199a869a70c224"
       }
     ]
   },
   "releases": [
+    {
+      "tag": "v2.6.20",
+      "name": "YunGet 2.6.20",
+      "published": "2026-10-08T13:50:23Z",
+      "prerelease": false,
+      "url": "https://github.com/jiayuxuan123/YunGet/releases/tag/v2.6.20",
+      "summary": "YunGet 2.6.20：修复蓝奏分享点文件报「缺少下载参数」；四套引擎的入口合并到一处\n---\n修复：蓝奏分享里点文件就报错\n**现象**：文件夹分享解析出来了，文件也列出来了，点它取直链就弹「蓝奏分享页缺少下载参数，请重新解析」。\n**根因有三条，前两条各自都足以让它必现**：\n1. **取错了页面**。文件夹分享的分享页是一张**目录页**，上面根本没有下载参数 —— 参数在文件夹里\n   **每个文件自己的页面**上（`{host}/{文件key}`）。原实现在目录页上找 `sign`，找不到就报错。\n   现在先取文件自己的页面，再从那一页里找参数（与 alist 的 `GetFilesByShareUrl(file.GetID())` 同一做法）。\n2. **协议相对地址拼错了**。下载参数在同源 iframe 里，而蓝奏的 iframe `src` 常写成\n   `//ho…",
+      "assets": [
+        {
+          "name": "YunGet-2.6.20-release.apk",
+          "size": 29253022,
+          "url": "https://github.com/jiayuxuan123/YunGet/releases/download/v2.6.20/YunGet-2.6.20-release.apk",
+          "downloads": 0,
+          "sha256": "80b5ddf11f8751f2685887a8fc080f8035504c273eb17d7429199a869a70c224"
+        }
+      ]
+    },
     {
       "tag": "v2.6.19",
       "name": "YunGet 2.6.19：修复内存回收回调导致的崩溃（NetworkOnMainThreadException）",
@@ -30,7 +47,7 @@
           "name": "YunGet-2.6.19-release.apk",
           "size": 29251699,
           "url": "https://github.com/jiayuxuan123/YunGet/releases/download/v2.6.19/YunGet-2.6.19-release.apk",
-          "downloads": 489,
+          "downloads": 890,
           "sha256": "d01180c164fd9fc7af2dc6cda9ad48485c66a741aa877139dc2809f02886ea70"
         }
       ]
@@ -47,7 +64,7 @@
           "name": "YunGet-2.6.18-release.apk",
           "size": 29248962,
           "url": "https://github.com/jiayuxuan123/YunGet/releases/download/v2.6.18/YunGet-2.6.18-release.apk",
-          "downloads": 177,
+          "downloads": 179,
           "sha256": "12c0e101b075995d546b80323576c4ad586e583f58668cdbb28917b20d45a695"
         }
       ]
@@ -508,23 +525,6 @@
           "url": "https://github.com/jiayuxuan123/YunGet/releases/download/v2.0.1/YunGet-v2.0.1-release.apk",
           "downloads": 8,
           "sha256": "03981c4854c7702fec955a24b6efc4ae7187c66e2f6ebd79a2bb6431ab7a24cf"
-        }
-      ]
-    },
-    {
-      "tag": "v2.0.0",
-      "name": "YunGet v2.0.0",
-      "published": "2026-08-25T04:05:06Z",
-      "prerelease": false,
-      "url": "https://github.com/jiayuxuan123/YunGet/releases/tag/v2.0.0",
-      "summary": "YunGet 2.0.0（基于 [CYQawa/YunX](https://github.com/CYQawa/YunX) 的二次开发，AGPL-3.0）\n本版本核心：重写自适应多线程下载引擎\n相较上游「主池 70% 等分 + 弹性区 30% 中点劈分」两阶段模型，本版本 `AdaptiveDownloadEngine` 做了四项升级：\n1. **工作窃取调度（work-stealing）**：单一顺序游标发放字节相邻块，失败/细分块回投共享 retry 双端队列被空闲线程窃取，消除中后段掉速与尾部并发塌缩。\n2. **动态并发调节（AIMD）**：按实测吞吐加性增/回退，遇限流乘性收缩；通过信号量寄存/释放许可真实增减线程。\n3. **自适应分块**：块大小随单连接吞吐动态收敛至目标耗时，尾部自动收敛避免长尾。\n4. **连接复用 / HTTP2**：复用下载客户端 + 大连接池 kee…",
-      "assets": [
-        {
-          "name": "YunGet-v2.0.0-release.apk",
-          "size": 18862525,
-          "url": "https://github.com/jiayuxuan123/YunGet/releases/download/v2.0.0/YunGet-v2.0.0-release.apk",
-          "downloads": 3,
-          "sha256": "c73a0897926a786f2903c05e261db10f421f927cbbb987dd20d381313c95578f"
         }
       ]
     }
