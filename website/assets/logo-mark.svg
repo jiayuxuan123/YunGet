@@ -1,0 +1,7 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32" width="32" height="32" role="img" aria-label="TurboDL">
+  <g fill="none" stroke="#d2691e" stroke-width="2.3" stroke-linecap="round">
+    <path d="M6 5v9.5M16 3.2v11.3M26 5v9.5"/>
+  </g>
+  <path d="M16 15.6l6.2 6.2H9.8z" fill="#d2691e"/>
+  <path d="M16 21v7" stroke="#d2691e" stroke-width="2.3" stroke-linecap="round"/>
+</svg>

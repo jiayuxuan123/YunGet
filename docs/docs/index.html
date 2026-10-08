@@ -1,0 +1,44 @@
+<!DOCTYPE html>
+<html lang="zh">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>文档 · 云取 YunGet</title>
+<meta name="description" content="使用说明、常见问题、下载引擎、从源码构建，以及项目说明。">
+<link rel="canonical" href="https://jiayuxuan123.github.io/YunGet/docs/index.html">
+<meta property="og:type" content="website">
+<meta property="og:site_name" content="云取 YunGet">
+<meta property="og:title" content="文档 · 云取 YunGet">
+<meta property="og:description" content="使用说明、常见问题、下载引擎、从源码构建，以及项目说明。">
+<meta property="og:url" content="https://jiayuxuan123.github.io/YunGet/docs/index.html">
+<meta property="og:image" content="https://jiayuxuan123.github.io/YunGet/assets/og.png">
+<meta name="twitter:card" content="summary_large_image">
+<link rel="icon" href="../assets/favicon.svg" type="image/svg+xml">
+<link rel="apple-touch-icon" href="../assets/apple-touch-icon.png">
+<link rel="stylesheet" href="../assets/site.css">
+</head>
+<body class="brand-yunget">
+<a class="skip" href="#main">跳到正文</a>
+<header class="site-head">
+<div class="wrap">
+<a class="brand" href="../index.html"><span class="brand-mark"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32" width="24" height="24" aria-hidden="true"><g fill="none" stroke="currentColor" stroke-width="2.3" stroke-linecap="round"><path d="M6 5v9.5M16 3.2v11.3M26 5v9.5"/></g><path d="M16 15.6l6.2 6.2H9.8z" fill="currentColor"/><path d="M16 21v7" stroke="currentColor" stroke-width="2.3" stroke-linecap="round"/></svg></span><span class="brand-name">云取 YunGet</span></a>
+<button class="nav-toggle" aria-expanded="false" aria-controls="site-nav">菜单</button>
+<nav id="site-nav" class="site-nav"><a href="../index.html">概览</a><a href="../download/index.html">下载</a><a href="index.html" class="active" aria-current="page">文档</a><a href="../changelog/index.html">更新日志</a><a href="../community/index.html">社区</a><a href="../support/index.html">支持开发</a><a href="../legal/index.html">协议</a></nav>
+
+</div>
+</header>
+<main id="main">
+<section><h1>文档</h1><p class="lead">下面每一篇都是仓库里的一个文件，官网与 GitHub 读的是同一份源 ——改一处，两处都对。每页都留了原文入口，想拿原始文件随时可以拿。</p></section><section><h2>三分钟上手</h2><ol><li>从 <a href="../download/index.html">下载页</a>取当前版本的 APK；</li><li>允许「未知来源」安装（应用没有上架任何应用商店）；</li><li>在「网盘」页登录你要用的网盘 —— 不登录只能看到文件名，拿不到可下载的直链；</li><li>复制一条分享链接，切回应用，点提示里的「粘贴」，解析、浏览、选中要下的文件；</li><li>任务出现在「下载」页，可以暂停、继续、删除、打开。</li></ol><div class="code"><div class="code-cap">shell</div><pre><code># 想自己编译一版：
+git clone https://github.com/jiayuxuan123/YunGet.git
+cd YunGet
+./gradlew :app:assembleRelease
+# 产物：app/build/outputs/apk/release/app-release.apk</code></pre></div></section><section><h2>全部文档</h2><div class="cards cols-2"><div class="card"><h3>项目说明</h3><div class="card-body"><p>它是什么、支持哪些网盘、能做什么、怎么从源码构建 —— 就是仓库里的那篇 README。</p><p class="mono small">README.md</p><div class="btn-row tight"><a class="btn" href="readme/index.html">阅读</a></div></div></div><div class="card"><h3>使用说明</h3><div class="card-body"><p>从粘贴一条分享链接开始：解析、浏览、取直链、下载，以及登录与凭证怎么处理。</p><p class="mono small">docs/GUIDE.md</p><div class="btn-row tight"><a class="btn" href="guide/index.html">阅读</a></div></div></div><div class="card"><h3>常见问题</h3><div class="card-body"><p>解析失败、速度慢、换机要重登、更新检不出来 —— 这些问题的成因与处理办法。</p><p class="mono small">docs/FAQ.md</p><div class="btn-row tight"><a class="btn" href="faq/index.html">阅读</a></div></div></div><div class="card"><h3>从源码构建</h3><div class="card-body"><p>需要的 JDK 与 SDK、签名怎么配、测试怎么跑，以及国内网络环境下的仓库镜像。</p><p class="mono small">docs/BUILD.md</p><div class="btn-row tight"><a class="btn" href="build/index.html">阅读</a></div></div></div><div class="card"><h3>下载引擎</h3><div class="card-body"><p>TurboDL 负责什么、应用里为什么不止一个引擎、什么时候会用到哪一个。</p><p class="mono small">docs/ENGINES.md</p><div class="btn-row tight"><a class="btn" href="engines/index.html">阅读</a></div></div></div><div class="card"><h3>开源协议（AGPL-3.0）</h3><div class="card-body"><p>本项目基于 GNU AGPL-3.0 开源，这里是协议原文，一字未改。</p><p class="mono small">LICENSE</p><div class="btn-row tight"><a class="btn" href="../legal/license/index.html">阅读</a></div></div></div><div class="card"><h3>隐私说明</h3><div class="card-body"><p>网盘凭证存在哪、会发给谁，以及哪些数据从来不离开这台设备。</p><p class="mono small">docs/PRIVACY.md</p><div class="btn-row tight"><a class="btn" href="../legal/privacy/index.html">阅读</a></div></div></div><div class="card"><h3>使用条款与免责声明</h3><div class="card-body"><p>使用者的责任、软件提供到什么程度、下载内容的版权归属。</p><p class="mono small">docs/TERMS.md</p><div class="btn-row tight"><a class="btn" href="../legal/terms/index.html">阅读</a></div></div></div></div></section><section><h2>技术栈</h2><p class="mono small">Kotlin · Jetpack Compose · Material 3 · Room · OkHttp · <a href="https://github.com/jiayuxuan123/TurboDL">TurboDL</a> · KSP</p><p>下载引擎与 HLS 都由 TurboDL 提供，所以引擎的改进可以单独升级、也可以被别的应用复用。应用自己负责的是网盘解析、文件浏览、任务管理与界面。</p></section></main>
+<footer class="site-foot">
+<div class="wrap">
+<div class="foot-cols"><div class="foot-col"><h4>项目</h4><ul><li><a href="https://github.com/jiayuxuan123/YunGet">GitHub</a></li><li><a href="../download/index.html">下载</a></li><li><a href="../changelog/index.html">更新日志</a></li><li><a href="https://github.com/jiayuxuan123/YunGet/issues">问题反馈</a></li></ul></div><div class="foot-col"><h4>文档</h4><ul><li><a href="readme/index.html">项目说明</a></li><li><a href="guide/index.html">使用说明</a></li><li><a href="faq/index.html">常见问题</a></li><li><a href="engines/index.html">下载引擎</a></li><li><a href="build/index.html">从源码构建</a></li></ul></div><div class="foot-col"><h4>协议与说明</h4><ul><li><a href="../legal/license/index.html">AGPL-3.0 原文</a></li><li><a href="../legal/notice/index.html">署名与致谢</a></li><li><a href="../legal/privacy/index.html">隐私说明</a></li><li><a href="../legal/terms/index.html">使用条款</a></li><li><a href="../support/index.html">支持开发</a></li></ul></div><div class="foot-col"><h4>相关</h4><ul><li><a href="https://github.com/CYQawa/YunX">上游 CYQawa/YunX</a></li><li><a href="https://github.com/jiayuxuan123/TurboDL">下载引擎 TurboDL</a></li><li><a href="../community/index.html">社区</a></li></ul></div></div>
+<div class="foot-note"><p>云取 YunGet v2.6.19 · AGPL-3.0 · 内置 TurboDL 0.2.0.5 · Android 6.0（API 23）</p><p>本项目是 CYQawa/YunX（云析）的二次开发版本，与上游作者无隐性关联。仅供个人学习与技术交流，请勿用于商业用途；下载内容的版权归原作者及相关权利人所有。</p></div>
+</div>
+</footer>
+<script src="../assets/site.js" defer></script>
+</body>
+</html>

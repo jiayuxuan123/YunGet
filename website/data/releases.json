@@ -1,0 +1,532 @@
+{
+  "repo": "jiayuxuan123/YunGet",
+  "latest": {
+    "tag": "v2.6.19",
+    "name": "YunGet 2.6.19：修复内存回收回调导致的崩溃（NetworkOnMainThreadException）",
+    "published": "2026-10-07T16:52:47Z",
+    "prerelease": false,
+    "url": "https://github.com/jiayuxuan123/YunGet/releases/tag/v2.6.19",
+    "summary": "YunGet 2.6.19：修复内存回收回调导致的崩溃（NetworkOnMainThreadException）\n---\n修复：应用在后台时偶发崩溃\n**现象**：切到后台、或系统内存吃紧时，应用**崩溃退出**。\n**错误**：\n**根因**：`onTrimMemory` 是**主线程**回调，而 `connectionPool.evictAll()` 不是\n\"清空一个列表\"这么无害 —— 它真的会 close 每条空闲连接的 socket\n（`RealConnectionPool.evictAll` → `Util.closeQuietly(socket)`）。\n关闭 TLS 连接要把 `close_notify` 告警**写出去**，这是一次网络写，Android 因此在主线程抛异常。\n而 OkHttp 的 `closeQuietly` **只吞 `IOException`**：`…",
+    "assets": [
+      {
+        "name": "YunGet-2.6.19-release.apk",
+        "size": 29251699,
+        "url": "https://github.com/jiayuxuan123/YunGet/releases/download/v2.6.19/YunGet-2.6.19-release.apk",
+        "downloads": 489,
+        "sha256": "d01180c164fd9fc7af2dc6cda9ad48485c66a741aa877139dc2809f02886ea70"
+      }
+    ]
+  },
+  "releases": [
+    {
+      "tag": "v2.6.19",
+      "name": "YunGet 2.6.19：修复内存回收回调导致的崩溃（NetworkOnMainThreadException）",
+      "published": "2026-10-07T16:52:47Z",
+      "prerelease": false,
+      "url": "https://github.com/jiayuxuan123/YunGet/releases/tag/v2.6.19",
+      "summary": "YunGet 2.6.19：修复内存回收回调导致的崩溃（NetworkOnMainThreadException）\n---\n修复：应用在后台时偶发崩溃\n**现象**：切到后台、或系统内存吃紧时，应用**崩溃退出**。\n**错误**：\n**根因**：`onTrimMemory` 是**主线程**回调，而 `connectionPool.evictAll()` 不是\n\"清空一个列表\"这么无害 —— 它真的会 close 每条空闲连接的 socket\n（`RealConnectionPool.evictAll` → `Util.closeQuietly(socket)`）。\n关闭 TLS 连接要把 `close_notify` 告警**写出去**，这是一次网络写，Android 因此在主线程抛异常。\n而 OkHttp 的 `closeQuietly` **只吞 `IOException`**：`…",
+      "assets": [
+        {
+          "name": "YunGet-2.6.19-release.apk",
+          "size": 29251699,
+          "url": "https://github.com/jiayuxuan123/YunGet/releases/download/v2.6.19/YunGet-2.6.19-release.apk",
+          "downloads": 489,
+          "sha256": "d01180c164fd9fc7af2dc6cda9ad48485c66a741aa877139dc2809f02886ea70"
+        }
+      ]
+    },
+    {
+      "tag": "v2.6.18",
+      "name": "YunGet 2.6.18（紧急修复）：修复 2.6.17 升级后启动即崩",
+      "published": "2026-10-07T14:57:11Z",
+      "prerelease": false,
+      "url": "https://github.com/jiayuxuan123/YunGet/releases/tag/v2.6.18",
+      "summary": "YunGet 2.6.18（紧急修复）：修复 2.6.17 升级后启动即崩\n---\n修复：升级到 2.6.17 后应用启动崩溃\n**现象**：从旧版本升级到 2.6.17 的用户，打开应用**立刻崩溃**，进不去任何界面。\n**错误**：`IllegalStateException: Migration didn't properly handle: download_task`\n**根因**：2.6.17 做数据库迁移时，为了与上游版本号对齐补了两列 ——\n`download_task.avgSpeed` 与 `xunlei_account.authType`，\n但**只加了迁移、忘了把这两个字段加进对应的数据实体**。\nRoom 在迁移完成后会校验表结构是否与实体一致，发现数据库里**多出这两列**，\n于是抛异常中止启动。\n**为什么本地测不出来**：开发机上的库是全新安装的（走\"建表…",
+      "assets": [
+        {
+          "name": "YunGet-2.6.18-release.apk",
+          "size": 29248962,
+          "url": "https://github.com/jiayuxuan123/YunGet/releases/download/v2.6.18/YunGet-2.6.18-release.apk",
+          "downloads": 177,
+          "sha256": "12c0e101b075995d546b80323576c4ad586e583f58668cdbb28917b20d45a695"
+        }
+      ]
+    },
+    {
+      "tag": "v2.6.17",
+      "name": "YunGet 2.6.17：全量同步上游（4 个新网盘、内置 Gopeed 引擎、磁力与口令、一批修复）",
+      "published": "2026-10-07T14:34:30Z",
+      "prerelease": false,
+      "url": "https://github.com/jiayuxuan123/YunGet/releases/tag/v2.6.17",
+      "summary": "YunGet 2.6.17：全量同步上游（4 个新网盘、内置 Gopeed 引擎、磁力与口令、一批修复）\n---\n新增：4 个网盘\n本次同步上游一周的更新，一次性接入四个平台，每个都含**登录 / 云盘管理 / 分享解析 / 转存 / 下载**全链路：\n| 平台 | 登录方式 |\n|---|---|\n| **115 网盘** | 网页登录（Cookie 含 UID/CID/SEID/KID 四键） |\n| **光鸭云盘** | 账号密码（换 access/refresh token + 设备标识） |\n| **蓝奏云优享版** | 账号密码或网页登录 |\n| **蓝奏云** | 网页登录（Cookie 需同时含 ylogin 与 phpdisk_info） |\n凭证与既有平台一致：**AES-GCM + Android Keystore 加密**后落库，密钥不可导出。\n数据库版本 11 →…",
+      "assets": [
+        {
+          "name": "YunGet-2.6.17-release.apk",
+          "size": 29247705,
+          "url": "https://github.com/jiayuxuan123/YunGet/releases/download/v2.6.17/YunGet-2.6.17-release.apk",
+          "downloads": 37,
+          "sha256": "0884ced6d4a8de22cc826558349926645dfe216e2b55c4e84648508db4878604"
+        }
+      ]
+    },
+    {
+      "tag": "v2.6.15",
+      "name": "YunGet 2.6.15：修复开发诊断报「NetworkOnMainThreadException」",
+      "published": "2026-09-30T04:47:02Z",
+      "prerelease": false,
+      "url": "https://github.com/jiayuxuan123/YunGet/releases/tag/v2.6.15",
+      "summary": "YunGet 2.6.15：修复开发诊断报「NetworkOnMainThreadException」\n---\n修复：诊断功能报「指定的链接不可用： NetworkOnMainThreadException」\n**现象**：连接数诊断（含粘贴了当前有效直链的情况）点击后直接报\n「❌ 指定的链接不可用： NetworkOnMainThreadException: 无法连接 https://…」。\n**根因**：链接本身没有问题。诊断开始前有一次预检探活（先确认链接可用、\n免得白等 1 分钟），这个探活是阻塞式网络调用，却被界面主线程的协程直接调用 ——\nAndroid 禁止在主线程发起网络请求，于是抛出 `NetworkOnMainThreadException`。\n该异常又被探活的异常处理捕获并转成「链接不可用： …」的文案，\n**伪装成了链接失效**，引导用户去换链接、怀疑网盘，而真正原…",
+      "assets": [
+        {
+          "name": "YunGet-2.6.15-release.apk",
+          "size": 28284269,
+          "url": "https://github.com/jiayuxuan123/YunGet/releases/download/v2.6.15/YunGet-2.6.15-release.apk",
+          "downloads": 3926,
+          "sha256": "27284307104496d94934cb94f82b2445d586bcebda3d0b4d1b74232427f0e845"
+        }
+      ]
+    },
+    {
+      "tag": "v2.6.14",
+      "name": "YunGet 2.6.14：DNS 自动择优（含端点延迟可视化）；修复诊断功能不可用",
+      "published": "2026-09-29T15:32:14Z",
+      "prerelease": false,
+      "url": "https://github.com/jiayuxuan123/YunGet/releases/tag/v2.6.14",
+      "summary": "YunGet 2.6.14：DNS 自动择优（含端点延迟可视化）；修复诊断功能不可用\n---\n新增：DNS 自动模式\n**此前的问题**：DNS 只能二选一 —— 「系统 DNS」或「手动填一个 DoH 地址」。\n而用户很难知道哪个 DoH 在当前网络下可用。实测国内网络环境：\n**境外 DoH（Google / Cloudflare）完全不可达，境内 DoH（阿里 / 腾讯）可用**。\n用户往往先填境外那几个知名地址，结果\"开了 DoH 反而更慢甚至解析失败\"。\n**自动模式**：并发探测全部候选端点，采用**最快给出有效结果**的那个，\n并在之后 10 分钟内固定复用它；选定端点失效或超过有效期时重新择优；\n全部失败则回退系统 DNS。\n候选端点**国内优先**：阿里 → 腾讯 → Google → Cloudflare。\n顺序只影响极端情况下的兜底，因为探测是并发的、取最快者。\n**…",
+      "assets": [
+        {
+          "name": "YunGet-2.6.14-release.apk",
+          "size": 28282625,
+          "url": "https://github.com/jiayuxuan123/YunGet/releases/download/v2.6.14/YunGet-2.6.14-release.apk",
+          "downloads": 339,
+          "sha256": "fc841063fe834dc5597208da749d9a99d2f23261d4200d0c0eaccae02c086216"
+        }
+      ]
+    },
+    {
+      "tag": "v2.6.13",
+      "name": "YunGet 2.6.13：123 云盘改网页登录（避免风控）；HLS 插件安全加固",
+      "published": "2026-09-29T14:27:03Z",
+      "prerelease": false,
+      "url": "https://github.com/jiayuxuan123/YunGet/releases/tag/v2.6.13",
+      "summary": "123 云盘改为网页登录（避免账号密码接口触发风控）；HLS 插件安全加固\n---\n123 云盘改为网页登录\n**改动原因**：原登录方式需要向 `user.123pan.cn/api/user/sign_in` 提交**明文账号密码**。\n这类直接调用登录接口的行为容易被官方判定为异常客户端而触发风控，进而影响账号使用。\n**新的登录方式**：在应用内打开 123 云盘官方网页（`yun.123pan.cn`），\n由用户在**官方页面**完成登录（验证码、扫码等均由官网处理），\n应用从网页 localStorage 的 `authorToken` 读取结果凭证。\n取到的 token 与旧接口返回的 `data.token` **同源同形**（都是 Bearer JWT），\n因此后续的凭证校验与业务请求无需任何改动。\n**三个入口**：\n1. **自动检测**（主路径）：网页登录完成后自动…",
+      "assets": [
+        {
+          "name": "YunGet-2.6.13-release.apk",
+          "size": 28273925,
+          "url": "https://github.com/jiayuxuan123/YunGet/releases/download/v2.6.13/YunGet-2.6.13-release.apk",
+          "downloads": 80,
+          "sha256": "692601f02b1e41342eca8d84d9de6c93ea87bc6e2232dcf6dfe7e73ae0d81269"
+        }
+      ]
+    },
+    {
+      "tag": "v2.6.12",
+      "name": "YunGet 2.6.12：新增网盘链接收藏；修复登录后网盘页残留「请先登录」；修正进度写库节流",
+      "published": "2026-09-29T14:05:25Z",
+      "prerelease": false,
+      "url": "https://github.com/jiayuxuan123/YunGet/releases/tag/v2.6.12",
+      "summary": "新增网盘链接收藏；修复登录后网盘页残留「请先登录」；修正进度写库节流\n继续同步上游 [CYQawa/YunX](https://github.com/CYQawa/YunX) 的改进。\n---\n新增：网盘链接收藏\n解析页标题栏新增收藏入口，可保存分享链接与提取码并按分类管理；\n点击收藏条目直接跳回解析页开始解析，无需重新粘贴。\n数据存入新增的 Room 表 `bookmark`（数据库版本 10 → 11，带迁移），\n字段与上游保持一致以便后续同步。分类既可用预置项，也可由已保存条目自动汇总。\n---\n修复：登录成功后网盘页仍显示「请先登录」\n**现象**：首次登录某个网盘后，切到该网盘的文件页，仍停在「请先登录夸克网盘」之类的提示，\n必须手动点一次「重试」才能看到文件列表。\n**根因**：6 个云盘浏览 ViewModel 在构造时无条件执行 `init { loadRoot() }`。…",
+      "assets": [
+        {
+          "name": "YunGet-2.6.12-release.apk",
+          "size": 28258406,
+          "url": "https://github.com/jiayuxuan123/YunGet/releases/download/v2.6.12/YunGet-2.6.12-release.apk",
+          "downloads": 32,
+          "sha256": "f870e99e99a42575269fc62025b0cfc33eba024a5c83566714efb7954311244a"
+        }
+      ]
+    },
+    {
+      "tag": "v2.6.11",
+      "name": "YunGet 2.6.11：同步上游安全加固（凭证加密/日志脱敏）、保存流式落盘、Material 3 Expressive 界面",
+      "published": "2026-09-29T13:37:49Z",
+      "prerelease": false,
+      "url": "https://github.com/jiayuxuan123/YunGet/releases/tag/v2.6.11",
+      "summary": "同步上游 YunX 的安全加固、保存路径重构与 Material 3 Expressive 界面\n本版将上游 [CYQawa/YunX](https://github.com/CYQawa/YunX) 的多项改进合并进本项目。\n合并前先做了逐文件比对（归一化包名与许可证头后，122 个同名文件中 51 个内容完全一致），\n据此决定三类处理方式：可直接采用、需适配定制点、以及双方已分叉需保留各自的实现。\n---\n安全：凭证加密存储\n**此前状态**：各网盘的登录凭证（cookie / accessToken / refreshToken）以**明文**存储在\nRoom 数据库中。设备被 root 或数据库文件被取出时，账号凭证可直接读取。\n**改造后**：\n· 落库前使用 **AES-GCM** 加密，密钥由 **Android Keystore** 持有且不可导出\n· 附加认证数据（AAD…",
+      "assets": [
+        {
+          "name": "YunGet-2.6.11-release.apk",
+          "size": 28206128,
+          "url": "https://github.com/jiayuxuan123/YunGet/releases/download/v2.6.11/YunGet-2.6.11-release.apk",
+          "downloads": 34,
+          "sha256": "6d9257c36cc2c1a3a29635b3492cd8154f8d973d75883b23cd7c3514e630e125"
+        }
+      ]
+    },
+    {
+      "tag": "v2.6.10",
+      "name": "YunGet 2.6.10：修复检查更新检测不到新版本；下载引擎升级 0.2.0.1；备份引擎升 aria2-next 2.8.3",
+      "published": "2026-09-29T09:58:48Z",
+      "prerelease": false,
+      "url": "https://github.com/jiayuxuan123/YunGet/releases/tag/v2.6.10",
+      "summary": "修复「检查更新」检测不到新版本；下载引擎升级至 0.2.0.1；内置 aria2 引擎升级至 aria2-next 2.8.3\n---\n修复：检查更新无法发现新版本\n**现象**：安装 2.6.9 后，应用内「检查更新」提示已是最新版本，无法发现后续发布。\n**根因**：此前使用 GitHub 的 `/releases/latest` 接口。该接口按设计**只返回已正式发布的版本，\n跳过预发布版本**，而本项目的测试版本正是以预发布形式发布。实测对比：\n| 接口 | 返回结果 |\n|---|---|\n| `/releases/latest`（原使用） | `v2.6.7`（跳过了所有预发布版本） |\n| `/releases?per_page=30`（现使用） | `v2.6.10`、`v2.6.9`、`v2.6.7` … |\n**改动**：改用 Release 列表接口，并自行按**版本…",
+      "assets": [
+        {
+          "name": "YunGet-2.6.10-release.apk",
+          "size": 27139908,
+          "url": "https://github.com/jiayuxuan123/YunGet/releases/download/v2.6.10/YunGet-2.6.10-release.apk",
+          "downloads": 171,
+          "sha256": "6bdcceec13a3243aa9820277047a13a759bd121cd053ca71c3245d4064d8f414"
+        }
+      ]
+    },
+    {
+      "tag": "v2.6.9",
+      "name": "YunGet 2.6.9：下载引擎可切换（TurboDL / 内置兼容 / aria2 原生）",
+      "published": "2026-09-28T10:48:05Z",
+      "prerelease": true,
+      "url": "https://github.com/jiayuxuan123/YunGet/releases/tag/v2.6.9",
+      "summary": "下载引擎可切换（TurboDL / 内置兼容 / aria2 原生）+ 若干缺陷修复\n---\n新增：下载引擎可切换\n设置页 → 下载 → **下载引擎**，三选一：\n| 引擎 | 说明 |\n|---|---|\n| **TurboDL（默认）** | 多线程 Range 分片 / 工作窃取 / 断点续传 / 现场诊断 |\n| 内置兼容引擎 | 项目早期实现，保留作兜底；不支持现场诊断 |\n| **aria2 原生引擎（实验）** | 内置官方 aria2c 1.37.0，仅 arm64 |\n**切换需重启 App 生效** —— 这不是偷懒：管理器由 ViewModel 持有，\n而各业务 ViewModel 在构造时强引用它；若做热切换，旧 ViewModel 会继续指向旧管理器，\n导致**两套引擎同时活着**（连接池重复占用）。弹窗里已明确提示。\n同时把 `DownloadManager`…",
+      "assets": [
+        {
+          "name": "YunGet-2.6.9-release.apk",
+          "size": 21487222,
+          "url": "https://github.com/jiayuxuan123/YunGet/releases/download/v2.6.9/YunGet-2.6.9-release.apk",
+          "downloads": 20,
+          "sha256": "0c64daaf604b4cc9679cefce5c7da2d15018023b4a3343fe80dd2213e97413ad"
+        }
+      ]
+    },
+    {
+      "tag": "v2.6.7",
+      "name": "YunGet 2.6.7：续传修复（二）取不到指纹不再丢弃旧分片",
+      "published": "2026-09-15T09:49:31Z",
+      "prerelease": false,
+      "url": "https://github.com/jiayuxuan123/YunGet/releases/tag/v2.6.7",
+      "summary": "YunGet 2.6.7：续传修复（二）—— 取不到指纹不再丢弃旧分片\n上一版只修了一半\n2.6.6 用「内容指纹」替代了「弱校验器一律丢弃」，但判定是**二值**的：指纹不通过就丢弃。\n而\"不通过\"其实包含两种完全不同的情况：\n| 情况 | 2.6.6 行为 | 正确行为 |\n|---|---|---|\n| 拿到了服务器字节、**内容确实不同** | 丢弃 ✅ | 丢弃 |\n| **根本没拿到**（状态码异常 / 请求失败 / 无可读分片） | **丢弃 ❌** | **保留** |\n第二种就是「**一次指纹请求没成功，就把已下载的数据全删了**」——\n也就是你看到的\"暂停之后还是从头下\"。**拿不到证据 ≠ 内容已变。**\n本版改动\n判定改为**三值**：\n· **一致** → 保留旧分片，续传可用\n· **确证不同** → 丢弃（安全底线不变）\n· **取不到** → **保留**（…",
+      "assets": [
+        {
+          "name": "app-release.apk",
+          "size": 18993570,
+          "url": "https://github.com/jiayuxuan123/YunGet/releases/download/v2.6.7/app-release.apk",
+          "downloads": 3332,
+          "sha256": "aea85a934fd642afc63fc87ef822914e37f63730f66993482f1e5c419f7218e6"
+        }
+      ]
+    },
+    {
+      "tag": "v2.6.6",
+      "name": "YunGet 2.6.6：修复暂停就整包重下",
+      "published": "2026-09-15T09:28:22Z",
+      "prerelease": false,
+      "url": "https://github.com/jiayuxuan123/YunGet/releases/tag/v2.6.6",
+      "summary": "YunGet 2.6.6：修复「暂停就整包重下」+ 回退上一版的分片上限\n本版处理你反馈的三个问题。**其中两个是我自己造成的，一并说明。**\n> 你反馈：「速度快不起来（要不还是修，或者回退吧）。用夸克链接暂停了，它**就重新下载了**；\n>   而且现在**速度和线程上升都变慢了**；暂停后再点进来，卡在**已下载 0%** 然后才显示下载。」\n1. 「暂停就重新下载」——夸克这类链接一直是这样\n夸克 CDN **不给 ETag / Last-Modified**，引擎的续传校验只能拿到\"弱校验器\"，\n而旧策略规定「弱校验器不足以安全续传 → **丢弃全部已有分片**」。\n两者叠加就是：**一暂停，已下载的全没了，从头再来**。1.3GB 就是十几分钟白下。\n**现在改用「内容指纹」代替「一律丢弃」**：续传前取一个已存分片的前 **64KB**，\n和服务器请求同一区间逐字节比对 ——…",
+      "assets": [
+        {
+          "name": "app-release.apk",
+          "size": 18993583,
+          "url": "https://github.com/jiayuxuan123/YunGet/releases/download/v2.6.6/app-release.apk",
+          "downloads": 12,
+          "sha256": "5d475749865a95d5f752fc44f05900bbea86c8044bb5cbe483e9c891c7afb74c"
+        }
+      ]
+    },
+    {
+      "tag": "v2.6.5",
+      "name": "YunGet 2.6.5：高并发下分片数收敛（64 线程比 128 更快）",
+      "published": "2026-09-15T08:57:11Z",
+      "prerelease": false,
+      "url": "https://github.com/jiayuxuan123/YunGet/releases/tag/v2.6.5",
+      "summary": "升级 TurboDL rc19；高并发下分片数收敛（实测 1.45~1.9 倍）\n依赖升级\nTurboDL `0.2.0-rc18` → `0.2.0-rc19`。\n本版内容\n1. 总切块数加上限（`maxSegmentsPerTask`，默认 128；0 = 不限）\n块数原本 = `连接数 × 4`，**没有上限**：128 线程 → 512 块（压到 256 块，每块仅 64KB）。\n每个块 = 一次 HTTP 请求 + 一个临时文件 + 合并时的一次读写。\n新增的正交实验（`FanoutCostTest`，交错 round-robin，三次取中位数）：\n| 连接数 \\ 分片数 | 256 | 128 |\n|---|---|---|\n| **128** | 4.4 MB/s | **6.4** |\n| **64** | 4.8 | **9.2** |\n· 分片数 256→128 平均…",
+      "assets": [
+        {
+          "name": "app-release.apk",
+          "size": 18993587,
+          "url": "https://github.com/jiayuxuan123/YunGet/releases/download/v2.6.5/app-release.apk",
+          "downloads": 13,
+          "sha256": "0042772d8f3b87ffeb3a362497e50cb274ac597c75151d320b3779d0467136bb"
+        }
+      ]
+    },
+    {
+      "tag": "v2.6.4",
+      "name": "YunGet 2.6.4：修复解析卡顿（DoH 缓存 / IPv4 优先）+ 启动阶段诊断",
+      "published": "2026-09-15T08:08:04Z",
+      "prerelease": false,
+      "url": "https://github.com/jiayuxuan123/YunGet/releases/tag/v2.6.4",
+      "summary": "升级 TurboDL rc18；针对「任何链接解析都卡半分钟」的三处修复 + 启动阶段诊断日志\n依赖升级\nTurboDL `0.2.0-rc17` → `0.2.0-rc18`。\n修的问题（用户实报）\n> 「不管什么链接，它解析的阶段都非常非常非常久……大概过了半分钟以后才开始。」（2.6.2 / 2.6.3 都这样）\n这类问题**在开发机（回环）上永远复现不了**：没有真实 DNS、没有 IPv6、没有 TLS 握手。\n所以本版按真实网络的三个客观缺陷动手。\n1. DoH 每次查询都是完整 HTTPS 往返，且**完全没有缓存**\n`DohDns.lookup` 每次调用都发一次 DoH 请求（超时 10s 连接 + 10s 读），而它会被**每个新连接**调用。\n只要 DoH 服务器慢/不通，就是「每个链接解析先撞一次超时」——症状与描述完全一致。\n**修复**：加查询缓存（成功 5…",
+      "assets": [
+        {
+          "name": "app-release.apk",
+          "size": 18977202,
+          "url": "https://github.com/jiayuxuan123/YunGet/releases/download/v2.6.4/app-release.apk",
+          "downloads": 26,
+          "sha256": "977db92ddeae16d668273a6d4f34b781d12d52294ef664ca8177100ce8141d36"
+        }
+      ]
+    },
+    {
+      "tag": "v2.6.3",
+      "name": "YunGet 2.6.3：修复并发惩罚服务器下任务直接失败",
+      "published": "2026-09-15T05:22:42Z",
+      "prerelease": false,
+      "url": "https://github.com/jiayuxuan123/YunGet/releases/tag/v2.6.3",
+      "summary": "YunGet 2.6.3：修复并发惩罚服务器下任务直接失败\n依赖升级\nTurboDL `0.2.0-rc16` → `0.2.0-rc17`。\n修复的问题：同一台服务器，32 线程失败、128 线程成功\nTurboDL 新增的连接数扫描测量台在「**对并发有惩罚**的服务端模型」\n（并发超过 16 就返回 503 —— 网盘 CDN 常见行为）下发现：\n| 连接数 | 修复前 |\n|---|---|\n| 8 / 16 | ✅ 正常（1.4 MB/s） |\n| **32** | ❌ **整个任务失败**：「分片持续被限流（429/503），重试 4 次后放弃」 |\n| 128 | ✅ 能完成，但撞了 299 次 503 |\n**同一台服务器，设 32 线程失败、设 128 线程成功，纯看运气。**\n如果某台服务器对并发有惩罚，这就是「高线程反而更慢/更不稳」的机制之一。\n根因\n两处叠加：\n1…",
+      "assets": [
+        {
+          "name": "app-release.apk",
+          "size": 18977203,
+          "url": "https://github.com/jiayuxuan123/YunGet/releases/download/v2.6.3/app-release.apk",
+          "downloads": 72,
+          "sha256": "24fbfa7bde18f5f1e7df362d6496eab060539004f002e27161268d0e7d629cf6"
+        }
+      ]
+    },
+    {
+      "tag": "v2.6.2",
+      "name": "YunGet 2.6.2：解析更快、续传修好、完成状态不再显示 99%",
+      "published": "2026-09-15T04:31:59Z",
+      "prerelease": false,
+      "url": "https://github.com/jiayuxuan123/YunGet/releases/tag/v2.6.2",
+      "summary": "YunGet 2.6.2：解析更快、续传修好、完成状态不再显示 99%\n本版内容\n1. 升级 TurboDL 到 `0.2.0-rc16`\n**解析阶段更快**（用户实报：10MB/6MB 这种小文件，解析也要等很久）\n引擎原先把「服务器**确定性地**不支持分片」这个结论当成了「瞬时抖动」——\n每一轮探测都白发 2 个请求，还要把重试次数跑满并叠加退避，而结论永远不会变。\n网盘链接因为调用方已知文件大小会**跳过探测**，所以反而更快 —— 这是那个反直觉现象的来源。\n现在确定性结论立即返回：不支持分片的服务器探测请求从 8 次降到 2 次；\n返回网页（反爬/拦截）的服务器从\"跑满重试\"变成 **26ms 立即失败**并给出准确原因。\n**消除「每个分片各自重走一次 302」**\n跳过探测时引擎用的是原始链接，于是**每个分片都要自己跟一次 302**。\n实测：8 连接 / 32 分片…",
+      "assets": [
+        {
+          "name": "app-release.apk",
+          "size": 18977203,
+          "url": "https://github.com/jiayuxuan123/YunGet/releases/download/v2.6.2/app-release.apk",
+          "downloads": 23,
+          "sha256": "2c21ce3c90cb74c4b19ace5c8ba0afcdccda6968de6e928c2dcbf144610e9cf9"
+        }
+      ]
+    },
+    {
+      "tag": "v2.6.1",
+      "name": "YunGet 2.6.1：默认线程数翻倍（升级 TurboDL rc14）",
+      "published": "2026-09-14T09:37:26Z",
+      "prerelease": false,
+      "url": "https://github.com/jiayuxuan123/YunGet/releases/tag/v2.6.1",
+      "summary": "升级 TurboDL 到 0.2.0-rc14\n依赖升级\ndev.turbodl:* 由 0.2.0-rc13 → 0.2.0-rc14。\nrc14 带来的变化\n1. 默认连接数 8 → 16（对本 App 直接有利）\n实测（本地服务器**每连接限速 2MB/s**，24MB 文件）：\n| 连接数 | 吞吐 |\n|---|---|\n| 8（旧默认） | 7.3 MB/s |\n| 16 | 8.9 MB/s |\n| 64 | 12.1 MB/s |\n**+65%，单调。** 机制：服务器按**每条连接**限速时，总吞吐 = 单连接上限 × 连接数\n—— 此时**连接数是唯一的倍率**，分片粒度调参替代不了它。\n这对本宿主很关键：云盘直链普遍是**按连接限速**的，\n所以\"设置页调大线程数\"是真能提速的，而 rc13 之前的默认值 8 偏保守。\n（用户仍可在设置页自行调高到 64。）\n2. 放…",
+      "assets": [
+        {
+          "name": "app-release.apk",
+          "size": 18977203,
+          "url": "https://github.com/jiayuxuan123/YunGet/releases/download/v2.6.1/app-release.apk",
+          "downloads": 226,
+          "sha256": "903e288ec9f4754c408c07e2d68b58f75a4e88be4618222172786e7df39deb14"
+        }
+      ]
+    },
+    {
+      "tag": "v2.6.0",
+      "name": "YunGet 2.6.0：修复低限速下下载卡死（升级 TurboDL rc13）",
+      "published": "2026-09-14T07:55:02Z",
+      "prerelease": false,
+      "url": "https://github.com/jiayuxuan123/YunGet/releases/tag/v2.6.0",
+      "summary": "YunGet 2.6.0：修复低限速下下载卡死（升级 TurboDL 0.2.0-rc13）\n本次修复\n关键修复：限速调低后下载会「卡住不动」\nTurboDL 的 `SpeedLimiter` 令牌桶容量固定为「1 秒额度」。当**单次要消费的字节数\n大于该额度**时，`bytes <= tokens` 永远不成立，限速器陷入无限等待 ——\n下载既不报错也不推进，任务彻底卡死。\n对本 App 来说这个触发条件很容易碰到：\n· 设置页允许把**全局限速**调到很低；\n· 而引擎的 IO 缓冲默认是 **1MB**（`ioBufferSize`）。\n也就是说 **只要限速低于约 1MB/s，恢复下载后就可能永久卡住**。\n升级到 TurboDL 0.2.0-rc13 后，桶容量改为 `max(1 秒额度, 本次要消费的量)`，\n该自锁被消除。\n一并带上 rc12 的数据正确性修复\n本次依赖同时…",
+      "assets": [
+        {
+          "name": "app-release.apk",
+          "size": 18977193,
+          "url": "https://github.com/jiayuxuan123/YunGet/releases/download/v2.6.0/app-release.apk",
+          "downloads": 42,
+          "sha256": "c8a5f9e66f4f17d54266814bab900af0903df4019881541b126e97177fddf28c"
+        }
+      ]
+    },
+    {
+      "tag": "v2.5.0",
+      "name": "YunGet 2.5.0：吞吐量瓶颈修复——终于能跑满了",
+      "published": "2026-08-30T08:20:43Z",
+      "prerelease": false,
+      "url": "https://github.com/jiayuxuan123/YunGet/releases/tag/v2.5.0",
+      "summary": "吞吐量瓶颈修复：终于能跑满了\n你说「后期也只能稳定 3MB/s，别的下载器能跑几十 MB/s」——根因不是网络，是引擎内部三个自身瓶颈。\n主因：线程数硬天花板 64\n分片下载是阻塞式读取，一个分片占死一个线程。但 Kotlin 的 IO 调度器默认并行度只有 `max(64, CPU核数)`——设 128 连接时实际最多只有 ~64 个能同时搜数据，其余在队列里干等。\n这正是你之前反复看到的「线程数卡在 64」，也是吞吐上不去的硬天花板。\n现在为每个下载任务开专用 IO 线程池（并行度 = 你的连接数 + 余量），不再与其他任务或库抢线程，设 128 就能真正跑 128。\n次因：进度上报拖累 CPU\n每个缓冲块都要重建进度 Map、启协程发事件，高速多连接下每秒上千次，CPU 全耗在上报而不是搬数据。现在默认 200ms 节流；IO 缓冲从 256KB 放大到 1MB。\n三处一起修，本地测…",
+      "assets": [
+        {
+          "name": "YunGet-2.5.0.apk",
+          "size": 18977198,
+          "url": "https://github.com/jiayuxuan123/YunGet/releases/download/v2.5.0/YunGet-2.5.0.apk",
+          "downloads": 138,
+          "sha256": "b2ee411bfeef1a45ad7b2fb978aac65219b35a9c3c7a3baff93b9a0f1c3becdd"
+        }
+      ]
+    },
+    {
+      "tag": "v2.4.3",
+      "name": "YunGet 2.4.3：修复下载前「解析」卡近一分钟",
+      "published": "2026-08-30T04:21:56Z",
+      "prerelease": false,
+      "url": "https://github.com/jiayuxuan123/YunGet/releases/tag/v2.4.3",
+      "summary": "修复：点了下载后「解析」要等将近一分钟\r\n\r\n这是上两个版本引入的回归。三处串行等待叠加，最坏约 69 秒：\r\n\r\n1. **探测重试预算过大**：单次超时 20 秒、最多试 3 次，加上重试间隔，最坏要卡 **61 秒**。这期间任务已经显示「下载中」但字节为 0 —— 就是你看到的「一直在解析」。\r\n2. **连接预热同步等待**：预热要全部完成（最坏 8 秒）才开始下载，直接叠加在探测之后。这正是你之前发现「关掉连接预热会好些」的原因。\r\n3. **已知大小仍重复探测**：网盘解析已经给出准确文件大小了，还要再去探测一次，纯属浪费时间。\r\n现在\r\n· 探测超时 20 秒 → **6 秒**，最多重试 1 次：最坏等待从 61 秒降到约 12 秒。探测失败并不影响下载（大不了单线程），不值得久等。\r\n· 连接预热改为**后台进行**，下载立刻开始，预热好的连接会自动被后续分片复用。…",
+      "assets": [
+        {
+          "name": "YunGet-2.4.3.apk",
+          "size": 18977202,
+          "url": "https://github.com/jiayuxuan123/YunGet/releases/download/v2.4.3/YunGet-2.4.3.apk",
+          "downloads": 2,
+          "sha256": "ce739517ed490cdc12338fd551d6855ae058669e9b9b7604499a29f35e24b0bc"
+        }
+      ]
+    },
+    {
+      "tag": "v2.4.2",
+      "name": "YunGet 2.4.2：线程数终于跑满 + 弱网卡顿修复",
+      "published": "2026-08-30T03:42:30Z",
+      "prerelease": false,
+      "url": "https://github.com/jiayuxuan123/YunGet/releases/tag/v2.4.2",
+      "summary": "针对你实测反馈的三个问题修复。\n修复：设 128 线程实际远达不到\n慢启动每次只加 1 个连接，从初始值爬到 128 需要上百次上调、几百个分片完成，中小文件根本爬不到顶。\n现改为**按比例上调**，十余次即可到顶，同时仍然是渐进的、不会一上来就冲击服务器。\n修复：速度变快，显示的线程数反而下降\n这是显示口径的问题（实际并发没降）。原先统计的是「这一瞬间正在传输的分片数」，\n而每个线程完成一个分片、领取下一个之间有极短空档；速度越快、分片完成越频繁，\n空档占比越大，采样到的数字反而越小。现在改为统计「当前有多少连接在干活」，\n下载末期剩余分片不足时数字下降属于正常现象。\n修复：2.4GHz Wi-Fi 等弱网下容易卡住\n连接预热此前会按下载线程数并发建连（最多 8 条）。弱网下一口气并发多个 TLS 握手会互相争抢信道，\n反而拖慢首字节时间、甚至堆积超时让任务看起来「卡在下载中」。\n现在预…",
+      "assets": [
+        {
+          "name": "YunGet-2.4.2.apk",
+          "size": 18977217,
+          "url": "https://github.com/jiayuxuan123/YunGet/releases/download/v2.4.2/YunGet-2.4.2.apk",
+          "downloads": 3,
+          "sha256": "f93dff18b1fa7b11ecef82d0e3c6c9ad52a040cc108db022ab8fe1495e426cdf"
+        }
+      ]
+    },
+    {
+      "tag": "v2.4.1",
+      "name": "YunGet 2.4.1：修复下载卡住不动 + 探测增强",
+      "published": "2026-08-29T07:47:08Z",
+      "prerelease": false,
+      "url": "https://github.com/jiayuxuan123/YunGet/releases/tag/v2.4.1",
+      "summary": "修复：有时显示「下载中」但一直不动\n这是引擎层的无界等待问题，本版彻底修复：\n· **探测阶段挂起**：服务器接受连接但迟迟不响应时，旧版会叠加等待近一分钟，期间界面已显示「下载中」但字节为 0（就是你看到的「连解析都没做」）；现在探测有硬超时并自动重试，全部失败才回退单线程。\n· **传输中卡死**：若 CDN 每隔很久才吐几字节，系统超时永远不触发，任务可挂到无限久；现在新增卡死守护，一段时间无进展就主动重连（可能换到其他 CDN 节点），连续多次失败才明确报错（分片保留，重试即续传）。\n· **连接预热挂起**：预热请求现在有独立超时，绝不拖慢正式下载。\n优化：部分链接白白退化成单线程\n某些 CDN 对探测请求返回 200 而非 206，即使它明确支持分片也被判为不支持，导致退化成单线程。本版会读取 `Accept-Ranges` 正确识别，多线程恢复生效。\n优化：续传更安全 + 文…",
+      "assets": [
+        {
+          "name": "YunGet-2.4.1.apk",
+          "size": 18977220,
+          "url": "https://github.com/jiayuxuan123/YunGet/releases/download/v2.4.1/YunGet-2.4.1.apk",
+          "downloads": 15,
+          "sha256": "7be07bda9c654e559cff8ceb5732ac802f0ec33abff65e4872390652e65048b5"
+        }
+      ]
+    },
+    {
+      "tag": "v2.4.0",
+      "name": "YunGet 2.4.0：设置页增强 / 线程上限 128 / 弹窗修复",
+      "published": "2026-08-28T06:58:04Z",
+      "prerelease": false,
+      "url": "https://github.com/jiayuxuan123/YunGet/releases/tag/v2.4.0",
+      "summary": "修复：更新弹窗按钮重叠\n「使用镜像站下载」与「忽略本次/稍后」挤在一起的排版问题已修复，按钮改为整齐的单列布局。\n下载线程上限 64 → 128\n设置页新增 128 线程档位（引擎能力不变，软件层放开到 128）。\n设置页新增性能选项（下载分组下）\n· **自定义 DNS (DoH)**：可选阿里/腾讯/Google/Cloudflare 或自定义 URL，下载走加密 DNS，绕过本地 DNS 污染。\n· **连接预热**（默认开）：下载前预建连接并解析 DNS，起步更快。\n· **慢启动**（默认开）：并发从少逐步爬升到设定值，更稳、不易触发 CDN 风控。\n以上选项修改后立即生效。\n版本 2.3.0 → 2.4.0（versionCode 7 → 8）。手动安装覆盖即可。",
+      "assets": [
+        {
+          "name": "YunGet-2.4.0.apk",
+          "size": 18960826,
+          "url": "https://github.com/jiayuxuan123/YunGet/releases/download/v2.4.0/YunGet-2.4.0.apk",
+          "downloads": 16,
+          "sha256": "2fe0a6273439a9245a0f18f099a378efdf9d90ede6c3cf9918caf70c2595117f"
+        }
+      ]
+    },
+    {
+      "tag": "v2.3.0",
+      "name": "YunGet 2.3.0：下载更快更稳（预热/慢启动/协议自适应）",
+      "published": "2026-08-28T05:58:15Z",
+      "prerelease": false,
+      "url": "https://github.com/jiayuxuan123/YunGet/releases/tag/v2.3.0",
+      "summary": "下载引擎升级到 TurboDL rc7，带来一批性能与稳定性增强（均自动生效）：\n· **连接预热 + DNS 预解析**：开始下载前先建好连接、解析好域名，起步更快、初期不再空等。\n· **慢启动**：并发线程数从少逐步爬升到你设定的值，避免一上来几十个连接同时冲击服务器被风控/限速。\n· **HTTP 协议自适应**：多线程分片走 HTTP/1.1 保证多连接加速，单流回退时允许 HTTP/2，兼容更多服务器。\n· **更平滑的剩余时间**：ETA 不再大范围跳变。\n版本 2.2.2 → 2.3.0（versionCode 6 → 7）。手动安装覆盖即可。",
+      "assets": [
+        {
+          "name": "YunGet-2.3.0.apk",
+          "size": 18960812,
+          "url": "https://github.com/jiayuxuan123/YunGet/releases/download/v2.3.0/YunGet-2.3.0.apk",
+          "downloads": 3,
+          "sha256": "ea231aa860cddf00b4f73d5f5cbdd0491a1ec3f4cec9c663b3d1aed8b3282cfe"
+        }
+      ]
+    },
+    {
+      "tag": "v2.2.2",
+      "name": "YunGet 2.2.2：修复原始链接下载卡在\"下载中\"不动",
+      "published": "2026-08-28T05:06:29Z",
+      "prerelease": false,
+      "url": "https://github.com/jiayuxuan123/YunGet/releases/tag/v2.2.2",
+      "summary": "修复：粘贴原始链接（未解析）下载卡住、线程/大小都不显示\n原始下载链接会 302 跳转到带签名的 CDN 临时直链，只有临时直链支持多线程。此前底层没跟随 302、\n一直用原始链接下载，导致\"显示下载中但字节和线程都不动，最后失败\"；而手动贴入解析后的 CDN\n直链则能满速多线程。本版底层探测后自动改用解析出的最终直链下载。\n版本 2.2.1 → 2.2.2（versionCode 5 → 6）。手动安装覆盖即可。",
+      "assets": [
+        {
+          "name": "YunGet-2.2.2.apk",
+          "size": 18960814,
+          "url": "https://github.com/jiayuxuan123/YunGet/releases/download/v2.2.2/YunGet-2.2.2.apk",
+          "downloads": 6,
+          "sha256": "7cc3028b85f117df5e6de99237772ed33e0665eb5ad16dbb9041c7de01d97806"
+        }
+      ]
+    },
+    {
+      "tag": "v2.2.1",
+      "name": "YunGet 2.2.1：修复大小校验失败 / 满并发 / 更新崩溃",
+      "published": "2026-08-28T04:36:13Z",
+      "prerelease": false,
+      "url": "https://github.com/jiayuxuan123/YunGet/releases/tag/v2.2.1",
+      "summary": "重要修复版，建议手动安装覆盖（勿走应用内更新，旧版更新流程本身会崩）。\n修复：更新/下载时「大小校验失败」\n下载完成时莫名弹出大小校验失败、算下来字节少了约 2~3 倍。根因是底层 OkHttp 对未声明编码的请求\n自动启用 gzip 并透明解压，落盘字节与服务器声明的字节数不一致。已在引擎层强制 identity 编码修复。\n修复：设 64 线程只跑到约 16、速度暴跌\n上一版误加的 per-host 并发上限把每个下载直接限死到 16 并发（单个下载所有分片本就同一 host），\n科学上网直链、网盘转直链速度都暴跌到十几分之一。本版移除该限制，恢复满并发。\n修复：应用内更新时崩溃\nForegroundServiceDidNotStartInTimeException —— 任务秒失败时前台服务来不及完成启动契约导致崩溃。\n已修复前台服务启动时序。\n版本 2.2.0 → 2.2.1（ve…",
+      "assets": [
+        {
+          "name": "YunGet-2.2.1.apk",
+          "size": 18960819,
+          "url": "https://github.com/jiayuxuan123/YunGet/releases/download/v2.2.1/YunGet-2.2.1.apk",
+          "downloads": 3,
+          "sha256": "925124188414aff9d249e46e94e9c0e720f8c24bc4917214bcf59ccb35a5d47e"
+        }
+      ]
+    },
+    {
+      "tag": "v2.2.0",
+      "name": "YunGet 2.2.0：断点续传 + 网盘/后期速度修复",
+      "published": "2026-08-28T03:35:21Z",
+      "prerelease": false,
+      "url": "https://github.com/jiayuxuan123/YunGet/releases/tag/v2.2.0",
+      "summary": "本版修复用户反馈的两个关键问题，并升级 TurboDL 内核到 0.2.0-rc3。\n修复：下到后面线程数骤降、速度只剩几 KB\n下载后期线程数莫名掉下去、最后速度暴跌到几 KB，是 TurboDL 引擎的背压模型缺陷：\n· 旧背压只降不升 —— 网盘 CDN 频繁 502/503 会把并发连续砍半、且几乎无法恢复，越下越慢。\n· 降并发时还存在信号量许可回收不全的问题，并发单向衰减到接近单线程。\n已在引擎层重写并发调度（索引自闸门 + 主动恢复），并在 App 侧对网盘场景关闭降并发、\n增加 per-host 并发上限（规避迅雷把 Range 降级为整文件）。\n修复：暂停后恢复直接从头下载\n断点续传此前完全失效 —— 暂停再恢复会从 0 重新下。根因是分片临时目录用引擎内部自增 id 命名，\n每次恢复都得到新目录、旧分片全丢。本版：\n· 每个任务用稳定键（Room 任务 id）复用同一分…",
+      "assets": [
+        {
+          "name": "YunGet-2.2.0.apk",
+          "size": 18960798,
+          "url": "https://github.com/jiayuxuan123/YunGet/releases/download/v2.2.0/YunGet-2.2.0.apk",
+          "downloads": 4,
+          "sha256": "bc639b933b7664503b0a410a9a56695e695f1193ec9d00e75d4c7f50f3ca2a29"
+        }
+      ]
+    },
+    {
+      "tag": "v2.1.0",
+      "name": "YunGet 2.1.0：下载内核替换为 TurboDL",
+      "published": "2026-08-27T03:15:48Z",
+      "prerelease": false,
+      "url": "https://github.com/jiayuxuan123/YunGet/releases/tag/v2.1.0",
+      "summary": "本版把下载内核整体替换为独立的 **TurboDL SDK**（`dev.turbodl:*:0.2.0-rc2`），并让「粘贴链接」同时支持普通直链的多线程下载。\n多线程下载修复（重点）\n上一版存在「设定 64 线程却只有单线程速度（100~200KB/s）」的问题，本版在 TurboDL 侧定位并修复了四条叠加根因：\n1. **块规划与线程数脱钩**：旧实现按固定块大小预分块，20MB 文件只切 20 块，配置 64 线程时多出的 worker 一启动就无活可干退出，实际并发被块数封顶。现改为块数 = 线程数 × 4 反推块大小，保证每个线程都有活干并留余量供工作窃取。\n2. **HTTP/2 多路复用抹平多连接收益**：h2 把所有分片压到单条 TCP 连接、共享一个拥塞窗口，开多少分片都等同单连接吞吐（GitHub 及多数 CDN 默认 h2）。现默认走 HTTP/1.1，每分片独…",
+      "assets": [
+        {
+          "name": "YunGet-2.1.0.apk",
+          "size": 18944431,
+          "url": "https://github.com/jiayuxuan123/YunGet/releases/download/v2.1.0/YunGet-2.1.0.apk",
+          "downloads": 14,
+          "sha256": "e5f7067b1ae450798173331563387fd2c352078d63a5a997af73a3bf26b964d7"
+        }
+      ]
+    },
+    {
+      "tag": "v2.0.1",
+      "name": "YunGet v2.0.1（修复下载速度）",
+      "published": "2026-08-25T04:28:39Z",
+      "prerelease": false,
+      "url": "https://github.com/jiayuxuan123/YunGet/releases/tag/v2.0.1",
+      "summary": "YunGet 2.0.1 —— 修复下载速度暴跌\n问题\n2.0.0 的自适应引擎带了一套 AIMD 动态并发调节，会把网盘 CDN 正常的单连接速率抖动**误判为服务器过载**，每 1.5s 减一个线程，最终砍到只剩 2 个连接。网盘通常对单条连接限速、速度全靠多连接堆叠，连接被砍光后速度只有满并发的极小一部分（实测仅 32KB/s 且忽上忽下，甚至不如上游）。\n修复（参照 aria2 / IDM 经验重写引擎）\n· **固定满并发**：连接数 = 用户设定的线程数，一次全部拉起（仅首连错峰），**绝不因吞吐波动收缩连接数**（对齐 aria2 `--max-connection-per-server` / IDM「多连接绕过单连接限速」）。\n· **固定 4MB 小块 + 工作窃取**：顺序游标发块，空闲线程立刻领下一块；失败块回投共享队列被任意线程补下。小块天然无「最后一个大块单线程收…",
+      "assets": [
+        {
+          "name": "YunGet-v2.0.1-release.apk",
+          "size": 18862524,
+          "url": "https://github.com/jiayuxuan123/YunGet/releases/download/v2.0.1/YunGet-v2.0.1-release.apk",
+          "downloads": 8,
+          "sha256": "03981c4854c7702fec955a24b6efc4ae7187c66e2f6ebd79a2bb6431ab7a24cf"
+        }
+      ]
+    },
+    {
+      "tag": "v2.0.0",
+      "name": "YunGet v2.0.0",
+      "published": "2026-08-25T04:05:06Z",
+      "prerelease": false,
+      "url": "https://github.com/jiayuxuan123/YunGet/releases/tag/v2.0.0",
+      "summary": "YunGet 2.0.0（基于 [CYQawa/YunX](https://github.com/CYQawa/YunX) 的二次开发，AGPL-3.0）\n本版本核心：重写自适应多线程下载引擎\n相较上游「主池 70% 等分 + 弹性区 30% 中点劈分」两阶段模型，本版本 `AdaptiveDownloadEngine` 做了四项升级：\n1. **工作窃取调度（work-stealing）**：单一顺序游标发放字节相邻块，失败/细分块回投共享 retry 双端队列被空闲线程窃取，消除中后段掉速与尾部并发塌缩。\n2. **动态并发调节（AIMD）**：按实测吞吐加性增/回退，遇限流乘性收缩；通过信号量寄存/释放许可真实增减线程。\n3. **自适应分块**：块大小随单连接吞吐动态收敛至目标耗时，尾部自动收敛避免长尾。\n4. **连接复用 / HTTP2**：复用下载客户端 + 大连接池 kee…",
+      "assets": [
+        {
+          "name": "YunGet-v2.0.0-release.apk",
+          "size": 18862525,
+          "url": "https://github.com/jiayuxuan123/YunGet/releases/download/v2.0.0/YunGet-v2.0.0-release.apk",
+          "downloads": 3,
+          "sha256": "c73a0897926a786f2903c05e261db10f421f927cbbb987dd20d381313c95578f"
+        }
+      ]
+    }
+  ]
+}

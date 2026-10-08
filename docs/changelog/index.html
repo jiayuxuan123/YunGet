@@ -1,0 +1,169 @@
+<!DOCTYPE html>
+<html lang="zh">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>更新日志 · 云取 YunGet</title>
+<meta name="description" content="云取 YunGet 的版本历史，由发布说明生成。">
+<link rel="canonical" href="https://jiayuxuan123.github.io/YunGet/changelog/index.html">
+<meta property="og:type" content="website">
+<meta property="og:site_name" content="云取 YunGet">
+<meta property="og:title" content="更新日志 · 云取 YunGet">
+<meta property="og:description" content="云取 YunGet 的版本历史，由发布说明生成。">
+<meta property="og:url" content="https://jiayuxuan123.github.io/YunGet/changelog/index.html">
+<meta property="og:image" content="https://jiayuxuan123.github.io/YunGet/assets/og.png">
+<meta name="twitter:card" content="summary_large_image">
+<link rel="icon" href="../assets/favicon.svg" type="image/svg+xml">
+<link rel="apple-touch-icon" href="../assets/apple-touch-icon.png">
+<link rel="stylesheet" href="../assets/site.css">
+</head>
+<body class="brand-yunget">
+<a class="skip" href="#main">跳到正文</a>
+<header class="site-head">
+<div class="wrap">
+<a class="brand" href="../index.html"><span class="brand-mark"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32" width="24" height="24" aria-hidden="true"><g fill="none" stroke="currentColor" stroke-width="2.3" stroke-linecap="round"><path d="M6 5v9.5M16 3.2v11.3M26 5v9.5"/></g><path d="M16 15.6l6.2 6.2H9.8z" fill="currentColor"/><path d="M16 21v7" stroke="currentColor" stroke-width="2.3" stroke-linecap="round"/></svg></span><span class="brand-name">云取 YunGet</span></a>
+<button class="nav-toggle" aria-expanded="false" aria-controls="site-nav">菜单</button>
+<nav id="site-nav" class="site-nav"><a href="../index.html">概览</a><a href="../download/index.html">下载</a><a href="../docs/index.html">文档</a><a href="index.html" class="active" aria-current="page">更新日志</a><a href="../community/index.html">社区</a><a href="../support/index.html">支持开发</a><a href="../legal/index.html">协议</a></nav>
+
+</div>
+</header>
+<main id="main">
+<section><h1>更新日志</h1><p class="lead">由发布说明本身生成 —— 应用内的「检查更新」读的是同一份数据，所以两处看到的版本与内容永远一致。</p></section><section><div class="cards cols-2"><div class="card"><h3><span class="mono">v2.6.19</span></h3><p class="small">2026-10-07 · 1 个附件</p><p class="muted">YunGet 2.6.19：修复内存回收回调导致的崩溃（NetworkOnMainThreadException）
+---
+修复：应用在后台时偶发崩溃
+**现象**：切到后台、或系统内存吃紧时，应用**崩溃退出**。
+**错误**：
+**根因**：`onTrimMemory` 是**主线程**回调，而 `connectionPool.evictAll()` 不是
+&quot;清空一个列表&quot;这么无害 —— 它真的会 close 每条空闲连接的 socket
+（`RealConnectionPool.evictAll` → `Util.closeQuietly(socket)`）。
+关闭 TLS 连接要把 `close_notify` 告警**写出去**，这是一次网络写，Android 因此在主线程抛异常。
+而 OkHttp 的 `closeQuietly` **只吞 `IOException`**：`…</p><p class="small"><a href="https://github.com/jiayuxuan123/YunGet/releases/tag/v2.6.19">发布页</a></p></div><div class="card"><h3><span class="mono">v2.6.18</span></h3><p class="small">2026-10-07 · 1 个附件</p><p class="muted">YunGet 2.6.18（紧急修复）：修复 2.6.17 升级后启动即崩
+---
+修复：升级到 2.6.17 后应用启动崩溃
+**现象**：从旧版本升级到 2.6.17 的用户，打开应用**立刻崩溃**，进不去任何界面。
+**错误**：`IllegalStateException: Migration didn&#x27;t properly handle: download_task`
+**根因**：2.6.17 做数据库迁移时，为了与上游版本号对齐补了两列 ——
+`download_task.avgSpeed` 与 `xunlei_account.authType`，
+但**只加了迁移、忘了把这两个字段加进对应的数据实体**。
+Room 在迁移完成后会校验表结构是否与实体一致，发现数据库里**多出这两列**，
+于是抛异常中止启动。
+**为什么本地测不出来**：开发机上的库是全新安装的（走&quot;建表…</p><p class="small"><a href="https://github.com/jiayuxuan123/YunGet/releases/tag/v2.6.18">发布页</a></p></div><div class="card"><h3><span class="mono">v2.6.17</span></h3><p class="small">2026-10-07 · 1 个附件</p><p class="muted">YunGet 2.6.17：全量同步上游（4 个新网盘、内置 Gopeed 引擎、磁力与口令、一批修复）
+---
+新增：4 个网盘
+本次同步上游一周的更新，一次性接入四个平台，每个都含**登录 / 云盘管理 / 分享解析 / 转存 / 下载**全链路：
+| 平台 | 登录方式 |
+|---|---|
+| **115 网盘** | 网页登录（Cookie 含 UID/CID/SEID/KID 四键） |
+| **光鸭云盘** | 账号密码（换 access/refresh token + 设备标识） |
+| **蓝奏云优享版** | 账号密码或网页登录 |
+| **蓝奏云** | 网页登录（Cookie 需同时含 ylogin 与 phpdisk_info） |
+凭证与既有平台一致：**AES-GCM + Android Keystore 加密**后落库，密钥不可导出。
+数据库版本 11 →…</p><p class="small"><a href="https://github.com/jiayuxuan123/YunGet/releases/tag/v2.6.17">发布页</a></p></div><div class="card"><h3><span class="mono">v2.6.15</span></h3><p class="small">2026-09-30 · 1 个附件</p><p class="muted">YunGet 2.6.15：修复开发诊断报「NetworkOnMainThreadException」
+---
+修复：诊断功能报「指定的链接不可用： NetworkOnMainThreadException」
+**现象**：连接数诊断（含粘贴了当前有效直链的情况）点击后直接报
+「❌ 指定的链接不可用： NetworkOnMainThreadException: 无法连接 https://…」。
+**根因**：链接本身没有问题。诊断开始前有一次预检探活（先确认链接可用、
+免得白等 1 分钟），这个探活是阻塞式网络调用，却被界面主线程的协程直接调用 ——
+Android 禁止在主线程发起网络请求，于是抛出 `NetworkOnMainThreadException`。
+该异常又被探活的异常处理捕获并转成「链接不可用： …」的文案，
+**伪装成了链接失效**，引导用户去换链接、怀疑网盘，而真正原…</p><p class="small"><a href="https://github.com/jiayuxuan123/YunGet/releases/tag/v2.6.15">发布页</a></p></div><div class="card"><h3><span class="mono">v2.6.14</span></h3><p class="small">2026-09-29 · 1 个附件</p><p class="muted">YunGet 2.6.14：DNS 自动择优（含端点延迟可视化）；修复诊断功能不可用
+---
+新增：DNS 自动模式
+**此前的问题**：DNS 只能二选一 —— 「系统 DNS」或「手动填一个 DoH 地址」。
+而用户很难知道哪个 DoH 在当前网络下可用。实测国内网络环境：
+**境外 DoH（Google / Cloudflare）完全不可达，境内 DoH（阿里 / 腾讯）可用**。
+用户往往先填境外那几个知名地址，结果&quot;开了 DoH 反而更慢甚至解析失败&quot;。
+**自动模式**：并发探测全部候选端点，采用**最快给出有效结果**的那个，
+并在之后 10 分钟内固定复用它；选定端点失效或超过有效期时重新择优；
+全部失败则回退系统 DNS。
+候选端点**国内优先**：阿里 → 腾讯 → Google → Cloudflare。
+顺序只影响极端情况下的兜底，因为探测是并发的、取最快者。
+**…</p><p class="small"><a href="https://github.com/jiayuxuan123/YunGet/releases/tag/v2.6.14">发布页</a></p></div><div class="card"><h3><span class="mono">v2.6.13</span></h3><p class="small">2026-09-29 · 1 个附件</p><p class="muted">123 云盘改为网页登录（避免账号密码接口触发风控）；HLS 插件安全加固
+---
+123 云盘改为网页登录
+**改动原因**：原登录方式需要向 `user.123pan.cn/api/user/sign_in` 提交**明文账号密码**。
+这类直接调用登录接口的行为容易被官方判定为异常客户端而触发风控，进而影响账号使用。
+**新的登录方式**：在应用内打开 123 云盘官方网页（`yun.123pan.cn`），
+由用户在**官方页面**完成登录（验证码、扫码等均由官网处理），
+应用从网页 localStorage 的 `authorToken` 读取结果凭证。
+取到的 token 与旧接口返回的 `data.token` **同源同形**（都是 Bearer JWT），
+因此后续的凭证校验与业务请求无需任何改动。
+**三个入口**：
+1. **自动检测**（主路径）：网页登录完成后自动…</p><p class="small"><a href="https://github.com/jiayuxuan123/YunGet/releases/tag/v2.6.13">发布页</a></p></div><div class="card"><h3><span class="mono">v2.6.12</span></h3><p class="small">2026-09-29 · 1 个附件</p><p class="muted">新增网盘链接收藏；修复登录后网盘页残留「请先登录」；修正进度写库节流
+继续同步上游 [CYQawa/YunX](https://github.com/CYQawa/YunX) 的改进。
+---
+新增：网盘链接收藏
+解析页标题栏新增收藏入口，可保存分享链接与提取码并按分类管理；
+点击收藏条目直接跳回解析页开始解析，无需重新粘贴。
+数据存入新增的 Room 表 `bookmark`（数据库版本 10 → 11，带迁移），
+字段与上游保持一致以便后续同步。分类既可用预置项，也可由已保存条目自动汇总。
+---
+修复：登录成功后网盘页仍显示「请先登录」
+**现象**：首次登录某个网盘后，切到该网盘的文件页，仍停在「请先登录夸克网盘」之类的提示，
+必须手动点一次「重试」才能看到文件列表。
+**根因**：6 个云盘浏览 ViewModel 在构造时无条件执行 `init { loadRoot() }`。…</p><p class="small"><a href="https://github.com/jiayuxuan123/YunGet/releases/tag/v2.6.12">发布页</a></p></div><div class="card"><h3><span class="mono">v2.6.11</span></h3><p class="small">2026-09-29 · 1 个附件</p><p class="muted">同步上游 YunX 的安全加固、保存路径重构与 Material 3 Expressive 界面
+本版将上游 [CYQawa/YunX](https://github.com/CYQawa/YunX) 的多项改进合并进本项目。
+合并前先做了逐文件比对（归一化包名与许可证头后，122 个同名文件中 51 个内容完全一致），
+据此决定三类处理方式：可直接采用、需适配定制点、以及双方已分叉需保留各自的实现。
+---
+安全：凭证加密存储
+**此前状态**：各网盘的登录凭证（cookie / accessToken / refreshToken）以**明文**存储在
+Room 数据库中。设备被 root 或数据库文件被取出时，账号凭证可直接读取。
+**改造后**：
+· 落库前使用 **AES-GCM** 加密，密钥由 **Android Keystore** 持有且不可导出
+· 附加认证数据（AAD…</p><p class="small"><a href="https://github.com/jiayuxuan123/YunGet/releases/tag/v2.6.11">发布页</a></p></div><div class="card"><h3><span class="mono">v2.6.10</span></h3><p class="small">2026-09-29 · 1 个附件</p><p class="muted">修复「检查更新」检测不到新版本；下载引擎升级至 0.2.0.1；内置 aria2 引擎升级至 aria2-next 2.8.3
+---
+修复：检查更新无法发现新版本
+**现象**：安装 2.6.9 后，应用内「检查更新」提示已是最新版本，无法发现后续发布。
+**根因**：此前使用 GitHub 的 `/releases/latest` 接口。该接口按设计**只返回已正式发布的版本，
+跳过预发布版本**，而本项目的测试版本正是以预发布形式发布。实测对比：
+| 接口 | 返回结果 |
+|---|---|
+| `/releases/latest`（原使用） | `v2.6.7`（跳过了所有预发布版本） |
+| `/releases?per_page=30`（现使用） | `v2.6.10`、`v2.6.9`、`v2.6.7` … |
+**改动**：改用 Release 列表接口，并自行按**版本…</p><p class="small"><a href="https://github.com/jiayuxuan123/YunGet/releases/tag/v2.6.10">发布页</a></p></div><div class="card"><h3><span class="mono">v2.6.9</span> <span class="chip">pre</span></h3><p class="small">2026-09-28 · 1 个附件</p><p class="muted">下载引擎可切换（TurboDL / 内置兼容 / aria2 原生）+ 若干缺陷修复
+---
+新增：下载引擎可切换
+设置页 → 下载 → **下载引擎**，三选一：
+| 引擎 | 说明 |
+|---|---|
+| **TurboDL（默认）** | 多线程 Range 分片 / 工作窃取 / 断点续传 / 现场诊断 |
+| 内置兼容引擎 | 项目早期实现，保留作兜底；不支持现场诊断 |
+| **aria2 原生引擎（实验）** | 内置官方 aria2c 1.37.0，仅 arm64 |
+**切换需重启 App 生效** —— 这不是偷懒：管理器由 ViewModel 持有，
+而各业务 ViewModel 在构造时强引用它；若做热切换，旧 ViewModel 会继续指向旧管理器，
+导致**两套引擎同时活着**（连接池重复占用）。弹窗里已明确提示。
+同时把 `DownloadManager`…</p><p class="small"><a href="https://github.com/jiayuxuan123/YunGet/releases/tag/v2.6.9">发布页</a></p></div><div class="card"><h3><span class="mono">v2.6.7</span></h3><p class="small">2026-09-15 · 1 个附件</p><p class="muted">YunGet 2.6.7：续传修复（二）—— 取不到指纹不再丢弃旧分片
+上一版只修了一半
+2.6.6 用「内容指纹」替代了「弱校验器一律丢弃」，但判定是**二值**的：指纹不通过就丢弃。
+而&quot;不通过&quot;其实包含两种完全不同的情况：
+| 情况 | 2.6.6 行为 | 正确行为 |
+|---|---|---|
+| 拿到了服务器字节、**内容确实不同** | 丢弃 ✅ | 丢弃 |
+| **根本没拿到**（状态码异常 / 请求失败 / 无可读分片） | **丢弃 ❌** | **保留** |
+第二种就是「**一次指纹请求没成功，就把已下载的数据全删了**」——
+也就是你看到的&quot;暂停之后还是从头下&quot;。**拿不到证据 ≠ 内容已变。**
+本版改动
+判定改为**三值**：
+· **一致** → 保留旧分片，续传可用
+· **确证不同** → 丢弃（安全底线不变）
+· **取不到** → **保留**（…</p><p class="small"><a href="https://github.com/jiayuxuan123/YunGet/releases/tag/v2.6.7">发布页</a></p></div><div class="card"><h3><span class="mono">v2.6.6</span></h3><p class="small">2026-09-15 · 1 个附件</p><p class="muted">YunGet 2.6.6：修复「暂停就整包重下」+ 回退上一版的分片上限
+本版处理你反馈的三个问题。**其中两个是我自己造成的，一并说明。**
+&gt; 你反馈：「速度快不起来（要不还是修，或者回退吧）。用夸克链接暂停了，它**就重新下载了**；
+&gt;   而且现在**速度和线程上升都变慢了**；暂停后再点进来，卡在**已下载 0%** 然后才显示下载。」
+1. 「暂停就重新下载」——夸克这类链接一直是这样
+夸克 CDN **不给 ETag / Last-Modified**，引擎的续传校验只能拿到&quot;弱校验器&quot;，
+而旧策略规定「弱校验器不足以安全续传 → **丢弃全部已有分片**」。
+两者叠加就是：**一暂停，已下载的全没了，从头再来**。1.3GB 就是十几分钟白下。
+**现在改用「内容指纹」代替「一律丢弃」**：续传前取一个已存分片的前 **64KB**，
+和服务器请求同一区间逐字节比对 ——…</p><p class="small"><a href="https://github.com/jiayuxuan123/YunGet/releases/tag/v2.6.6">发布页</a></p></div></div></section><section><h2>完整历史</h2><div class="btn-row"><a class="btn" href="https://github.com/jiayuxuan123/YunGet/releases">全部发布</a><a class="btn" href="https://github.com/jiayuxuan123/YunGet/commits/main">代码提交</a></div></section></main>
+<footer class="site-foot">
+<div class="wrap">
+<div class="foot-cols"><div class="foot-col"><h4>项目</h4><ul><li><a href="https://github.com/jiayuxuan123/YunGet">GitHub</a></li><li><a href="../download/index.html">下载</a></li><li><a href="index.html">更新日志</a></li><li><a href="https://github.com/jiayuxuan123/YunGet/issues">问题反馈</a></li></ul></div><div class="foot-col"><h4>文档</h4><ul><li><a href="../docs/readme/index.html">项目说明</a></li><li><a href="../docs/guide/index.html">使用说明</a></li><li><a href="../docs/faq/index.html">常见问题</a></li><li><a href="../docs/engines/index.html">下载引擎</a></li><li><a href="../docs/build/index.html">从源码构建</a></li></ul></div><div class="foot-col"><h4>协议与说明</h4><ul><li><a href="../legal/license/index.html">AGPL-3.0 原文</a></li><li><a href="../legal/notice/index.html">署名与致谢</a></li><li><a href="../legal/privacy/index.html">隐私说明</a></li><li><a href="../legal/terms/index.html">使用条款</a></li><li><a href="../support/index.html">支持开发</a></li></ul></div><div class="foot-col"><h4>相关</h4><ul><li><a href="https://github.com/CYQawa/YunX">上游 CYQawa/YunX</a></li><li><a href="https://github.com/jiayuxuan123/TurboDL">下载引擎 TurboDL</a></li><li><a href="../community/index.html">社区</a></li></ul></div></div>
+<div class="foot-note"><p>云取 YunGet v2.6.19 · AGPL-3.0 · 内置 TurboDL 0.2.0.5 · Android 6.0（API 23）</p><p>本项目是 CYQawa/YunX（云析）的二次开发版本，与上游作者无隐性关联。仅供个人学习与技术交流，请勿用于商业用途；下载内容的版权归原作者及相关权利人所有。</p></div>
+</div>
+</footer>
+<script src="../assets/site.js" defer></script>
+</body>
+</html>

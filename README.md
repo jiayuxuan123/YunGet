@@ -4,28 +4,36 @@
 >
 > **本项目是 [CYQawa/YunX（云析）](https://github.com/CYQawa/YunX) 的二次开发版本**，在其协议与架构基础上进行功能扩展，并将下载能力逐步迁移至独立的 [TurboDL](https://github.com/jiayuxuan123/TurboDL) 下载引擎。遵循 GNU AGPL-3.0 协议开源。
 
+当前版本 **2.6.19**（versionCode 44）· Android 6.0+（minSdk 23，targetSdk 34）· 内置 TurboDL 0.2.0.5
+
+**文档**：[使用说明](docs/GUIDE.md) · [常见问题](docs/FAQ.md) · [下载引擎](docs/ENGINES.md) · [从源码构建](docs/BUILD.md) · [隐私说明](docs/PRIVACY.md) · [使用条款](docs/TERMS.md) · [在线文档](https://jiayuxuan123.github.io/YunGet/)
+
 ---
 
 ## 与上游（YunX）的关系
 
 - 本仓库 fork 自上游 [CYQawa/YunX](https://github.com/CYQawa/YunX)，感谢原作者的工作。
-- 上游协议为 **GNU AGPL-3.0**，本项目同样以 **AGPL-3.0** 继续开源，并保留原始版权与协议声明。
+- 上游协议为 **GNU AGPL-3.0**，本项目同样以 **AGPL-3.0** 继续开源，并保留原始版权与协议声明（见 [NOTICE](NOTICE)）。
 - 本项目在上游协议解析、网盘功能和 Android 应用结构基础上进行了二次开发。
-- 下载引擎已从项目内部实现迁移至独立的 [TurboDL](https://github.com/jiayuxuan123/TurboDL) SDK，以便将下载核心与具体应用解耦，并支持后续独立迭代。
-- 当前 TurboDL 已用于 YunGet 的普通直链多线程下载，并逐步承担原有下载引擎的核心职责。
-- HLS 下载能力通过 TurboDL 的插件化机制接入，后续其他下载协议或能力也将以插件形式扩展。
+- 下载能力已迁移到独立的 [TurboDL](https://github.com/jiayuxuan123/TurboDL) SDK：日常的直链下载走它，HLS 通过它的插件机制接入。项目早期自己写的那套下载实现仍留在代码里，作为可选的兜底引擎。
 - **赞赏渠道说明**：应用内「支持开发」页的赞赏码仅面向**本二次开发版本**的维护；若想支持上游原项目作者，请移步 [上游仓库](https://github.com/CYQawa/YunX) 的捐赠渠道，避免权益混淆。
 
 ## 支持平台
 
 > **不建议使用百度网盘，可能导致账号被风控，请谨慎使用。**
 
-- 夸克网盘
-- UC 网盘
-- 迅雷网盘
-- 百度网盘
-- 123 云盘
-- 139 网盘（和彩云）
+| 网盘 | 登录方式 |
+|---|---|
+| 夸克网盘 / UC 网盘 | 应用内网页登录 |
+| 迅雷网盘 | 账号密码 / 短信 |
+| 百度网盘 | 应用内网页登录 |
+| 123 云盘 | 网页登录 |
+| 139 网盘（和彩云） | 应用内网页登录 |
+| 115 网盘 / 光鸭云盘 | 应用内登录页 |
+| 蓝奏云 | 网页登录 |
+| 蓝奏云优享版 | 账号密码 |
+
+网盘接口是抓包分析得到的，官方一改就可能失效 —— 某个平台在某段时间不可用属于常态，以实际运行结果为准。
 
 ## 功能
 
@@ -76,7 +84,21 @@
   - 云 X 图标
 - 主题与外观相关设置
 
-## TurboDL 下载引擎
+## 下载引擎
+
+应用里能见到四套下载实现，设置里可以随时换，重建任务后生效：
+
+| 引擎 | 说明 |
+|---|---|
+| **TurboDL**（默认） | 独立发布的下载 SDK。普通直链、网盘直链、HLS 都走它 |
+| 内置兼容引擎 | 项目早期的实现，固定较满的并发 + 4MB 分块 + 工作窃取；作为兜底 |
+| aria2 | 实验性，用于对照排查；内置可执行文件，**仅 arm64 设备** |
+| Gopeed | 磁力 / BT 这类内置分片器做不到的任务。内核不随 APK 分发，需在应用内导入 |
+
+选的引擎跑不起来时报错，而不是悄悄换一个继续下 —— 换个下载器默默下完，比直接失败更难排查。
+各自的校验方式、内核来源与边界见 [下载引擎](docs/ENGINES.md)。
+
+## TurboDL 下载引擎（默认）
 
 YunGet 当前正在将下载能力从应用内部实现逐步迁移至独立的 **[TurboDL](https://github.com/jiayuxuan123/TurboDL)**。
 
@@ -239,20 +261,29 @@ HLS 下载功能主要面向**完整资源下载**，而不是实时播放。
 ## 技术栈
 
 - Kotlin
-- Jetpack Compose
-- Material 3
-- Room（凭证与下载任务持久化）
+- Jetpack Compose + Material 3
+- Room（凭证与下载任务持久化，凭证字段加密存储）
 - OkHttp（网络请求与 HTTP 下载）
-- TurboDL（通用下载引擎 SDK）
+- TurboDL（通用下载引擎 SDK，含 HLS 插件）
+- Gopeed（可选内核，用于磁力 / BT 这类任务；不随 APK 分发，需在应用内导入）
+- aria2（内置可执行文件，实验性，仅 arm64）
 - KSP
 
 ## 构建
 
 要求：
 
-- minSdk 23
-- targetSdk 34
 - JDK 17+
+- Android SDK（`local.properties` 里的 `sdk.dir`，或环境变量 `ANDROID_HOME` / `ANDROID_SDK_ROOT`）
+- `compileSdk 36` / `minSdk 23` / `targetSdk 34`
+
+**先发布 TurboDL 到本地 Maven。** 依赖里的 `dev.turbodl:*:0.2.0.5` 不在公共仓库上，
+`settings.gradle.kts` 把 `mavenLocal()` 排在仓库列表最前，所以要先在 TurboDL 仓库执行
+`./gradlew publishToMavenLocal`（或从它的 Release 页取 mavenLocal 离线包解到 `~/.m2/repository`），
+否则构建会在依赖解析阶段直接失败。
+
+正式签名需要仓库根目录的 `keystore.properties`（`storeFile` / `storePassword` / `keyAlias` /
+`keyPassword` 四个键）；没有它也能构建，会退回调试签名 —— 能装能跑，但不能用来发布。
 
 ```bash
 git clone https://github.com/jiayuxuan123/YunGet.git
@@ -262,20 +293,34 @@ cd YunGet
 # sdk.dir=/path/to/Android/sdk
 
 ./gradlew :app:assembleRelease
+# 产物：app/build/outputs/apk/release/app-release.apk
 ```
 
 也可以使用 Android Studio 打开项目直接构建。
 
-国内网络环境可根据实际情况将 Gradle 与依赖仓库配置为可访问的镜像，相关配置位于：
+跑单元测试：
+
+```bash
+./gradlew :app:testDebugUnitTest
+```
+
+10 个测试文件、68 个用例，全部是纯 JVM 测试（不依赖 Android 运行时，不需要模拟器）；
+仓库里没有 `androidTest` 目录。覆盖版本号比较、分享链接解析、迅雷口令、数据库迁移契约、
+加密凭证契约、下载引擎枚举与进度落盘节流等。
+
+国内网络环境可根据实际情况将 Gradle 与依赖仓库配置为可访问的镜像（仓库里已配好阿里云与腾讯云镜像，
+一般不用改），相关配置位于：
 
 ```text
 gradle/wrapper/gradle-wrapper.properties
 settings.gradle.kts
 ```
 
+更详细的说明见 [从源码构建](docs/BUILD.md)。
+
 ## 关于 TurboDL
 
-TurboDL 是本项目后续重点使用的独立下载引擎。
+TurboDL 是本项目的主要下载引擎。
 
 项目地址：
 

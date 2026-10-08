@@ -1,0 +1,4 @@
+User-agent: *
+Allow: /
+
+Sitemap: https://jiayuxuan123.github.io/YunGet/sitemap.xml
