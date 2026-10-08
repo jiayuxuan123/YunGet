@@ -30,6 +30,7 @@ import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
 import androidx.compose.animation.togetherWith
 import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -67,6 +68,7 @@ import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.FilledTonalButton
 import androidx.compose.material3.Icon
+import androidx.compose.material3.RadioButton
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.ModalBottomSheet
@@ -99,6 +101,9 @@ import androidx.compose.ui.window.DialogProperties
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleEventObserver
 import androidx.lifecycle.compose.LocalLifecycleOwner
+import com.yunget.app.data.download.Aria2Executor
+import com.yunget.app.data.download.Aria2ProbeResult
+import com.yunget.app.data.download.DownloadEngine
 import com.yunget.app.data.gopeed.GopeedEngine
 import com.yunget.app.data.gopeed.KernelProvisioner
 import com.yunget.app.data.prefs.SettingsRepository
@@ -107,6 +112,7 @@ import com.yunget.app.ui.components.YunGetWavyProgress
 import com.yunget.app.ui.resolve.formatSize
 import com.yunget.app.ui.theme.effectsDefault
 import com.yunget.app.ui.theme.effectsFast
+import com.yunget.app.util.DiagLog
 import com.yunget.app.util.PermissionState
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
@@ -152,6 +158,12 @@ fun DownloadEngineScreen(onBack: () -> Unit, modifier: Modifier = Modifier) {
     val engineState by GopeedEngine.state.collectAsState()
 
     var engineChoice by remember { mutableStateOf(settings.downloadEngine) }
+    // 内置下载器的**具体实现**（TurboDL / 内置兼容 / aria2）。
+    // 这一项以前藏在「设置」页的一个弹窗里，和这里的「内置 vs Gopeed」分成两个入口 ——
+    // 现在四个引擎都在这一页选：这个页面就是唯一的引擎入口。
+    var builtinImpl by remember { mutableStateOf(DownloadEngine.fromId(settings.downloadEngineId)) }
+    var aria2Result by remember { mutableStateOf<Aria2ProbeResult?>(null) }
+    var aria2Checking by remember { mutableStateOf(false) }
     var busy by remember { mutableStateOf(false) }
     var soBytes by remember { mutableStateOf(0L) }
     var engineVersion by remember { mutableStateOf("") }
@@ -170,6 +182,7 @@ fun DownloadEngineScreen(onBack: () -> Unit, modifier: Modifier = Modifier) {
                 allFilesReady = PermissionState.allFilesAccessGranted()
                 legacyStorageReady = !PermissionState.engineStoragePermissionPending(context)
                 engineChoice = settings.downloadEngine
+                builtinImpl = DownloadEngine.fromId(settings.downloadEngineId)
             }
         }
         lifecycleOwner.lifecycle.addObserver(observer)
@@ -396,6 +409,87 @@ fun DownloadEngineScreen(onBack: () -> Unit, modifier: Modifier = Modifier) {
                                 enabled = engineOn,
                                 onClick = { chooseEngine(SettingsRepository.ENGINE_BUILTIN) }
                             )
+
+                            // ---------- 具体实现：三选一（从设置页的弹窗搬过来） ----------
+                            // 只有内置下载器在用的时候才有意义；用 Gopeed 时这里给一行提示，
+                            // 免得用户以为"选了但没生效"。
+                            if (!engineOn) {
+                                Spacer(modifier = Modifier.height(4.dp))
+                                Text(
+                                    text = "具体实现 · 重启 App 后生效",
+                                    style = MaterialTheme.typography.titleSmall,
+                                    color = MaterialTheme.colorScheme.onSurface
+                                )
+                                DownloadEngine.entries.forEach { engine ->
+                                    Row(
+                                        modifier = Modifier
+                                            .fillMaxWidth()
+                                            .clickable {
+                                                builtinImpl = engine
+                                                settings.downloadEngineId = engine.id
+                                                notice = if (engine == DownloadEngine.TURBODL) {
+                                                    "已切换到 TurboDL，重启 App 后生效"
+                                                } else {
+                                                    "已切换到${engine.displayName}，重启 App 后生效"
+                                                }
+                                            }
+                                            .padding(vertical = 6.dp),
+                                        verticalAlignment = Alignment.Top
+                                    ) {
+                                        RadioButton(selected = builtinImpl == engine, onClick = null)
+                                        Spacer(modifier = Modifier.width(8.dp))
+                                        Column {
+                                            Text(engine.displayName, style = MaterialTheme.typography.bodyLarge)
+                                            Text(
+                                                engine.description,
+                                                style = MaterialTheme.typography.bodySmall,
+                                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                                            )
+                                        }
+                                    }
+                                }
+
+                                // aria2 可用性检测：先确认"这台设备能不能跑"再切过去，
+                                // 结果含确切失败原因（ENOENT / EACCES / ENOEXEC 语义完全不同）。
+                                Button(
+                                    onClick = {
+                                        aria2Checking = true
+                                        scope.launch {
+                                            val r = withContext(Dispatchers.IO) { Aria2Executor.probe(context) }
+                                            aria2Result = r
+                                            aria2Checking = false
+                                            // 落盘：让检测结果能随「导出日志」一起回传，
+                                            // 否则又是一次"我测了但你拿不到证据"
+                                            withContext(Dispatchers.IO) {
+                                                DiagLog.i(
+                                                    context, "aria2检测",
+                                                    if (r.available) "可用: ${r.detail}" else "不可用: ${r.detail}"
+                                                )
+                                            }
+                                        }
+                                    },
+                                    enabled = !aria2Checking,
+                                    modifier = Modifier.fillMaxWidth()
+                                ) {
+                                    Text(if (aria2Checking) "检测中…" else "检测 aria2 是否可用")
+                                }
+                                aria2Result?.let { r ->
+                                    Text(
+                                        text = if (r.available) "✅ 可用：${r.detail}" else "❌ 不可用：${r.detail}",
+                                        style = MaterialTheme.typography.bodySmall,
+                                        color = if (r.available) MaterialTheme.colorScheme.primary
+                                        else MaterialTheme.colorScheme.error
+                                    )
+                                }
+
+                                Text(
+                                    text = "只有 TurboDL 能下网盘：网盘取到的直链要带 Cookie / Referer / UA 等" +
+                                        "请求头才能下，aria2 与内置兼容引擎不走这条带头的路径，下网盘基本不可用；" +
+                                        "Gopeed 面向磁力 / BT。日常下载不必改动这一项。",
+                                    style = MaterialTheme.typography.bodySmall,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                                )
+                            }
                         }
 
                         Box(

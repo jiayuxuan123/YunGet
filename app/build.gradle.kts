@@ -26,7 +26,23 @@ android {
         applicationId = "com.yunget.app"
         minSdk = 23
         targetSdk = 34
-        versionCode = 44
+        versionCode = 45
+        // 2.6.20 内容：
+        //  ① **修复蓝奏分享点文件报「缺少下载参数」**，三条根因：
+        //     - 文件夹分享的分享页是**目录页**，上面没有下载参数 —— 参数在文件夹里每个文件
+        //       自己的页面上（`{host}/{文件key}`）。以前直接拿目录页去找 sign，必然落空；
+        //       现在按协议的走法先取文件自己的页面。
+        //     - `absolutize()` 处理不了协议相对地址（iframe src 常写成 `//host/path`），
+        //       会拼出 `https://host//host/path` 这种双主机地址，请求必然失败。
+        //     - 参数名不再硬编码：新版页面把参数写成对象且值是变量名
+        //       （`data: {'action':'downprocess','sign':wp_sign}`），现在整体解析后再回查变量。
+        //     - 顺手补上子目录：它们只在分享页 HTML 上、以前被当成文件，点进去同样报缺参数。
+        //       子目录现在能进入（分页参数从子目录自己的页面重新解析）。
+        //  ② **引擎入口合并到一处**：原来「下载引擎」页只选「内置 / Gopeed」，具体实现
+        //     （TurboDL / 内置兼容 / aria2）在设置页的另一个弹窗里。现在四套引擎都在
+        //     「下载引擎」页上选，aria2 可用性检测也一起搬过去。
+        //  ③ 该页补一句实话：网盘直链要带 Cookie / Referer 才下得动，只有 TurboDL 走这条路径，
+        //     aria2 与内置兼容引擎下网盘基本不可用，Gopeed 面向磁力 / BT。
         // 2.6.18 内容（**紧急修复**：2.6.17 升级用户启动即崩）：
         //  ① **修复数据库迁移与实体不一致导致的启动崩溃**：
         //     2.6.17 为了对齐上游版本号，在迁移里补了两列 —— `download_task.avgSpeed`
@@ -161,7 +177,7 @@ android {
         //     - 分片请求带 `If-Range`：防止 CDN 中途换文件时新旧字节拼出混杂文件
         //       （那种情况长度校验会通过，损坏会静默落地）。
         //     - 401/403/410 不再触发背压降并发（是授权/时效信号，不是"你太快了"）。
-        versionName = "2.6.19"
+        versionName = "2.6.20"
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
     }

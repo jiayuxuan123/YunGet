@@ -390,11 +390,9 @@ class LanzouApi(
             ?: Regex("""name=["']file["']\s+value=["'](\d+)["']""").find(html)?.groupValues?.get(1)
             ?: Regex("""file=(\d+)""").find(html)?.groupValues?.get(1)
         val folderParams = if (isFolder) {
-            val lx = jsVar(html, "lx")
-            val fid = jsVar(html, "fid") ?: uri.path.substringAfterLast('/')
-            val t = jsVar(html, "t")
-            val k = jsVar(html, "k")
-            if (lx != null && t != null && k != null) LanzouFolderParams(lx, fid, t, k) else null
+            // 分页参数在新版页面里是对象字面量（`'t':1666…, 'k':'5e30…'`），旧版是变量 ——
+            // folderParamsOf 两种都认；fid 缺失时才退回分享 key。
+            folderParamsOf(html, uri.path.substringAfterLast('/'))
         } else null
         val shareId = uri.path.trim('/').substringAfterLast('/').ifBlank { uri.path.trim('/') }
         // 单文件分享的展示大小：页面文本「文件大小：1.5 M」（参考 wenxi LanzouPage.displaySize）
@@ -424,13 +422,23 @@ class LanzouApi(
         )
     }
 
-    /** A7：文件夹分页列表。 */
+    /** A7：文件夹分页列表。`dirFid` 不是根目录时，先把这个子目录当成一个分享页取回来。 */
     suspend fun listShareFolder(page: LanzouSharePage, pwd: String?, dirFid: String): List<ShareFile> =
         withContext(Dispatchers.IO) {
-            val params = page.folderParams
+            val root = dirFid.isBlank() || dirFid == LanzouConstants.ROOT_FOLDER_ID
+            // 子目录不在 filemoreajax 的返回里，它自己也是一个页面（GET {host}/{folderKey}），
+            // 分页参数得从那个页面重新解析一份。以前这里忽略 dirFid、永远拿根目录的参数去请求，
+            // 于是点进子目录只会再看到根目录的内容（或者报「分页重复」）。
+            val baseHtml = if (root) page.html else {
+                val key = dirFid.removePrefix(LanzouConstants.FOLDER_PREFIX).trim()
+                fetchPageFollowingLanzou("${page.baseUrl}/$key")
+            }
+            val params = (if (root) page.folderParams ?: folderParamsOf(baseHtml, "") else folderParamsOf(baseHtml, ""))
                 ?: throw IllegalStateException("蓝奏分享分页异常，请重试")
             val all = mutableListOf<ShareFile>()
-            val seen = mutableSetOf<String>()
+            // 子目录要先列出来：它们只在页面 HTML 上，不在分页结果里
+            all += parseSubFolders(baseHtml)
+            val seen = all.map { it.fid }.toMutableSet()
             var pg = 1
             while (pg <= LanzouConstants.MAX_FOLDER_PAGES) {
                 var attempt = 0
@@ -497,49 +505,84 @@ class LanzouApi(
             all
         }
 
-    /** A2-A6：获取分享文件下载直链（匿名）。 */
+    /**
+     * 文件夹分享里的文件，取链前必须先打**它自己的页面**（`{host}/{文件key}`）—— 分享页是目录页，
+     * 上面没有任何下载参数。单文件分享的分享页本身就是那个文件的页面，不需要额外请求（返回 null）。
+     */
+    internal fun downloadPageUrlFor(page: LanzouSharePage, file: ShareFile): String? {
+        if (!page.isFolder) return null
+        val key = file.fid.removePrefix(LanzouConstants.FILE_PREFIX).trim()
+        return if (key.isBlank()) null else "${page.baseUrl}/$key"
+    }
+
+    /**
+     * A2-A6：获取分享文件下载直链（匿名）。
+     *
+     * 两条容易踩空的路，这里都按协议走对了：
+     *  1. **文件夹分享里的文件**：分享页是目录页，上面没有任何下载参数；参数在**这个文件自己的
+     *     页面**上（`{host}/{文件key}`）。以前直接拿目录页去找 sign，必然报「缺少下载参数」。
+     *  2. **参数名不固定**：新版页面把参数写成一个对象（`data: {'action':'downprocess','sign':wp_sign}`），
+     *     值还是**变量名**。所以不能硬编码 `wp_sign`/`sign`/`ajaxdata` 去抓，要把对象整体解析、
+     *     再逐个回查变量（做法与 alist 的 htmlJsonToMap 一致）。
+     */
     suspend fun getShareDownloadLink(page: LanzouSharePage, file: ShareFile, pwd: String?): DownloadLink =
         withContext(Dispatchers.IO) {
             val origin = page.baseUrl
-            // A2：同源 iframe 下载页
-            var html = page.html
-            page.iframeUrl?.let { iframe ->
-                val iframeUri = runCatching { URI(iframe) }.getOrNull()
-                if (iframeUri != null && iframeUri.host.equals(URI(page.shareUrl).host, ignoreCase = true)) {
-                    html = fetchPage(iframe, page.shareUrl, null)
-                } else if (iframeUri != null && iframeUri.host != null) {
+            val withPwd = !pwd.isNullOrBlank()
+
+            // ① 定位「这个文件自己的页面」
+            val childPageUrl = downloadPageUrlFor(page, file)
+            val entryHtml = childPageUrl?.let { fetchPageFollowingLanzou(it) } ?: page.html
+            val entryUrl = childPageUrl ?: page.shareUrl
+
+            // ② 下载参数在同源 iframe 里（单文件分享的 iframe 解析阶段就记下了；子文件页面现场认）
+            var html = entryHtml
+            val iframe = if (childPageUrl != null) iframeSrc(entryHtml, origin) else page.iframeUrl
+            if (iframe != null) {
+                val iframeHost = runCatching { URI(iframe).host }.getOrNull()
+                val entryHost = runCatching { URI(entryUrl).host }.getOrNull()
+                if (iframeHost != null && entryHost != null && iframeHost.equals(entryHost, ignoreCase = true)) {
+                    html = fetchPage(iframe, entryUrl, null)
+                } else if (iframeHost != null && entryHost != null) {
                     throw IllegalStateException("蓝奏下载页面地址异常，请检查分享链接")
                 }
             }
-            val fileId = page.fileId
-                ?: Regex("""(?:ajaxm|ajaxfile)\.php\?file=(\d+)""").find(html)?.groupValues?.get(1)
+
+            // ③ 文件 id 与下载接口地址
+            val fileId = Regex("""(?:ajaxm|ajaxfile)\.php\?file=(\d+)""").find(html)?.groupValues?.get(1)
+                ?: Regex("""(?i)\b(?:f_id|fid)\s*=\s*['"]?(\d+)['"]?""").find(html)?.groupValues?.get(1)
                 ?: Regex("""file=(\d+)""").find(html)?.groupValues?.get(1)
-                ?: throw IllegalStateException("蓝奏解析失败，请确认分享链接和提取码后重试")
-            // A3：取下载参数
-            val withPwd = !pwd.isNullOrBlank()
-            // 下载接口可能在同源，也可能在 apifile.woozooo.com（新版页面用 domain1/domain2 给出完整 URL）
-            val ajaxUrl = resolveAjaxUrl(html, origin, fileId, withPwd)
-            // 新版页面签名变量为 wp_sign（旧版为 sign）
-            val sign = jsVar(html, "wp_sign") ?: jsVar(html, "sign") ?: inputValue(html, "sign")
-                ?: throw IllegalStateException("蓝奏分享页缺少下载参数，请重新解析")
-            val ajaxData = jsVar(html, "ajaxdata")
-            val kd = jsVarRaw(html, "kdns") ?: "1"
+                ?: page.fileId
+            val ajaxUrl = resolveAjaxUrl(html, origin, fileId.orEmpty(), withPwd)
+
+            // ④ 组装表单：优先页面自己写的参数对象；页面没写就回退到旧版的固定变量名
             val fields = mutableListOf<Pair<String, String>>()
-            fields += "action" to "downprocess"
-            fields += "sign" to sign
-            if (withPwd) {
-                fields += "p" to pwd!!
-                fields += "kd" to "1"
+            val declared = listOf(stripNotes(html), html).firstNotNullOfOrNull { dataObject(it) }
+            if (declared != null) {
+                declared.forEach { (k, v) -> fields += k to v }
+                // 带提取码时补上 p（页面对象里有就不覆盖）
+                if (withPwd && fields.none { it.first == "p" }) fields += "p" to pwd!!
             } else {
-                // 新版无密码协议：websignkey/signs 用 ajaxdata，websign 空，kd 用 kdns
-                val key = ajaxData ?: jsVar(html, "websignkey") ?: inputValue(html, "websignkey") ?: ""
-                fields += "signs" to (jsVar(html, "signs") ?: key)
-                fields += "websignkey" to key
-                fields += "websign" to (jsVar(html, "websign") ?: "")
-                fields += "kd" to kd
-                fields += "ves" to "1"
+                val sign = jsParam(html, "wp_sign") ?: jsParam(html, "sign") ?: inputValue(html, "sign")
+                    ?: throw IllegalStateException("蓝奏分享页缺少下载参数，请重新解析")
+                fields += "action" to "downprocess"
+                fields += "sign" to sign
+                if (withPwd) {
+                    fields += "p" to pwd!!
+                    fields += "kd" to "1"
+                } else {
+                    // 旧版无密码协议：websignkey/signs 用 ajaxdata，websign 空，kd 用 kdns
+                    val key = jsParam(html, "ajaxdata") ?: jsParam(html, "websignkey")
+                        ?: inputValue(html, "websignkey") ?: ""
+                    fields += "signs" to (jsParam(html, "signs") ?: key)
+                    fields += "websignkey" to key
+                    fields += "websign" to (jsParam(html, "websign") ?: "")
+                    fields += "kd" to (jsParam(html, "kdns") ?: "1")
+                    fields += "ves" to "1"
+                }
             }
-            val ajaxJson = formPost(ajaxUrl, fields, page.shareUrl, origin, null)
+
+            val ajaxJson = formPost(ajaxUrl, fields, entryUrl, origin, null)
             validateAjax(ajaxJson)
             val dom = ajaxJson.optString("dom")
             val rel = ajaxJson.optString("url")
@@ -956,6 +999,20 @@ class LanzouApi(
     private fun jsVar(html: String, name: String): String? =
         Regex("""(?:(?:var|let|const)\s+)?$name\s*=\s*['"]([^'"]*)['"]""").find(html)?.groupValues?.get(1)
 
+    /**
+     * 去掉注释再解析参数。
+     *
+     * 蓝奏在页面里塞注释做干扰：真参数在活代码里、假的写在注释里（或者反过来让正则抓错地方），
+     * 所以直接对整页跑正则容易被诱饵骗到。这里只删 HTML 注释与块注释 ——
+     * **不动** `//` 行注释，那会把 `href="//cdn.…"` 这种协议相对地址一起吃掉。
+     *
+     * 注意调用方是"先看去掉注释的版本、没有参数再回退到原始 HTML"，所以就算某个变体把真值
+     * 藏在注释里也不会因此漏掉。
+     */
+    internal fun stripNotes(html: String): String = html
+        .replace(Regex("""<!--.*?-->""", RegexOption.DOT_MATCHES_ALL), "\n")
+        .replace(Regex("""/\*.*?\*/""", RegexOption.DOT_MATCHES_ALL), "\n")
+
     /** 读取未加引号的 JS 变量值（如 `var kdns = 0`）。 */
     private fun jsVarRaw(html: String, name: String): String? =
         Regex("""(?:var|let|const)\s+$name\s*=\s*([^;,\n\r]+)""").find(html)?.groupValues?.get(1)
@@ -972,12 +1029,126 @@ class LanzouApi(
      * 下载接口 URL：优先页面里的 `domain1`/`domain2`（新版在 apifile.woozooo.com，跨域），
      * 其次页面中出现的绝对 ajaxm/ajaxfile 地址，最后回退同源。
      */
-    private fun resolveAjaxUrl(html: String, origin: String, fileId: String, withPwd: Boolean): String {
+    internal fun resolveAjaxUrl(html: String, origin: String, fileId: String, withPwd: Boolean): String {
         val candidate = jsVar(html, "domain1")?.takeIf { it.contains("/ajax") }
             ?: jsVar(html, "domain2")?.takeIf { it.contains("/ajax") }
             ?: Regex("""https?://[^'"\s]+/(?:ajaxm|ajaxfile)\.php\?file=\d+""").find(html)?.value
+            ?: findAjaxPath(html)?.let { absolutize(origin, it) }
         if (!candidate.isNullOrBlank()) return candidate
         return if (withPwd) "$origin/ajaxfile.php?file=$fileId" else "$origin/ajaxm.php?file=$fileId"
+    }
+
+    /**
+     * 下载接口路径：`/ajaxm.php?file=123`（旧版）或 `/ajaxm.php`（新版**不带** file 参数）。
+     *
+     * 新旧两种都必须在 `?file=` 之外认出来 —— 新版页面的取链请求就是裸 `/ajaxm.php`，
+     * 参数全在 body 里；只认带 file 的写法会直接跳过这一页，最后落到硬拼的 URL 上。
+     */
+    internal fun findAjaxPath(html: String): String? =
+        Regex("""(?i)(/ajax(?:m|file)\.php(?:\?file=\d+\b)?)""").find(html)?.groupValues?.get(1)
+
+    /** 页面里的同源 iframe（下载参数通常在这个 iframe 的页面里，而不是分享页本身）。 */
+    internal fun iframeSrc(html: String, origin: String): String? =
+        Regex("""<iframe[^>]+src=["']([^"']+)["']""", RegexOption.IGNORE_CASE)
+            .find(html)?.groupValues?.get(1)?.let { absolutize(origin, it) }
+
+    /**
+     * `var name = '...' | "..." | 裸值;` —— 取最后一个非空匹配。
+     *
+     * 取最后一个而不是第一个：页面里同一个变量名可能先被声明成空、随后才赋值；
+     * 反过来（取第一个）会拿到空串，等于白找。
+     */
+    internal fun jsVarValue(html: String, name: String): String? =
+        Regex("""var\s+${Regex.escape(name)}\s*=\s*(?:'([^']*)'|"([^"]*)"|([^;\s]+))\s*;""")
+            .findAll(html)
+            .mapNotNull { m -> m.groupValues.drop(1).firstOrNull { it.isNotEmpty() } }
+            .lastOrNull()
+
+    /**
+     * 从页面里取一个 `'key': value` 形式的参数（值可以是字面量，也可以是变量名）。
+     *
+     * 蓝奏页面上的参数有两种写法，两种都要认：
+     *  - `var t = '1666146943';`（变量）
+     *  - `{ 't': 1666146943, 'k': '5e30…', 'fid': 2455975 }`（对象字面量）
+     */
+    internal fun jsParam(html: String, key: String): String? {
+        val quoted = Regex("""['"]${Regex.escape(key)}['"]\s*:\s*(?:'([^']*)'|"([^"]*)"|([^,}\s]+))""")
+            .findAll(html)
+            .mapNotNull { m -> m.groupValues.drop(1).firstOrNull { it.isNotEmpty() } }
+            .lastOrNull()
+        if (quoted != null) {
+            val bare = quoted.trim().trim('\'', '"')
+            // 值可能是变量名（'k': kValue）—— 回查一次；查不到就当字面量用
+            if (bare.isNotEmpty() && !bare.all { it.isDigit() }) {
+                return jsVarValue(html, bare) ?: jsVar(html, bare) ?: bare
+            }
+            return bare
+        }
+        return jsVar(html, key)
+    }
+
+    /**
+     * 解析下载页上的 `data {…}` 参数对象 —— 这是新版页面取链用的**全部**表单字段。
+     *
+     * 为什么不能像以前那样只抓 `wp_sign`/`sign`/`ajaxdata` 几个名字：蓝奏的防爬手法之一就是
+     * 让变量名随机、把真正的名字写在对象里（`data: {'action':'downprocess','sign':wp_sign}`，
+     * 值是一个变量名）。硬编码名字只能碰运气，所以这里把对象整体解析出来再逐个回查变量
+     * （与 alist 的 htmlJsonToMap 做法一致），页面上写什么名字就用什么名字。
+     *
+     * 页面上可能出现多个 `data {…}`（注释干扰），取**最长**的那个 = 参数最全的那个。
+     */
+    internal fun dataObject(html: String): Map<String, String>? {
+        val bodies = Regex("""data[:\s]+(\{[^}]+\})""").findAll(html).map { it.groupValues[1] }.toList()
+        val body = bodies.maxByOrNull { it.length } ?: return null
+        val out = LinkedHashMap<String, String>()
+        for (m in Regex("""['"]([^'"]+)['"]\s*:\s*('?[^' },]*)""").findAll(body)) {
+            val key = m.groupValues[1]
+            if (key.isBlank()) continue
+            val raw = m.groupValues[2].trim()
+            val value = when {
+                raw.isEmpty() -> ""
+                raw.contains("'") || raw.contains("\"") -> raw.trim('\'', '"')
+                raw.all { it.isDigit() } -> raw
+                else -> jsVarValue(html, raw) ?: jsVar(html, raw) ?: raw
+            }
+            out[key] = value
+        }
+        return out.ifEmpty { null }
+    }
+
+    /**
+     * 文件夹分享的子目录条目。
+     *
+     * 子目录**不在** `filemoreajax` 的返回里，只在分享页 HTML 上；以前这里把它们全当成文件，
+     * 于是点进去会走下载流程，报「缺少下载参数」。它们的 href 就是子目录自己的页面地址。
+     */
+    internal fun parseSubFolders(html: String): List<ShareFile> =
+        Regex("""(?i)(?:folderlink|mbxfolder).+?href="/([^"]+)"[^>]*>\s*(.+?)<""")
+            .findAll(html)
+            .mapNotNull { m ->
+                val fid = m.groupValues[1].trim().removePrefix("/")
+                val name = m.groupValues[2].trim()
+                if (fid.isBlank()) null
+                else ShareFile(
+                    fid = fid,
+                    fname = name.ifBlank { fid },
+                    fsize = 0L,
+                    isdir = true,
+                    pdirFid = "",
+                    fidToken = ""
+                )
+            }
+            .distinctBy { it.fid }
+            .toList()
+
+    /** 文件夹分页参数（lx/fid/t/k），变量与对象两种写法都认。 */
+    internal fun folderParamsOf(html: String, fallbackFid: String): LanzouFolderParams? {
+        val lx = jsParam(html, "lx") ?: "2"
+        val fid = jsParam(html, "fid") ?: fallbackFid
+        val t = jsParam(html, "t") ?: return null
+        val k = jsParam(html, "k") ?: return null
+        if (fid.isBlank() || t.isBlank() || k.isBlank()) return null
+        return LanzouFolderParams(lx, fid, t, k)
     }
 
     private fun inputValue(html: String, name: String): String? =
@@ -988,6 +1159,10 @@ class LanzouApi(
         if (target.startsWith("http://") || target.startsWith("https://")) return target
         val uri = runCatching { URI(base) }.getOrNull() ?: return target
         val root = "${uri.scheme}://${uri.host}"
+        // 协议相对地址（`//host/path`）：蓝奏的 iframe src 经常这么写。
+        // 以前这里按"以 / 开头"处理，拼出 `https://host//host/path` 这种双主机地址，
+        // 请求必然失败 —— 拿不到参数，最后就报「缺少下载参数」。
+        if (target.startsWith("//")) return "${uri.scheme}:$target"
         return if (target.startsWith("/")) root + target else "$root/$target"
     }
 

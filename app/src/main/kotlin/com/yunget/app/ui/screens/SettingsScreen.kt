@@ -86,15 +86,11 @@ import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.unit.dp
 import com.yunget.app.data.backup.AuthBackupManager
 import com.yunget.app.data.backup.AuthCrypto
-import com.yunget.app.data.download.Aria2Executor
-import com.yunget.app.data.download.Aria2ProbeResult
-import com.yunget.app.data.download.DownloadEngine
 import com.yunget.app.data.download.DownloadSaver
 import com.yunget.app.data.network.HttpClients
 import com.yunget.app.data.prefs.SettingsRepository
 import com.yunget.app.data.update.UpdateChecker
 import com.yunget.app.ui.SnackbarController
-import com.yunget.app.util.DiagLog
 import com.yunget.app.util.LogExporter
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
@@ -196,9 +192,6 @@ fun SettingsScreen(
     var dohUrl by remember { mutableStateOf(settingsRepo.dohUrl) }
     var warmUp by remember { mutableStateOf(settingsRepo.warmUpConnections) }
     var slowStartOn by remember { mutableStateOf(settingsRepo.slowStart) }
-    // 下载引擎选择（切换需重启 App 生效，见该设置项描述）
-    var currentEngine by remember { mutableStateOf(DownloadEngine.fromId(settingsRepo.downloadEngineId)) }
-    var showEngineDialog by remember { mutableStateOf(false) }
     var showConcurrencyDialog by remember { mutableStateOf(false) }
     var showSpeedDialog by remember { mutableStateOf(false) }
     var showRetryDialog by remember { mutableStateOf(false) }
@@ -355,14 +348,15 @@ fun SettingsScreen(
 
         Spacer(modifier = Modifier.height(8.dp))
 
-        // 下载引擎（内置分片下载器 / Gopeed 引擎）：切换、导入内核、启停与状态都在独立页面里
+        // 下载引擎：**所有**引擎都在这个页面里选（TurboDL / 内置兼容 / aria2 / Gopeed），
+        // 内核导入、启停与状态也都在那里 —— 设置页只留这一个入口，不再分两处。
         SettingsItem(
             icon = Icons.Outlined.Memory,
             title = "下载引擎",
             description = if (engineChoice == SettingsRepository.ENGINE_GOPEED) {
                 "Gopeed 引擎（支持磁力/BT，需导入内核）"
             } else {
-                "内置分片下载器（点击可切换到 Gopeed 引擎）"
+                "内置分片下载器 · 具体实现与 Gopeed 引擎都在这一页里选"
             },
             onClick = { showDownloadEngine = true }
         )
@@ -408,26 +402,6 @@ fun SettingsScreen(
                 settingsRepo.slowStart = slowStartOn
             },
             trailing = { Switch(checked = slowStartOn, onCheckedChange = null) }
-        )
-
-        Spacer(modifier = Modifier.height(8.dp))
-
-        // 内置下载器的具体实现：TurboDL（默认） / 内置兼容引擎 / aria2（兜底）。
-        // 与上面「下载引擎」的关系：那一项选「用内置下载器还是 Gopeed 引擎」，
-        // 这一项只在选了内置下载器时有意义 —— 决定内置下载器内部用哪套实现。
-        SettingsItem(
-            icon = Icons.Outlined.SettingsSuggest,
-            title = "内置下载器实现",
-            description = "当前：${currentEngine.displayName}" +
-                if (currentEngine != DownloadEngine.TURBODL) "（需重启 App 生效）" else "",
-            onClick = { showEngineDialog = true },
-            trailing = {
-                Icon(
-                    Icons.Outlined.ChevronRight,
-                    contentDescription = null,
-                    tint = MaterialTheme.colorScheme.onSurfaceVariant
-                )
-            }
         )
 
         Spacer(modifier = Modifier.height(8.dp))
@@ -996,103 +970,6 @@ fun SettingsScreen(
     }
 
     // 最大同时下载任务数
-    // 下载引擎选择：切换后需重启 App（管理器由 ViewModel 持有，热切换会让旧 ViewModel
-    // 继续指向旧管理器 → 两套引擎同时活着），故弹窗内明确提示。
-    if (showEngineDialog) {
-        AlertDialog(
-            onDismissRequest = { showEngineDialog = false },
-            title = { Text("下载引擎") },
-            text = {
-                Column {
-                    DownloadEngine.entries.forEach { engine ->
-                        Row(
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .clickable {
-                                    currentEngine = engine
-                                    settingsRepo.downloadEngineId = engine.id
-                                    showEngineDialog = false
-                                    SnackbarController.show(
-                                        if (engine == DownloadEngine.TURBODL)
-                                            "已切换到 TurboDL 内核，重启 App 后生效"
-                                        else
-                                            "已切换到${engine.displayName}，重启 App 后生效"
-                                    )
-                                }
-                                .padding(vertical = 6.dp),
-                            verticalAlignment = Alignment.Top
-                        ) {
-                            RadioButton(
-                                selected = currentEngine == engine,
-                                onClick = null
-                            )
-                            Spacer(modifier = Modifier.width(8.dp))
-                            Column {
-                                Text(engine.displayName, style = MaterialTheme.typography.bodyLarge)
-                                Text(
-                                    engine.description,
-                                    style = MaterialTheme.typography.bodySmall,
-                                    color = MaterialTheme.colorScheme.onSurfaceVariant
-                                )
-                            }
-                        }
-                    }
-                    Spacer(modifier = Modifier.height(10.dp))
-                    Text(
-                        text = "⚠ 切换引擎需重启 App 才生效（当前设置不影响正在运行的任务）。" +
-                            "内置兼容引擎为兜底选项：不支持现场诊断，且不持久化请求头，" +
-                            "部分网盘链接在进程重启后可能无法续传。",
-                        style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.error
-                    )
-                    Spacer(modifier = Modifier.height(12.dp))
-                    HorizontalDivider()
-                    Spacer(modifier = Modifier.height(12.dp))
-                    // aria2 可用性检测：让用户先确认"这台设备能不能跑"，再决定切不切。
-                    // 结果含确切失败原因（ENOENT / EACCES / ENOEXEC 语义完全不同），
-                    // 避免"切过去发现不能用、却不知道为什么"。
-                    Text("aria2 引擎可用性", style = MaterialTheme.typography.titleSmall)
-                    Spacer(modifier = Modifier.height(6.dp))
-                    val aria2Result = remember { mutableStateOf<Aria2ProbeResult?>(null) }
-                    var aria2Checking by remember { mutableStateOf(false) }
-                    Button(
-                        onClick = {
-                            aria2Checking = true
-                            scope.launch {
-                                val r = withContext(Dispatchers.IO) { Aria2Executor.probe(context) }
-                                aria2Result.value = r
-                                aria2Checking = false
-                                // 落盘：让"检测结果"也能随「导出日志」一起回传，
-                                // 否则又是一次"我测了但你拿不到证据"。
-                                withContext(Dispatchers.IO) {
-                                    DiagLog.i(
-                                        context, "aria2检测",
-                                        if (r.available) "可用: ${r.detail}" else "不可用: ${r.detail}"
-                                    )
-                                }
-                            }
-                        },
-                        enabled = !aria2Checking,
-                        modifier = Modifier.fillMaxWidth()
-                    ) {
-                        Text(if (aria2Checking) "检测中…" else "检测 aria2 是否可用")
-                    }
-                    aria2Result.value?.let { r ->
-                        Spacer(modifier = Modifier.height(6.dp))
-                        Text(
-                            text = if (r.available) "✅ 可用：${r.detail}" else "❌ 不可用：${r.detail}",
-                            style = MaterialTheme.typography.bodySmall,
-                            color = if (r.available) MaterialTheme.colorScheme.primary
-                            else MaterialTheme.colorScheme.error
-                        )
-                    }
-                }
-            },
-            confirmButton = {
-                TextButton(onClick = { showEngineDialog = false }) { Text("取消") }
-            }
-        )
-    }
 
     if (showConcurrencyDialog) {
         val options = listOf(1, 2, 3, 5, 8)
