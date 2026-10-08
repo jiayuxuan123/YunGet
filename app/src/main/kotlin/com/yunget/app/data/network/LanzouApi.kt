@@ -534,6 +534,10 @@ class LanzouApi(
             val childPageUrl = downloadPageUrlFor(page, file)
             val entryHtml = childPageUrl?.let { fetchPageFollowingLanzou(it) } ?: page.html
             val entryUrl = childPageUrl ?: page.shareUrl
+            LanzouLog.note(
+                if (childPageUrl != null) "取链：文件页 $origin${URI(childPageUrl).path.orEmpty()}（文件夹分享）"
+                else "取链：分享页 ${URI(entryUrl).path.orEmpty()}（单文件分享）"
+            )
 
             // ② 下载参数在同源 iframe 里（单文件分享的 iframe 解析阶段就记下了；子文件页面现场认）
             var html = entryHtml
@@ -583,6 +587,9 @@ class LanzouApi(
             }
 
             val ajaxJson = formPost(ajaxUrl, fields, entryUrl, origin, null)
+            LanzouLog.note(
+                "取链：提交 ${URI(ajaxUrl).path.orEmpty()}（${if (declared != null) "参数取自页面对象 ${declared.size} 项" else "参数取自固定变量名"}）"
+            )
             validateAjax(ajaxJson)
             val dom = ajaxJson.optString("dom")
             val rel = ajaxJson.optString("url")
@@ -615,6 +622,10 @@ class LanzouApi(
         fileName: String
     ): DownloadLink = withContext(Dispatchers.IO) {
         val info = createFileShare(cookie, uid, vei, fileId)
+        LanzouLog.note(
+            "个人盘取链：已生成分享 ${runCatching { URI(info.shareUrl).path }.getOrNull().orEmpty()}" +
+                if (info.passcode.isNotBlank()) "（带提取码）" else "（无提取码）"
+        )
         val page = resolveShare(info.shareUrl, info.passcode)
         val file = page.singleFile
             ?: ShareFile(fid = page.shareUrl, fname = fileName, fsize = 0L, isdir = false, pdirFid = "", fidToken = "")
@@ -623,19 +634,37 @@ class LanzouApi(
 
     // ---------- 内部 ----------
 
+    /**
+     * 「这一步是不是已经走过」的判据。
+     *
+     * **不能只按 URL 去重**：命中 acw_sc__v2 人机校验页时，做法是算出 Cookie 后**重放同一个地址**
+     * —— 那是设计好的第二次请求，不是循环。原来这里只记 URL，于是那次重放必然被判成
+     * 「循环跳转」，这条路根本走不通（真正的 A→B→A 循环它倒是也能抓到，所以一直没被发现）。
+     *
+     * 现在连着当时**发出去的 Cookie** 一起记：Cookie 变了就是一次新尝试，没变才是真循环。
+     */
+    internal class HopGuard {
+        private val seen = mutableSetOf<String>()
+
+        /** @return true 表示这一步可以走；false 表示同一个地址带着同一份 Cookie 又回来了 = 循环。 */
+        fun enter(url: String, cookie: String): Boolean = seen.add("$url|$cookie")
+    }
+
     private fun probeAndVerify(jump: String, shareOrigin: String): Pair<String, Long> {
         var url = jump
         // 下载节点要求注入 down_ip=1 Cookie（文档 §A4）
         setCookie(hostOf(jump), "down_ip", "1")
         var confirmedHosts = mutableSetOf<String>()
         val challenges = mutableSetOf<String>()
-        val visited = mutableSetOf<String>()
+        val guard = HopGuard()
         repeat(8) {
             val uri = runCatching { URI(url) }.getOrNull()
                 ?: throw IllegalStateException("蓝奏下载地址暂时不可用，请稍后重试")
             val host = uri.host ?: throw IllegalStateException("蓝奏下载地址暂时不可用，请稍后重试")
-            if (!visited.add(url)) throw IllegalStateException("蓝奏下载地址循环跳转，请重新解析")
+            val cookie = mergedCookie(host, LanzouConstants.DOWN_IP_COOKIE)
+            if (!guard.enter(url, cookie)) throw IllegalStateException("蓝奏下载地址循环跳转，请重新解析")
             val response = headRequest(url, shareOrigin)
+            LanzouLog.hop(host, uri.path.orEmpty(), response.code, url == jump)
             when {
                 response.code in 300..399 -> {
                     val loc = response.location ?: throw IllegalStateException("蓝奏下载地址暂时不可用，请稍后重试")
@@ -653,11 +682,13 @@ class LanzouApi(
                         val challenge = lanzouChallengeCookie(body)
                         if (challenge != null) {
                             if (!challenges.add(host)) throw IllegalStateException("蓝奏需要进一步验证，请在分享页完成验证后重试")
+                            LanzouLog.note("命中 acw_sc__v2 校验页，已算出 Cookie，重放 $host${uri.path.orEmpty()}")
                             setCookie(host, "acw_sc__v2", challenge)
                             return@repeat
                         }
                         if (body.contains("验证并下载")) {
                             if (confirmedHosts.add(host)) {
+                                LanzouLog.note("下载节点要求「验证并下载」，提交验证 $host${uri.path.orEmpty()}")
                                 val verified = submitVerify(url, body, shareOrigin)
                                 if (verified != null) {
                                     url = verified

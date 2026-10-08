@@ -4,7 +4,7 @@
 >
 > **本项目是 [CYQawa/YunX（云析）](https://github.com/CYQawa/YunX) 的二次开发版本**，在其协议与架构基础上进行功能扩展，并将下载能力逐步迁移至独立的 [TurboDL](https://github.com/jiayuxuan123/TurboDL) 下载引擎。遵循 GNU AGPL-3.0 协议开源。
 
-当前版本 **2.6.19**（versionCode 44）· Android 6.0+（minSdk 23，targetSdk 34）· 内置 TurboDL 0.2.0.5
+当前版本 **2.6.21**（versionCode 46）· Android 6.0+（minSdk 23，targetSdk 34）· 内置 TurboDL 0.2.0.6
 
 **官网**：[jiayuxuan123.github.io/YunGet](https://jiayuxuan123.github.io/YunGet/) —— 下载、使用说明、常见问题、隐私与条款
 
@@ -279,7 +279,7 @@ HLS 下载功能主要面向**完整资源下载**，而不是实时播放。
 - Android SDK（`local.properties` 里的 `sdk.dir`，或环境变量 `ANDROID_HOME` / `ANDROID_SDK_ROOT`）
 - `compileSdk 36` / `minSdk 23` / `targetSdk 34`
 
-**先发布 TurboDL 到本地 Maven。** 依赖里的 `dev.turbodl:*:0.2.0.5` 不在公共仓库上，
+**先发布 TurboDL 到本地 Maven。** 依赖里的 `dev.turbodl:*:0.2.0.6` 不在公共仓库上，
 `settings.gradle.kts` 把 `mavenLocal()` 排在仓库列表最前，所以要先在 TurboDL 仓库执行
 `./gradlew publishToMavenLocal`（或从它的 Release 页取 mavenLocal 离线包解到 `~/.m2/repository`），
 否则构建会在依赖解析阶段直接失败。

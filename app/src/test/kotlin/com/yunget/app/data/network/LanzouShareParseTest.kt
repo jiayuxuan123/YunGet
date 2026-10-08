@@ -20,6 +20,7 @@ package com.yunget.app.data.network
 import com.yunget.app.data.network.model.ShareFile
 import okhttp3.OkHttpClient
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Test
@@ -245,5 +246,36 @@ class LanzouShareParseTest {
     @Test
     fun plainFilePageHasNoSubFolders() {
         assertTrue(api.parseSubFolders("<div class='fileinfo'>单个文件</div>").isEmpty())
+    }
+
+    // ---------------------------------------------------------------- 循环跳转判据
+
+    /**
+     * 2.6.21 修的第二个故障：命中 acw_sc__v2 人机校验页后，代码会算出 Cookie 再**重放同一个地址**
+     * —— 那是设计好的第二次请求。而循环检测只按 URL 去重，于是那次重放必然被判成「循环跳转」。
+     * 现在连着 Cookie 一起记：Cookie 变了 = 新尝试，没变 = 真循环。
+     */
+    @Test
+    fun replayWithFreshCookieIsNotALoop() {
+        val guard = LanzouApi.HopGuard()
+        val url = "https://down.lanzouj.com/file/abc"
+        assertTrue("第一次应当放行", guard.enter(url, "down_ip=1"))
+        assertTrue("算出校验 Cookie 后重放同一地址，应当放行", guard.enter(url, "down_ip=1; acw_sc__v2=deadbeef"))
+    }
+
+    @Test
+    fun sameUrlWithSameCookieIsStillALoop() {
+        val guard = LanzouApi.HopGuard()
+        val url = "https://down.lanzouj.com/file/abc"
+        assertTrue(guard.enter(url, "down_ip=1"))
+        assertFalse("同一地址 + 同一份 Cookie 又回来 = 真循环", guard.enter(url, "down_ip=1"))
+    }
+
+    @Test
+    fun differentUrlsAreIndependent() {
+        val guard = LanzouApi.HopGuard()
+        assertTrue(guard.enter("https://a.lanzouj.com/file/x", ""))
+        assertTrue(guard.enter("https://b.lanzouj.com/file/x", ""))
+        assertTrue(guard.enter("https://a.lanzouj.com/file/y", ""))
     }
 }

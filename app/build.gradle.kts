@@ -26,7 +26,21 @@ android {
         applicationId = "com.yunget.app"
         minSdk = 23
         targetSdk = 34
-        versionCode = 45
+        versionCode = 46
+        // 2.6.21 内容：**修 2.6.19 起就存在的第二个蓝奏故障**（与 2.6.20 修的是同一链路上的两处）
+        //  ① 「缺少下载参数」与「下载地址循环跳转」是**两个独立的缺陷**，前者在 2.6.20 修掉了，
+        //     修好之后流程第一次真正走到下载节点，第二个才暴露出来（此前它被前一个错误挡在前面）。
+        //  ② 循环跳转的根因：命中 acw_sc__v2 人机校验页时，代码会算出 Cookie 后**重放同一个地址**
+        //     —— 那是设计好的第二次请求。而循环检测只按 URL 去重，于是这次重放必然被判成
+        //     「循环跳转」，这条重放路径实际上从来没成功过。现在连着当时发出去的 Cookie 一起记：
+        //     Cookie 变了 = 新尝试，没变 = 真循环（真正的 A→B→A 仍然会被抓到）。
+        //  ③ 顺手给这条链路补了诊断日志（logcat，随「导出日志」一起回传）：每跳的 host/path/状态码、
+        //     命中校验页、提交验证、参数取自哪一份 HTML。只记 host+path 不记 query ——
+        //     蓝奏直链的 query 带签名，等于临时钥匙，不该写进要发给别人看的日志里。
+        //     前两个故障来回猜了好几轮，就是因为它"请求了哪一页"完全看不见。
+        //  ④ 引擎跟进到 **TurboDL 0.2.0.6**：运行时补齐了 loadSource / 归属级联 / 并发卸载语义，
+        //     HLS 插件与引擎行为本身不变。四个坐标（core / runtime / bootstrap / hls）一起跟上，
+        //     顺带把文档与官网里写着 0.2.0.5 的地方全部改成 0.2.0.6。
         // 2.6.20 内容：
         //  ① **修复蓝奏分享点文件报「缺少下载参数」**，三条根因：
         //     - 文件夹分享的分享页是**目录页**，上面没有下载参数 —— 参数在文件夹里每个文件
@@ -177,7 +191,7 @@ android {
         //     - 分片请求带 `If-Range`：防止 CDN 中途换文件时新旧字节拼出混杂文件
         //       （那种情况长度校验会通过，损坏会静默落地）。
         //     - 401/403/410 不再触发背压降并发（是授权/时效信号，不是"你太快了"）。
-        versionName = "2.6.20"
+        versionName = "2.6.21"
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
     }
@@ -316,11 +330,11 @@ dependencies {
     implementation("androidx.lifecycle:lifecycle-viewmodel-compose:2.8.7")
     implementation("com.squareup.okhttp3:okhttp:4.12.0")
 
-    // TurboDL SDK（纯 JVM 多线程下载引擎 + 可选插件框架），从 mavenLocal 解析 dev.turbodl:*:0.2.0.5
-    implementation("dev.turbodl:turbodl-core:0.2.0.5")
-    implementation("dev.turbodl:turbo-plugin-runtime:0.2.0.5")
-    implementation("dev.turbodl:turbo-plugin-bootstrap:0.2.0.5")
-    implementation("dev.turbodl:turbo-plugin-hls:0.2.0.5")
+    // TurboDL SDK（纯 JVM 多线程下载引擎 + 可选插件框架），从 mavenLocal 解析 dev.turbodl:*:0.2.0.6
+    implementation("dev.turbodl:turbodl-core:0.2.0.6")
+    implementation("dev.turbodl:turbo-plugin-runtime:0.2.0.6")
+    implementation("dev.turbodl:turbo-plugin-bootstrap:0.2.0.6")
+    implementation("dev.turbodl:turbo-plugin-hls:0.2.0.6")
 
     implementation(libs.material)   // 原 libs.material.color.utilities -> 改为官方 Material 主库（含 color.utilities 包）
 

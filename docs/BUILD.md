@@ -12,7 +12,7 @@
 
 ## 关键一步：先把 TurboDL 发布到本地 Maven
 
-YunGet 依赖 `dev.turbodl:turbodl-core`、`turbo-plugin-runtime`、`turbo-plugin-bootstrap`、`turbo-plugin-hls`，版本都是 `0.2.0.5`。这些坐标不在 Maven Central，也不在 Google 的仓库里，只存在于本地 Maven。
+YunGet 依赖 `dev.turbodl:turbodl-core`、`turbo-plugin-runtime`、`turbo-plugin-bootstrap`、`turbo-plugin-hls`，版本都是 `0.2.0.6`。这些坐标不在 Maven Central，也不在 Google 的仓库里，只存在于本地 Maven。
 
 `settings.gradle.kts` 的仓库列表里 `mavenLocal()` 排在最前面，就是为了让这几个依赖优先从本地解析。所以在编译 YunGet 之前，先在 TurboDL 的仓库里执行：
 
