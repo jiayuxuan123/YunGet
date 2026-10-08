@@ -1,23 +1,40 @@
 {
   "repo": "jiayuxuan123/YunGet",
   "latest": {
-    "tag": "v2.6.20",
-    "name": "YunGet 2.6.20",
-    "published": "2026-10-08T13:50:23Z",
+    "tag": "v2.6.21",
+    "name": "YunGet 2.6.21",
+    "published": "2026-10-08T14:09:21Z",
     "prerelease": false,
-    "url": "https://github.com/jiayuxuan123/YunGet/releases/tag/v2.6.20",
-    "summary": "YunGet 2.6.20：修复蓝奏分享点文件报「缺少下载参数」；四套引擎的入口合并到一处\n---\n修复：蓝奏分享里点文件就报错\n**现象**：文件夹分享解析出来了，文件也列出来了，点它取直链就弹「蓝奏分享页缺少下载参数，请重新解析」。\n**根因有三条，前两条各自都足以让它必现**：\n1. **取错了页面**。文件夹分享的分享页是一张**目录页**，上面根本没有下载参数 —— 参数在文件夹里\n   **每个文件自己的页面**上（`{host}/{文件key}`）。原实现在目录页上找 `sign`，找不到就报错。\n   现在先取文件自己的页面，再从那一页里找参数（与 alist 的 `GetFilesByShareUrl(file.GetID())` 同一做法）。\n2. **协议相对地址拼错了**。下载参数在同源 iframe 里，而蓝奏的 iframe `src` 常写成\n   `//ho…",
+    "url": "https://github.com/jiayuxuan123/YunGet/releases/tag/v2.6.21",
+    "summary": "YunGet 2.6.21：修复「下载地址循环跳转」；引擎跟进到 TurboDL 0.2.0.6\n---\n先说清楚这一版和上一版的关系\n2.6.20 修的是「缺少下载参数」，这一版修的是「下载地址循环跳转」。两者是**同一链路上的两个独立缺陷**，\n在 2.6.19 里就已经并存 —— 只是循环跳转被前面那个错误挡着，流程根本走不到那里；\n2.6.20 修好第一步之后，它才第一次露出来。\n修复：循环跳转\n**根因**：命中 `acw_sc__v2` 人机校验页时，代码会算出 Cookie 然后**重放同一个地址** ——\n那是设计好的第二次请求。而循环检测只按 URL 去重，于是这次重放**必然**被判成循环。\n换句话说，这条重放路径从来没有成功过：凡是碰上校验页的下载，最后都会以「循环跳转」收场。\n**修法**：判据从「这个地址访问过吗」改成「这个地址**带着这份 Cookie**访问过…",
     "assets": [
       {
-        "name": "YunGet-2.6.20-release.apk",
-        "size": 29253022,
-        "url": "https://github.com/jiayuxuan123/YunGet/releases/download/v2.6.20/YunGet-2.6.20-release.apk",
+        "name": "YunGet-2.6.21-release.apk",
+        "size": 29256285,
+        "url": "https://github.com/jiayuxuan123/YunGet/releases/download/v2.6.21/YunGet-2.6.21-release.apk",
         "downloads": 0,
-        "sha256": "80b5ddf11f8751f2685887a8fc080f8035504c273eb17d7429199a869a70c224"
+        "sha256": "80e7d72941dec73605eb7b83a58843380bef89c039b8ed57ca705b91affbe67a"
       }
     ]
   },
   "releases": [
+    {
+      "tag": "v2.6.21",
+      "name": "YunGet 2.6.21",
+      "published": "2026-10-08T14:09:21Z",
+      "prerelease": false,
+      "url": "https://github.com/jiayuxuan123/YunGet/releases/tag/v2.6.21",
+      "summary": "YunGet 2.6.21：修复「下载地址循环跳转」；引擎跟进到 TurboDL 0.2.0.6\n---\n先说清楚这一版和上一版的关系\n2.6.20 修的是「缺少下载参数」，这一版修的是「下载地址循环跳转」。两者是**同一链路上的两个独立缺陷**，\n在 2.6.19 里就已经并存 —— 只是循环跳转被前面那个错误挡着，流程根本走不到那里；\n2.6.20 修好第一步之后，它才第一次露出来。\n修复：循环跳转\n**根因**：命中 `acw_sc__v2` 人机校验页时，代码会算出 Cookie 然后**重放同一个地址** ——\n那是设计好的第二次请求。而循环检测只按 URL 去重，于是这次重放**必然**被判成循环。\n换句话说，这条重放路径从来没有成功过：凡是碰上校验页的下载，最后都会以「循环跳转」收场。\n**修法**：判据从「这个地址访问过吗」改成「这个地址**带着这份 Cookie**访问过…",
+      "assets": [
+        {
+          "name": "YunGet-2.6.21-release.apk",
+          "size": 29256285,
+          "url": "https://github.com/jiayuxuan123/YunGet/releases/download/v2.6.21/YunGet-2.6.21-release.apk",
+          "downloads": 0,
+          "sha256": "80e7d72941dec73605eb7b83a58843380bef89c039b8ed57ca705b91affbe67a"
+        }
+      ]
+    },
     {
       "tag": "v2.6.20",
       "name": "YunGet 2.6.20",
@@ -30,7 +47,7 @@
           "name": "YunGet-2.6.20-release.apk",
           "size": 29253022,
           "url": "https://github.com/jiayuxuan123/YunGet/releases/download/v2.6.20/YunGet-2.6.20-release.apk",
-          "downloads": 0,
+          "downloads": 15,
           "sha256": "80b5ddf11f8751f2685887a8fc080f8035504c273eb17d7429199a869a70c224"
         }
       ]
@@ -47,7 +64,7 @@
           "name": "YunGet-2.6.19-release.apk",
           "size": 29251699,
           "url": "https://github.com/jiayuxuan123/YunGet/releases/download/v2.6.19/YunGet-2.6.19-release.apk",
-          "downloads": 890,
+          "downloads": 892,
           "sha256": "d01180c164fd9fc7af2dc6cda9ad48485c66a741aa877139dc2809f02886ea70"
         }
       ]
@@ -508,23 +525,6 @@
           "url": "https://github.com/jiayuxuan123/YunGet/releases/download/v2.1.0/YunGet-2.1.0.apk",
           "downloads": 14,
           "sha256": "e5f7067b1ae450798173331563387fd2c352078d63a5a997af73a3bf26b964d7"
-        }
-      ]
-    },
-    {
-      "tag": "v2.0.1",
-      "name": "YunGet v2.0.1（修复下载速度）",
-      "published": "2026-08-25T04:28:39Z",
-      "prerelease": false,
-      "url": "https://github.com/jiayuxuan123/YunGet/releases/tag/v2.0.1",
-      "summary": "YunGet 2.0.1 —— 修复下载速度暴跌\n问题\n2.0.0 的自适应引擎带了一套 AIMD 动态并发调节，会把网盘 CDN 正常的单连接速率抖动**误判为服务器过载**，每 1.5s 减一个线程，最终砍到只剩 2 个连接。网盘通常对单条连接限速、速度全靠多连接堆叠，连接被砍光后速度只有满并发的极小一部分（实测仅 32KB/s 且忽上忽下，甚至不如上游）。\n修复（参照 aria2 / IDM 经验重写引擎）\n· **固定满并发**：连接数 = 用户设定的线程数，一次全部拉起（仅首连错峰），**绝不因吞吐波动收缩连接数**（对齐 aria2 `--max-connection-per-server` / IDM「多连接绕过单连接限速」）。\n· **固定 4MB 小块 + 工作窃取**：顺序游标发块，空闲线程立刻领下一块；失败块回投共享队列被任意线程补下。小块天然无「最后一个大块单线程收…",
-      "assets": [
-        {
-          "name": "YunGet-v2.0.1-release.apk",
-          "size": 18862524,
-          "url": "https://github.com/jiayuxuan123/YunGet/releases/download/v2.0.1/YunGet-v2.0.1-release.apk",
-          "downloads": 8,
-          "sha256": "03981c4854c7702fec955a24b6efc4ae7187c66e2f6ebd79a2bb6431ab7a24cf"
         }
       ]
     }
