@@ -6,7 +6,9 @@
 
 当前版本 **2.6.19**（versionCode 44）· Android 6.0+（minSdk 23，targetSdk 34）· 内置 TurboDL 0.2.0.5
 
-**文档**：[使用说明](docs/GUIDE.md) · [常见问题](docs/FAQ.md) · [下载引擎](docs/ENGINES.md) · [从源码构建](docs/BUILD.md) · [隐私说明](docs/PRIVACY.md) · [使用条款](docs/TERMS.md) · [在线文档](https://jiayuxuan123.github.io/YunGet/)
+**官网**：[jiayuxuan123.github.io/YunGet](https://jiayuxuan123.github.io/YunGet/) —— 下载、使用说明、常见问题、隐私与条款
+
+**文档**：[使用说明](docs/GUIDE.md) · [常见问题](docs/FAQ.md) · [下载引擎](docs/ENGINES.md) · [从源码构建](docs/BUILD.md) · [隐私说明](docs/PRIVACY.md) · [使用条款](docs/TERMS.md)
 
 ---
 
