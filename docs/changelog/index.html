@@ -28,7 +28,17 @@
 </div>
 </header>
 <main id="main">
-<section><h1>更新日志</h1><p class="lead">由发布说明本身生成 —— 应用内的「检查更新」读的是同一份数据，所以两处看到的版本与内容永远一致。</p></section><section><div class="cards cols-2"><div class="card"><h3><span class="mono">v2.7.0</span></h3><p class="small">2026-10-09 · 1 个附件</p><p class="muted">YunGet 2.7.0：插件体系落地 + 界面大升级
+<section><h1>更新日志</h1><p class="lead">由发布说明本身生成 —— 应用内的「检查更新」读的是同一份数据，所以两处看到的版本与内容永远一致。</p></section><section><div class="cards cols-2"><div class="card"><h3><span class="mono">v2.7.1</span></h3><p class="small">2026-10-09 · 1 个附件</p><p class="muted">YunGet 2.7.1：修下载页崩溃与 JS 引擎误报
+这两个问题都在 2.7.0 引入，也都由你真机实报。它们有一个共同点：**错在判断，不在功能**——
+一个是把界面画崩的用法错误，一个是把好的引擎报成坏的。
+下载页一进去就崩
+崩在速度曲线的横轴上。我给横轴传了一个&quot;返回空串&quot;的格式化器，本意是让横轴不显示刻度，
+但 Vico 明确禁止这么做：它把空标签当成用法错误，在绘制阶段直接抛异常，并在报错里写明了
+正确做法——要控制哪些刻度显示标签，应该用 `ItemPlacer`，而不是让格式化器返回空串。
+纵轴的&quot;速度为零时不显示标签&quot;是同一类错误，只是恰好没被触发到，一并改掉了。
+横轴现在整条不传：它的刻度是采样点序号，对用户本来就没有信息量。
+顺带把格式化逻辑抽出来配了测试，锁住&quot;任何输入都不返回空串&quot;这条契约。它能让应用崩溃，
+但编译器不会拦——只能靠测试。覆盖了零、负数、各量级进…</p><p class="small"><a href="https://github.com/jiayuxuan123/YunGet/releases/tag/v2.7.1">发布页</a></p></div><div class="card"><h3><span class="mono">v2.7.0</span></h3><p class="small">2026-10-09 · 1 个附件</p><p class="muted">YunGet 2.7.0：插件体系落地 + 界面大升级
 这一版有两件事。一是把「JS 插件」从设计文档变成应用里真能用的东西：能装、能写、能更新。
 二是把界面整体重排了一遍，并顺手修掉了几个一直存在但没人报的缺陷。
 插件：现在真的能用了
@@ -138,21 +148,11 @@ Android 禁止在主线程发起网络请求，于是抛出 `NetworkOnMainThread
 Room 数据库中。设备被 root 或数据库文件被取出时，账号凭证可直接读取。
 **改造后**：
 · 落库前使用 **AES-GCM** 加密，密钥由 **Android Keystore** 持有且不可导出
-· 附加认证数据（AAD…</p><p class="small"><a href="https://github.com/jiayuxuan123/YunGet/releases/tag/v2.6.11">发布页</a></p></div><div class="card"><h3><span class="mono">v2.6.10</span></h3><p class="small">2026-09-29 · 1 个附件</p><p class="muted">修复「检查更新」检测不到新版本；下载引擎升级至 0.2.0.1；内置 aria2 引擎升级至 aria2-next 2.8.3
----
-修复：检查更新无法发现新版本
-**现象**：安装 2.6.9 后，应用内「检查更新」提示已是最新版本，无法发现后续发布。
-**根因**：此前使用 GitHub 的 `/releases/latest` 接口。该接口按设计**只返回已正式发布的版本，
-跳过预发布版本**，而本项目的测试版本正是以预发布形式发布。实测对比：
-| 接口 | 返回结果 |
-|---|---|
-| `/releases/latest`（原使用） | `v2.6.7`（跳过了所有预发布版本） |
-| `/releases?per_page=30`（现使用） | `v2.6.10`、`v2.6.9`、`v2.6.7` … |
-**改动**：改用 Release 列表接口，并自行按**版本…</p><p class="small"><a href="https://github.com/jiayuxuan123/YunGet/releases/tag/v2.6.10">发布页</a></p></div></div></section><section><h2>完整历史</h2><div class="btn-row"><a class="btn" href="https://github.com/jiayuxuan123/YunGet/releases">全部发布</a><a class="btn" href="https://github.com/jiayuxuan123/YunGet/commits/main">代码提交</a></div></section></main>
+· 附加认证数据（AAD…</p><p class="small"><a href="https://github.com/jiayuxuan123/YunGet/releases/tag/v2.6.11">发布页</a></p></div></div></section><section><h2>完整历史</h2><div class="btn-row"><a class="btn" href="https://github.com/jiayuxuan123/YunGet/releases">全部发布</a><a class="btn" href="https://github.com/jiayuxuan123/YunGet/commits/main">代码提交</a></div></section></main>
 <footer class="site-foot">
 <div class="wrap">
 <div class="foot-cols"><div class="foot-col"><h4>项目</h4><ul><li><a href="https://github.com/jiayuxuan123/YunGet">GitHub</a></li><li><a href="../download/index.html">下载</a></li><li><a href="index.html">更新日志</a></li><li><a href="https://github.com/jiayuxuan123/YunGet/issues">问题反馈</a></li></ul></div><div class="foot-col"><h4>文档</h4><ul><li><a href="../docs/readme/index.html">项目说明</a></li><li><a href="../docs/guide/index.html">使用说明</a></li><li><a href="../docs/faq/index.html">常见问题</a></li><li><a href="../docs/engines/index.html">下载引擎</a></li><li><a href="../docs/build/index.html">从源码构建</a></li></ul></div><div class="foot-col"><h4>插件</h4><ul><li><a href="../plugins/index.html">插件（市场与安装）</a></li><li><a href="../developers/index.html">开发者（怎么写）</a></li><li><a href="../docs/plugin-dev/index.html">写一个插件</a></li><li><a href="../docs/plugin-api/index.html">插件 ABI 参考</a></li><li><a href="../docs/plugin-publish/index.html">打包与发布</a></li><li><a href="../docs/plugin-security/index.html">插件安全模型</a></li></ul></div><div class="foot-col"><h4>协议与说明</h4><ul><li><a href="../legal/license/index.html">AGPL-3.0 原文</a></li><li><a href="../legal/notice/index.html">署名与致谢</a></li><li><a href="../legal/privacy/index.html">隐私说明</a></li><li><a href="../legal/terms/index.html">使用条款</a></li><li><a href="../support/index.html">支持开发</a></li></ul></div><div class="foot-col"><h4>相关</h4><ul><li><a href="https://github.com/CYQawa/YunX">上游 CYQawa/YunX</a></li><li><a href="https://github.com/jiayuxuan123/TurboDL">下载引擎 TurboDL</a></li><li><a href="https://github.com/jiayuxuan123/YunGet-Plugins">插件源 YunGet-Plugins</a></li><li><a href="../community/index.html">社区</a></li></ul></div></div>
-<div class="foot-note"><p>云取 YunGet v2.7.0 · AGPL-3.0 · 内置 TurboDL 0.2.0.7 · Android 6.0（API 23）</p><p>本项目是 CYQawa/YunX（云析）的二次开发版本，与上游作者无隐性关联。仅供个人学习与技术交流，请勿用于商业用途；下载内容的版权归原作者及相关权利人所有。</p></div>
+<div class="foot-note"><p>云取 YunGet v2.7.1 · AGPL-3.0 · 内置 TurboDL 0.2.0.7 · Android 6.0（API 23）</p><p>本项目是 CYQawa/YunX（云析）的二次开发版本，与上游作者无隐性关联。仅供个人学习与技术交流，请勿用于商业用途；下载内容的版权归原作者及相关权利人所有。</p></div>
 </div>
 </footer>
 <script src="../assets/site.js" defer></script>

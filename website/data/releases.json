@@ -1,23 +1,40 @@
 {
   "repo": "jiayuxuan123/YunGet",
   "latest": {
-    "tag": "v2.7.0",
-    "name": "YunGet 2.7.0：插件体系落地 + 界面大升级",
-    "published": "2026-10-09T16:08:18Z",
+    "tag": "v2.7.1",
+    "name": "YunGet 2.7.1：修下载页崩溃与 JS 引擎误报",
+    "published": "2026-10-09T16:48:28Z",
     "prerelease": false,
-    "url": "https://github.com/jiayuxuan123/YunGet/releases/tag/v2.7.0",
-    "summary": "YunGet 2.7.0：插件体系落地 + 界面大升级\n这一版有两件事。一是把「JS 插件」从设计文档变成应用里真能用的东西：能装、能写、能更新。\n二是把界面整体重排了一遍，并顺手修掉了几个一直存在但没人报的缺陷。\n插件：现在真的能用了\n以前插件只是引擎里的一个接口，应用里既装不了也写不了。这一版补齐了整条链路：\n**自己写** —— 内置编辑器，保存前先做语法预检。写错了当场告诉你哪一行有问题，而不是等下载时才发现脚本根本没加载。编辑器里有模板可以照着改。\n**从市场装** —— 插件市场支持添加插件源、浏览、一键安装，以及检查更新。装过的插件有更新时会提示，点一下就更新。\n**一个插件可以管多个协议** —— 不必给每个协议写一个插件。插件在清单里声明自己支持哪些协议（比如一个插件同时声明 `magnet` 和 `bt`），引擎在加载时建立索引，之后按协议查表。分成太多插件会让加载和切…",
+    "url": "https://github.com/jiayuxuan123/YunGet/releases/tag/v2.7.1",
+    "summary": "YunGet 2.7.1：修下载页崩溃与 JS 引擎误报\n这两个问题都在 2.7.0 引入，也都由你真机实报。它们有一个共同点：**错在判断，不在功能**——\n一个是把界面画崩的用法错误，一个是把好的引擎报成坏的。\n下载页一进去就崩\n崩在速度曲线的横轴上。我给横轴传了一个\"返回空串\"的格式化器，本意是让横轴不显示刻度，\n但 Vico 明确禁止这么做：它把空标签当成用法错误，在绘制阶段直接抛异常，并在报错里写明了\n正确做法——要控制哪些刻度显示标签，应该用 `ItemPlacer`，而不是让格式化器返回空串。\n纵轴的\"速度为零时不显示标签\"是同一类错误，只是恰好没被触发到，一并改掉了。\n横轴现在整条不传：它的刻度是采样点序号，对用户本来就没有信息量。\n顺带把格式化逻辑抽出来配了测试，锁住\"任何输入都不返回空串\"这条契约。它能让应用崩溃，\n但编译器不会拦——只能靠测试。覆盖了零、负数、各量级进…",
     "assets": [
       {
-        "name": "YunGet-2.7.0-release.apk",
-        "size": 31586005,
-        "url": "https://github.com/jiayuxuan123/YunGet/releases/download/v2.7.0/YunGet-2.7.0-release.apk",
+        "name": "YunGet-2.7.1-release.apk",
+        "size": 31586091,
+        "url": "https://github.com/jiayuxuan123/YunGet/releases/download/v2.7.1/YunGet-2.7.1-release.apk",
         "downloads": 0,
-        "sha256": "d35b27bf3a94e363b67f6c57a1a488bae07e5c276ccf3c5cec50980e2c06cc7e"
+        "sha256": "4140068dadae124607ec22f7d23a297691690f3586c84c7f14fb8da4ce32992f"
       }
     ]
   },
   "releases": [
+    {
+      "tag": "v2.7.1",
+      "name": "YunGet 2.7.1：修下载页崩溃与 JS 引擎误报",
+      "published": "2026-10-09T16:48:28Z",
+      "prerelease": false,
+      "url": "https://github.com/jiayuxuan123/YunGet/releases/tag/v2.7.1",
+      "summary": "YunGet 2.7.1：修下载页崩溃与 JS 引擎误报\n这两个问题都在 2.7.0 引入，也都由你真机实报。它们有一个共同点：**错在判断，不在功能**——\n一个是把界面画崩的用法错误，一个是把好的引擎报成坏的。\n下载页一进去就崩\n崩在速度曲线的横轴上。我给横轴传了一个\"返回空串\"的格式化器，本意是让横轴不显示刻度，\n但 Vico 明确禁止这么做：它把空标签当成用法错误，在绘制阶段直接抛异常，并在报错里写明了\n正确做法——要控制哪些刻度显示标签，应该用 `ItemPlacer`，而不是让格式化器返回空串。\n纵轴的\"速度为零时不显示标签\"是同一类错误，只是恰好没被触发到，一并改掉了。\n横轴现在整条不传：它的刻度是采样点序号，对用户本来就没有信息量。\n顺带把格式化逻辑抽出来配了测试，锁住\"任何输入都不返回空串\"这条契约。它能让应用崩溃，\n但编译器不会拦——只能靠测试。覆盖了零、负数、各量级进…",
+      "assets": [
+        {
+          "name": "YunGet-2.7.1-release.apk",
+          "size": 31586091,
+          "url": "https://github.com/jiayuxuan123/YunGet/releases/download/v2.7.1/YunGet-2.7.1-release.apk",
+          "downloads": 0,
+          "sha256": "4140068dadae124607ec22f7d23a297691690f3586c84c7f14fb8da4ce32992f"
+        }
+      ]
+    },
     {
       "tag": "v2.7.0",
       "name": "YunGet 2.7.0：插件体系落地 + 界面大升级",
@@ -30,7 +47,7 @@
           "name": "YunGet-2.7.0-release.apk",
           "size": 31586005,
           "url": "https://github.com/jiayuxuan123/YunGet/releases/download/v2.7.0/YunGet-2.7.0-release.apk",
-          "downloads": 0,
+          "downloads": 54,
           "sha256": "d35b27bf3a94e363b67f6c57a1a488bae07e5c276ccf3c5cec50980e2c06cc7e"
         }
       ]
@@ -47,7 +64,7 @@
           "name": "YunGet-2.6.21-release.apk",
           "size": 29256285,
           "url": "https://github.com/jiayuxuan123/YunGet/releases/download/v2.6.21/YunGet-2.6.21-release.apk",
-          "downloads": 1280,
+          "downloads": 1287,
           "sha256": "80e7d72941dec73605eb7b83a58843380bef89c039b8ed57ca705b91affbe67a"
         }
       ]
@@ -132,7 +149,7 @@
           "name": "YunGet-2.6.15-release.apk",
           "size": 28284269,
           "url": "https://github.com/jiayuxuan123/YunGet/releases/download/v2.6.15/YunGet-2.6.15-release.apk",
-          "downloads": 3934,
+          "downloads": 3936,
           "sha256": "27284307104496d94934cb94f82b2445d586bcebda3d0b4d1b74232427f0e845"
         }
       ]
@@ -508,23 +525,6 @@
           "url": "https://github.com/jiayuxuan123/YunGet/releases/download/v2.2.1/YunGet-2.2.1.apk",
           "downloads": 3,
           "sha256": "925124188414aff9d249e46e94e9c0e720f8c24bc4917214bcf59ccb35a5d47e"
-        }
-      ]
-    },
-    {
-      "tag": "v2.2.0",
-      "name": "YunGet 2.2.0：断点续传 + 网盘/后期速度修复",
-      "published": "2026-08-28T03:35:21Z",
-      "prerelease": false,
-      "url": "https://github.com/jiayuxuan123/YunGet/releases/tag/v2.2.0",
-      "summary": "本版修复用户反馈的两个关键问题，并升级 TurboDL 内核到 0.2.0-rc3。\n修复：下到后面线程数骤降、速度只剩几 KB\n下载后期线程数莫名掉下去、最后速度暴跌到几 KB，是 TurboDL 引擎的背压模型缺陷：\n· 旧背压只降不升 —— 网盘 CDN 频繁 502/503 会把并发连续砍半、且几乎无法恢复，越下越慢。\n· 降并发时还存在信号量许可回收不全的问题，并发单向衰减到接近单线程。\n已在引擎层重写并发调度（索引自闸门 + 主动恢复），并在 App 侧对网盘场景关闭降并发、\n增加 per-host 并发上限（规避迅雷把 Range 降级为整文件）。\n修复：暂停后恢复直接从头下载\n断点续传此前完全失效 —— 暂停再恢复会从 0 重新下。根因是分片临时目录用引擎内部自增 id 命名，\n每次恢复都得到新目录、旧分片全丢。本版：\n· 每个任务用稳定键（Room 任务 id）复用同一分…",
-      "assets": [
-        {
-          "name": "YunGet-2.2.0.apk",
-          "size": 18960798,
-          "url": "https://github.com/jiayuxuan123/YunGet/releases/download/v2.2.0/YunGet-2.2.0.apk",
-          "downloads": 4,
-          "sha256": "bc639b933b7664503b0a410a9a56695e695f1193ec9d00e75d4c7f50f3ca2a29"
         }
       ]
     }

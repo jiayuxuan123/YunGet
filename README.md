@@ -4,7 +4,7 @@
 >
 > **本项目是 [CYQawa/YunX（云析）](https://github.com/CYQawa/YunX) 的二次开发版本**，在其协议与架构基础上进行功能扩展，并将下载能力逐步迁移至独立的 [TurboDL](https://github.com/jiayuxuan123/TurboDL) 下载引擎。遵循 GNU AGPL-3.0 协议开源。
 
-当前版本 **2.7.0**（versionCode 48）· Android 6.0+（minSdk 23，targetSdk 34）· 内置 TurboDL 0.2.0.7
+当前版本 **2.7.1**（versionCode 49）· Android 6.0+（minSdk 23，targetSdk 34）· 内置 TurboDL 0.2.0.7
 
 **官网**：[jiayuxuan123.github.io/YunGet](https://jiayuxuan123.github.io/YunGet/) —— 下载、使用说明、常见问题、隐私与条款
 
