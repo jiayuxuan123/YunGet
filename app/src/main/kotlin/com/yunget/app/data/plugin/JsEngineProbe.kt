@@ -66,6 +66,8 @@ object JsEngineProbe {
      */
     suspend fun probe(): Result = withContext(Dispatchers.IO) {
         val steps = mutableListOf<Pair<String, Boolean>>()
+        // 失败原因：只写"失败"两个字的话，真机上就只能靠猜（2.7.0 就这么误报过一次）
+        var basicDetail = ""
 
         // ---- 1) 原生库能否加载 ----
         val engine = try {
@@ -88,37 +90,55 @@ object JsEngineProbe {
             engine.evaluationTimeoutMillis = PROBE_TIMEOUT_MS
 
             // ---- 2) 基本求值 + JSON 往返 ----
+            // 【必须用 evaluate<Any?>，不能写 evaluate<String>】JS 的数字是 double，
+            // `JSON.parse(...).a + 1` 求值出来是 Double(2.0)。引擎的类型转换表里
+            // **没有 Double→String 这条路径**，请求 String 会抛
+            // "No such type converter to convert 'kotlin.Double' to 'kotlin.String'" ——
+            // 那不是引擎坏了，是问它要了一个它没有的类型。
+            // 2.7.0 的真机上就是这么误报成"求值失败"的：引擎完全正常，探测本身写错了。
+            // 生产代码（TurboDL 的 JsRuntime）同样一律用 evaluate<Any?>，这里与它保持一致。
             val value = runCatching {
-                engine.evaluate<String>(
+                engine.evaluate<Any?>(
                     """JSON.parse('{"a":1}').a + 1""",
                     "probe-basic.js",
                 )
-            }.getOrNull()
-            val basicOk = value?.toString() == "2"
+            }
+            val basicOk = value.getOrNull()?.let { (it as? Number)?.toDouble() == 2.0 } == true
             steps += "求值 + JSON 往返" to basicOk
+            if (!basicOk) {
+                basicDetail = value.exceptionOrNull()?.let { "${it.javaClass.simpleName} ${it.message.orEmpty()}" }
+                    ?: "结果不是 2：${value.getOrNull()}"
+            }
 
             // ---- 3) 执行超时能中断 ----
-            // 期望：被引擎的看门狗打断（抛异常），而不是把调用方永远挂住
+            // 期望：被引擎的看门狗**以中断的形式**打断，而不是任何异常都算数。
+            // 之前这里把"抛了异常"直接当成通过 —— 那样连"引擎根本不支持 evaluate"
+            // 都会显示为"超时可中断"，是个只会给出假绿的空检查。
             var timeoutDetail = ""
             val timeoutOk = try {
                 engine.evaluate<Any?>("while(true){}", "probe-loop.js")
                 timeoutDetail = "死循环没有被中断"
                 false
-            } catch (t: Throwable) {
+            } catch (t: com.dokar.quickjs.QuickJsInterruptedException) {
                 timeoutDetail = t.javaClass.simpleName
                 true
+            } catch (t: Throwable) {
+                // 是异常，但不是"被中断"—— 不能算通过
+                timeoutDetail = "非中断异常：${t.javaClass.simpleName}"
+                false
             }
             steps += "执行超时可中断" to timeoutOk
 
             // ---- 4) 中断之后同一实例仍可用 ----
             val afterInterrupt = runCatching {
-                engine.evaluate<String>("1 + 1", "probe-after.js")?.toString() == "2"
+                engine.evaluate<Any?>("1 + 1", "probe-after.js")?.let { (it as? Number)?.toDouble() == 2.0 } == true
             }.getOrDefault(false)
             steps += "中断后实例仍可用" to afterInterrupt
 
             // ---- 5) 内存上限生效 ----
+            // 同样要求"是内存类错误"，而不是"抛了异常就算过"。
             var memoryDetail = ""
-            val memoryOk = try {
+            val memoryOk: Boolean = try {
                 engine.evaluate<Any?>(
                     "var a = []; while(true) { a.push(new Array(10000).fill('x')); }",
                     "probe-memory.js",
@@ -126,8 +146,13 @@ object JsEngineProbe {
                 memoryDetail = "无界分配没有报错"
                 false
             } catch (t: Throwable) {
-                memoryDetail = t.javaClass.simpleName
-                true
+                // 引擎把堆超限报成 QuickJsException（消息里带 memoryLimit / out of memory），
+                // 也可能表现为中断（分配不停时看门狗先到）。两者都算上限生效。
+                val msg = (t.message.orEmpty() + " " + t.javaClass.simpleName).lowercase()
+                val isMemoryOrInterrupt = t is com.dokar.quickjs.QuickJsInterruptedException ||
+                    "memory" in msg || "out of memory" in msg || "heap" in msg
+                memoryDetail = "${t.javaClass.simpleName}${if (isMemoryOrInterrupt) "" else "（非内存类）"}"
+                isMemoryOrInterrupt
             }
             steps += "内存上限生效" to memoryOk
 
@@ -138,7 +163,9 @@ object JsEngineProbe {
                     "原生库与隔离机制均可用（超时中断=$timeoutDetail，内存上限=$memoryDetail）"
                 } else {
                     "部分能力不可用：" +
-                        steps.joinToString("、") { "${it.first}=${if (it.second) "通过" else "失败"}" }
+                        steps.joinToString("、") { "${it.first}=${if (it.second) "通过" else "失败"}" } +
+                        // 求值失败时把**真实原因**带上：只报"失败"等于把排查成本推给用户
+                        if (basicDetail.isNotEmpty()) "（求值失败原因：$basicDetail）" else ""
                 },
                 steps = steps,
             )

@@ -30,7 +30,6 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.unit.dp
 import com.patrykandpatrick.vico.compose.cartesian.CartesianChartHost
-import com.patrykandpatrick.vico.compose.cartesian.axis.rememberBottom
 import com.patrykandpatrick.vico.compose.cartesian.axis.rememberStart
 import com.patrykandpatrick.vico.compose.cartesian.layer.rememberLine
 import com.patrykandpatrick.vico.compose.cartesian.layer.rememberLineCartesianLayer
@@ -39,7 +38,6 @@ import com.patrykandpatrick.vico.compose.cartesian.rememberVicoScrollState
 import com.patrykandpatrick.vico.compose.cartesian.rememberVicoZoomState
 import com.patrykandpatrick.vico.compose.common.fill
 import com.patrykandpatrick.vico.compose.m3.common.rememberM3VicoTheme
-import com.patrykandpatrick.vico.core.cartesian.axis.HorizontalAxis
 import com.patrykandpatrick.vico.core.cartesian.axis.VerticalAxis
 import com.patrykandpatrick.vico.core.cartesian.data.CartesianChartModelProducer
 import com.patrykandpatrick.vico.core.cartesian.data.CartesianValueFormatter
@@ -115,10 +113,15 @@ fun SpeedChart(
             // 纵轴只留速度刻度，不画网格线（网格线在小尺寸卡片里比曲线还抢眼）
             valueFormatter = yAxisFormatter
         ),
-        bottomAxis = HorizontalAxis.rememberBottom(
-            // 横轴是采样点序号，对用户没有意义，只保留轴线不标数值
-            valueFormatter = emptyAxisFormatter
-        )
+        // 横轴不传：它的刻度是采样点序号，对用户没有意义。
+        //
+        // 【为什么不传一个"返回空串的格式化器"】Vico 明确禁止这么做 ——
+        // formatForAxis() 在格式化器返回空串时直接抛 IllegalStateException
+        // （"Use HorizontalAxis.ItemPlacer and VerticalAxis.ItemPlacer, not empty strings,
+        // to control which x and y values are labeled."）。控制"哪些刻度显示标签"要用
+        // ItemPlacer，不是让格式化器返回空串。这里干脆整条轴都不要 ——
+        // 少一条轴比"有轴但没字"更干净，也顺带省掉一行高度。
+        bottomAxis = null
     )
 
     Box(modifier = modifier) {
@@ -139,17 +142,25 @@ fun SpeedChart(
 private val CHART_HEIGHT = 48.dp
 
 /**
- * 纵轴数值格式：把字节/秒按 1024 进制换算成 KB/s、MB/s。
+ * 纵轴数值格式：把字节/秒按 1024 进制换算成 B/K/M/G。
+ *
+ * ★ **绝不能返回空串**。Vico 的 `formatForAxis()` 在格式化器返回空串时直接抛
+ *   `IllegalStateException`（见 `CartesianValueFormatter.kt`）—— 它把"空标签"当成用法错误：
+ *   想控制哪些刻度显示，应该用 `ItemPlacer`，而不是让格式化器返回空串。
+ *   所以 0 也要给一个真实标签（"0"），不能返回 ""。这条约束由 `SpeedChartFormatTest` 守住。
  *
  * 与 [com.yunget.app.ui.screens.formatSpeed] 是同一套换算，但**不共用函数**：
  * 那个函数输出带空格的完整单位（"1.5 MB/s"），纵轴宽度有限，这里要的是最紧凑的形式（"1.5M"）。
  * 两处口径（进制、进位阈值）必须一致，改一处要改另一处 —— 这是有意的重复，
  * 因为"轴标签"和"正文文字"本来就有不同的排版约束。
+ *
+ * 声明为 internal 而非 private：单测要能直接调它（见 SpeedChartFormatTest）。
+ * 界面上只经 [yAxisFormatter] 使用。
  */
-private val yAxisFormatter = CartesianValueFormatter { _, value, _ ->
-    val bytes = value.toLong()
-    when {
-        bytes <= 0 -> ""
+internal fun formatAxisSpeed(bytesPerSec: Double): String {
+    val bytes = bytesPerSec.toLong()
+    return when {
+        bytes <= 0 -> "0"
         bytes < 1024 -> "${bytes}B"
         bytes < 1024 * 1024 -> "${bytes / 1024}K"
         bytes < 1024L * 1024 * 1024 -> compact(bytes / 1024.0 / 1024.0, "M")
@@ -157,12 +168,11 @@ private val yAxisFormatter = CartesianValueFormatter { _, value, _ ->
     }
 }
 
+private val yAxisFormatter = CartesianValueFormatter { _, value, _ -> formatAxisSpeed(value) }
+
 /** 保留一位小数，但整数不显示 ".0"（纵轴标签越短越好）。 */
 private fun compact(value: Double, suffix: String): String {
     val rounded = Math.round(value * 10) / 10.0
     return if (rounded == rounded.toLong().toDouble()) "${rounded.toLong()}$suffix"
     else "${DecimalFormat("0.0").format(rounded)}$suffix"
 }
-
-/** 横轴不标数值：采样点序号对用户没有意义。 */
-private val emptyAxisFormatter = CartesianValueFormatter { _, _, _ -> "" }

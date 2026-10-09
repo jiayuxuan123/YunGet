@@ -26,7 +26,26 @@ android {
         applicationId = "com.yunget.app"
         minSdk = 23
         targetSdk = 34
-        versionCode = 48
+        versionCode = 49
+        // 2.7.1 内容：**修 2.7.0 的两个真机问题**（都由用户实报，见下）
+        //  ① 【崩溃】下载页一进去就崩：`CartesianValueFormatter.format returned an empty string`。
+        //     我给速度曲线的**横轴**传了一个"返回空串"的格式化器（想让横轴不显示刻度），
+        //     而 Vico 明确禁止这么做 —— 它的 formatForAxis() 在拿到空串时直接抛
+        //     IllegalStateException，并指明"要控制哪些刻度显示标签，请用 ItemPlacer，
+        //     而不是让格式化器返回空串"。纵轴的 `bytes <= 0 -> ""` 是同一类错误，
+        //     只是恰好没被触发。修法：横轴整条不传（它的刻度是采样点序号，本来就没有信息量），
+        //     纵轴零值返回 "0"。并把格式化逻辑抽成 internal 函数 + 5 条测试锁住
+        //     "任何输入都不返回空串"这条**会让应用崩溃的契约**（编译器不拦，只能靠测试）。
+        //  ② 【误报】插件页显示「JS 引擎不可用：求值 + JSON 往返=失败、中断后实例仍可用=失败」，
+        //     于是已装的插件一直停在"未运行"。**引擎是好的，是自检本身写错了**：
+        //     这两项都用 `evaluate<String>` 去接 JS 的数字，而引擎的类型转换表里
+        //     没有 Double→String 这条路径，必然抛 "No such type converter"。
+        //     更糟的是另两项（超时中断、内存上限）把"抛了任何异常"都算成通过 ——
+        //     于是真正失败的项被显示为失败，而写错的判据显示为通过，整张表都不可信。
+        //     修法：一律 evaluate<Any?> 再自己判数值（与 TurboDL 生产代码一致）；
+        //     超时必须是 QuickJsInterruptedException、内存必须是内存类错误才算通过；
+        //     失败时把真实异常写进结论，不再只报"失败"两个字。
+        //     并在 TurboDL 侧加了 EvaluateTypeContractTest（4 例）把这条类型契约钉住。
         // 2.7.0 内容：**插件体系落地 + UI 大升级**（一次版本，两件事）
         //
         // 【插件体系】把「JS 插件」从设计文档变成 App 里真能用的东西：
@@ -238,7 +257,7 @@ android {
         //     - 分片请求带 `If-Range`：防止 CDN 中途换文件时新旧字节拼出混杂文件
         //       （那种情况长度校验会通过，损坏会静默落地）。
         //     - 401/403/410 不再触发背压降并发（是授权/时效信号，不是"你太快了"）。
-        versionName = "2.7.0"
+        versionName = "2.7.1"
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
     }
