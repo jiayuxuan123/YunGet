@@ -107,8 +107,8 @@ private const val AUTO_DOH = "auto://best"
 
 
 
-/** 可选的最大下载线程数（引擎慢启动在 [4, 该值] 间动态爬升，最高 128） */
-private val threadOptions = listOf(1, 2, 4, 8, 16, 32, 64, 128)
+/** 可选的最大下载线程数（引擎慢启动在 [4, 该值] 间动态爬升，最高 256 = 引擎上限） */
+private val threadOptions = listOf(1, 2, 4, 8, 16, 32, 64, 128, 192, 256)
 
 /**
  * 设置页：下载线程数设置 + 主题外观 + 检查更新 + 日志与网盘认证。
@@ -268,7 +268,7 @@ fun SettingsScreen(
         SettingsItem(
             icon = Icons.Outlined.Tune,
             title = "最大下载线程数",
-            description = "并发上限：当前 $threads 线程（引擎慢启动从少逐步爬升到该值，最高 128）",
+            description = "并发上限：当前 $threads 线程（引擎慢启动从少逐步爬升到该值，最高 256）",
             onClick = { showThreadsDialog = true }
         )
 
@@ -867,7 +867,7 @@ fun SettingsScreen(
             text = {
                 Column {
                     Text(
-                        text = "设置并发上限（最高 128）；引擎会慢启动逐步爬升到该值（需服务器支持 Range）",
+                        text = "设置并发上限（最高 256，即引擎上限）；引擎会慢启动逐步爬升到该值（需服务器支持 Range）",
                         style = MaterialTheme.typography.bodyMedium,
                         color = MaterialTheme.colorScheme.onSurfaceVariant
                     )

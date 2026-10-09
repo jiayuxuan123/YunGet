@@ -252,7 +252,7 @@ class TurboDownloadManager(
     // ---------- 配置映射 ----------
 
     private fun buildConfig(): TurboConfig = TurboConfig(
-        maxConnectionsPerTask = threadProvider().coerceIn(1, 128),
+        maxConnectionsPerTask = threadProvider().coerceIn(1, SettingsRepository.MAX_DOWNLOAD_THREADS),
         maxConcurrentTasks = concurrencyProvider().coerceIn(1, 64),
         globalSpeedLimitBytesPerSec = speedLimitProvider().coerceAtLeast(0L),
         maxRetries = retryCountProvider().coerceIn(0, 50),
@@ -689,7 +689,7 @@ class TurboDownloadManager(
                 destination = out,
                 headers = restoredHeaders,
                 knownSize = knownSize,
-                connectionsOverride = threadProvider().coerceIn(1, 128),
+                connectionsOverride = threadProvider().coerceIn(1, SettingsRepository.MAX_DOWNLOAD_THREADS),
                 // 稳定键 = Room 任务 id：使同一任务多次 submit 复用同一分片目录，
                 // 真正实现断点续传（暂停恢复 / 进程重启都从断点继续，而非从头下）。
                 stableKey = "room-$id",
@@ -829,7 +829,7 @@ class TurboDownloadManager(
                         saveDir = dir,
                         headers = headers,
                         // 连接数用与内置路径同一个设置值（同一个「下载线程数」口径，避免两套设置各说各话）
-                        connections = threadProvider().coerceIn(1, 128),
+                        connections = threadProvider().coerceIn(1, SettingsRepository.MAX_DOWNLOAD_THREADS),
                         name = fileName,
                         // 任务侧 id 塞进标签：出了问题时能在引擎侧直接反查是本地哪条任务
                         labels = mapOf("yungetTaskId" to id.toString()),

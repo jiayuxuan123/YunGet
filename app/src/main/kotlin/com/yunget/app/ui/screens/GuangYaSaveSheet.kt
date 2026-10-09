@@ -40,10 +40,13 @@ import androidx.compose.material.icons.outlined.Folder
 import androidx.compose.material3.Button
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Icon
+import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.SnackbarHost
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
+import androidx.compose.material3.ModalBottomSheet
+import androidx.compose.material3.rememberModalBottomSheetState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
@@ -202,5 +205,33 @@ internal fun GuangYaSaveContent(
 
             SnackbarHost(hostState = snackbarHostState)
         }
+    }
+}
+
+/**
+ * 光鸭云盘的「转存到我的网盘」底部弹窗。
+ *
+ * 这个文件原本只有 [GuangYaSaveContent]（内容），而 115 / 夸克 / 百度那几家都是「Content + SaveSheet 外壳」
+ * 两个 composable。分享页的转存分发按 `isSaveXXX` 选外壳，光鸭因为没有外壳就一直落到 `else` 分支 ——
+ * 弹出的却是**夸克**的目录选择器。这里补上外壳，与其他平台保持一致。
+ */
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+fun GuangYaSaveSheet(
+    resolveViewModel: ResolveViewModel,
+    cloudViewModel: GuangYaCloudViewModel,
+    onDismiss: () -> Unit
+) {
+    val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
+    ModalBottomSheet(
+        onDismissRequest = onDismiss,
+        sheetState = sheetState,
+        containerColor = MaterialTheme.colorScheme.surface
+    ) {
+        GuangYaSaveContent(
+            resolveViewModel = resolveViewModel,
+            cloudViewModel = cloudViewModel,
+            onBack = onDismiss
+        )
     }
 }

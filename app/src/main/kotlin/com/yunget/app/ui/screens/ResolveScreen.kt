@@ -219,6 +219,8 @@ fun ResolveScreen(
             c139CloudViewModel = c139CloudViewModel,
             ucCloudViewModel = ucCloudViewModel,
             pan123CloudViewModel = pan123CloudViewModel,
+            pan115CloudViewModel = pan115CloudViewModel,
+            guangYaCloudViewModel = guangyaCloudViewModel,
             scrollBehavior = scrollBehavior,
                     // 顶部左上角返回：退出文件页回到输入页（输入框内容保留）
                     onExit = { viewModel.backToInput() },

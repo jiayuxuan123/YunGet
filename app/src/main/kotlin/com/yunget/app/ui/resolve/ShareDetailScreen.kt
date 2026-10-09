@@ -80,6 +80,10 @@ import com.yunget.app.ui.viewmodel.QuarkCloudViewModel
 import com.yunget.app.ui.viewmodel.ResolveViewModel
 import com.yunget.app.ui.viewmodel.UCCoudViewModel
 import com.yunget.app.ui.viewmodel.XunleiCloudViewModel
+import com.yunget.app.ui.screens.GuangYaSaveSheet
+import com.yunget.app.ui.screens.Pan115SaveSheet
+import com.yunget.app.ui.viewmodel.GuangYaCloudViewModel
+import com.yunget.app.ui.viewmodel.Pan115CloudViewModel
 
 /** 百度非会员限速阈值：>300MB 提示 */
 private const val BAIDU_LIMIT_BYTES = 300L * 1024 * 1024
@@ -105,6 +109,10 @@ fun ShareDetailScreen(
     ucCloudViewModel: UCCoudViewModel,
     /** 123 云盘浏览 ViewModel（123 分享转存目录选择用） */
     pan123CloudViewModel: Pan123CloudViewModel,
+    /** 115 网盘浏览 ViewModel（115 分享转存目录选择用） */
+    pan115CloudViewModel: Pan115CloudViewModel,
+    /** 光鸭云盘浏览 ViewModel（光鸭分享转存目录选择用） */
+    guangYaCloudViewModel: GuangYaCloudViewModel,
     scrollBehavior: TopAppBarScrollBehavior,
     /** 顶部左上角返回：退出文件页回到输入页（输入框内容保留） */
     onExit: () -> Unit,
@@ -380,6 +388,18 @@ fun ShareDetailScreen(
             viewModel.isSavePan123 -> Pan123SaveSheet(
                 resolveViewModel = viewModel,
                 cloudViewModel = pan123CloudViewModel,
+                onDismiss = { viewModel.dismissSave() }
+            )
+            // 115 与光鸭的 ViewModel 早就在 ResolveScreen 里了，只是一直没接到这一层 ——
+            // 结果这两家的"转存"会掉进下面的 else，弹出一个**夸克**的目录选择器（点下去必然失败）。
+            viewModel.isSavePan115 -> Pan115SaveSheet(
+                resolveViewModel = viewModel,
+                cloudViewModel = pan115CloudViewModel,
+                onDismiss = { viewModel.dismissSave() }
+            )
+            viewModel.isSaveGuangYa -> GuangYaSaveSheet(
+                resolveViewModel = viewModel,
+                cloudViewModel = guangYaCloudViewModel,
                 onDismiss = { viewModel.dismissSave() }
             )
             else -> SaveToCloudSheet(
