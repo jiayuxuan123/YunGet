@@ -351,15 +351,28 @@ fun ComposeEmptyActivityTheme(
         else -> darkTheme
     }
     val colorScheme = when {
-        // 动态色彩：Android 12+ 从系统壁纸取色
-        ThemeController.colorMode == 0 && Build.VERSION.SDK_INT >= Build.VERSION_CODES.S -> {
+        // 动态色彩：Android 12+ 从系统壁纸取色。
+        // 系统只给"标准对比度"这一套，选中中等/高对比时改走种子色路径 ——
+        // 用动态色算出的种子重新生成带对比度的方案，观感仍是壁纸色调。
+        ThemeController.colorMode == 0 && Build.VERSION.SDK_INT >= Build.VERSION_CODES.S &&
+            ThemeController.contrastLevel == 0 -> {
             if (isDark) dynamicDarkColorScheme(context) else dynamicLightColorScheme(context)
         }
         // 自定义种子色（预选色 / 颜色卡自选）：基于种子色生成完整 Material3 方案
-        ThemeController.colorMode == 2 -> seedColorScheme(ThemeController.seedColor, isDark)
-        // 默认蓝色（低版本动态色彩不可用时也回退到这里）
-        isDark -> darkScheme
-        else -> lightScheme
+        ThemeController.colorMode == 2 ||
+            (ThemeController.colorMode == 0 && ThemeController.contrastLevel != 0 &&
+                Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) -> {
+            val seed = if (ThemeController.colorMode == 2) {
+                ThemeController.seedColor
+            } else {
+                // 动态模式下选了对比度：从系统方案的主色反推一个种子，保持壁纸色调
+                val dyn = if (isDark) dynamicDarkColorScheme(context) else dynamicLightColorScheme(context)
+                dyn.primary.toArgb().toLong() and 0xFFFFFFFFL
+            }
+            seedColorScheme(seed, isDark, ThemeController.contrastLevel)
+        }
+        // 内置方案：标准 / 中等对比 / 高对比 × 浅色 / 深色（六选一）
+        else -> builtinScheme(isDark, ThemeController.contrastLevel)
     }
 
     // Material 3 Expressive 主题入口：一次性注入 colorScheme / motionScheme / shapes / typography，
@@ -376,13 +389,37 @@ fun ComposeEmptyActivityTheme(
 }
 
 /**
+ * 内置配色方案：浅色/深色 × 标准/中等对比/高对比。
+ *
+ * 四套对比度方案（[mediumContrastLightColorScheme] 等）此前在本文件里定义了却没有任何入口
+ * 能选中 —— 死代码。现在由「主题与外观 → 颜色对比度」驱动，成为真正的可选档位。
+ */
+private fun builtinScheme(dark: Boolean, contrast: Int) = when {
+    dark && contrast == 2 -> highContrastDarkColorScheme
+    dark && contrast == 1 -> mediumContrastDarkColorScheme
+    dark -> darkScheme
+    contrast == 2 -> highContrastLightColorScheme
+    contrast == 1 -> mediumContrastLightColorScheme
+    else -> lightScheme
+}
+
+/**
  * 基于种子色生成完整 Material3 颜色方案（浅色/深色），
  * 使用 material-color-utilities 的 Tonal Spot 方案（与 Material You 同源算法）。
+ *
+ * [contrast] 直接透传给 SchemeTonalSpot —— 它内部按该值调整前景/背景的对比度，
+ * 0.0 为标准、约 0.5 为中等、1.0 为最高。这样自定义色与动态色也能获得对比度档位，
+ * 而不是只有内置方案能调。
  */
 @Composable
-private fun seedColorScheme(seedArgb: Long, dark: Boolean): androidx.compose.material3.ColorScheme {
-    val scheme = remember(seedArgb, dark) {
-        SchemeTonalSpot(Hct.fromInt(seedArgb.toInt()), dark, 0.0)
+private fun seedColorScheme(seedArgb: Long, dark: Boolean, contrast: Int = 0): androidx.compose.material3.ColorScheme {
+    val contrastValue = when (contrast) {
+        1 -> 0.5
+        2 -> 1.0
+        else -> 0.0
+    }
+    val scheme = remember(seedArgb, dark, contrast) {
+        SchemeTonalSpot(Hct.fromInt(seedArgb.toInt()), dark, contrastValue)
     }
     return if (dark) darkColorScheme(
         primary = Color(scheme.primary),

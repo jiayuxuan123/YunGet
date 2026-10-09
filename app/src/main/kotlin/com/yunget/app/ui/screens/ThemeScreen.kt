@@ -250,6 +250,42 @@ fun ThemeScreen(
 
             Spacer(modifier = Modifier.height(16.dp))
 
+            // ---------- 颜色对比度 ----------
+            // 无障碍档位：标准配色在强光下或视力不佳时可能读不清，这里提供更高对比度的方案。
+            // 对内置配色是切换整套色板；对动态色彩/自定义色是让配色算法加大明暗差。
+            SectionLabel("颜色对比度")
+            Card(
+                modifier = Modifier.fillMaxWidth(),
+                colors = CardDefaults.cardColors(
+                    containerColor = MaterialTheme.colorScheme.surfaceContainer
+                )
+            ) {
+                Column(modifier = Modifier.padding(16.dp)) {
+                    Text(
+                        text = "提高文字与背景的明暗差，强光下更容易看清",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                    Spacer(modifier = Modifier.height(12.dp))
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.spacedBy(8.dp)
+                    ) {
+                        val levels = listOf("标准", "中等", "高")
+                        levels.forEachIndexed { index, label ->
+                            SmoothFilterChip(
+                                selected = ThemeController.contrastLevel == index,
+                                label = label,
+                                onClick = { ThemeController.setContrastLevel(context, index) },
+                                modifier = Modifier.weight(1f)
+                            )
+                        }
+                    }
+                }
+            }
+
+            Spacer(modifier = Modifier.height(16.dp))
+
             // ---------- 主题色（可折叠卡片） ----------
             Card(
                 modifier = Modifier.fillMaxWidth(),
@@ -393,6 +429,43 @@ fun ThemeScreen(
                 }
             }
         }
+
+            Spacer(modifier = Modifier.height(16.dp))
+
+            // ---------- 文件名显示 ----------
+            // 长文件名的取舍：跑马灯省高度但要点着看全，折行一眼看全但占地方。
+            // 云盘页/解析页/下载列表共用的 FileNameText 按这一项决定怎么显示。
+            SectionLabel("文件名显示")
+            Card(
+                modifier = Modifier.fillMaxWidth(),
+                colors = CardDefaults.cardColors(
+                    containerColor = MaterialTheme.colorScheme.surfaceContainer
+                )
+            ) {
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(16.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Column(modifier = Modifier.weight(1f)) {
+                        Text("多行折行显示", style = MaterialTheme.typography.bodyMedium)
+                        Text(
+                            text = if (ThemeController.fileNameMultiLine) {
+                                "长文件名折行显示，一眼看全"
+                            } else {
+                                "单行跑马灯滚动，列表更紧凑"
+                            },
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                    }
+                    Switch(
+                        checked = ThemeController.fileNameMultiLine,
+                        onCheckedChange = { ThemeController.setFileNameMultiLine(context, it) }
+                    )
+                }
+            }
 
             Spacer(modifier = Modifier.height(16.dp))
 

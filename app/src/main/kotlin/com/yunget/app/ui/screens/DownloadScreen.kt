@@ -52,6 +52,7 @@ import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.Checkbox
 import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.FilledTonalButton
 import androidx.compose.material3.FloatingActionButton
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
@@ -82,6 +83,7 @@ import androidx.core.content.FileProvider
 import com.yunget.app.data.db.DownloadTaskEntity
 import com.yunget.app.data.download.DownloadStats
 import com.yunget.app.ui.SnackbarController
+import com.yunget.app.ui.components.SpeedChart
 import com.yunget.app.ui.viewmodel.DownloadViewModel
 import java.io.File
 import com.yunget.app.ui.theme.effectsDefault
@@ -100,6 +102,7 @@ fun DownloadScreen(
     val context = LocalContext.current
     val tasks by viewModel.tasks.collectAsState()
     val stats by viewModel.stats.collectAsState()
+    val speedSeries by viewModel.speedSeries.collectAsState()
     var showAddDialog by remember { mutableStateOf(false) }
     var pendingDelete by remember { mutableStateOf<DownloadTaskEntity?>(null) }
     var showDeleteAllConfirm by remember { mutableStateOf(false) }
@@ -112,19 +115,28 @@ fun DownloadScreen(
         if (granted) showAddDialog = true
         else SnackbarController.show("需要存储权限才能保存到下载目录")
     }
-    val hasPermission = remember {
-        if (needLegacyPermission) {
-            ContextCompat.checkSelfPermission(context, Manifest.permission.WRITE_EXTERNAL_STORAGE) ==
-                PackageManager.PERMISSION_GRANTED
-        } else true
+
+    // 手动添加下载：先确认存储权限（Android 9- 需要），再开对话框
+    val requestAddDownload = {
+        if (!needLegacyPermission || ContextCompat.checkSelfPermission(
+                context, Manifest.permission.WRITE_EXTERNAL_STORAGE
+            ) == PackageManager.PERMISSION_GRANTED
+        ) {
+            showAddDialog = true
+        } else {
+            permissionLauncher.launch(Manifest.permission.WRITE_EXTERNAL_STORAGE)
+        }
     }
 
     Box(modifier = modifier.fillMaxSize()) {
         if (tasks.isEmpty()) {
-            EmptyDownloadState(modifier = Modifier.align(Alignment.Center))
+            EmptyDownloadState(
+                onAdd = requestAddDownload,
+                modifier = Modifier.align(Alignment.Center)
+            )
         } else {
             Column(modifier = Modifier.fillMaxSize()) {
-                // 批量操作栏：全部暂停 / 全部开始 / 删除全部
+                // 批量操作栏：全部暂停 / 全部开始 / 删除全部（并发任务多时附带合计速度）
                 DownloadBatchBar(
                     hasActive = tasks.any {
                         it.status == DownloadTaskEntity.STATUS_DOWNLOADING ||
@@ -134,6 +146,9 @@ fun DownloadScreen(
                         it.status == DownloadTaskEntity.STATUS_PAUSED ||
                             it.status == DownloadTaskEntity.STATUS_FAILED
                     },
+                    // 合计速度：只在有任务真的在跑时有意义，否则显示"0 B/s"反而像卡住了
+                    totalSpeed = stats.values.sumOf { it.speed },
+                    activeCount = tasks.count { it.status == DownloadTaskEntity.STATUS_DOWNLOADING },
                     onPauseAll = { viewModel.pauseAll() },
                     onResumeAll = { viewModel.resumeAll() },
                     onDeleteAll = { showDeleteAllConfirm = true }
@@ -156,6 +171,7 @@ fun DownloadScreen(
                         DownloadTaskCard(
                             task = task,
                             stats = stats[task.id],
+                            speedSamples = speedSeries[task.id].orEmpty(),
                             onPause = { viewModel.pause(task.id) },
                             onResume = { viewModel.resume(task.id) },
                             onRemove = { pendingDelete = task }
@@ -178,7 +194,16 @@ fun DownloadScreen(
             }
         }
 
+        // 手动添加下载：右下角常驻按钮（列表为空时引导文案也指向这里）
+        FloatingActionButton(
+            onClick = requestAddDownload,
+            modifier = Modifier
+                .align(Alignment.BottomEnd)
+                .padding(20.dp)
+        ) {
+            Icon(Icons.Filled.Add, contentDescription = "添加下载任务")
         }
+    }
 
     if (showAddDialog) {
         AddDownloadDialog(
@@ -258,11 +283,18 @@ fun DownloadScreen(
     }
 }
 
-/** 批量操作栏：全部暂停 / 全部开始 / 删除全部（Material3 紧凑按钮，无可用操作时禁用） */
+/**
+ * 批量操作栏：全部暂停 / 全部开始 / 删除全部。
+ *
+ * 并发多个任务时在中间显示**合计速度** —— 每个任务卡上都有各自的速度，但"现在一共跑多快"
+ * 得自己加，而下载页最常被问的就是这个问题。
+ */
 @Composable
 private fun DownloadBatchBar(
     hasActive: Boolean,
     hasResumable: Boolean,
+    totalSpeed: Long,
+    activeCount: Int,
     onPauseAll: () -> Unit,
     onResumeAll: () -> Unit,
     onDeleteAll: () -> Unit
@@ -292,6 +324,16 @@ private fun DownloadBatchBar(
             Text("全部开始")
         }
         Spacer(modifier = Modifier.weight(1f))
+        // 合计速度：只在一个以上任务同时下载时出现（单任务时卡片上已经有了，重复显示是噪音）
+        if (activeCount > 1 && totalSpeed > 0) {
+            Text(
+                text = "合计 ${formatSpeed(totalSpeed)}",
+                style = MaterialTheme.typography.labelMedium,
+                fontWeight = FontWeight.Medium,
+                color = MaterialTheme.colorScheme.primary
+            )
+            Spacer(modifier = Modifier.width(4.dp))
+        }
         TextButton(onClick = onDeleteAll) {
             Icon(
                 imageVector = Icons.Outlined.Delete,
@@ -367,7 +409,10 @@ private fun DeleteConfirmDialog(
 }
 
 @Composable
-private fun EmptyDownloadState(modifier: Modifier = Modifier) {
+private fun EmptyDownloadState(
+    onAdd: () -> Unit,
+    modifier: Modifier = Modifier
+) {
     Column(
         modifier = modifier.padding(32.dp),
         horizontalAlignment = Alignment.CenterHorizontally
@@ -394,11 +439,22 @@ private fun EmptyDownloadState(modifier: Modifier = Modifier) {
         )
         Spacer(modifier = Modifier.height(6.dp))
         Text(
-            text = "解析分享后点击文件即可加入下载队列\n也可点击右下角按钮手动添加",
+            text = "解析分享后点击文件即可加入下载队列",
             style = MaterialTheme.typography.bodyMedium,
             color = MaterialTheme.colorScheme.onSurfaceVariant,
             textAlign = TextAlign.Center
         )
+        Spacer(modifier = Modifier.height(16.dp))
+        // 引导文案指向的按钮就在右下角，这里再给一个直接入口，省得用户去找
+        FilledTonalButton(onClick = onAdd) {
+            Icon(
+                imageVector = Icons.Filled.Add,
+                contentDescription = null,
+                modifier = Modifier.size(18.dp)
+            )
+            Spacer(modifier = Modifier.width(8.dp))
+            Text("手动添加下载")
+        }
     }
 }
 
@@ -668,6 +724,7 @@ private fun DownloadSubTaskRow(
 private fun DownloadTaskCard(
     task: DownloadTaskEntity,
     stats: DownloadStats?,
+    speedSamples: List<Long>,
     onPause: () -> Unit,
     onResume: () -> Unit,
     onRemove: () -> Unit
@@ -675,6 +732,7 @@ private fun DownloadTaskCard(
     val context = LocalContext.current
     val isDownloading = task.status == DownloadTaskEntity.STATUS_DOWNLOADING ||
         task.status == DownloadTaskEntity.STATUS_PENDING
+    val isActive = task.status == DownloadTaskEntity.STATUS_DOWNLOADING
     val fraction = if (task.totalSize > 0) {
         (task.downloadedSize.toFloat() / task.totalSize).coerceIn(0f, 1f)
     } else 0f
@@ -687,6 +745,7 @@ private fun DownloadTaskCard(
         )
     ) {
         Column(modifier = Modifier.padding(14.dp)) {
+            // ---- 标题行：图标 + 文件名 + 状态 + 主操作 ----
             Row(verticalAlignment = Alignment.CenterVertically) {
                 Surface(
                     modifier = Modifier.size(40.dp),
@@ -715,7 +774,11 @@ private fun DownloadTaskCard(
                     Text(
                         text = taskStatusLine(task),
                         style = MaterialTheme.typography.bodyMedium,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                        color = if (task.status == DownloadTaskEntity.STATUS_FAILED) {
+                            MaterialTheme.colorScheme.error
+                        } else {
+                            MaterialTheme.colorScheme.onSurfaceVariant
+                        }
                     )
                 }
                 // 主操作按钮
@@ -750,10 +813,9 @@ private fun DownloadTaskCard(
                 }
             }
 
-            Spacer(modifier = Modifier.height(12.dp))
-
             // 失败原因（红色小字展示具体错误）
             if (task.status == DownloadTaskEntity.STATUS_FAILED && task.errorMsg.isNotBlank()) {
+                Spacer(modifier = Modifier.height(10.dp))
                 Text(
                     text = "失败原因：${task.errorMsg}",
                     style = MaterialTheme.typography.labelSmall,
@@ -761,10 +823,23 @@ private fun DownloadTaskCard(
                     maxLines = 2,
                     overflow = TextOverflow.Ellipsis
                 )
-                Spacer(modifier = Modifier.height(6.dp))
             }
 
-            // 实时统计：速度 / 剩余时间 / 线程数
+            // ---- 速度曲线：只在真正下载中且攒够两个点时出现 ----
+            // 暂停/失败/完成都不显示：那几秒的曲线没有信息量，留着只会让卡片高度跳来跳去。
+            if (isActive && speedSamples.size >= 2) {
+                Spacer(modifier = Modifier.height(10.dp))
+                SpeedChart(
+                    samples = speedSamples,
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .height(CHART_AREA_HEIGHT)
+                )
+            }
+
+            Spacer(modifier = Modifier.height(12.dp))
+
+            // ---- 实时统计：速度 / 剩余时间 / 线程数 ----
             if (isDownloading && stats != null && stats.speed > 0) {
                 Text(
                     text = "${formatSpeed(stats.speed)} · 剩余 ${formatRemain(stats.remainMillis)} · ${stats.chunkCount} 线程",
@@ -774,12 +849,11 @@ private fun DownloadTaskCard(
                 Spacer(modifier = Modifier.height(6.dp))
             }
 
-            // 进度条
+            // ---- 进度条 ----
             LinearProgressIndicator(
-                progress = { if (isDownloading) fraction else if (task.status == DownloadTaskEntity.STATUS_COMPLETED) 1f else fraction },
+                progress = { if (task.status == DownloadTaskEntity.STATUS_COMPLETED) 1f else fraction },
                 modifier = Modifier.fillMaxWidth(),
                 color = when (task.status) {
-                    DownloadTaskEntity.STATUS_COMPLETED -> MaterialTheme.colorScheme.primary
                     DownloadTaskEntity.STATUS_FAILED -> MaterialTheme.colorScheme.error
                     else -> MaterialTheme.colorScheme.primary
                 },
@@ -812,6 +886,9 @@ private fun DownloadTaskCard(
         }
     }
 }
+
+/** 曲线占位高度：48dp 曲线 + 上下留白，卡片总高保持在「一眼能看两三张」的范围。 */
+private val CHART_AREA_HEIGHT = 48.dp
 
 private fun taskStatusLine(task: DownloadTaskEntity): String {
     val status = DownloadTaskEntity.statusText(task.status)

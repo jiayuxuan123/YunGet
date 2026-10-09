@@ -1,4 +1,10 @@
 [versions]
+# 图表：下载速度曲线。选它是为了**不自己画 Canvas** —— 曲线要处理缩放/坐标轴/空数据/主题配色，
+# 手写等于重造一个不完整的图表库。
+# 版本锁在 2.4.4：更新的版本会把 androidx.core / compose-ui 拉到需要 AGP 9.1 的版本
+# （本项目 AGP 8.13）。2.4.4 依赖的 core-ktx 1.17.0 与 compose-bom 2025.12 都在本项目基线之内，
+# 不会引起任何版本升级。
+vico = "2.4.4"
 agp = "8.13.0"
 kotlin = "2.1.0"
 coreKtx = "1.17.0"
@@ -21,6 +27,9 @@ kotlin-compose = { id = "org.jetbrains.kotlin.plugin.compose", version.ref = "ko
 ksp = { id = "com.google.devtools.ksp", version.ref = "ksp" }
 
 [libraries]
+# 图表：下载速度曲线（不自己画 Canvas）
+vico-compose = { module = "com.patrykandpatrick.vico:compose", version.ref = "vico" }
+vico-compose-m3 = { module = "com.patrykandpatrick.vico:compose-m3", version.ref = "vico" }
 # 原 material-color-utilities 坐标 (com.google.android.material:material-color-utilities:1.0.0) 在 Maven 上不存在。
 # 官方 color.utilities 包就打包在下面这个主库里，import 无需改动。
 material = { group = "com.google.android.material", name = "material", version.ref = "material" }

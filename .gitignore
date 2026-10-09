@@ -26,3 +26,7 @@ local.properties
 
 # 安全钩子运行时状态（非源码）
 .mimosa/
+
+# Python 站点生成器的字节码缓存（生成产物，不入库）
+__pycache__/
+*.pyc

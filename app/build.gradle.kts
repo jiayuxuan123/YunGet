@@ -26,7 +26,41 @@ android {
         applicationId = "com.yunget.app"
         minSdk = 23
         targetSdk = 34
-        versionCode = 47
+        versionCode = 48
+        // 2.7.0 内容：**插件体系落地 + UI 大升级**（一次版本，两件事）
+        //
+        // 【插件体系】把「JS 插件」从设计文档变成 App 里真能用的东西：
+        //  ① 引擎侧（TurboDL 0.2.0.7）补齐 JS 加载器与**协议声明**：一个插件可以同时声明多个协议
+        //     （`protocols: ["magnet","bt"]`），不必一个协议一个插件 —— 分成太多插件会让加载与
+        //     切换都变慢。协议索引在加载时建立，scheme → 插件是查表，不是每次遍历。
+        //  ② App 侧新增插件内核：安装/更新/卸载/启停、脚本编辑器（保存前用 JsScriptValidator
+        //     预检，语法错当场报）、插件市场（插件源管理 + 检查更新 + 一键更新）。
+        //  ③ **安装与更新走同一条校验链**（6 道闸：可验证性 → 最低宿主版本 → 体积 → sha256+签名
+        //     → 脚本自报身份 → 清单一致性）。更新比安装宽松是这类系统的经典漏洞，这里从结构上
+        //     避免：两者共用同一个 fetchAndVerify()。
+        //  ④ 签名用 **Ed25519**（minSdk 23 上系统验签 API 要 33+，故自带纯 Kotlin RFC 8032 实现，
+        //     系统可用时走系统快路径）。信任分级看「来源身份 + 是否命中内置公钥」两项，**签名不等于
+        //     安全** —— 这一条在界面文案与文档里都写明了，不制造"已签名就放心装"的错觉。
+        //  ⑤ JS 引擎（QuickJS）此前在 Android 上没有可用产物：官方 quickjs-kt 只发 JVM 版
+        //     （linux/macos/windows），装上也是启动即崩。改用同作者的 quickjs-kt-android，
+        //     四个 ABI 的 so 一起进包。
+        //
+        // 【UI 大升级】
+        //  ① 下载页新增**实时速度曲线**（最近约一分钟）：引擎只给瞬时速度，序列由界面侧按 1 秒
+        //     采样攒（采样放在 ViewModel，切 Tab 再回来曲线接着画，不清零）。
+        //  ② 顺手修掉一个真实缺陷：下载页空状态写着「可点击右下角按钮手动添加」，
+        //     但那个按钮**根本不存在**（`showAddDialog` 只有权限回调能置位，而回调永远不会被触发）
+        //     —— 空状态点不开添加框。现在补上常驻 FAB 与空状态里的按钮。
+        //  ③ 设置页按用途重新分组（原先 11 项挤在一个「下载」标题下）：下载 / 引擎与插件 /
+        //     后台与通知 / 外观 / 通用 / 网盘认证 / 关于。
+        //  ④ 网盘页按登录态分组：已登录在上、未登录在下。10 个盘平铺时常用的一两个混在
+        //     八个"点击登录"里，每次都要从头找。
+        //  ⑤ 主题新增**颜色对比度**档位（标准/中等/高）。Theme.kt 里四套对比度方案
+        //     （中等/高 × 浅色/深色）此前定义了却没有任何入口 —— 死代码，现在成为真可选档位；
+        //     动态色彩与自定义种子色也一并支持（走 material-color-utilities 的对比度参数）。
+        //  ⑥ 「文件名显示」开关（跑马灯/多行折行）此前只有内部状态、没有界面入口，一并补上。
+        //  ⑦ 解析页空输入框时给「粘贴」按钮：剪贴板提示卡片只在内容被识别为链接时出现，
+        //     识别不出或已被忽略时用户仍需一个一键粘贴的入口。
         // 2.6.22 内容：**修「暂停/继续时进度数字前后跳」**
         //  ① 现象（用户实报）：暂停显示 29.2 MB，点继续变 24.5 MB；另一次是暂停 9.2 MB、继续变 24.8 MB，
         //     看着像"进度倒退、断点续传没生效"。**实际上两次都在接着下** —— 设备日志写得很清楚：
@@ -204,7 +238,7 @@ android {
         //     - 分片请求带 `If-Range`：防止 CDN 中途换文件时新旧字节拼出混杂文件
         //       （那种情况长度校验会通过，损坏会静默落地）。
         //     - 401/403/410 不再触发背压降并发（是授权/时效信号，不是"你太快了"）。
-        versionName = "2.6.22"
+        versionName = "2.7.0"
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
     }
@@ -265,7 +299,23 @@ android {
     kotlin {
         compilerOptions {
             jvmTarget.set(org.jetbrains.kotlin.gradle.dsl.JvmTarget.fromTarget("17"))
+            // quickjs-kt-android 1.0.15 由 Kotlin 2.4.x 编译（metadata 2.4.0），本 App 工具链是 2.1.0。
+            // 这是**同一个已知取舍**，TurboDL 的 turbo-plugin-js 模块早就这么做了（那里也是它自己
+            // 依赖 quickjs-kt）：跳过元数据版本检查，换取"不动整个 App 的 Kotlin 工具链"。
+            // 升级 Kotlin 到 2.4 会牵动 Compose 编译器与 KSP（2.1.0-1.0.29）一起升，代价远大于这个标志。
+            // 依据：这些 API 只经 JVM 边界调用（QuickJs.create/evaluate/memoryLimit…），
+            // 不涉及需要新编译器特性的 inline/契约，实测行为正确（见 JsEngineProbe 的真机自检）。
+            freeCompilerArgs.add("-Xskip-metadata-version-check")
         }
+    }
+
+    // 把 kotlin-stdlib 钉在项目工具链的版本上：quickjs-kt-android 的 POM 把 stdlib 拉到 2.4.10，
+    // 那会让整个 App 的 stdlib 跟着跳版（且 metadata 2.4.0 又触发一次上面的问题）。
+    // 运行时只需要 stdlib 的稳定 API，2.1.0 完全够用。
+    configurations.configureEach {
+        resolutionStrategy.force("org.jetbrains.kotlin:kotlin-stdlib:2.1.0")
+        resolutionStrategy.force("org.jetbrains.kotlin:kotlin-stdlib-jdk7:2.1.0")
+        resolutionStrategy.force("org.jetbrains.kotlin:kotlin-stdlib-jdk8:2.1.0")
     }
 }
 
@@ -343,11 +393,33 @@ dependencies {
     implementation("androidx.lifecycle:lifecycle-viewmodel-compose:2.8.7")
     implementation("com.squareup.okhttp3:okhttp:4.12.0")
 
-    // TurboDL SDK（纯 JVM 多线程下载引擎 + 可选插件框架），从 mavenLocal 解析 dev.turbodl:*:0.2.0.6
-    implementation("dev.turbodl:turbodl-core:0.2.0.6")
-    implementation("dev.turbodl:turbo-plugin-runtime:0.2.0.6")
-    implementation("dev.turbodl:turbo-plugin-bootstrap:0.2.0.6")
-    implementation("dev.turbodl:turbo-plugin-hls:0.2.0.6")
+    // TurboDL SDK（纯 JVM 多线程下载引擎 + 可选插件框架），从 mavenLocal 解析 dev.turbodl:*:0.2.0.7
+    implementation("dev.turbodl:turbodl-core:0.2.0.7")
+    implementation("dev.turbodl:turbo-plugin-runtime:0.2.0.7")
+    implementation("dev.turbodl:turbo-plugin-bootstrap:0.2.0.7")
+    implementation("dev.turbodl:turbo-plugin-hls:0.2.0.7")
+
+    // JavaScript 插件加载器：让用户能自己写/导入脚本插件。
+    //
+    // 这里必须做一次依赖替换，原因是 turbo-plugin-js 是 kotlin("jvm") 模块：
+    //   · 它声明的是 `io.github.dokar3:quickjs-kt-jvm` —— 那个 jar 的 `jni/` 里只有
+    //     linux / macos / windows 的原生库，**没有任何 Android ABI**；
+    //     在 Android 上会去 dlopen `jni/linux_aarch64/libquickjs.so`（glibc 构建）→ 必然失败。
+    //     而且它用的 `java.nio.file.Files.createTempFile` 是 API 26+，本 App 的 minSdk 是 23。
+    //   · 同一作者、同一版本号发布的 `quickjs-kt-android` 是它的 Android 产物：
+    //     minSdk 23、含 arm64-v8a/armeabi-v7a/x86/x86_64 四个 ABI、
+    //     公开 API（interruptEvaluation / memoryLimit / memoryUsage…）与 jvm 版逐名一致，
+    //     且 Android 侧走 System.loadLibrary（不再有 createTempFile 问题）。
+    // 所以：排掉 jvm 版，换成 android 版 —— turbo-plugin-js 自身一行代码都不用改。
+    implementation("dev.turbodl:turbo-plugin-js:0.2.0.7") {
+        exclude(group = "io.github.dokar3", module = "quickjs-kt-jvm")
+    }
+    implementation("io.github.dokar3:quickjs-kt-android:1.0.15")
+
+    // 下载速度曲线（图表）。不自己画 Canvas：曲线要处理缩放、坐标轴、空数据、主题配色，
+    // 手写等于重造一个不完整的图表库。
+    implementation(libs.vico.compose)
+    implementation(libs.vico.compose.m3)
 
     implementation(libs.material)   // 原 libs.material.color.utilities -> 改为官方 Material 主库（含 color.utilities 包）
 
@@ -373,6 +445,10 @@ dependencies {
     implementation(libs.androidx.ui.tooling.preview)
     implementation(libs.androidx.material3)
     testImplementation("junit:junit:4.13.2")
+    // 纯 JVM 单测里 android.jar 的 org.json 是**空桩**（方法体一律 throw "not mocked"），
+    // 而市场索引解析、插件自报元信息读取都要真行为。补一个真实现到**测试**类路径：
+    // 只在单测生效，不进 APK（Android 运行时本来就有 org.json）。
+    testImplementation("org.json:json:20240303")
     debugImplementation(libs.androidx.ui.tooling)
     debugImplementation(libs.androidx.ui.test.manifest)
 }

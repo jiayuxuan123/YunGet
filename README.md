@@ -4,11 +4,11 @@
 >
 > **本项目是 [CYQawa/YunX（云析）](https://github.com/CYQawa/YunX) 的二次开发版本**，在其协议与架构基础上进行功能扩展，并将下载能力逐步迁移至独立的 [TurboDL](https://github.com/jiayuxuan123/TurboDL) 下载引擎。遵循 GNU AGPL-3.0 协议开源。
 
-当前版本 **2.6.21**（versionCode 46）· Android 6.0+（minSdk 23，targetSdk 34）· 内置 TurboDL 0.2.0.6
+当前版本 **2.7.0**（versionCode 48）· Android 6.0+（minSdk 23，targetSdk 34）· 内置 TurboDL 0.2.0.7
 
 **官网**：[jiayuxuan123.github.io/YunGet](https://jiayuxuan123.github.io/YunGet/) —— 下载、使用说明、常见问题、隐私与条款
 
-**文档**：[使用说明](docs/GUIDE.md) · [常见问题](docs/FAQ.md) · [下载引擎](docs/ENGINES.md) · [从源码构建](docs/BUILD.md) · [隐私说明](docs/PRIVACY.md) · [使用条款](docs/TERMS.md)
+**文档**：[使用说明](docs/GUIDE.md) · [常见问题](docs/FAQ.md) · [下载引擎](docs/ENGINES.md) · [从源码构建](docs/BUILD.md) · [隐私说明](docs/PRIVACY.md) · [使用条款](docs/TERMS.md) · [插件开发](docs/PLUGIN-DEV.md) · [插件 ABI 参考](docs/PLUGIN-API.md) · [插件发布](docs/PLUGIN-PUBLISH.md) · [插件安全模型](docs/PLUGIN-SECURITY.md)
 
 ---
 
@@ -189,23 +189,37 @@ TurboDL Core
     │
     ├── HTTP/HTTPS 下载
     │
-    └── HLS Plugin
-```
-
-这种设计允许不同项目根据自己的需求选择能力，而不需要所有项目都携带完整的下载功能。
-
-后续可以继续扩展：
-
-```text
-TurboDL
-├── Core
-├── HTTP/HTTPS
-├── HLS Plugin
-├── 其他协议插件
-└── 第三方扩展
+    ├── HLS Plugin
+    │
+    └── JS Plugin Loader ──→ 用户脚本（可声明任意协议）
 ```
 
 插件可以独立维护、独立发布和独立接入，从而降低核心引擎与具体协议之间的耦合。
+
+### 一个插件可以管多个协议
+
+插件在清单里声明自己支持哪些协议，而不是"一个协议一个插件"：
+
+```json
+{
+  "id": "dev.example.magnet",
+  "protocols": ["magnet", "bt"]
+}
+```
+
+引擎在加载时建立「协议 → 插件」索引，之后按协议查表。之所以不做成一个协议一个插件：插件数量一多，加载与切换的开销、以及插件之间的选择冲突都会跟着涨。
+
+### 在应用里写插件
+
+应用内置脚本编辑器，保存前会先做语法预检（写错了当场报，不会等下载时才发现脚本没加载），并附模板可照着改。也可以从**插件市场**添加插件源、浏览、一键安装与检查更新。
+
+### 插件安全模型
+
+安装与更新走**同一条校验链**，共六道：可验证性 → 最低宿主版本 → 体积 → 哈希与签名 → 脚本自报身份 → 清单一致性。两者共用同一段校验代码是有意的——如果更新比安装宽松，攻击者只要先让你装一个无害的旧版本，再用"更新"把恶意代码送进来。
+
+**签名不等于安全。** 签名只证明"这个脚本来自它声称的作者"，不证明它做的事是安全的。信任分级看两项：来源身份，以及是否命中应用内置的公钥。
+
+详见 [插件安全模型](docs/PLUGIN-SECURITY.md)。
 
 插件开发规范请参考：
 
@@ -279,7 +293,7 @@ HLS 下载功能主要面向**完整资源下载**，而不是实时播放。
 - Android SDK（`local.properties` 里的 `sdk.dir`，或环境变量 `ANDROID_HOME` / `ANDROID_SDK_ROOT`）
 - `compileSdk 36` / `minSdk 23` / `targetSdk 34`
 
-**先发布 TurboDL 到本地 Maven。** 依赖里的 `dev.turbodl:*:0.2.0.6` 不在公共仓库上，
+**先发布 TurboDL 到本地 Maven。** 依赖里的 `dev.turbodl:*:0.2.0.7` 不在公共仓库上，
 `settings.gradle.kts` 把 `mavenLocal()` 排在仓库列表最前，所以要先在 TurboDL 仓库执行
 `./gradlew publishToMavenLocal`（或从它的 Release 页取 mavenLocal 离线包解到 `~/.m2/repository`），
 否则构建会在依赖解析阶段直接失败。

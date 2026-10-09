@@ -90,6 +90,32 @@ private data class DriveAccount(
 )
 
 /**
+ * 网盘页列表里的一项：账号信息 + 已登录/未登录各自该做的事。
+ *
+ * [onClick] 是已登录时点卡片的动作（进浏览页），[onLogin] 是未登录时的动作（进登录页）。
+ * 分开而不是在调用点写 `if (isLoggedIn) A else B`，是因为分组后列表要按登录态拆成两段，
+ * 拆的时候不该再重新判断一次"这一项该干嘛"。
+ */
+private data class DriveEntry(
+    val account: DriveAccount,
+    val quota: QuotaInfo?,
+    val onClick: () -> Unit,
+    val onMoreClick: (() -> Unit)?,
+    val onLogin: () -> Unit
+)
+
+/** 网盘分组标题（「已登录」/「未登录」）。 */
+@Composable
+private fun DriveGroupLabel(text: String) {
+    Text(
+        text = text,
+        style = MaterialTheme.typography.labelLarge,
+        color = MaterialTheme.colorScheme.primary,
+        modifier = Modifier.padding(top = 4.dp, bottom = 0.dp)
+    )
+}
+
+/**
  * 网盘页：
  * - 夸克未登录：点击进入登录页；
  * - 夸克已登录：副标题显示昵称，点击弹出账号信息底部弹窗（可查看 Cookie / 退出登录）。
@@ -274,6 +300,13 @@ fun DriveScreen(
     }
     // 下拉刷新状态：绑定空间配额加载中状态
     val isRefreshing by driveQuotaViewModel.loading.collectAsState()
+    // 各平台配额：在 LazyColumn 外读出来（列表内容 lambda 不是 composable，不能在里面 collectAsState）
+    val quarkQuota by driveQuotaViewModel.quarkQuota.collectAsState()
+    val ucQuota by driveQuotaViewModel.ucQuota.collectAsState()
+    val xunleiQuota by driveQuotaViewModel.xunleiQuota.collectAsState()
+    val baiduQuota by driveQuotaViewModel.baiduQuota.collectAsState()
+    val c139Quota by driveQuotaViewModel.c139Quota.collectAsState()
+    val pan123Quota by driveQuotaViewModel.pan123Quota.collectAsState()
 
     // 账号列表 ↔ 夸克云盘 ↔ UC 云盘 ↔ 迅雷云盘 ↔ 百度云盘 ↔ 139 云盘 ↔ 123 云盘 ↔ 115 云盘 ↔ 光鸭云盘 ↔ 蓝奏云优享版 ↔ 蓝奏云：平滑过渡（淡入 + 轻微缩放，不僵硬）
     AnimatedContent(
@@ -378,172 +411,92 @@ fun DriveScreen(
                 contentPadding = PaddingValues(16.dp),
                 verticalArrangement = Arrangement.spacedBy(12.dp)
             ) {
-                item {
-                    Text(
-                        text = "登录后即可自动携带凭证解析与下载",
-                        style = MaterialTheme.typography.bodyMedium,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                        modifier = Modifier.padding(bottom = 4.dp)
-                    )
-                }
-                item(key = quark.id) {
-                    DriveAccountCard(
-                        account = quark,
-                        quota = driveQuotaViewModel.quarkQuota.collectAsState().value,
-                        onClick = if (quark.isLoggedIn) {
-                            { showCloud = true }
-                        } else {
-                            onQuarkLogin
-                        },
-                        onMoreClick = if (quark.isLoggedIn) {
-                            { showQuarkSheet = true }
-                        } else {
-                            null
-                        }
-                    )
-                }
-                item(key = uc.id) {
-                    DriveAccountCard(
-                        account = uc,
-                        quota = driveQuotaViewModel.ucQuota.collectAsState().value,
-                        onClick = if (uc.isLoggedIn) {
-                            { showUCCloud = true }
-                        } else {
-                            onUCLogin
-                        },
-                        onMoreClick = if (uc.isLoggedIn) {
-                            { showUCSheet = true }
-                        } else {
-                            null
-                        }
-                    )
-                }
-                item(key = xunlei.id) {
-                    DriveAccountCard(
-                        account = xunlei,
-                        quota = driveQuotaViewModel.xunleiQuota.collectAsState().value,
-                        onClick = if (xunlei.isLoggedIn) {
-                            { showXunleiCloud = true }
-                        } else {
-                            onXunleiLogin
-                        },
-                        onMoreClick = if (xunlei.isLoggedIn) {
-                            { showXunleiSheet = true }
-                        } else {
-                            null
-                        }
-                    )
-                }
-                item(key = baidu.id) {
-                    DriveAccountCard(
-                        account = baidu,
-                        quota = driveQuotaViewModel.baiduQuota.collectAsState().value,
-                        onClick = if (baidu.isLoggedIn) {
-                            { showBaiduCloud = true }
-                        } else {
-                            onBaiduLogin
-                        },
-                        onMoreClick = if (baidu.isLoggedIn) {
-                            { showBaiduSheet = true }
-                        } else {
-                            null
-                        }
-                    )
-                }
-                item(key = c139.id) {
-                    DriveAccountCard(
-                        account = c139,
-                        quota = driveQuotaViewModel.c139Quota.collectAsState().value,
-                        onClick = if (c139.isLoggedIn) {
-                            { showC139Cloud = true }
-                        } else {
-                            onC139Login
-                        },
-                        onMoreClick = if (c139.isLoggedIn) {
-                            { showC139Sheet = true }
-                        } else {
-                            null
-                        }
-                    )
-                }
-                item(key = pan123.id) {
-                    DriveAccountCard(
-                        account = pan123,
-                        quota = driveQuotaViewModel.pan123Quota.collectAsState().value,
-                        onClick = if (pan123.isLoggedIn) {
-                            { showPan123Cloud = true }
-                        } else {
-                            onPan123Login
-                        },
-                        onMoreClick = if (pan123.isLoggedIn) {
-                            { showPan123Sheet = true }
-                        } else {
-                            null
-                        }
-                    )
-                }
-                // 以下 4 个平台暂未接入空间配额（DriveQuotaViewModel 只有 6 个平台），故不传 quota
-                item(key = pan115.id) {
-                    DriveAccountCard(
-                        account = pan115,
-                        onClick = when {
-                            !pan115.isLoggedIn -> onPan115Login
+                // 已登录的排在前面、未登录的排后面，中间用分组标题分开。
+                //
+                // 【为什么分组】10 个网盘平铺一列时，常用的那一两个混在八个"点击登录"里，
+                // 每次都要从头往下找。分完组，"我有哪些盘能用"和"还能加哪些盘"一眼分得开。
+                // 一个都没登录时整屏都是未登录，此时标题写「全部网盘」而不是「未登录」——
+                // 满屏"未登录"读起来像出了错。
+                val entries = listOf(
+                    DriveEntry(quark, quarkQuota, { showCloud = true }, { showQuarkSheet = true }, onQuarkLogin),
+                    DriveEntry(uc, ucQuota, { showUCCloud = true }, { showUCSheet = true }, onUCLogin),
+                    DriveEntry(xunlei, xunleiQuota, { showXunleiCloud = true }, { showXunleiSheet = true }, onXunleiLogin),
+                    DriveEntry(baidu, baiduQuota, { showBaiduCloud = true }, { showBaiduSheet = true }, onBaiduLogin),
+                    DriveEntry(c139, c139Quota, { showC139Cloud = true }, { showC139Sheet = true }, onC139Login),
+                    DriveEntry(pan123, pan123Quota, { showPan123Cloud = true }, { showPan123Sheet = true }, onPan123Login),
+                    // 以下 4 个平台暂未接入空间配额（DriveQuotaViewModel 只有 6 个平台），故 quota 为 null。
+                    // 浏览 ViewModel 未接线时点击退回账号信息弹窗，避免进入空白页。
+                    DriveEntry(
+                        pan115, null,
+                        when {
                             pan115CloudViewModel != null -> ({ showPan115Cloud = true })
-                            // 浏览 ViewModel 未接线：退回账号信息弹窗，避免进入空白页
                             else -> ({ showPan115Sheet = true })
                         },
-                        onMoreClick = if (pan115.isLoggedIn) {
-                            { showPan115Sheet = true }
-                        } else {
-                            null
-                        }
-                    )
-                }
-                item(key = guangya.id) {
-                    DriveAccountCard(
-                        account = guangya,
-                        onClick = when {
-                            !guangya.isLoggedIn -> onGuangYaLogin
+                        { showPan115Sheet = true }, onPan115Login
+                    ),
+                    DriveEntry(
+                        guangya, null,
+                        when {
                             guangyaCloudViewModel != null -> ({ showGuangYaCloud = true })
                             else -> ({ showGuangYaSheet = true })
                         },
-                        onMoreClick = if (guangya.isLoggedIn) {
-                            { showGuangYaSheet = true }
-                        } else {
-                            null
-                        }
-                    )
-                }
-                item(key = ilanzou.id) {
-                    DriveAccountCard(
-                        account = ilanzou,
-                        onClick = when {
-                            !ilanzou.isLoggedIn -> onILanzouLogin
+                        { showGuangYaSheet = true }, onGuangYaLogin
+                    ),
+                    DriveEntry(
+                        ilanzou, null,
+                        when {
                             ilanzouCloudViewModel != null -> ({ showILanzouCloud = true })
                             else -> ({ showILanzouSheet = true })
                         },
-                        onMoreClick = if (ilanzou.isLoggedIn) {
-                            { showILanzouSheet = true }
-                        } else {
-                            null
-                        }
-                    )
-                }
-                item(key = lanzou.id) {
-                    DriveAccountCard(
-                        account = lanzou,
-                        onClick = when {
-                            !lanzou.isLoggedIn -> onLanzouLogin
+                        { showILanzouSheet = true }, onILanzouLogin
+                    ),
+                    DriveEntry(
+                        lanzou, null,
+                        when {
                             lanzouCloudViewModel != null -> ({ showLanzouCloud = true })
                             else -> ({ showLanzouSheet = true })
                         },
-                        onMoreClick = if (lanzou.isLoggedIn) {
-                            { showLanzouSheet = true }
-                        } else {
-                            null
-                        }
-                    )
+                        { showLanzouSheet = true }, onLanzouLogin
+                    ),
+                )
+                val loggedIn = entries.filter { it.account.isLoggedIn }
+                val loggedOut = entries.filterNot { it.account.isLoggedIn }
+
+                if (loggedIn.isEmpty()) {
+                    item(key = "hint_not_logged_in") {
+                        Text(
+                            text = "登录后即可自动携带凭证解析与下载",
+                            style = MaterialTheme.typography.bodyMedium,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            modifier = Modifier.padding(bottom = 4.dp)
+                        )
+                    }
+                } else {
+                    item(key = "header_logged_in") { DriveGroupLabel("已登录") }
+                    items(loggedIn, key = { it.account.id }) { entry ->
+                        DriveAccountCard(
+                            account = entry.account,
+                            quota = entry.quota,
+                            onClick = entry.onClick,
+                            onMoreClick = entry.onMoreClick
+                        )
+                    }
                 }
+
+                if (loggedOut.isNotEmpty()) {
+                    item(key = "header_logged_out") {
+                        DriveGroupLabel(if (loggedIn.isEmpty()) "全部网盘" else "未登录")
+                    }
+                    items(loggedOut, key = { it.account.id }) { entry ->
+                        DriveAccountCard(
+                            account = entry.account,
+                            quota = entry.quota,
+                            onClick = entry.onLogin,
+                            onMoreClick = null
+                        )
+                    }
+                }
+
                 items(others, key = { it.id }) { account ->
                     DriveAccountCard(account = account)
                 }

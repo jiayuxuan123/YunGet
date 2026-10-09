@@ -38,6 +38,7 @@ import androidx.compose.material.icons.outlined.Memory
 import androidx.compose.material.icons.outlined.SettingsSuggest
 import androidx.compose.material.icons.outlined.Bolt
 import androidx.compose.material.icons.outlined.Dns
+import androidx.compose.material.icons.outlined.Extension
 import androidx.compose.material.icons.outlined.FolderOpen
 import androidx.compose.material.icons.outlined.Info
 import androidx.compose.material.icons.outlined.Layers
@@ -47,6 +48,7 @@ import androidx.compose.material.icons.outlined.Power
 import androidx.compose.material.icons.outlined.Refresh
 import androidx.compose.material.icons.outlined.Restore
 import androidx.compose.material.icons.outlined.Speed
+import androidx.compose.material.icons.outlined.Storefront
 import androidx.compose.material.icons.outlined.SystemUpdate
 import androidx.compose.material.icons.outlined.TrendingUp
 import androidx.compose.material.icons.outlined.Tune
@@ -74,6 +76,7 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -88,6 +91,7 @@ import com.yunget.app.data.backup.AuthBackupManager
 import com.yunget.app.data.backup.AuthCrypto
 import com.yunget.app.data.download.DownloadSaver
 import com.yunget.app.data.network.HttpClients
+import com.yunget.app.data.plugin.PluginRepository
 import com.yunget.app.data.prefs.SettingsRepository
 import com.yunget.app.data.update.UpdateChecker
 import com.yunget.app.ui.SnackbarController
@@ -155,6 +159,8 @@ fun SettingsScreen(
     val scope = rememberCoroutineScope()
     // 下载保存目录（SAF）：本地状态驱动 UI 刷新，同时同步 SharedPreferences
     val settingsRepo = remember { SettingsRepository(context) }
+    // 插件仓库：只用来给下面「插件」一行取已装/启用数量（插件页自己会再拿一份，各管各的）
+    val pluginRepo = remember { PluginRepository(context) }
     var downloadDirUri by remember { mutableStateOf(settingsRepo.downloadDirUri) }
     // 隐藏开发调试：忽略 SSL 证书（抓包用，长按「关于云取」打开菜单）
     var ignoreSsl by remember { mutableStateOf(settingsRepo.ignoreSslCert) }
@@ -162,6 +168,16 @@ fun SettingsScreen(
     // 下载引擎页（两套下载器切换、导入内核、引擎启停与状态）：独立全屏页，返回时同步副标题
     var showDownloadEngine by remember { mutableStateOf(false) }
     var engineChoice by remember { mutableStateOf(settingsRepo.downloadEngine) }
+    // 插件页（JS 脚本导入/启停/详情）：独立全屏页，入口紧挨着「下载引擎」
+    var showPlugins by remember { mutableStateOf(false) }
+    // 插件市场页（插件源管理 / 检查更新 / 从源安装）：与插件页并列的独立全屏页
+    var showMarket by remember { mutableStateOf(false) }
+    // 插件副标题的计数：直接从插件仓库的 Flow 取，装上/卸掉/启停后这一行会自己更新，
+    // 不必等用户进插件页再回来。Flow 记住：listInstalled() 每次返回新 Flow，不记会反复重启收集。
+    val installedPluginsFlow = remember(pluginRepo) { pluginRepo.listInstalled() }
+    val installedPlugins by installedPluginsFlow.collectAsStateWithLifecycle(emptyList())
+    val pluginTotal = installedPlugins.size
+    val pluginEnabled = installedPlugins.count { it.enabled }
     // 【开发诊断】连接数扫描。
     // 状态与结果**由管理器持有**，这里只做轮询展示 —— 否则用户切页面/退出设置页，
     // remember 里的状态就没了，"跑没跑完"根本无从判断（用户实报的正是这一点）。
@@ -264,6 +280,9 @@ fun SettingsScreen(
             .verticalScroll(rememberScrollState())
             .padding(16.dp)
     ) {
+        // ---------- 下载 ----------
+        // 只放"改变下载行为本身"的项。下面按用途分了三组，而不是一长条平铺：
+        // 原先 11 项挤在一个「下载」标题下，找一项要通读全部描述。
         SectionLabel("下载")
         SettingsItem(
             icon = Icons.Outlined.Tune,
@@ -348,36 +367,6 @@ fun SettingsScreen(
 
         Spacer(modifier = Modifier.height(8.dp))
 
-        // 下载引擎：**所有**引擎都在这个页面里选（TurboDL / 内置兼容 / aria2 / Gopeed），
-        // 内核导入、启停与状态也都在那里 —— 设置页只留这一个入口，不再分两处。
-        SettingsItem(
-            icon = Icons.Outlined.Memory,
-            title = "下载引擎",
-            description = if (engineChoice == SettingsRepository.ENGINE_GOPEED) {
-                "Gopeed 引擎（支持磁力/BT，需导入内核）"
-            } else {
-                "内置分片下载器 · 具体实现与 Gopeed 引擎都在这一页里选"
-            },
-            onClick = { showDownloadEngine = true }
-        )
-
-        Spacer(modifier = Modifier.height(8.dp))
-
-        // 自定义 DNS over HTTPS：绕过本地 DNS 污染/加速域名解析
-        SettingsItem(
-            icon = Icons.Outlined.Dns,
-            title = "自定义 DNS (DoH)",
-            description = when {
-                // 哨兵值不能直接展示（对用户是无意义的内部标记）
-                dohUrl == AUTO_DOH -> "自动（并发探测最快的公共 DoH）"
-                dohUrl != null -> "已启用：$dohUrl"
-                else -> "使用系统 DNS（点击配置 DNS over HTTPS）"
-            },
-            onClick = { showDohDialog = true }
-        )
-
-        Spacer(modifier = Modifier.height(8.dp))
-
         // 连接预热：下载前预建连接池，起步更快
         SettingsItem(
             icon = Icons.Outlined.Bolt,
@@ -404,9 +393,72 @@ fun SettingsScreen(
             trailing = { Switch(checked = slowStartOn, onCheckedChange = null) }
         )
 
+        Spacer(modifier = Modifier.height(24.dp))
+
+        // ---------- 引擎与插件 ----------
+        // 「用哪个引擎下」与「引擎能识别什么链接」是同一件事的两半，放在一组里。
+        SectionLabel("引擎与插件")
+        // 下载引擎：**所有**引擎都在这个页面里选（TurboDL / 内置兼容 / aria2 / Gopeed），
+        // 内核导入、启停与状态也都在那里 —— 设置页只留这一个入口，不再分两处。
+        SettingsItem(
+            icon = Icons.Outlined.Memory,
+            title = "下载引擎",
+            description = if (engineChoice == SettingsRepository.ENGINE_GOPEED) {
+                "Gopeed 引擎（支持磁力/BT，需导入内核）"
+            } else {
+                "内置分片下载器 · 具体实现与 Gopeed 引擎都在这一页里选"
+            },
+            onClick = { showDownloadEngine = true }
+        )
+
         Spacer(modifier = Modifier.height(8.dp))
 
-        // 用户体验与系统适配：锁屏保持下载 / 通知栏进度样式
+        // 插件：JS 脚本的导入 / 启停 / 运行状态 / 卸载都在那一页。
+        // 副标题直接给「装了几个、几个在跑」—— 不开插件页也能看出「装了但没启用」这种状态。
+        SettingsItem(
+            icon = Icons.Outlined.Extension,
+            title = "插件",
+            description = when {
+                pluginTotal == 0 -> "还没装插件 · 可以导入或粘贴 JS 脚本扩展解析能力"
+                pluginEnabled == pluginTotal -> "$pluginTotal 个已安装，全部启用"
+                pluginEnabled == 0 -> "$pluginTotal 个已安装，都已停用"
+                else -> "$pluginTotal 个已安装，$pluginEnabled 个启用"
+            },
+            onClick = { showPlugins = true }
+        )
+
+        Spacer(modifier = Modifier.height(8.dp))
+
+        // 插件市场：插件源管理与从源安装都在那一页。
+        // 与「插件」分开两行是有意的 —— 那一页管"本机装了什么"，这一页管"哪里能拿到插件"，
+        // 加源与装插件是两件独立的事（市场页里也是这么分开的）。
+        SettingsItem(
+            icon = Icons.Outlined.Storefront,
+            title = "插件市场",
+            description = "从插件源浏览并安装 · 检查插件更新",
+            onClick = { showMarket = true }
+        )
+
+        Spacer(modifier = Modifier.height(8.dp))
+
+        // 自定义 DNS over HTTPS：绕过本地 DNS 污染/加速域名解析
+        SettingsItem(
+            icon = Icons.Outlined.Dns,
+            title = "自定义 DNS (DoH)",
+            description = when {
+                // 哨兵值不能直接展示（对用户是无意义的内部标记）
+                dohUrl == AUTO_DOH -> "自动（并发探测最快的公共 DoH）"
+                dohUrl != null -> "已启用：$dohUrl"
+                else -> "使用系统 DNS（点击配置 DNS over HTTPS）"
+            },
+            onClick = { showDohDialog = true }
+        )
+
+        Spacer(modifier = Modifier.height(24.dp))
+
+        // ---------- 后台与通知 ----------
+        // 这两项都属于"下载时系统怎么对待本应用"，与下载参数不是一回事。
+        SectionLabel("后台与通知")
         SettingsItem(
             icon = Icons.Outlined.Power,
             title = "锁屏后保持下载",
@@ -1281,6 +1333,18 @@ fun SettingsScreen(
                 engineChoice = settingsRepo.downloadEngine
             }
         )
+    }
+
+    // 插件页：独立全屏页（JS 脚本的导入/启停/运行状态/详情/卸载）。
+    // 副标题走的是仓库的 Flow，卸载与启停会自己反映到上面那一行，这里不必回读设置。
+    if (showPlugins) {
+        PluginsScreen(onBack = { showPlugins = false })
+    }
+
+    // 插件市场页：独立全屏页（插件源 / 检查更新 / 从源安装 / 详情）。
+    // 与插件页同理，装了什么由市场页自己的 Flow 反映，这里不必回读设置。
+    if (showMarket) {
+        PluginMarketScreen(onBack = { showMarket = false })
     }
 }
 

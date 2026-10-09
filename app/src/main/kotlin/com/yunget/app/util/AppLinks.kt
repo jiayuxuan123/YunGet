@@ -41,9 +41,49 @@ object AppLinks {
     /** GitHub 仓库展示用短地址（去掉协议头，界面文字用；与 [GITHUB_REPO] 必须指向同一仓库） */
     const val GITHUB_REPO_DISPLAY = "github.com/jiayuxuan123/YunGet"
 
+    /**
+     * 云取官网（GitHub Pages）。
+     *
+     * 站点源码就在本仓库的 `website/` 下、产物在 `docs/`，所以这个地址与仓库同源：
+     * 官网上的版本、截图、下载入口都是从仓库里生成出来的，不会与仓库各说各话。
+     */
+    const val WEBSITE = "https://jiayuxuan123.github.io/YunGet/"
+
+    /** 官网展示用短地址。 */
+    const val WEBSITE_DISPLAY = "jiayuxuan123.github.io/YunGet"
+
+    /**
+     * TurboDL（下载引擎）官网。
+     *
+     * 单列出来是因为它讲的是**另一件事**：引擎是可独立使用的 SDK，
+     * 想看"分片调度与插件机制到底怎么做的"该去引擎那边，而不是在应用官网里翻。
+     */
+    const val ENGINE_WEBSITE = "https://jiayuxuan123.github.io/TurboDL/"
+
+    /** 引擎官网展示用短地址。 */
+    const val ENGINE_WEBSITE_DISPLAY = "jiayuxuan123.github.io/TurboDL"
+
+    /** 引擎仓库（插件开发文档、Release、Issue 都在那边）。 */
+    const val ENGINE_REPO = "https://github.com/jiayuxuan123/TurboDL"
+
+    /** 插件源仓库（官方插件源：索引、示例插件、签名公钥）。 */
+    const val PLUGINS_REPO = "https://github.com/jiayuxuan123/YunGet-Plugins"
+
     /** 用系统浏览器打开仓库页；返回 false 表示没有可用浏览器 */
-    fun openRepo(context: Context): Boolean {
-        val intent = Intent(Intent.ACTION_VIEW, Uri.parse(GITHUB_REPO))
+    fun openRepo(context: Context): Boolean = open(context, GITHUB_REPO)
+
+    /** 用系统浏览器打开云取官网。 */
+    fun openWebsite(context: Context): Boolean = open(context, WEBSITE)
+
+    /** 用系统浏览器打开 TurboDL 引擎官网。 */
+    fun openEngineWebsite(context: Context): Boolean = open(context, ENGINE_WEBSITE)
+
+    /** 用系统浏览器打开插件源仓库。 */
+    fun openPluginsRepo(context: Context): Boolean = open(context, PLUGINS_REPO)
+
+    /** 打开任意地址；返回 false 表示没有可用浏览器。 */
+    private fun open(context: Context, url: String): Boolean {
+        val intent = Intent(Intent.ACTION_VIEW, Uri.parse(url))
         return runCatching { context.startActivity(intent) }.isSuccess
     }
 }

@@ -10,8 +10,8 @@ import com.yunget.app.data.security.AndroidKeystoreCredentialCipher
 import com.yunget.app.data.security.CredentialCipher
 
 @Database(
-    entities = [QuarkAccountEntity::class, DownloadTaskEntity::class, UCAccountEntity::class, XunleiAccountEntity::class, BaiduAccountEntity::class, C139AccountEntity::class, Pan123AccountEntity::class, BookmarkEntity::class, Pan115AccountEntity::class, GuangYaAccountEntity::class, ILanzouAccountEntity::class, LanzouAccountEntity::class],
-    version = 19,
+    entities = [QuarkAccountEntity::class, DownloadTaskEntity::class, UCAccountEntity::class, XunleiAccountEntity::class, BaiduAccountEntity::class, C139AccountEntity::class, Pan123AccountEntity::class, BookmarkEntity::class, Pan115AccountEntity::class, GuangYaAccountEntity::class, ILanzouAccountEntity::class, LanzouAccountEntity::class, PluginInstalledEntity::class, PluginSourceEntity::class],
+    version = 20,
     exportSchema = false
 )
 abstract class AppDatabase : RoomDatabase() {
@@ -44,6 +44,12 @@ abstract class AppDatabase : RoomDatabase() {
 
     /** 网盘链接收藏（无凭证内容，无需加密装饰器）。 */
     abstract fun bookmarkDao(): BookmarkDao
+
+    /** 已安装的 JS 插件（无凭证内容，无需加密装饰器）。 */
+    abstract fun pluginInstalledDao(): PluginInstalledDao
+
+    /** 插件源 / 市场索引源。 */
+    abstract fun pluginSourceDao(): PluginSourceDao
 
     /** 凭证加密器，由 [get] 在构造后注入。 */
     private lateinit var credentialCipher: CredentialCipher
@@ -98,6 +104,7 @@ abstract class AppDatabase : RoomDatabase() {
                         MIGRATION_16_17,
                         MIGRATION_17_18,
                         MIGRATION_18_19,
+                        MIGRATION_19_20,
                     )
                     // 早期开发版（1-8）无可靠 schema；从 v9 起必须保留凭证和下载任务
                     .fallbackToDestructiveMigrationFrom(1, 2, 3, 4, 5, 6, 7, 8)
@@ -269,6 +276,50 @@ abstract class AppDatabase : RoomDatabase() {
                         "ALTER TABLE `xunlei_account` ADD COLUMN `authType` TEXT NOT NULL DEFAULT ''"
                     )
                 }
+            }
+        }
+
+        /**
+         * v20：插件管理两张表 —— 已安装插件 [PluginInstalledEntity] 与插件源 [PluginSourceEntity]。
+         *
+         * 都是**新建表**（不像 v18/v19 那样给老表加列），所以每列显式写 `NOT NULL` + 默认值：
+         * 表一旦有历史行，加列缺默认值就会失败；这里的默认值同时要与实体上的
+         * `@ColumnInfo(defaultValue = ...)` 逐字一致，否则 Room 打开库时校验表结构会抛
+         * `Migration didn't properly handle`（本轮由 `DatabaseMigrationContractTest` 静态核对）。
+         *
+         * 脚本本体不入库：`plugin_installed.scriptPath` 存应用私有目录下的绝对路径。
+         */
+        private val MIGRATION_19_20 = object : Migration(19, 20) {
+            override fun migrate(db: SupportSQLiteDatabase) {
+                db.execSQL(
+                    "CREATE TABLE IF NOT EXISTS `plugin_installed` (" +
+                        "`id` TEXT NOT NULL DEFAULT '', " +
+                        "`name` TEXT NOT NULL DEFAULT '', " +
+                        "`version` TEXT NOT NULL DEFAULT '', " +
+                        "`sourceUri` TEXT NOT NULL DEFAULT '', " +
+                        "`sourceKind` TEXT NOT NULL DEFAULT '', " +
+                        "`manifestJson` TEXT NOT NULL DEFAULT '', " +
+                        "`scriptPath` TEXT NOT NULL DEFAULT '', " +
+                        "`scriptSha256` TEXT NOT NULL DEFAULT '', " +
+                        "`enabled` INTEGER NOT NULL DEFAULT 0, " +
+                        "`declaredPermissions` TEXT NOT NULL DEFAULT '', " +
+                        "`trustLevel` TEXT NOT NULL DEFAULT '', " +
+                        "`installedAt` INTEGER NOT NULL DEFAULT 0, " +
+                        "`updatedAt` INTEGER NOT NULL DEFAULT 0, " +
+                        "`lastError` TEXT NOT NULL DEFAULT '', " +
+                        "PRIMARY KEY(`id`))"
+                )
+                db.execSQL(
+                    "CREATE TABLE IF NOT EXISTS `plugin_source` (" +
+                        "`id` TEXT NOT NULL DEFAULT '', " +
+                        "`displayName` TEXT NOT NULL DEFAULT '', " +
+                        "`indexUrl` TEXT NOT NULL DEFAULT '', " +
+                        "`trustLevel` TEXT NOT NULL DEFAULT '', " +
+                        "`addedAt` INTEGER NOT NULL DEFAULT 0, " +
+                        "`lastFetchedAt` INTEGER NOT NULL DEFAULT 0, " +
+                        "`enabled` INTEGER NOT NULL DEFAULT 0, " +
+                        "PRIMARY KEY(`id`))"
+                )
             }
         }
 

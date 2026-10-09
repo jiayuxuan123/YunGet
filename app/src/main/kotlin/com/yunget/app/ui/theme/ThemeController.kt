@@ -48,10 +48,17 @@ object ThemeController {
      * 文件名显示方式：false=单行跑马灯滚动（默认），true=多行折行。
      *
      * ★ 本项由移植上游 `FileNameText`（云盘页/解析页/下载列表共用的文件名组件）而补入：
-     *   组件按此开关决定单行跑马灯还是多行折行。本项目的「主题与外观」页暂未暴露该开关，
-     *   默认值（单行跑马灯）与改动前各页的观感完全一致。
+     *   组件按此开关决定单行跑马灯还是多行折行。
      */
     var fileNameMultiLine by mutableStateOf(false)
+        private set
+
+    /**
+     * 颜色对比度档位：0=标准，1=中等对比，2=高对比。
+     *
+     * 无障碍设置，不是审美选项 —— 见 [SettingsRepository.contrastLevel]。
+     */
+    var contrastLevel by mutableStateOf(0)
         private set
 
     private var initialized = false
@@ -64,6 +71,7 @@ object ThemeController {
         colorMode = s.themeColorMode
         seedColor = s.themeSeedColor
         fileNameMultiLine = s.fileNameMultiLine
+        contrastLevel = s.contrastLevel
         initialized = true
     }
 
@@ -93,5 +101,11 @@ object ThemeController {
     fun setFileNameMultiLine(context: Context, value: Boolean) {
         fileNameMultiLine = value
         SettingsRepository(context).fileNameMultiLine = value
+    }
+
+    /** 设置颜色对比度档位（0=标准 / 1=中等 / 2=高）并持久化 */
+    fun setContrastLevel(context: Context, value: Int) {
+        contrastLevel = value.coerceIn(0, 2)
+        SettingsRepository(context).contrastLevel = contrastLevel
     }
 }

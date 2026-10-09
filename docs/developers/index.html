@@ -1,0 +1,118 @@
+<!DOCTYPE html>
+<html lang="zh">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>开发者 · 云取 YunGet</title>
+<meta name="description" content="写一个云取插件：能力边界、ABI 参考、最小示例，以及签名与发布的最短路径。">
+<link rel="canonical" href="https://jiayuxuan123.github.io/YunGet/developers/index.html">
+<meta property="og:type" content="website">
+<meta property="og:site_name" content="云取 YunGet">
+<meta property="og:title" content="开发者 · 云取 YunGet">
+<meta property="og:description" content="写一个云取插件：能力边界、ABI 参考、最小示例，以及签名与发布的最短路径。">
+<meta property="og:url" content="https://jiayuxuan123.github.io/YunGet/developers/index.html">
+<meta property="og:image" content="https://jiayuxuan123.github.io/YunGet/assets/og.png">
+<meta name="twitter:card" content="summary_large_image">
+<link rel="icon" href="../assets/favicon.svg" type="image/svg+xml">
+<link rel="apple-touch-icon" href="../assets/apple-touch-icon.png">
+<link rel="stylesheet" href="../assets/site.css">
+</head>
+<body class="brand-yunget">
+<a class="skip" href="#main">跳到正文</a>
+<header class="site-head">
+<div class="wrap">
+<a class="brand" href="../index.html"><span class="brand-mark"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32" width="24" height="24" aria-hidden="true"><g fill="none" stroke="currentColor" stroke-width="2.3" stroke-linecap="round"><path d="M6 5v9.5M16 3.2v11.3M26 5v9.5"/></g><path d="M16 15.6l6.2 6.2H9.8z" fill="currentColor"/><path d="M16 21v7" stroke="currentColor" stroke-width="2.3" stroke-linecap="round"/></svg></span><span class="brand-name">云取 YunGet</span></a>
+<button class="nav-toggle" aria-expanded="false" aria-controls="site-nav">菜单</button>
+<nav id="site-nav" class="site-nav"><a href="../index.html">概览</a><a href="../download/index.html">下载</a><a href="../plugins/index.html">插件</a><a href="../docs/index.html">文档</a><a href="index.html" class="active" aria-current="page">开发者</a><a href="../changelog/index.html">更新日志</a><a href="../community/index.html">社区</a><a href="../support/index.html">支持开发</a><a href="../legal/index.html">协议</a></nav>
+
+</div>
+</header>
+<main id="main">
+<section class="hero"><h1>写一个云取插件</h1><p class="lead">插件是一段 JavaScript：不用编译、不用打包 APK、不用发版 —— 写一个 <span class="mono">.js</span> 文件装进应用，它就能认链接、拼请求头、算签名。这一页给想动手的人：能力边界在哪、文档在哪、最小示例长什么样、怎么签名发布。</p><div class="btn-row"><a class="btn" href="../docs/plugin-dev/index.html">从零写一个插件</a><a class="btn" href="../docs/plugin-api/index.html">ABI 参考</a><a class="btn" href="https://github.com/jiayuxuan123/YunGet-Plugins">官方源仓库</a><a class="btn" href="https://jiayuxuan123.github.io/TurboDL/">引擎官网 TurboDL</a></div></section><section><h2>三条边界</h2><div class="cards cols-3"><div class="card"><h3>能算什么</h3><div class="card-body"><p>四类事：<strong>认链接</strong>（解析器）、<strong>改提交前的请求</strong>（pre-hook）、<strong>任务结束后收尾</strong>（post-hook）、<strong>看引擎事件</strong>（进度 / 完成 / 失败）。</p><p>在这些里可以发 HTTP 请求、算摘要与 HMAC、编解码 base64/hex、读写自己的小存储、打日志、用定时器。</p></div></div><div class="card"><h3>不能做什么</h3><div class="card-body"><p><strong>不经手下载数据流</strong>：没有流式 API、没有 body 句柄、没有分块回调；<span class="mono">host.http.request</span> 给的是一份完整的（有上限的）响应体，<span class="mono">downloadToFile</span> 给的是一个已经写完的文件。</p><p>也不能注册下载后端（返回 <span class="mono">unsupported</span>），不能在运行时给自己加权限 —— 实际授予 = 脚本声明 ∩ 加载器上限 ∩ 用户已确认，没有任何 API 能改变它。</p></div></div><div class="card"><h3>为什么这么定</h3><div class="card-body"><p>分片与字节面留在 Kotlin 里，脚本就永远不会站在数据路径上。否则一个写得不好的插件（或者干脆是恶意的）会变成整条下载链路的带宽瓶颈 —— 而且每个数据块都要跨一次 JS 边界，代价比下载本身还大。</p><p>所以插件的定位是「算 URL / 拼头 / 签名 / 解析分享链接」，不是「自己实现一个下载器」。</p></div></div></div><div class="note">声明了 <span class="mono">http</span> 就意味着它能上网、能把你的链接发出去。用户装之前会看到这份权限清单 —— 所以<strong>只声明真正用到的能力</strong>。</div></section><section><h2>四份文档</h2><div class="cards cols-2"><div class="card"><h3>写一个插件</h3><div class="card-body"><p>插件是一段 JavaScript：能做什么、不能做什么，以及从零写一个能跑的解析器。</p><p class="mono small">docs/PLUGIN-DEV.md</p><div class="btn-row tight"><a class="btn" href="../docs/plugin-dev/index.html">阅读</a></div></div></div><div class="card"><h3>插件 ABI 参考</h3><div class="card-body"><p>脚本能用的每一样东西：plugin / host 两个对象、能力、错误码与所有上限。</p><p class="mono small">docs/PLUGIN-API.md</p><div class="btn-row tight"><a class="btn" href="../docs/plugin-api/index.html">阅读</a></div></div></div><div class="card"><h3>打包与发布</h3><div class="card-body"><p>清单怎么写、签名怎么算、怎么提 PR 进官方源、怎么自建一个源、怎么发新版本。</p><p class="mono small">docs/PLUGIN-PUBLISH.md</p><div class="btn-row tight"><a class="btn" href="../docs/plugin-publish/index.html">阅读</a></div></div></div><div class="card"><h3>插件安全模型</h3><div class="card-body"><p>信任四级、校验链，以及这份机制不做（也不打算假装做了）的那些承诺。</p><p class="mono small">docs/PLUGIN-SECURITY.md</p><div class="btn-row tight"><a class="btn" href="../docs/plugin-security/index.html">阅读</a></div></div></div></div></section><section><h2>最小示例插件</h2><p>这个插件认 <span class="mono">demo://</span> 链接，把它变成一条可下载的 https 请求。整段复制到一个 <span class="mono">.js</span> 文件里就能用 —— 和<a href="../docs/plugin-dev/index.html">《写一个插件》</a>里的那段是同一份代码。</p><div class="code"><div class="code-cap">parser.demo.js —— 从 docs/PLUGIN-DEV.md 读取</div><pre><code>/*
+ * parser.demo - 最小可用示例：demo://&lt;path&gt;[?name=&lt;文件名&gt;]
+ *   demo://share/hello.bin           -&gt; https://example.com/share/hello.bin
+ *   demo://share/hello.bin?name=a.txt -&gt; 同一个 URL，保存为 a.txt
+ * 其它链接返回 null（不是我的，交给下一个解析器）。
+ */
+
+// 1) 声明要用到的能力。没声明的能力在运行时不可用，而且&quot;声明了但宿主没授予&quot;会让插件加载失败。
+//    这里只声明真正用到的：crypto 用来算 stableKey。加一条网络查询就再补 &#x27;http&#x27;。
+plugin.requires({ permissions: [&#x27;crypto&#x27;], abiMajor: 1 });
+
+// 2) 自报身份。id 会被云取用来定位插件，version 是市场更新判据，name 是界面上显示的名字。
+plugin.defineMeta({ id: &#x27;parser.demo&#x27;, name: &#x27;Demo 解析器&#x27;, version: &#x27;1.0.0&#x27; });
+
+var SCHEME = &#x27;demo://&#x27;;
+var BASE = &#x27;https://example.com&#x27;;
+
+/** 链接里的文件名是不可信输入：只留一个裸文件名，丢掉路径与危险字符。 */
+function safeName(raw) {
+  var last = String(raw || &#x27;&#x27;).split(&#x27;/&#x27;).pop().split(&#x27;\\&#x27;).pop();
+  var cleaned = &#x27;&#x27;;
+  for (var i = 0; i &lt; last.length; i++) {
+    var c = last.charAt(i);
+    var code = last.charCodeAt(i);
+    if (code &lt; 32 || code === 127) continue;
+    if (&#x27;&lt;&gt;:&quot;|?*/\\&#x27;.indexOf(c) &gt;= 0) continue;
+    cleaned += c;
+  }
+  cleaned = cleaned.replace(/^[.\s]+/, &#x27;&#x27;).replace(/[.\s]+$/, &#x27;&#x27;).replace(/\.\./g, &#x27;_&#x27;);
+  return cleaned.slice(0, 80);   // 80 个字符，不是字节：中文名也能留下
+}
+
+plugin.registerParser({
+  priority: 300,
+  parse: function (input) {
+    // 宿主传进来的是一个对象：{ input: &#x27;&lt;原始链接&gt;&#x27; }
+    var raw = String((input &amp;&amp; input.input !== undefined) ? input.input : input).trim();
+    if (raw.slice(0, SCHEME.length).toLowerCase() !== SCHEME) return null;  // 不是我的链接
+
+    var rest = raw.slice(SCHEME.length);
+    var query = &#x27;&#x27;;
+    var q = rest.indexOf(&#x27;?&#x27;);
+    if (q &gt;= 0) { query = rest.slice(q + 1); rest = rest.slice(0, q); }
+
+    var path = rest.replace(/^\/+/, &#x27;&#x27;);
+    if (path === &#x27;&#x27;) return null;
+
+    var wanted = &#x27;&#x27;;
+    var pairs = query.split(&#x27;&amp;&#x27;);
+    for (var i = 0; i &lt; pairs.length; i++) {
+      var eq = pairs[i].indexOf(&#x27;=&#x27;);
+      if (eq &gt; 0 &amp;&amp; pairs[i].slice(0, eq) === &#x27;name&#x27;) {
+        wanted = pairs[i].slice(eq + 1).replace(/\+/g, &#x27; &#x27;);
+        try { wanted = decodeURIComponent(wanted); } catch (e) { /* 编码坏了就用原文 */ }
+      }
+    }
+
+    var url = BASE + &#x27;/&#x27; + path;
+    return [{
+      url: url,
+      fileName: safeName(wanted) || safeName(path) || &#x27;demo.bin&#x27;,
+      stableKey: &#x27;demo-&#x27; + host.crypto.digest(&#x27;SHA-256&#x27;, url).hex.slice(0, 16),
+      connections: 8,
+      tags: { scheme: &#x27;demo&#x27;, plugin: &#x27;parser.demo&#x27; }
+    }];
+  }
+});
+
+plugin.onInit(function () {
+  host.log.info(&#x27;demo 解析器就绪，id=&#x27; + plugin.id);
+});</code></pre></div><p>这份代码里的每一点都是必要的：权限声明要<strong>保持扁平</strong>（读它的是一个小文本扫描器，嵌套对象会让权限预览看不到）、文件名是不可信输入要洗过、自报的 <span class="mono">id</span> 只允许 <span class="mono">[a-z0-9.-]</span> 且长度 3..64、单次求值预算 5 秒（只计 JS 时间）。为什么这么写，逐条解释在文档里。</p><div class="note">想看更完整的写法（含可选的服务端直链解析与失败回退），读官方源仓库里的 <a href="https://github.com/jiayuxuan123/YunGet-Plugins/tree/main/plugins/parser.example-cloud">parser.example-cloud</a> —— 那份是市场模板，也是本站插件页列出的那一个。</div></section><section><h2>签名与发布的最短路径</h2><p>签名的对象是<strong>脚本文件的原始字节</strong>：不剥 BOM、不做行尾归一化、不重新编码、不是「先算 sha256 再签摘要」—— <span class="mono">sha256</span> 与 <span class="mono">signature</span> 覆盖的是同一串字节，所以两条检查互相印证。工具在源仓库的 <span class="mono">tools/sign_plugin.py</span> 里，Ed25519 零依赖可用。</p><div class="code"><div class="code-cap">shell</div><pre><code># 1) 生成密钥对（私钥 0600 落盘、绝不进仓库；公钥可以直接进仓库）
+python tools/sign_plugin.py keygen --key-id my-id-2026 --out-dir keys
+
+# 2) 签一个脚本，输出能直接粘进 plugins.json 的 JSON 片段
+python tools/sign_plugin.py sign plugins/parser.mycloud/parser.mycloud.js \
+    --key keys/my-id-2026.key --key-id my-id-2026
+
+# 3) 扫 plugins/*/ 重新生成整个索引（含真实 sha256 与签名，避免手抄出错）
+python tools/sign_plugin.py index --key keys/my-id-2026.key --key-id my-id-2026</code></pre></div><p>发布到官方源就是往 <a href="https://github.com/jiayuxuan123/YunGet-Plugins">YunGet-Plugins</a> 提一个 PR：建目录 <span class="mono">plugins/&lt;插件 id&gt;/</span>，放齐脚本、<span class="mono">turbodl-plugin.json</span>、<span class="mono">market.json</span>，说明它做什么、要哪些权限、为什么需要这些权限。不想进官方源也可以自建一个源：一个能通过 https 访问的静态目录，里面放索引、公钥和脚本就行。</p><div class="note warn">改了脚本却不升版本号，用户永远收不到更新 —— App 的更新判据是 semver 比大小，不看时间戳；而且 <span class="mono">index</span> 会因为「同版本但字节变了」直接报错（已发布版本的字节不可改写）。</div><div class="btn-row"><a class="btn" href="../docs/plugin-publish/index.html">打包与发布（全文）</a><a class="btn" href="../docs/plugin-security/index.html">安全模型（全文）</a></div></section><section><h2>两个仓库</h2><p><a href="https://github.com/jiayuxuan123/YunGet-Plugins">YunGet-Plugins</a> 是插件源：索引、插件源码、公钥、签名工具都在那里，插件的问题（含发现可疑插件）提到它的 Issue。</p><p><a href="https://jiayuxuan123.github.io/TurboDL/">TurboDL</a> 是下载引擎（纯 Kotlin/JVM），插件框架与 ABI 由它提供 —— 所以引擎的改进可以单独升级，也可以被别的应用复用。ABI 的完整清单在本站就有：<a href="../docs/plugin-api/index.html">插件 ABI 参考</a>。</p><div class="btn-row"><a class="btn" href="https://github.com/jiayuxuan123/YunGet-Plugins">YunGet-Plugins</a><a class="btn" href="https://jiayuxuan123.github.io/TurboDL/">TurboDL 官网</a><a class="btn" href="../docs/index.html">全部文档</a></div></section></main>
+<footer class="site-foot">
+<div class="wrap">
+<div class="foot-cols"><div class="foot-col"><h4>项目</h4><ul><li><a href="https://github.com/jiayuxuan123/YunGet">GitHub</a></li><li><a href="../download/index.html">下载</a></li><li><a href="../changelog/index.html">更新日志</a></li><li><a href="https://github.com/jiayuxuan123/YunGet/issues">问题反馈</a></li></ul></div><div class="foot-col"><h4>文档</h4><ul><li><a href="../docs/readme/index.html">项目说明</a></li><li><a href="../docs/guide/index.html">使用说明</a></li><li><a href="../docs/faq/index.html">常见问题</a></li><li><a href="../docs/engines/index.html">下载引擎</a></li><li><a href="../docs/build/index.html">从源码构建</a></li></ul></div><div class="foot-col"><h4>插件</h4><ul><li><a href="../plugins/index.html">插件（市场与安装）</a></li><li><a href="index.html">开发者（怎么写）</a></li><li><a href="../docs/plugin-dev/index.html">写一个插件</a></li><li><a href="../docs/plugin-api/index.html">插件 ABI 参考</a></li><li><a href="../docs/plugin-publish/index.html">打包与发布</a></li><li><a href="../docs/plugin-security/index.html">插件安全模型</a></li></ul></div><div class="foot-col"><h4>协议与说明</h4><ul><li><a href="../legal/license/index.html">AGPL-3.0 原文</a></li><li><a href="../legal/notice/index.html">署名与致谢</a></li><li><a href="../legal/privacy/index.html">隐私说明</a></li><li><a href="../legal/terms/index.html">使用条款</a></li><li><a href="../support/index.html">支持开发</a></li></ul></div><div class="foot-col"><h4>相关</h4><ul><li><a href="https://github.com/CYQawa/YunX">上游 CYQawa/YunX</a></li><li><a href="https://github.com/jiayuxuan123/TurboDL">下载引擎 TurboDL</a></li><li><a href="https://github.com/jiayuxuan123/YunGet-Plugins">插件源 YunGet-Plugins</a></li><li><a href="../community/index.html">社区</a></li></ul></div></div>
+<div class="foot-note"><p>云取 YunGet v2.6.21 · AGPL-3.0 · 内置 TurboDL 0.2.0.7 · Android 6.0（API 23）</p><p>本项目是 CYQawa/YunX（云析）的二次开发版本，与上游作者无隐性关联。仅供个人学习与技术交流，请勿用于商业用途；下载内容的版权归原作者及相关权利人所有。</p></div>
+</div>
+</footer>
+<script src="../assets/site.js" defer></script>
+</body>
+</html>

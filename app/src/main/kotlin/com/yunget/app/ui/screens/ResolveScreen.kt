@@ -28,6 +28,7 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Close
+import androidx.compose.material.icons.outlined.ContentPaste
 import androidx.compose.material.icons.outlined.ErrorOutline
 import androidx.compose.material.icons.outlined.Link
 import androidx.compose.material3.Button
@@ -339,6 +340,7 @@ private fun ResolveInputContent(
     onOpenBookmarks: () -> Unit
 ) {
     val isLoading = state is ResolveUiState.Loading
+    val context = LocalContext.current
 
     Column(
         modifier = Modifier
@@ -364,6 +366,18 @@ private fun ResolveInputContent(
                 if (link.isNotEmpty()) {
                     IconButton(onClick = onClearLink) {
                         Icon(Icons.Filled.Close, contentDescription = "清空链接")
+                    }
+                } else {
+                    // 空输入框时给「粘贴」：剪贴板提示卡片只在内容被识别为链接时才出现，
+                    // 识别不出（或已被忽略）时用户仍需要一个一键粘贴的入口。
+                    IconButton(onClick = {
+                        readClipboardSafely(context)?.takeIf { it.isNotBlank() }?.let { text ->
+                            onLinkChange(text)
+                            // 粘贴的链接自带提取码时顺手填上（与提示卡片的行为一致）
+                            ShareLinkParser.parse(text)?.pwd?.let { onPwdChange(it) }
+                        }
+                    }) {
+                        Icon(Icons.Outlined.ContentPaste, contentDescription = "粘贴")
                     }
                 }
             },

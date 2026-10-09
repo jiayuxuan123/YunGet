@@ -25,6 +25,9 @@ import androidx.compose.material.icons.outlined.CheckCircle
 import androidx.compose.material.icons.outlined.ChevronRight
 import androidx.compose.material.icons.outlined.Cloud
 import androidx.compose.material.icons.outlined.Code
+import androidx.compose.material.icons.outlined.Memory
+import androidx.compose.material.icons.outlined.Public
+import com.yunget.app.util.AppLinks
 import androidx.compose.material.icons.outlined.Info
 import androidx.compose.material.icons.outlined.Link
 import androidx.compose.material.icons.outlined.OpenInNew
@@ -143,8 +146,32 @@ fun AboutScreen(
             // ---------- 重新预览欢迎界面 ----------
             PreviewOnboardingCard(onClick = onPreviewOnboarding)
 
-            // ---------- 开源仓库 ----------
-            GitHubCard(context)
+            // ---------- 对外入口 ----------
+            // 三个入口刻意分列：仓库是"改代码/报问题"的地方，两个官网是"读文档/看下载"的地方，
+            // 引擎官网单列是因为它讲的是另一个东西（可独立使用的下载 SDK）。
+            LinkCard(
+                context = context,
+                url = AppLinks.GITHUB_REPO,
+                title = "开源仓库",
+                subtitle = AppLinks.GITHUB_REPO_DISPLAY,
+                icon = Icons.Outlined.Code
+            )
+            Spacer(modifier = Modifier.height(8.dp))
+            LinkCard(
+                context = context,
+                url = AppLinks.WEBSITE,
+                title = "云取官网",
+                subtitle = AppLinks.WEBSITE_DISPLAY,
+                icon = Icons.Outlined.Public
+            )
+            Spacer(modifier = Modifier.height(8.dp))
+            LinkCard(
+                context = context,
+                url = AppLinks.ENGINE_WEBSITE,
+                title = "下载引擎官网（TurboDL）",
+                subtitle = AppLinks.ENGINE_WEBSITE_DISPLAY,
+                icon = Icons.Outlined.Memory
+            )
 
             Spacer(modifier = Modifier.height(8.dp))
             Text(
@@ -490,12 +517,23 @@ private fun CardIcon(icon: ImageVector) {
     }
 }
 
-/** 开源仓库入口卡片 */
+/**
+ * 对外入口卡片（仓库 / 官网）。
+ *
+ * URL 由调用方传进来而不是写死在卡片里：这个页面现在有三张同样的卡
+ * （仓库、云取官网、引擎官网），写死意味着以后改地址要改三处、且很容易漏一处。
+ */
 @Composable
-private fun GitHubCard(context: android.content.Context) {
+private fun LinkCard(
+    context: android.content.Context,
+    url: String,
+    title: String,
+    subtitle: String,
+    icon: androidx.compose.ui.graphics.vector.ImageVector,
+) {
     Card(
         onClick = {
-            val intent = Intent(Intent.ACTION_VIEW, Uri.parse("https://github.com/jiayuxuan123/YunGet"))
+            val intent = Intent(Intent.ACTION_VIEW, Uri.parse(url))
             context.startActivity(intent)
         },
         modifier = Modifier.fillMaxWidth(),
@@ -517,7 +555,7 @@ private fun GitHubCard(context: android.content.Context) {
             ) {
                 Box(contentAlignment = Alignment.Center) {
                     Icon(
-                        imageVector = Icons.Outlined.Code,
+                        imageVector = icon,
                         contentDescription = null,
                         modifier = Modifier.size(20.dp),
                         tint = MaterialTheme.colorScheme.onPrimaryContainer
@@ -527,12 +565,12 @@ private fun GitHubCard(context: android.content.Context) {
             Spacer(modifier = Modifier.width(14.dp))
             Column(modifier = Modifier.weight(1f)) {
                 Text(
-                    text = "开源仓库",
+                    text = title,
                     style = MaterialTheme.typography.titleMedium,
                     fontWeight = FontWeight.Medium
                 )
                 Text(
-                    text = "github.com/jiayuxuan123/YunGet",
+                    text = subtitle,
                     style = MaterialTheme.typography.bodyMedium,
                     color = MaterialTheme.colorScheme.onSurfaceVariant
                 )

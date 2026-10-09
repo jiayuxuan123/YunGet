@@ -218,6 +218,19 @@ class SettingsRepository(context: Context) {
             prefs.edit().putBoolean("file_name_multi_line", value).apply()
         }
 
+    /**
+     * 颜色对比度档位：0=标准，1=中等对比，2=高对比。
+     *
+     * 这三档不是"更好看/更难看"的区别，而是无障碍设置：视力不佳或强光下使用时，
+     * Material 的标准配色对比度可能不够。`Theme.kt` 里四套对比度方案本来就存在
+     * （中等/高 × 浅色/深色），但此前没有任何入口能选中它们 —— 等于白写。
+     */
+    var contrastLevel: Int
+        get() = prefs.getInt("contrast_level", 0)
+        set(value) {
+            prefs.edit().putInt("contrast_level", value.coerceIn(0, 2)).apply()
+        }
+
     companion object {
         const val DEFAULT_DOWNLOAD_THREADS = 16
 
