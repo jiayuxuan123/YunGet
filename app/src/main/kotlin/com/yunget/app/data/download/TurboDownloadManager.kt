@@ -208,6 +208,20 @@ class TurboDownloadManager(
     private val lastDbWriteTs = ConcurrentHashMap<Long, Long>()
     private val lastDbWriteBytes = ConcurrentHashMap<Long, Long>()
 
+    /**
+     * 每条任务**最近一次**由引擎上报的字节数（不节流，只在内存里记一个数）。
+     *
+     * 为什么需要它：列表上的「已下载」读的是**库里的值**，而库是靠上面那套时间节流写的
+     * （正常下载时它落后真实进度若干秒的传输量，这在下载中无害 —— 下一个节拍就补上了）。
+     * 但任务一旦暂停就再也不会收到进度事件，那个落后值会被**永久冻在列表上**：
+     * 界面上写着「已暂停 · 9.2 MB」，磁盘上其实已经有 24.8 MB。用户点继续，引擎从磁盘真实
+     * 字节起步上报，数字当场跳到 24.8 MB —— 看起来就像"进度倒退/断点续传没生效"。
+     * （2026-10-09 实测：暂停显示 9.2 MB，日志里引擎恢复时的首个上报是 24767785。）
+     *
+     * 所以暂停/失败/删除这些**状态切换点**要把此刻的值补写一次，不能只靠节流。
+     */
+    private val lastSeenBytes = ConcurrentHashMap<Long, Long>()
+
     companion object {
         /**
          * 进度落盘的时间间隔（毫秒）。**这是唯一节流条件**。
@@ -700,9 +714,21 @@ class TurboDownloadManager(
         val turboId = turboIds.remove(id)
         if (turboId != null) turboIdToRoomId.remove(turboId)
         _stats.update { it - id }
+        // 暂停是状态切换点：库里的值来自每 800ms 的节流写，会落后真实进度若干 MB；
+        // 暂停后不再有进度事件，这个落后值就冻在列表上了（用户点继续时看到数字前后跳）。
+        // 取值优先级：引擎**当前计数器**（逐块更新，最新）→ 最近一次上报事件 → 上次写库值。
+        val pauseAt = turboId?.let { client.progress.value[it]?.downloadedBytes }
+            ?: lastSeenBytes[id] ?: lastDbWriteBytes[id]
         scope.launch {
             if (turboId != null) client.pause(turboId)
-            dao.updateStatus(id, DownloadTaskEntity.STATUS_PAUSED)
+            if (pauseAt != null) {
+                // 总大小不能写成 0：那会让列表上的「/ 221.1 MB」变成「/ 0 B」。
+                // 内存里没有就回读一次库里的原值。
+                val total = taskSizes[id]?.takeIf { it > 0 } ?: dao.get(id)?.totalSize ?: 0L
+                dao.updateProgress(id, DownloadTaskEntity.STATUS_PAUSED, pauseAt, total)
+            } else {
+                dao.updateStatus(id, DownloadTaskEntity.STATUS_PAUSED)
+            }
             onTaskFinished()
         }
     }
@@ -727,6 +753,9 @@ class TurboDownloadManager(
         _stats.update { it - id }
         taskHeaders.remove(id)
         taskSizes.remove(id)
+        lastSeenBytes.remove(id)
+        lastDbWriteTs.remove(id)
+        lastDbWriteBytes.remove(id)
         val cleanup = taskCallbacks.remove(id)
         scope.launch {
             if (turboId != null) client.cancel(turboId, deleteOutput = true)
@@ -1034,6 +1063,7 @@ class TurboDownloadManager(
                     ))
                 }
                 // 进度写库节流：每任务至多每 800ms 或每增长 1MB 写一次，避免高频 launch+DB 竞争拖慢吞吐。
+                lastSeenBytes[roomId] = p.downloadedBytes
                 if (shouldWriteDb(roomId, p.downloadedBytes)) {
                     scope.launch {
                         dao.updateProgress(
@@ -1054,6 +1084,7 @@ class TurboDownloadManager(
                 turboIds.remove(roomId)?.let { turboIdToRoomId.remove(it) }
                 _stats.update { it - roomId }
                 metadataAtMs.remove(roomId)
+                lastSeenBytes.remove(roomId)
                 dao.updateStatus(roomId, DownloadTaskEntity.STATUS_FAILED)
                 dao.updateError(roomId, ev.reason)
                 turboOutputs.remove(roomId)?.delete()
@@ -1171,6 +1202,7 @@ class TurboDownloadManager(
                 // 未授权：保留临时文件，标为失败供重试保存（不删）。
                 turboIds.remove(roomId)?.let { turboIdToRoomId.remove(it) }
                 _stats.update { it - roomId }
+                lastSeenBytes.remove(roomId)
                 dao.updateStatus(roomId, DownloadTaskEntity.STATUS_FAILED)
                 dao.updateError(roomId, "未授予存储权限，无法保存到下载目录（已保留临时文件，可重试）")
                 onTaskFinished()
@@ -1179,6 +1211,7 @@ class TurboDownloadManager(
             val savedPath = withContext(Dispatchers.IO) {
                 DownloadSaver.save(context, task.fileName, file, saveDirProvider())
             } ?: throw IllegalStateException("保存到下载目录失败")
+            lastSeenBytes.remove(roomId)
             // 完成时用**实际落盘大小**修正进度记录。
             // 进度是节流写库的（每 800ms / 每 1MB），最后一段增量可能压根没写进去，
             // 只写 status 的话界面就会显示「已完成 · 18.0/18.1 MB · 99%」——
