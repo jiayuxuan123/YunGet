@@ -9,6 +9,7 @@ import com.yunget.app.data.db.DownloadTaskDao
 import com.yunget.app.data.download.Aria2Runner
 import com.yunget.app.data.download.Aria2Executor
 import com.yunget.app.data.download.ChunkDownloader
+import com.yunget.app.data.download.ioBufferSizeFor
 import com.yunget.app.data.download.DownloadEngine
 import com.yunget.app.data.download.DownloadManager
 import com.yunget.app.data.download.LegacyDownloadManager
@@ -144,7 +145,7 @@ class DownloadManagerViewModel(
     private fun createLegacyManager(): DownloadManager = LegacyDownloadManager(
         context = appContext,
         dao = dao,
-        downloader = ChunkDownloader { HttpClients.downloadClient() },
+        downloader = chunkDownloaderWithThrottledBuffer(),
         threadProvider = settings::downloadThreads,
         saveDirProvider = { settings.downloadDirUri },
         concurrencyProvider = { settings.maxConcurrentDownloads },
@@ -152,6 +153,23 @@ class DownloadManagerViewModel(
         retryCountProvider = { settings.downloadRetryCount },
         keepWhenLockedProvider = { settings.keepDownloadWhenLocked },
         showSpeedProvider = { settings.notificationShowSpeed },
+    )
+
+    /**
+     * 构造兜底引擎用的 [ChunkDownloader]，缓冲按「线程数 × 并发任务数」摊薄。
+     *
+     * 【为什么必须摊薄】旧行为是每连接固定 256KB。看着不大，乘上连接数就大了：
+     * 线程上限 256 × 256KB = 64MB，多任务并行还要再乘。
+     * 默认引擎（TurboDL）那边同期是 1MB/连接 → 256 × 1MB = 256MB = Android 默认整堆，
+     * 2026-10-10 真机 OOM 就是这么来的。这里用同一套口径把兜底引擎一并管住。
+     *
+     * 两个引擎的构造点共用本函数，避免"改一处漏一处"。
+     */
+    private fun chunkDownloaderWithThrottledBuffer() = ChunkDownloader(
+        clientProvider = { HttpClients.downloadClient() },
+        bufferSizeProvider = {
+            ioBufferSizeFor(settings.downloadThreads, settings.maxConcurrentDownloads)
+        },
     )
 
     /**
@@ -167,7 +185,7 @@ class DownloadManagerViewModel(
     private fun createAria2Manager(): DownloadManager = LegacyDownloadManager(
         context = appContext,
         dao = dao,
-        downloader = ChunkDownloader { HttpClients.downloadClient() },
+        downloader = chunkDownloaderWithThrottledBuffer(),
         threadProvider = settings::downloadThreads,
         saveDirProvider = { settings.downloadDirUri },
         concurrencyProvider = { settings.maxConcurrentDownloads },

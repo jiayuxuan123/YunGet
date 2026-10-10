@@ -23,8 +23,42 @@ private const val TAG = "YunGet-DL"
 private const val CHUNK_RETRIES = 3
 /** 当服务器忽略 Range（返回 200 整文件）时，对单分片重试 Range 的次数（指数退避后重发，CDN 负载下降后常能拿到 206） */
 private const val RANGE_RETRIES = 4
-/** 网络读缓冲：256KB */
+/** 网络读缓冲上限：256KB（**单连接上限**，实际值按并发摊薄，见 [ioBufferSizeFor]） */
 private const val BUFFER_SIZE = 256 * 1024
+
+/**
+ * 全部在飞连接的读缓冲总预算（字节，32MB）。
+ *
+ * 【为什么必须按并发摊薄】旧实现是"每个连接固定 256KB"。这个数看起来不大，
+ * 乘上连接数就大了：线程上限是 256，256 × 256KB = 64MB。
+ * 而 TurboDL 那边（默认引擎）同一时期是 1MB/连接 —— 256 × 1MB = 256MB
+ * = Android 默认整堆，2026-10-10 真机 OOM 事故就是这么来的。
+ *
+ * 本引擎的 64MB 不至于当场 OOM，但仍是同一类缺陷（内存花得不值：
+ * 高并发时每个连接分到的带宽本来就小，256KB 缓冲远超实际需要），故一并管住。
+ * 数值取 32MB 与引擎侧（TurboDL `ioBufferTotalBudgetBytes`）保持一致口径。
+ */
+private const val IO_BUFFER_TOTAL_BUDGET = 32 * 1024 * 1024
+
+/** 单连接读缓冲硬下限（8KB）：再小就只剩 syscall 开销了。 */
+private const val MIN_IO_BUFFER = 8 * 1024
+
+/**
+ * 按**最坏情况的连接总数**摊薄单连接读缓冲。
+ *
+ * 分母含 [concurrentTasks]，因为预算是**整个进程**的：同时跑的任务数 × 每任务连接数
+ * 才是真实连接总数（多任务并行时只按单任务摊仍会突破预算）。
+ *
+ * 声明为 internal 而非 private：装配层（`DownloadManagerViewModel`）要在构造
+ * `ChunkDownloader` 时按用户设置算这个值，且必须与这里同一套口径 —— 两处各写一份
+ * 迟早会走样。
+ */
+internal fun ioBufferSizeFor(connections: Int, concurrentTasks: Int): Int {
+    val lanes = connections.coerceAtLeast(1).toLong() *
+        concurrentTasks.coerceAtLeast(1).toLong()
+    val shared = (IO_BUFFER_TOTAL_BUDGET / lanes).coerceAtMost(Int.MAX_VALUE.toLong())
+    return shared.toInt().coerceIn(MIN_IO_BUFFER, BUFFER_SIZE)
+}
 
 /**
  * 分片下载结果（结构化）：
@@ -41,9 +75,20 @@ enum class ChunkResult { OK, RANGE_IGNORED, FAILED }
  * - 写入后严格校验「已写字节 == 预期字节」，杜绝空洞文件（损坏）；
  * - 任务级取消：每个任务 OkHttp Call 统一登记，暂停/删除时主动 cancel() 立即中断阻塞 IO。
  */
-class ChunkDownloader(private val clientProvider: () -> OkHttpClient) {
+class ChunkDownloader(
+    private val clientProvider: () -> OkHttpClient,
+    /**
+     * 单连接读缓冲大小（字节）。由持有方按**实际线程数与并发任务数**摊薄后注入，
+     * 见 [ioBufferSizeFor]。默认 [BUFFER_SIZE] 是为了让不关心此事的调用方（测试、
+     * 内核探测）保持原行为。
+     */
+    private val bufferSizeProvider: () -> Int = { BUFFER_SIZE },
+) {
     /** 每次请求动态获取全局下载客户端（忽略 SSL 开关切换即时生效） */
     private val client get() = clientProvider()
+
+    /** 当前生效的单连接缓冲大小（触底保护在 [ioBufferSizeFor] 里做）。 */
+    private val bufferSize get() = bufferSizeProvider().coerceAtLeast(MIN_IO_BUFFER)
 
     /** 任务 id → 该任务当前所有分片请求 */
     private val activeCalls = ConcurrentHashMap<Long, MutableSet<Call>>()
@@ -235,7 +280,7 @@ class ChunkDownloader(private val clientProvider: () -> OkHttpClient) {
         var written = 0L
         RandomAccessFile(partFile, "rw").use { raf ->
             raf.seek(existing)
-            val buffer = ByteArray(BUFFER_SIZE)
+            val buffer = ByteArray(bufferSize)
             while (true) {
                 val read = input.read(buffer)
                 if (read <= 0) break
@@ -286,7 +331,7 @@ class ChunkDownloader(private val clientProvider: () -> OkHttpClient) {
                 RandomAccessFile(partFile, "rw").use { raf ->
                     raf.seek(existing)
                     body.byteStream().use { input ->
-                        val buffer = ByteArray(BUFFER_SIZE)
+                        val buffer = ByteArray(bufferSize)
                         while (true) {
                             val read = input.read(buffer)
                             if (read <= 0) break
@@ -365,7 +410,7 @@ class ChunkDownloader(private val clientProvider: () -> OkHttpClient) {
         onProgress: ((Long) -> Unit)? = null
     ): Long = withContext(Dispatchers.IO) {
         var total = 0L
-        val buffer = ByteArray(BUFFER_SIZE)
+        val buffer = ByteArray(bufferSize)
         chunkFiles.forEach { part ->
             java.io.FileInputStream(part).use { fis ->
                 while (true) {

@@ -26,7 +26,26 @@ android {
         applicationId = "com.yunget.app"
         minSdk = 23
         targetSdk = 34
-        versionCode = 49
+        versionCode = 50
+        // 2.7.2 内容：**修 OOM（内存用满导致的崩溃）**
+        //  ① 现象（用户实报）：`OutOfMemoryError: Failed to allocate a 64 byte allocation
+        //     with 365360 free bytes ... target footprint 268435456`，崩在 Okio Watchdog 线程。
+        //     看着像网络问题（它只是想关掉一个超时的 socket），实际是**堆被占满了**。
+        //  ② 根因：引擎每个在飞连接分配一个读缓冲，而缓冲大小是固定的 1MB。
+        //     连接数上限我在 71d402e 从 128 提到了 256 —— 于是 256 × 1MB = 268435456 字节，
+        //     正好等于这台设备的整堆上限（报错里那个数字一字节不差）。缓冲是**活对象**
+        //     （正被下载协程引用），GC 一个都回收不掉，所以是"占满"而不是"垃圾堆积"。
+        //     128 那版就已经吃掉半个堆，提到 256 只是把它从危险变成必然 —— 这是我引入的回归。
+        //  ③ 修法：给缓冲加**总量预算**（TurboDL `ioBufferTotalBudgetBytes` = 32MB），
+        //     单连接缓冲按「连接数 × 并发任务数」摊薄（引擎 0.2.0.8）。
+        //     256 连接 → 128KB/连接，总量封顶 32MB；16 连接（默认）仍是 1MB，日常行为不变。
+        //     摊薄分母必须含并发任务数：预算是进程级的，5 任务 × 256 连接 = 1280 条连接，
+        //     只按单任务摊仍会突破。
+        //  ④ 兜底引擎（内置兼容 / aria2）是同一类缺陷（256KB/连接 × 256 = 64MB），
+        //     用同一套口径一并管住 —— 两个引擎共用 `ioBufferSizeFor`，避免改一处漏一处。
+        //  ⑤ 加测试把「总占用 ≤ 预算」这条不变量对**任意可达配置**钉住（含 App 设置页的
+        //     全部线程/并发选项组合）。这类不变量编译器不拦、单跑一遍也不报错，
+        //     只有把边界值算出来才会发现。
         // 2.7.1 内容：**修 2.7.0 的两个真机问题**（都由用户实报，见下）
         //  ① 【崩溃】下载页一进去就崩：`CartesianValueFormatter.format returned an empty string`。
         //     我给速度曲线的**横轴**传了一个"返回空串"的格式化器（想让横轴不显示刻度），
@@ -257,7 +276,7 @@ android {
         //     - 分片请求带 `If-Range`：防止 CDN 中途换文件时新旧字节拼出混杂文件
         //       （那种情况长度校验会通过，损坏会静默落地）。
         //     - 401/403/410 不再触发背压降并发（是授权/时效信号，不是"你太快了"）。
-        versionName = "2.7.1"
+        versionName = "2.7.2"
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
     }
@@ -412,11 +431,12 @@ dependencies {
     implementation("androidx.lifecycle:lifecycle-viewmodel-compose:2.8.7")
     implementation("com.squareup.okhttp3:okhttp:4.12.0")
 
-    // TurboDL SDK（纯 JVM 多线程下载引擎 + 可选插件框架），从 mavenLocal 解析 dev.turbodl:*:0.2.0.7
-    implementation("dev.turbodl:turbodl-core:0.2.0.7")
-    implementation("dev.turbodl:turbo-plugin-runtime:0.2.0.7")
-    implementation("dev.turbodl:turbo-plugin-bootstrap:0.2.0.7")
-    implementation("dev.turbodl:turbo-plugin-hls:0.2.0.7")
+    // TurboDL SDK（纯 JVM 多线程下载引擎 + 可选插件框架），从 mavenLocal 解析 dev.turbodl:*:0.2.0.8
+    // 0.2.0.8：读缓冲改为按并发摊薄（修 256 连接 = 256MB = 整堆的 OOM，见 2.7.2 说明）
+    implementation("dev.turbodl:turbodl-core:0.2.0.8")
+    implementation("dev.turbodl:turbo-plugin-runtime:0.2.0.8")
+    implementation("dev.turbodl:turbo-plugin-bootstrap:0.2.0.8")
+    implementation("dev.turbodl:turbo-plugin-hls:0.2.0.8")
 
     // JavaScript 插件加载器：让用户能自己写/导入脚本插件。
     //
@@ -430,7 +450,7 @@ dependencies {
     //     公开 API（interruptEvaluation / memoryLimit / memoryUsage…）与 jvm 版逐名一致，
     //     且 Android 侧走 System.loadLibrary（不再有 createTempFile 问题）。
     // 所以：排掉 jvm 版，换成 android 版 —— turbo-plugin-js 自身一行代码都不用改。
-    implementation("dev.turbodl:turbo-plugin-js:0.2.0.7") {
+    implementation("dev.turbodl:turbo-plugin-js:0.2.0.8") {
         exclude(group = "io.github.dokar3", module = "quickjs-kt-jvm")
     }
     implementation("io.github.dokar3:quickjs-kt-android:1.0.15")
