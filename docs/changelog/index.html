@@ -28,7 +28,20 @@
 </div>
 </header>
 <main id="main">
-<section><h1>更新日志</h1><p class="lead">由发布说明本身生成 —— 应用内的「检查更新」读的是同一份数据，所以两处看到的版本与内容永远一致。</p></section><section><div class="cards cols-2"><div class="card"><h3><span class="mono">v2.7.3</span></h3><p class="small">2026-10-10 · 1 个附件</p><p class="muted">这次改了什么
+<section><h1>更新日志</h1><p class="lead">由发布说明本身生成 —— 应用内的「检查更新」读的是同一份数据，所以两处看到的版本与内容永远一致。</p></section><section><div class="cards cols-2"><div class="card"><h3><span class="mono">v2.7.4</span></h3><p class="small">2026-10-10 · 1 个附件</p><p class="muted">插件系统的四项补齐，外加路上发现并修掉的两个真问题。
+引擎同步到 TurboDL 0.2.1.0。
+**更新失败可回滚（P4）**
+一次坏更新过去会让插件彻底不可用：脚本已经被覆盖，而没有退路。
+现在更新前会把当前版本快照到 `filesDir/plugins/rollback/&lt;id&gt;.json`
+（用侧车文件而不是加数据库列——这个项目已经出过一次迁移事故，不值得
+为它冒风险）。装载失败会自动回滚、重新装载，并明确告诉你回退到了哪一版。
+应用启动时也会体检已启用的插件：过去装载失败只有在你恰好打开插件页时才
+暴露，不进那个页就永远发现不了，表现为&quot;下载功能莫名失效，但插件列表看着
+一切正常&quot;。
+**源镜像与失败回退（P5）**
+候选顺序抽成了纯函数：本源自定义镜像 → 全局 GitHub 镜像 → 直连，
+**直连永远排最后**。索引、脚本、清单、公钥四类请求走同一条回退链。
+顺序本身…</p><p class="small"><a href="https://github.com/jiayuxuan123/YunGet/releases/tag/v2.7.4">发布页</a></p></div><div class="card"><h3><span class="mono">v2.7.3</span></h3><p class="small">2026-10-10 · 1 个附件</p><p class="muted">这次改了什么
 **内嵌引擎升到 TurboDL 0.2.0.9：下载并发现在会自己收敛，高线程数不再必然更快。**
 以前你把线程数调高，引擎就真的开那么多连接 —— 不管对面服务器受不受得了。现在它会看**总吞吐**：多开的连接如果没换来速度，就退回到更低的一档。
 为什么值得装
@@ -139,22 +152,11 @@ Android 禁止在主线程发起网络请求，于是抛出 `NetworkOnMainThread
 全部失败则回退系统 DNS。
 候选端点**国内优先**：阿里 → 腾讯 → Google → Cloudflare。
 顺序只影响极端情况下的兜底，因为探测是并发的、取最快者。
-**…</p><p class="small"><a href="https://github.com/jiayuxuan123/YunGet/releases/tag/v2.6.14">发布页</a></p></div><div class="card"><h3><span class="mono">v2.6.13</span></h3><p class="small">2026-09-29 · 1 个附件</p><p class="muted">123 云盘改为网页登录（避免账号密码接口触发风控）；HLS 插件安全加固
----
-123 云盘改为网页登录
-**改动原因**：原登录方式需要向 `user.123pan.cn/api/user/sign_in` 提交**明文账号密码**。
-这类直接调用登录接口的行为容易被官方判定为异常客户端而触发风控，进而影响账号使用。
-**新的登录方式**：在应用内打开 123 云盘官方网页（`yun.123pan.cn`），
-由用户在**官方页面**完成登录（验证码、扫码等均由官网处理），
-应用从网页 localStorage 的 `authorToken` 读取结果凭证。
-取到的 token 与旧接口返回的 `data.token` **同源同形**（都是 Bearer JWT），
-因此后续的凭证校验与业务请求无需任何改动。
-**三个入口**：
-1. **自动检测**（主路径）：网页登录完成后自动…</p><p class="small"><a href="https://github.com/jiayuxuan123/YunGet/releases/tag/v2.6.13">发布页</a></p></div></div></section><section><h2>完整历史</h2><div class="btn-row"><a class="btn" href="https://github.com/jiayuxuan123/YunGet/releases">全部发布</a><a class="btn" href="https://github.com/jiayuxuan123/YunGet/commits/main">代码提交</a></div></section></main>
+**…</p><p class="small"><a href="https://github.com/jiayuxuan123/YunGet/releases/tag/v2.6.14">发布页</a></p></div></div></section><section><h2>完整历史</h2><div class="btn-row"><a class="btn" href="https://github.com/jiayuxuan123/YunGet/releases">全部发布</a><a class="btn" href="https://github.com/jiayuxuan123/YunGet/commits/main">代码提交</a></div></section></main>
 <footer class="site-foot">
 <div class="wrap">
 <div class="foot-cols"><div class="foot-col"><h4>项目</h4><ul><li><a href="https://github.com/jiayuxuan123/YunGet">GitHub</a></li><li><a href="../download/index.html">下载</a></li><li><a href="index.html">更新日志</a></li><li><a href="https://github.com/jiayuxuan123/YunGet/issues">问题反馈</a></li></ul></div><div class="foot-col"><h4>文档</h4><ul><li><a href="../docs/readme/index.html">项目说明</a></li><li><a href="../docs/guide/index.html">使用说明</a></li><li><a href="../docs/faq/index.html">常见问题</a></li><li><a href="../docs/engines/index.html">下载引擎</a></li><li><a href="../docs/build/index.html">从源码构建</a></li></ul></div><div class="foot-col"><h4>插件</h4><ul><li><a href="../plugins/index.html">插件（市场与安装）</a></li><li><a href="../developers/index.html">开发者（怎么写）</a></li><li><a href="../docs/plugin-dev/index.html">写一个插件</a></li><li><a href="../docs/plugin-api/index.html">插件 ABI 参考</a></li><li><a href="../docs/plugin-publish/index.html">打包与发布</a></li><li><a href="../docs/plugin-security/index.html">插件安全模型</a></li></ul></div><div class="foot-col"><h4>协议与说明</h4><ul><li><a href="../legal/license/index.html">AGPL-3.0 原文</a></li><li><a href="../legal/notice/index.html">署名与致谢</a></li><li><a href="../legal/privacy/index.html">隐私说明</a></li><li><a href="../legal/terms/index.html">使用条款</a></li><li><a href="../support/index.html">支持开发</a></li></ul></div><div class="foot-col"><h4>相关</h4><ul><li><a href="https://github.com/CYQawa/YunX">上游 CYQawa/YunX</a></li><li><a href="https://github.com/jiayuxuan123/TurboDL">下载引擎 TurboDL</a></li><li><a href="https://github.com/jiayuxuan123/YunGet-Plugins">插件源 YunGet-Plugins</a></li><li><a href="../community/index.html">社区</a></li></ul></div></div>
-<div class="foot-note"><p>云取 YunGet v2.7.3 · AGPL-3.0 · 内置 TurboDL 0.2.0.8 · Android 6.0（API 23）</p><p>本项目是 CYQawa/YunX（云析）的二次开发版本，与上游作者无隐性关联。仅供个人学习与技术交流，请勿用于商业用途；下载内容的版权归原作者及相关权利人所有。</p></div>
+<div class="foot-note"><p>云取 YunGet v2.7.4 · AGPL-3.0 · 内置 TurboDL 0.2.0.8 · Android 6.0（API 23）</p><p>本项目是 CYQawa/YunX（云析）的二次开发版本，与上游作者无隐性关联。仅供个人学习与技术交流，请勿用于商业用途；下载内容的版权归原作者及相关权利人所有。</p></div>
 </div>
 </footer>
 <script src="../assets/site.js" defer></script>
