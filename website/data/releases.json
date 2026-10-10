@@ -1,23 +1,40 @@
 {
   "repo": "jiayuxuan123/YunGet",
   "latest": {
-    "tag": "v2.7.2",
-    "name": "YunGet 2.7.2：修 OOM（下载时内存用满导致的崩溃）",
-    "published": "2026-10-10T04:29:33Z",
+    "tag": "v2.7.3",
+    "name": "YunGet 2.7.3：并发按实测吞吐收敛（不再盲目堆线程）",
+    "published": "2026-10-10T11:14:37Z",
     "prerelease": false,
-    "url": "https://github.com/jiayuxuan123/YunGet/releases/tag/v2.7.2",
-    "summary": "YunGet 2.7.2：修 OOM（下载时内存用满导致的崩溃）\n问题\n崩溃日志：\n两处容易看错的地方：\n**一是崩在了 Okio Watchdog 线程上。** 那只是\"受害者\"——它只是想在 socket 超时时关掉连接，\n结果连 64 字节都分配不出来。真正的原因在别处。\n**二是 268435456 这个数字。** 它是 256MiB，正好等于 Android 给这个应用的堆上限，\n也正好等于 256 × 1MB。这不是巧合。\n根因\n引擎每个在飞连接分配一个读缓冲，缓冲大小是固定的 **1MB**。这个数看着不大，乘上连接数就大了——\n而我在 2.6.22 那一版（提交 71d402e）把线程上限从 128 提到了**引擎支持的 256**：\n缓冲都是**活对象**（正被下载协程引用），GC 一个都回收不掉，所以是\"占满\"而不是\"垃圾太多\"。\n触发条件很普通：**线程数调到高 +…",
+    "url": "https://github.com/jiayuxuan123/YunGet/releases/tag/v2.7.3",
+    "summary": "这次改了什么\n**内嵌引擎升到 TurboDL 0.2.0.9：下载并发现在会自己收敛，高线程数不再必然更快。**\n以前你把线程数调高，引擎就真的开那么多连接 —— 不管对面服务器受不受得了。现在它会看**总吞吐**：多开的连接如果没换来速度，就退回到更低的一档。\n为什么值得装\n实测同一台机器、同一个文件：\n| 配置 | 吞吐 |\n|---|---|\n| 16 连接 | **30.6 MB/s** |\n| 64 连接 | 8.7 MB/s |\n| 128 连接 | **6.1 MB/s（慢 5 倍）** |\n真实链路上也存在「加连接不再变快」的聚合限速。以前这两种情况引擎都不会自己退回来，你只能看着速度掉下去 —— 现在它会退，并在稳定一段时间后重新试一次。\n有个细节值得说明\n它**不会**因为「每条连接速度低」就降并发。有些服务端是按连接限速的（每条只有十几 KB/s），单连接速度本来就…",
     "assets": [
       {
-        "name": "YunGet-2.7.2-release.apk",
-        "size": 31588032,
-        "url": "https://github.com/jiayuxuan123/YunGet/releases/download/v2.7.2/YunGet-2.7.2-release.apk",
+        "name": "YunGet-2.7.3-release.apk",
+        "size": 31593625,
+        "url": "https://github.com/jiayuxuan123/YunGet/releases/download/v2.7.3/YunGet-2.7.3-release.apk",
         "downloads": 0,
-        "sha256": "38681a358c8ca14f2c661a072a3382cd8ab26e8c89ceda23f03bf863fe5933d7"
+        "sha256": "2affb2e8958b8b147606aacd7c77815d238133c9e820e5110c41aebff8475767"
       }
     ]
   },
   "releases": [
+    {
+      "tag": "v2.7.3",
+      "name": "YunGet 2.7.3：并发按实测吞吐收敛（不再盲目堆线程）",
+      "published": "2026-10-10T11:14:37Z",
+      "prerelease": false,
+      "url": "https://github.com/jiayuxuan123/YunGet/releases/tag/v2.7.3",
+      "summary": "这次改了什么\n**内嵌引擎升到 TurboDL 0.2.0.9：下载并发现在会自己收敛，高线程数不再必然更快。**\n以前你把线程数调高，引擎就真的开那么多连接 —— 不管对面服务器受不受得了。现在它会看**总吞吐**：多开的连接如果没换来速度，就退回到更低的一档。\n为什么值得装\n实测同一台机器、同一个文件：\n| 配置 | 吞吐 |\n|---|---|\n| 16 连接 | **30.6 MB/s** |\n| 64 连接 | 8.7 MB/s |\n| 128 连接 | **6.1 MB/s（慢 5 倍）** |\n真实链路上也存在「加连接不再变快」的聚合限速。以前这两种情况引擎都不会自己退回来，你只能看着速度掉下去 —— 现在它会退，并在稳定一段时间后重新试一次。\n有个细节值得说明\n它**不会**因为「每条连接速度低」就降并发。有些服务端是按连接限速的（每条只有十几 KB/s），单连接速度本来就…",
+      "assets": [
+        {
+          "name": "YunGet-2.7.3-release.apk",
+          "size": 31593625,
+          "url": "https://github.com/jiayuxuan123/YunGet/releases/download/v2.7.3/YunGet-2.7.3-release.apk",
+          "downloads": 0,
+          "sha256": "2affb2e8958b8b147606aacd7c77815d238133c9e820e5110c41aebff8475767"
+        }
+      ]
+    },
     {
       "tag": "v2.7.2",
       "name": "YunGet 2.7.2：修 OOM（下载时内存用满导致的崩溃）",
@@ -30,7 +47,7 @@
           "name": "YunGet-2.7.2-release.apk",
           "size": 31588032,
           "url": "https://github.com/jiayuxuan123/YunGet/releases/download/v2.7.2/YunGet-2.7.2-release.apk",
-          "downloads": 0,
+          "downloads": 514,
           "sha256": "38681a358c8ca14f2c661a072a3382cd8ab26e8c89ceda23f03bf863fe5933d7"
         }
       ]
@@ -47,7 +64,7 @@
           "name": "YunGet-2.7.1-release.apk",
           "size": 31586091,
           "url": "https://github.com/jiayuxuan123/YunGet/releases/download/v2.7.1/YunGet-2.7.1-release.apk",
-          "downloads": 592,
+          "downloads": 601,
           "sha256": "4140068dadae124607ec22f7d23a297691690f3586c84c7f14fb8da4ce32992f"
         }
       ]
@@ -166,7 +183,7 @@
           "name": "YunGet-2.6.15-release.apk",
           "size": 28284269,
           "url": "https://github.com/jiayuxuan123/YunGet/releases/download/v2.6.15/YunGet-2.6.15-release.apk",
-          "downloads": 3939,
+          "downloads": 3942,
           "sha256": "27284307104496d94934cb94f82b2445d586bcebda3d0b4d1b74232427f0e845"
         }
       ]
@@ -404,7 +421,7 @@
           "name": "app-release.apk",
           "size": 18977193,
           "url": "https://github.com/jiayuxuan123/YunGet/releases/download/v2.6.0/app-release.apk",
-          "downloads": 42,
+          "downloads": 46,
           "sha256": "c8a5f9e66f4f17d54266814bab900af0903df4019881541b126e97177fddf28c"
         }
       ]
@@ -508,23 +525,6 @@
           "url": "https://github.com/jiayuxuan123/YunGet/releases/download/v2.3.0/YunGet-2.3.0.apk",
           "downloads": 3,
           "sha256": "ea231aa860cddf00b4f73d5f5cbdd0491a1ec3f4cec9c663b3d1aed8b3282cfe"
-        }
-      ]
-    },
-    {
-      "tag": "v2.2.2",
-      "name": "YunGet 2.2.2：修复原始链接下载卡在\"下载中\"不动",
-      "published": "2026-08-28T05:06:29Z",
-      "prerelease": false,
-      "url": "https://github.com/jiayuxuan123/YunGet/releases/tag/v2.2.2",
-      "summary": "修复：粘贴原始链接（未解析）下载卡住、线程/大小都不显示\n原始下载链接会 302 跳转到带签名的 CDN 临时直链，只有临时直链支持多线程。此前底层没跟随 302、\n一直用原始链接下载，导致\"显示下载中但字节和线程都不动，最后失败\"；而手动贴入解析后的 CDN\n直链则能满速多线程。本版底层探测后自动改用解析出的最终直链下载。\n版本 2.2.1 → 2.2.2（versionCode 5 → 6）。手动安装覆盖即可。",
-      "assets": [
-        {
-          "name": "YunGet-2.2.2.apk",
-          "size": 18960814,
-          "url": "https://github.com/jiayuxuan123/YunGet/releases/download/v2.2.2/YunGet-2.2.2.apk",
-          "downloads": 6,
-          "sha256": "7cc3028b85f117df5e6de99237772ed33e0665eb5ad16dbb9041c7de01d97806"
         }
       ]
     }

@@ -28,7 +28,19 @@
 </div>
 </header>
 <main id="main">
-<section><h1>更新日志</h1><p class="lead">由发布说明本身生成 —— 应用内的「检查更新」读的是同一份数据，所以两处看到的版本与内容永远一致。</p></section><section><div class="cards cols-2"><div class="card"><h3><span class="mono">v2.7.2</span></h3><p class="small">2026-10-10 · 1 个附件</p><p class="muted">YunGet 2.7.2：修 OOM（下载时内存用满导致的崩溃）
+<section><h1>更新日志</h1><p class="lead">由发布说明本身生成 —— 应用内的「检查更新」读的是同一份数据，所以两处看到的版本与内容永远一致。</p></section><section><div class="cards cols-2"><div class="card"><h3><span class="mono">v2.7.3</span></h3><p class="small">2026-10-10 · 1 个附件</p><p class="muted">这次改了什么
+**内嵌引擎升到 TurboDL 0.2.0.9：下载并发现在会自己收敛，高线程数不再必然更快。**
+以前你把线程数调高，引擎就真的开那么多连接 —— 不管对面服务器受不受得了。现在它会看**总吞吐**：多开的连接如果没换来速度，就退回到更低的一档。
+为什么值得装
+实测同一台机器、同一个文件：
+| 配置 | 吞吐 |
+|---|---|
+| 16 连接 | **30.6 MB/s** |
+| 64 连接 | 8.7 MB/s |
+| 128 连接 | **6.1 MB/s（慢 5 倍）** |
+真实链路上也存在「加连接不再变快」的聚合限速。以前这两种情况引擎都不会自己退回来，你只能看着速度掉下去 —— 现在它会退，并在稳定一段时间后重新试一次。
+有个细节值得说明
+它**不会**因为「每条连接速度低」就降并发。有些服务端是按连接限速的（每条只有十几 KB/s），单连接速度本来就…</p><p class="small"><a href="https://github.com/jiayuxuan123/YunGet/releases/tag/v2.7.3">发布页</a></p></div><div class="card"><h3><span class="mono">v2.7.2</span></h3><p class="small">2026-10-10 · 1 个附件</p><p class="muted">YunGet 2.7.2：修 OOM（下载时内存用满导致的崩溃）
 问题
 崩溃日志：
 两处容易看错的地方：
@@ -138,23 +150,11 @@ Android 禁止在主线程发起网络请求，于是抛出 `NetworkOnMainThread
 取到的 token 与旧接口返回的 `data.token` **同源同形**（都是 Bearer JWT），
 因此后续的凭证校验与业务请求无需任何改动。
 **三个入口**：
-1. **自动检测**（主路径）：网页登录完成后自动…</p><p class="small"><a href="https://github.com/jiayuxuan123/YunGet/releases/tag/v2.6.13">发布页</a></p></div><div class="card"><h3><span class="mono">v2.6.12</span></h3><p class="small">2026-09-29 · 1 个附件</p><p class="muted">新增网盘链接收藏；修复登录后网盘页残留「请先登录」；修正进度写库节流
-继续同步上游 [CYQawa/YunX](https://github.com/CYQawa/YunX) 的改进。
----
-新增：网盘链接收藏
-解析页标题栏新增收藏入口，可保存分享链接与提取码并按分类管理；
-点击收藏条目直接跳回解析页开始解析，无需重新粘贴。
-数据存入新增的 Room 表 `bookmark`（数据库版本 10 → 11，带迁移），
-字段与上游保持一致以便后续同步。分类既可用预置项，也可由已保存条目自动汇总。
----
-修复：登录成功后网盘页仍显示「请先登录」
-**现象**：首次登录某个网盘后，切到该网盘的文件页，仍停在「请先登录夸克网盘」之类的提示，
-必须手动点一次「重试」才能看到文件列表。
-**根因**：6 个云盘浏览 ViewModel 在构造时无条件执行 `init { loadRoot() }`。…</p><p class="small"><a href="https://github.com/jiayuxuan123/YunGet/releases/tag/v2.6.12">发布页</a></p></div></div></section><section><h2>完整历史</h2><div class="btn-row"><a class="btn" href="https://github.com/jiayuxuan123/YunGet/releases">全部发布</a><a class="btn" href="https://github.com/jiayuxuan123/YunGet/commits/main">代码提交</a></div></section></main>
+1. **自动检测**（主路径）：网页登录完成后自动…</p><p class="small"><a href="https://github.com/jiayuxuan123/YunGet/releases/tag/v2.6.13">发布页</a></p></div></div></section><section><h2>完整历史</h2><div class="btn-row"><a class="btn" href="https://github.com/jiayuxuan123/YunGet/releases">全部发布</a><a class="btn" href="https://github.com/jiayuxuan123/YunGet/commits/main">代码提交</a></div></section></main>
 <footer class="site-foot">
 <div class="wrap">
 <div class="foot-cols"><div class="foot-col"><h4>项目</h4><ul><li><a href="https://github.com/jiayuxuan123/YunGet">GitHub</a></li><li><a href="../download/index.html">下载</a></li><li><a href="index.html">更新日志</a></li><li><a href="https://github.com/jiayuxuan123/YunGet/issues">问题反馈</a></li></ul></div><div class="foot-col"><h4>文档</h4><ul><li><a href="../docs/readme/index.html">项目说明</a></li><li><a href="../docs/guide/index.html">使用说明</a></li><li><a href="../docs/faq/index.html">常见问题</a></li><li><a href="../docs/engines/index.html">下载引擎</a></li><li><a href="../docs/build/index.html">从源码构建</a></li></ul></div><div class="foot-col"><h4>插件</h4><ul><li><a href="../plugins/index.html">插件（市场与安装）</a></li><li><a href="../developers/index.html">开发者（怎么写）</a></li><li><a href="../docs/plugin-dev/index.html">写一个插件</a></li><li><a href="../docs/plugin-api/index.html">插件 ABI 参考</a></li><li><a href="../docs/plugin-publish/index.html">打包与发布</a></li><li><a href="../docs/plugin-security/index.html">插件安全模型</a></li></ul></div><div class="foot-col"><h4>协议与说明</h4><ul><li><a href="../legal/license/index.html">AGPL-3.0 原文</a></li><li><a href="../legal/notice/index.html">署名与致谢</a></li><li><a href="../legal/privacy/index.html">隐私说明</a></li><li><a href="../legal/terms/index.html">使用条款</a></li><li><a href="../support/index.html">支持开发</a></li></ul></div><div class="foot-col"><h4>相关</h4><ul><li><a href="https://github.com/CYQawa/YunX">上游 CYQawa/YunX</a></li><li><a href="https://github.com/jiayuxuan123/TurboDL">下载引擎 TurboDL</a></li><li><a href="https://github.com/jiayuxuan123/YunGet-Plugins">插件源 YunGet-Plugins</a></li><li><a href="../community/index.html">社区</a></li></ul></div></div>
-<div class="foot-note"><p>云取 YunGet v2.7.2 · AGPL-3.0 · 内置 TurboDL 0.2.0.8 · Android 6.0（API 23）</p><p>本项目是 CYQawa/YunX（云析）的二次开发版本，与上游作者无隐性关联。仅供个人学习与技术交流，请勿用于商业用途；下载内容的版权归原作者及相关权利人所有。</p></div>
+<div class="foot-note"><p>云取 YunGet v2.7.3 · AGPL-3.0 · 内置 TurboDL 0.2.0.8 · Android 6.0（API 23）</p><p>本项目是 CYQawa/YunX（云析）的二次开发版本，与上游作者无隐性关联。仅供个人学习与技术交流，请勿用于商业用途；下载内容的版权归原作者及相关权利人所有。</p></div>
 </div>
 </footer>
 <script src="../assets/site.js" defer></script>
