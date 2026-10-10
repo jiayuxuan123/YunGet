@@ -54,6 +54,15 @@ interface PluginSourceDao {
     @Query("UPDATE plugin_source SET enabled = :enabled WHERE id = :id")
     suspend fun updateEnabled(id: String, enabled: Boolean)
 
+    /**
+     * 改本源镜像前缀（P5）。传空串 = 取消本源镜像，回到"只有全局镜像（且仅对 GitHub 生效）"。
+     *
+     * 刻意**不**动 `indexUrl`：那个参与源 id 的派生，改它等于换了一个源、
+     * 已从这个源装过的插件归属也会跟着乱；镜像只是"同一份内容从哪儿取"的传输层参数。
+     */
+    @Query("UPDATE plugin_source SET mirrorUrl = :mirrorUrl WHERE id = :id")
+    suspend fun updateMirror(id: String, mirrorUrl: String)
+
     @Query("DELETE FROM plugin_source WHERE id = :id")
     suspend fun delete(id: String)
 }

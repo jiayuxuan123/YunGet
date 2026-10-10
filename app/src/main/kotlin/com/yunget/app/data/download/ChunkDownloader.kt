@@ -1,6 +1,7 @@
 package com.yunget.app.data.download
 
 import android.util.Log
+import dev.turbodl.core.TurboConfig
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
@@ -40,25 +41,28 @@ private const val BUFFER_SIZE = 256 * 1024
  */
 private const val IO_BUFFER_TOTAL_BUDGET = 32 * 1024 * 1024
 
-/** 单连接读缓冲硬下限（8KB）：再小就只剩 syscall 开销了。 */
-private const val MIN_IO_BUFFER = 8 * 1024
-
 /**
  * 按**最坏情况的连接总数**摊薄单连接读缓冲。
  *
- * 分母含 [concurrentTasks]，因为预算是**整个进程**的：同时跑的任务数 × 每任务连接数
- * 才是真实连接总数（多任务并行时只按单任务摊仍会突破预算）。
+ * ## 算法不在这里实现（P13）
  *
- * 声明为 internal 而非 private：装配层（`DownloadManagerViewModel`）要在构造
- * `ChunkDownloader` 时按用户设置算这个值，且必须与这里同一套口径 —— 两处各写一份
- * 迟早会走样。
+ * 原先这里是引擎 `TurboConfig.effectiveIoBufferSize` 的**第二份实现**（0.2.0.8 修 OOM 时留下的）。
+ * 两份算法逐字相同、只有上限参数不同（引擎 1MB / 本引擎 256KB），所以收敛方式不是"共用配置"，
+ * 而是**算法唯一、参数各自传**：直接调用引擎的 [TurboConfig.budgetedIoBufferSize]。
+ *
+ * 【为什么必须唯一】这类不变量（"总占用 ≤ 预算"）出错时是 OOM ——
+ * 而两份实现必然漂移，改了一处另一处不会跟着改。OOM 是这个项目已经踩过的坑。
+ * 分母含 concurrentTasks 的理由（预算是进程级的）见引擎侧注释。
+ *
+ * 声明为 internal 而非 private：装配层（`DownloadManagerViewModel`）要用同一套口径算这个值。
  */
-internal fun ioBufferSizeFor(connections: Int, concurrentTasks: Int): Int {
-    val lanes = connections.coerceAtLeast(1).toLong() *
-        concurrentTasks.coerceAtLeast(1).toLong()
-    val shared = (IO_BUFFER_TOTAL_BUDGET / lanes).coerceAtMost(Int.MAX_VALUE.toLong())
-    return shared.toInt().coerceIn(MIN_IO_BUFFER, BUFFER_SIZE)
-}
+internal fun ioBufferSizeFor(connections: Int, concurrentTasks: Int): Int =
+    TurboConfig.budgetedIoBufferSize(
+        totalBudgetBytes = IO_BUFFER_TOTAL_BUDGET,
+        perConnectionCapBytes = BUFFER_SIZE,
+        connections = connections,
+        concurrentTasks = concurrentTasks,
+    )
 
 /**
  * 分片下载结果（结构化）：
@@ -87,8 +91,9 @@ class ChunkDownloader(
     /** 每次请求动态获取全局下载客户端（忽略 SSL 开关切换即时生效） */
     private val client get() = clientProvider()
 
-    /** 当前生效的单连接缓冲大小（触底保护在 [ioBufferSizeFor] 里做）。 */
-    private val bufferSize get() = bufferSizeProvider().coerceAtLeast(MIN_IO_BUFFER)
+    /** 当前生效的单连接缓冲大小（触底保护用引擎的同一常量，见 P13 的收敛）。 */
+    private val bufferSize get() =
+        bufferSizeProvider().coerceAtLeast(TurboConfig.MIN_IO_BUFFER_BYTES)
 
     /** 任务 id → 该任务当前所有分片请求 */
     private val activeCalls = ConcurrentHashMap<Long, MutableSet<Call>>()

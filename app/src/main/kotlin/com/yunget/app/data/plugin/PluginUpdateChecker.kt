@@ -190,6 +190,17 @@ class PluginUpdateChecker(private val context: Context) {
      *
      * 重新加载而不是等下次启动：用户点了"更新"就该立刻生效，否则会看到"已更新到 1.1.0"
      * 但脚本还是旧的行为 —— 那比不更新更让人困惑。
+     *
+     * ## 加载失败时自动回滚（P4）
+     *
+     * 更新是**覆盖式**的：新脚本写盘、库记录改版本、旧脚本文件被删。所以新版本一旦加载失败，
+     * 用户就卡在坏版本上 —— 而旧版本刚被我们自己删掉，连手动退回的素材都没有。
+     * 设计文档第 8.5 章要求"更新失败应支持回滚到上一可用版本"。
+     *
+     * 现在：更新前留快照（见 `PluginRepository.snapshotBeforeUpdate`），
+     * 加载失败则自动回滚并**重新加载回滚后的版本**，然后把"已回滚到 X"作为失败原因返回。
+     * 返回 `Result.failure` 而不是 success：这件事对用户是"更新没成功"，
+     * 界面上不该显示成绿的 —— 但插件仍然是可用的，原因里会写清楚。
      */
     suspend fun apply(available: Available): Result<String> = withContext(Dispatchers.IO) {
         val runtime = PluginRuntime(context)
@@ -200,13 +211,32 @@ class PluginUpdateChecker(private val context: Context) {
             trustLevel = available.trustLevel,
             index = cachedIndexFor(available.sourceId),
         ).mapCatching { installed ->
-            // 更新后重载：先卸载旧实例（脚本文件已换），再按新文件装一遍
-            if (installed.entity.enabled) {
-                runtime.load(installed.entity.id)?.let { reason ->
-                    throw IllegalStateException("已更新但加载失败：$reason")
-                }
+            if (!installed.entity.enabled) {
+                // 用户把这个插件关着：更新完不加载，也就谈不上"加载失败要回滚"。
+                return@mapCatching available.version.version
             }
-            available.version.version
+            val loadError = runtime.load(installed.entity.id)
+            if (loadError == null) return@mapCatching available.version.version
+
+            // 加载失败 → 尝试回滚到上一可用版本
+            val rolledBack = repo.rollbackToPrevious(installed.entity.id)
+            if (rolledBack == null) {
+                throw IllegalStateException(
+                    "已更新但加载失败：$loadError（没有可回滚的上一版本）"
+                )
+            }
+            // 回滚后立刻重载，确认回滚真的把插件救回来了 —— 否则用户会看到
+            // "已回滚到 1.0.0" 但插件其实还是跑不起来，那比不回滚更糟。
+            val afterRollback = runtime.load(installed.entity.id)
+            if (afterRollback != null) {
+                throw IllegalStateException(
+                    "已更新但加载失败：$loadError；" +
+                        "回滚到 $rolledBack 后仍无法加载：$afterRollback"
+                )
+            }
+            throw IllegalStateException(
+                "新版本 ${available.version.version} 加载失败：$loadError；已自动回滚到 $rolledBack"
+            )
         }
     }
 

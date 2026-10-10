@@ -148,11 +148,17 @@ class SettingsRepository(context: Context) {
 
     /**
      * 自定义 GitHub 下载镜像前缀（如 `https://gh.dpik.top/`）。
-     * null/空字符串表示使用内置默认镜像（`UpdateChecker.MIRROR_PREFIX`）。
+     * null/空字符串表示**用户没有自定义**；此时各调用方按自己的场景决定默认值，
+     * 这两个默认值**不一样**，不要在别处假设其中之一：
+     *
+     *  - `KernelProvisioner.mirrorUrl`（Gopeed 内核包）：空 → 用内置默认镜像
+     *    [UpdateChecker.MIRROR_PREFIX]（内核包几十 MB，走镜像是这轮移植的初衷）；
+     *  - `MarketClient`（插件索引与脚本）：空 → **直连**，不套任何镜像。
+     *    刻意不同：插件市场默认把所有流量过第三方 CDN 是一次信任面变化，
+     *    该由用户自己显式开启，而不是悄悄发生。
      *
      * ★ 本项目设置页目前没有暴露这一项，本字段为移植 Gopeed 内核包下载
-     *   （`KernelProvisioner.mirrorUrl`）而补入：内核包的 GitHub 镜像通道读它，
-     *   未配置时回落到内置默认前缀，与「检查更新」的镜像下载同一口径。
+     *   （`KernelProvisioner.mirrorUrl`）而补入。
      */
     var githubMirrorPrefix: String?
         get() = prefs.getString("github_mirror_prefix", null)

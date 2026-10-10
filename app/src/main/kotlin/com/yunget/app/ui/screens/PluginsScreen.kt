@@ -50,6 +50,7 @@ import androidx.compose.foundation.text.selection.SelectionContainer
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
+import androidx.compose.material.icons.automirrored.outlined.Undo
 import androidx.compose.material.icons.outlined.ContentPaste
 import androidx.compose.material.icons.outlined.Delete
 import androidx.compose.material.icons.outlined.Edit
@@ -100,7 +101,8 @@ import com.yunget.app.data.db.PluginInstalledEntity
 import com.yunget.app.data.plugin.InstalledPlugin
 import com.yunget.app.data.plugin.JsEngineProbe
 import com.yunget.app.data.plugin.PluginRepository
-import com.yunget.app.data.plugin.PluginRuntime
+import com.yunget.app.data.plugin.PluginLevel
+import com.yunget.app.data.plugin.sharedPluginRuntime
 import com.yunget.app.ui.SnackbarController
 import com.yunget.app.ui.resolve.formatSize
 import com.yunget.app.ui.theme.effectsDefault
@@ -110,8 +112,10 @@ import dev.turbodl.plugin.js.JsScriptValidator
 import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 
 /**
  * 插件页（设置 → 插件）：JS 脚本插件的导入、启停、运行状态、详情与卸载全在这一页。
@@ -222,19 +226,22 @@ fun PluginsScreen(onBack: () -> Unit, modifier: Modifier = Modifier) {
             scope.launch {
                 repo.setEnabled(plugin.id, enabled).fold(
                     onSuccess = {
+                        // L2 每次启停都要说清"重启才生效"（P20）：不提示的话，
+                        // 用户点了开关插件却毫无变化，只会当成坏了。
+                        val restartTail = if (plugin.level.requiresRestart) "，重启 App 后生效" else ""
                         if (enabled) {
                             val error = runtime.load(plugin.id)
                             SnackbarController.show(
-                                if (error == null) {
-                                    "已启用「${plugin.name}」"
-                                } else {
-                                    "「${plugin.name}」加载失败：$error"
+                                when {
+                                    error != null -> "「${plugin.name}」加载失败：$error"
+                                    plugin.level.requiresRestart -> "已启用「${plugin.name}」$restartTail"
+                                    else -> "已启用「${plugin.name}」"
                                 }
                             )
                         } else {
                             // 停用只从引擎里摘掉，不删脚本：用户随时可以再打开
                             runtime.unload(plugin.id)
-                            SnackbarController.show("已停用「${plugin.name}」")
+                            SnackbarController.show("已停用「${plugin.name}」$restartTail")
                         }
                     },
                     onFailure = { t ->
@@ -426,6 +433,13 @@ fun PluginsScreen(onBack: () -> Unit, modifier: Modifier = Modifier) {
     }
 
     detailPlugin?.let { plugin ->
+        // 【P4】回退入口只在真有备份时出现（常驻一个按不动的按钮会让人以为功能坏了）。
+        // 用状态 + LaunchedEffect 而不是在组合里直接调 hasRollback：后者要做文件 IO，
+        // 不该跑在主线程上。
+        var canRollback by remember(plugin.id, plugin.version) { mutableStateOf(false) }
+        LaunchedEffect(plugin.id, plugin.version) {
+            canRollback = withContext(Dispatchers.IO) { repo.hasRollback(plugin.id) }
+        }
         PluginDetailSheet(
             plugin = plugin,
             live = livePlugins.firstOrNull { it.id == plugin.id },
@@ -433,6 +447,28 @@ fun PluginsScreen(onBack: () -> Unit, modifier: Modifier = Modifier) {
             onToggle = { enabled -> togglePlugin(plugin, enabled) },
             onRequestUninstall = { pendingUninstall = plugin },
             onEdit = { id -> detailId = null; editorFor = id; showEditor = true },
+            canRollback = canRollback,
+            onRollback = {
+                val id = plugin.id
+                busyIds = busyIds + id
+                scope.launch {
+                    runtime.unload(id)
+                    val rolledBack = repo.rollbackToPrevious(id)
+                    if (rolledBack == null) {
+                        busyIds = busyIds - id
+                        SnackbarController.show("没有可回退的版本了")
+                        return@launch
+                    }
+                    // 回退后立刻重载：否则用户看到"已回退"但插件其实没生效。
+                    val loadError = runtime.load(id)
+                    busyIds = busyIds - id
+                    detailId = null
+                    SnackbarController.show(
+                        if (loadError == null) "已回退到 $rolledBack"
+                        else "已回退到 $rolledBack，但加载失败：$loadError"
+                    )
+                }
+            },
             onDismiss = { detailId = null }
         )
     }
@@ -462,7 +498,12 @@ fun PluginsScreen(onBack: () -> Unit, modifier: Modifier = Modifier) {
                         // 先把它从引擎里摘掉再删文件：反过来的话，脚本文件已经没了而实例还挂着
                         runtime.unload(id)
                         repo.uninstall(id).fold(
-                            onSuccess = { SnackbarController.show("已卸载「${target.name}」") },
+                            onSuccess = {
+                                SnackbarController.show(
+                                    "已卸载「${target.name}」" +
+                                        if (target.level.requiresRestart) "，重启 App 后彻底生效" else ""
+                                )
+                            },
                             onFailure = { t ->
                                 SnackbarController.show("卸载失败：${t.message ?: t.javaClass.simpleName}")
                             }
@@ -977,6 +1018,10 @@ private fun PluginDetailSheet(
     onRequestUninstall: () -> Unit,
     /** 打开编辑器改这个插件的脚本。 */
     onEdit: (String) -> Unit,
+    /** 是否有可回滚的上一版本（决定要不要显示回退按钮）。 */
+    canRollback: Boolean = false,
+    /** 回退到上一版本。 */
+    onRollback: () -> Unit = {},
     onDismiss: () -> Unit
 ) {
     val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
@@ -1084,6 +1129,32 @@ private fun PluginDetailSheet(
                 Icon(Icons.Outlined.Edit, contentDescription = null, modifier = Modifier.size(18.dp))
                 Spacer(Modifier.width(8.dp))
                 Text(if (plugin.scriptExists) "编辑脚本" else "脚本已丢失，无法编辑")
+            }
+            // 【P4】只有真的存在上一可用版本时才显示回退入口 ——
+            // 常驻一个按不动的按钮会让用户以为"这功能坏了"。
+            if (canRollback) {
+                Spacer(Modifier.height(8.dp))
+                OutlinedButton(
+                    onClick = onRollback,
+                    enabled = !busy,
+                    modifier = Modifier.fillMaxWidth().height(48.dp),
+                    shape = RoundedCornerShape(14.dp)
+                ) {
+                    // AutoMirrored：RTL 语言下箭头方向要跟着镜像（本仓库其它图标同一约定）。
+                    Icon(
+                        imageVector = Icons.AutoMirrored.Outlined.Undo,
+                        contentDescription = null,
+                        modifier = Modifier.size(18.dp)
+                    )
+                    Spacer(Modifier.width(8.dp))
+                    Text("回退到上一版本")
+                }
+                Text(
+                    text = "上次更新前的版本还留着。新版本出问题时可以退回去。",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    modifier = Modifier.padding(start = 4.dp, top = 4.dp)
+                )
             }
             Spacer(Modifier.height(8.dp))
             Button(
@@ -1203,28 +1274,3 @@ private fun runtimeStateLabel(state: String): Pair<String, Color> {
 private fun formatTimestamp(millis: Long): String =
     if (millis <= 0L) "未记录" else SimpleDateFormat("yyyy-MM-dd HH:mm", Locale.getDefault()).format(Date(millis))
 
-// ---------------------------------------------------------------- 运行时实例
-
-/** 进程内唯一的插件运行时（理由见 [sharedPluginRuntime]） */
-private var pluginRuntimeRef: PluginRuntime? = null
-
-/**
- * 拿插件运行时 —— **整个进程只有一个**，而不是每次进页面 new 一个。
- *
- * 为什么不能只是 `remember { PluginRuntime(context) }`：`PluginRuntime` 每次装载都会新建一个
- * `PluginHost`，脚本实例活在**那个宿主**里。如果本页每次进都 new 一个，退出时旧宿主就被丢掉了 ——
- * 里面的脚本还在跑，却再没人持有它去 `shutdown()`；进来几次就叠几份。所以这里按进程复用，
- * 与仓库里 `GopeedEngine` / `TurboDownloadManager` 用 `object` 做单例是同一个理由
- * （`PluginRuntime` 是 `class`，此处用等价的文件内持有者）。
- *
- * 用 applicationContext：本对象活得比任何一个 Composable 都久，绝不能持有 Activity。
- *
- * 可见性为 internal：插件市场页（[PluginMarketScreen]）装完 / 更新完要立刻把脚本装进**同一个**宿主，
- * 各自 new 一个 PluginRuntime 会得到两个 PluginHost，同一个脚本跑两份。
- */
-internal fun sharedPluginRuntime(context: Context): PluginRuntime =
-    pluginRuntimeRef ?: synchronized(PluginRuntimeHolderLock) {
-        pluginRuntimeRef ?: PluginRuntime(context.applicationContext).also { pluginRuntimeRef = it }
-    }
-
-private val PluginRuntimeHolderLock = Any()

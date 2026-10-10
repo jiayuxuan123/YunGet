@@ -11,7 +11,7 @@ import com.yunget.app.data.security.CredentialCipher
 
 @Database(
     entities = [QuarkAccountEntity::class, DownloadTaskEntity::class, UCAccountEntity::class, XunleiAccountEntity::class, BaiduAccountEntity::class, C139AccountEntity::class, Pan123AccountEntity::class, BookmarkEntity::class, Pan115AccountEntity::class, GuangYaAccountEntity::class, ILanzouAccountEntity::class, LanzouAccountEntity::class, PluginInstalledEntity::class, PluginSourceEntity::class],
-    version = 20,
+    version = 22,
     exportSchema = false
 )
 abstract class AppDatabase : RoomDatabase() {
@@ -105,6 +105,8 @@ abstract class AppDatabase : RoomDatabase() {
                         MIGRATION_17_18,
                         MIGRATION_18_19,
                         MIGRATION_19_20,
+                        MIGRATION_20_21,
+                        MIGRATION_21_22,
                     )
                     // 早期开发版（1-8）无可靠 schema；从 v9 起必须保留凭证和下载任务
                     .fallbackToDestructiveMigrationFrom(1, 2, 3, 4, 5, 6, 7, 8)
@@ -274,6 +276,42 @@ abstract class AppDatabase : RoomDatabase() {
                 if (!db.hasColumn("xunlei_account", "authType")) {
                     db.execSQL(
                         "ALTER TABLE `xunlei_account` ADD COLUMN `authType` TEXT NOT NULL DEFAULT ''"
+                    )
+                }
+            }
+        }
+
+        /**
+         * v22（P20）：给 `plugin_installed` 加 `level` —— 插件的能力级别（L1 JS / L2 原生）。
+         *
+         * 空串 = 存量数据，按 L1 读（`PluginLevel.DEFAULT`）。选空串而不是回填 'js'，
+         * 是为了让"这行是升级前写的"与"这行写了 js"在数据上仍可区分。
+         */
+        private val MIGRATION_21_22 = object : Migration(21, 22) {
+            override fun migrate(db: SupportSQLiteDatabase) {
+                if (!db.hasColumn("plugin_installed", "level")) {
+                    db.execSQL(
+                        "ALTER TABLE `plugin_installed` ADD COLUMN `level` TEXT NOT NULL DEFAULT ''"
+                    )
+                }
+            }
+        }
+
+        /**
+         * v21（P5）：给 `plugin_source` 加 `mirrorUrl` —— 本源专用的镜像前缀。
+         *
+         * 加列而不是改索引地址本身：索引地址参与源 id 的派生（改它等于换了一个源），
+         * 镜像只是"同一份内容从哪儿取"的传输层参数，两者生命周期不同。
+         *
+         * `NOT NULL DEFAULT ''` 必须给全：`plugin_source` 里已有的行拿不到新列的值，
+         * 缺默认值时 ALTER 会直接失败（这正是 `DatabaseMigrationContractTest`
+         * 的 `addedColumnsDeclareDefaultValues` 在守的那条）。空串 = 本源不单独配镜像。
+         */
+        private val MIGRATION_20_21 = object : Migration(20, 21) {
+            override fun migrate(db: SupportSQLiteDatabase) {
+                if (!db.hasColumn("plugin_source", "mirrorUrl")) {
+                    db.execSQL(
+                        "ALTER TABLE `plugin_source` ADD COLUMN `mirrorUrl` TEXT NOT NULL DEFAULT ''"
                     )
                 }
             }

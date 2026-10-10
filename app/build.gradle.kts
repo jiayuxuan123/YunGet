@@ -26,7 +26,7 @@ android {
         applicationId = "com.yunget.app"
         minSdk = 23
         targetSdk = 34
-        versionCode = 51
+        versionCode = 52
         // 2.7.3 内容：**内嵌引擎升到 TurboDL 0.2.0.9 —— 并发按实测吞吐收敛**
         //  ① 现象：高线程数并不更快。实测回环 16 连接 30.6 MB/s、128 连接只有 6.1 MB/s（慢 5 倍）；
         //     真实链路上也存在「加连接不再变快」的聚合限速。而引擎在这两种情况下都不会自己退回来，
@@ -291,7 +291,7 @@ android {
         //     - 分片请求带 `If-Range`：防止 CDN 中途换文件时新旧字节拼出混杂文件
         //       （那种情况长度校验会通过，损坏会静默落地）。
         //     - 401/403/410 不再触发背压降并发（是授权/时效信号，不是"你太快了"）。
-        versionName = "2.7.3"
+        versionName = "2.7.4"
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
     }
@@ -446,12 +446,12 @@ dependencies {
     implementation("androidx.lifecycle:lifecycle-viewmodel-compose:2.8.7")
     implementation("com.squareup.okhttp3:okhttp:4.12.0")
 
-    // TurboDL SDK（纯 JVM 多线程下载引擎 + 可选插件框架），从 mavenLocal 解析 dev.turbodl:*:0.2.0.9
+    // TurboDL SDK（纯 JVM 多线程下载引擎 + 可选插件框架），从 mavenLocal 解析 dev.turbodl:*:0.2.1.0
     // 0.2.0.8：读缓冲改为按并发摊薄（修 256 连接 = 256MB = 整堆的 OOM，见 2.7.2 说明）
-    implementation("dev.turbodl:turbodl-core:0.2.0.9")
-    implementation("dev.turbodl:turbo-plugin-runtime:0.2.0.9")
-    implementation("dev.turbodl:turbo-plugin-bootstrap:0.2.0.9")
-    implementation("dev.turbodl:turbo-plugin-hls:0.2.0.9")
+    implementation("dev.turbodl:turbodl-core:0.2.1.0")
+    implementation("dev.turbodl:turbo-plugin-runtime:0.2.1.0")
+    implementation("dev.turbodl:turbo-plugin-bootstrap:0.2.1.0")
+    implementation("dev.turbodl:turbo-plugin-hls:0.2.1.0")
 
     // JavaScript 插件加载器：让用户能自己写/导入脚本插件。
     //
@@ -465,7 +465,7 @@ dependencies {
     //     公开 API（interruptEvaluation / memoryLimit / memoryUsage…）与 jvm 版逐名一致，
     //     且 Android 侧走 System.loadLibrary（不再有 createTempFile 问题）。
     // 所以：排掉 jvm 版，换成 android 版 —— turbo-plugin-js 自身一行代码都不用改。
-    implementation("dev.turbodl:turbo-plugin-js:0.2.0.9") {
+    implementation("dev.turbodl:turbo-plugin-js:0.2.1.0") {
         exclude(group = "io.github.dokar3", module = "quickjs-kt-jvm")
     }
     implementation("io.github.dokar3:quickjs-kt-android:1.0.15")

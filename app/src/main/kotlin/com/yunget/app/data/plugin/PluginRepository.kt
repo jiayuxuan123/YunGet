@@ -23,7 +23,6 @@ import android.net.Uri
 import com.yunget.app.data.db.AppDatabase
 import com.yunget.app.data.db.PluginInstalledEntity
 import com.yunget.app.data.db.PluginSourceEntity
-import com.yunget.app.data.network.HttpClients
 import com.yunget.app.util.DiagLog
 import java.io.File
 import java.io.IOException
@@ -33,10 +32,6 @@ import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.flowOn
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.withContext
-import okhttp3.Request
-import org.json.JSONArray
-import org.json.JSONObject
-import org.json.JSONTokener
 
 /**
  * 已安装插件（对外的领域视图）：在表实体 [PluginInstalledEntity] 之上补一层
@@ -55,6 +50,14 @@ data class InstalledPlugin(
     val version: String get() = entity.version
     val enabled: Boolean get() = entity.enabled
     val sourceKind: String get() = entity.sourceKind
+
+    /**
+     * 能力级别（P20）。空串 = 升级前装的老数据，按 L1 读。
+     *
+     * 界面靠它决定要不要提示"需重启 App 生效"——卸载与启停时源可能已经拉不到了，
+     * 所以这个判断不能依赖索引，只能看库里这一列。
+     */
+    val level: PluginLevel get() = PluginLevel.parseOrDefault(entity.level) ?: PluginLevel.DEFAULT
     val trustLevel: String get() = entity.trustLevel
     val scriptPath: String get() = entity.scriptPath
 
@@ -111,6 +114,11 @@ class PluginRepository(context: Context) {
         installedDao.observeAll()
             .map { rows -> rows.map { InstalledPlugin(it, scriptExists = isScriptPresent(it.scriptPath)) } }
             .flowOn(Dispatchers.IO)
+
+    /** 启动健康检查只需知道有没有启用的插件，不要为了"空宿主"就初始化 QuickJS。 */
+    suspend fun hasEnabledPlugins(): Boolean = withContext(Dispatchers.IO) {
+        installedDao.getAllBlocking().any { it.enabled }
+    }
 
     /** 单个插件（找不到返回 null）。 */
     suspend fun getInstalled(id: String): InstalledPlugin? = withContext(Dispatchers.IO) {
@@ -255,6 +263,8 @@ class PluginRepository(context: Context) {
         declaredPermissions: String,
         /** 插件自带清单的原文；拿不到就空串（见 `MarketClient.fetchAndCheckManifest`）。 */
         manifestJson: String = "",
+        /** 能力级别（P20）；默认 L1。 */
+        level: PluginLevel = PluginLevel.DEFAULT,
     ): Result<InstalledPlugin> = withContext(Dispatchers.IO) {
         runCatching {
             val validId = PluginIds.validate(id)
@@ -265,6 +275,14 @@ class PluginRepository(context: Context) {
             writeText(target, script)
 
             val previous = installedDao.getById(validId)
+            // 【P4】更新前给旧版本留快照 —— 必须在改库之前，否则拿不到旧版本信息。
+            // 留了快照就不再删旧脚本（回滚要用它），见 snapshotBeforeUpdate。
+            val hadSnapshotBefore = rollbackStore.load(validId) != null
+            snapshotBeforeUpdate(previous)
+            val keepOldScript = previous != null &&
+                previous.scriptKindEligibleForRollback() &&
+                rollbackStore.load(validId) != null
+
             val now = System.currentTimeMillis()
             installedDao.upsert(
                 PluginInstalledEntity(
@@ -273,6 +291,7 @@ class PluginRepository(context: Context) {
                     version = version,
                     sourceUri = sourceUri,
                     sourceKind = PluginInstalledEntity.SOURCE_MARKET,
+                    level = level.id,
                     manifestJson = manifestJson,
                     scriptPath = target.absolutePath,
                     scriptSha256 = sha256,
@@ -284,8 +303,15 @@ class PluginRepository(context: Context) {
                     lastError = "",
                 )
             )
-            previous?.scriptPath?.takeIf { it.isNotBlank() && it != target.absolutePath }
-                ?.let { deleteScriptQuietly(it) }
+            // 旧脚本只在"没有为它留快照"时才删：留了快照说明它是回滚目标，必须保留。
+            previous?.scriptPath?.takeIf {
+                it.isNotBlank() && it != target.absolutePath && !keepOldScript
+            }?.let { deleteScriptQuietly(it) }
+            if (keepOldScript) {
+                DiagLog.i(appContext, TAG, "已为 $validId 保留上一版本脚本以备回滚")
+            } else if (hadSnapshotBefore) {
+                DiagLog.i(appContext, TAG, "$validId 的旧回滚快照已被本次更新取代")
+            }
 
             val action = if (previous == null) "安装" else "更新"
             DiagLog.i(
@@ -423,6 +449,7 @@ class PluginRepository(context: Context) {
         indexUrl: String,
         trustLevel: String = PluginInstalledEntity.TRUST_COMMUNITY,
         enabled: Boolean = true,
+        mirrorUrl: String = "",
     ): Result<String> = withContext(Dispatchers.IO) {
         runCatching {
             val url = indexUrl.trim()
@@ -438,6 +465,8 @@ class PluginRepository(context: Context) {
                     id = id,
                     displayName = displayName.trim().ifEmpty { url },
                     indexUrl = url,
+                    // 重复添加同一地址时保留已配的镜像：用户是"再登记一个源"，不是"覆盖掉设置"
+                    mirrorUrl = mirrorUrl.trim().ifBlank { previous?.mirrorUrl.orEmpty() },
                     trustLevel = normalizeTrust(trustLevel),
                     addedAt = previous?.addedAt ?: now,
                     lastFetchedAt = previous?.lastFetchedAt ?: 0L,
@@ -468,36 +497,27 @@ class PluginRepository(context: Context) {
     }
 
     /**
-     * 拉取插件源索引（本轮**只拉不装**）。
+     * 改本源镜像前缀（P5）。空串 = 取消本源镜像。
      *
-     * 索引 JSON 原文缓存到 `filesDir/plugins/sources/<id>.json`，
-     * 并返回其中的条目数（数组根 / `plugins` / `items` / `entries` 都认），供 UI 显示"发现 N 个插件"。
-     * `lastFetchedAt` 只在**成功**时推进，这样"从没拉过"与"拉过但失败"能区分开。
+     * 只接受 http/https 前缀：镜像地址会被拼在原始地址**前面**（`前缀 + 原地址`），
+     * 套 file:// 之类的 scheme 等于让应用去读本地文件，那不是分发该干的事。
      */
-    suspend fun refreshSource(id: String): Result<Int> = withContext(Dispatchers.IO) {
+    suspend fun setSourceMirror(id: String, mirror: String): Result<Unit> = withContext(Dispatchers.IO) {
         runCatching {
-            val source = sourceDao.getById(id) ?: throw IllegalArgumentException("插件源不存在：$id")
-            val client = HttpClients.apiClient()
-            val request = Request.Builder()
-                .url(source.indexUrl)
-                .header("Accept", "application/json")
-                .header("User-Agent", "YunGet")
-                .get()
-                .build()
-            val body = client.newCall(request).execute().use { resp ->
-                if (!resp.isSuccessful) throw IOException("索引拉取失败：HTTP ${resp.code}")
-                resp.body?.string() ?: throw IOException("索引响应为空")
+            if (sourceDao.getById(id) == null) throw IllegalArgumentException("插件源不存在：$id")
+            val value = mirror.trim()
+            if (value.isNotEmpty()) {
+                val scheme = value.substringBefore(':', "").lowercase()
+                if (scheme != "http" && scheme != "https") {
+                    throw IllegalArgumentException("镜像前缀必须是 http/https：$mirror")
+                }
             }
-            val cache = sourceCacheFileOrNull(id) ?: throw IOException("插件源 id 非法，拒绝写缓存：$id")
-            cache.parentFile?.mkdirs()
-            cache.writeText(body, Charsets.UTF_8)
-            val count = countIndexEntries(body)
-            sourceDao.updateFetchedAt(id, System.currentTimeMillis())
-            DiagLog.i(appContext, TAG, "插件源 $id 索引已更新：$count 个条目（${body.length} 字节）")
-            count
-        }.onFailure {
-            DiagLog.i(appContext, TAG, "插件源索引拉取失败（$id）：${it.javaClass.simpleName} ${it.message.orEmpty()}")
-        }
+            sourceDao.updateMirror(id, value)
+            DiagLog.i(
+                appContext, TAG,
+                "插件源 $id 镜像已设为：${if (value.isEmpty()) "（空，回退到全局/直连）" else value}"
+            )
+        }.onFailure { DiagLog.i(appContext, TAG, "设置插件源镜像失败（$id）：${it.message.orEmpty()}") }
     }
 
     // ---------------------------------------------------------------- 内部：id 与路径
@@ -520,6 +540,112 @@ class PluginRepository(context: Context) {
     private fun scriptsDir(): File = File(appContext.filesDir, PluginIds.SCRIPTS_DIR)
 
     private fun sourcesDir(): File = File(appContext.filesDir, PluginIds.SOURCES_DIR)
+
+    /** 回滚快照目录（P4）。用侧车文件而不是数据库字段，理由见 [PluginRollbackStore]。 */
+    private fun rollbackDir(): File = File(appContext.filesDir, PluginIds.ROLLBACK_DIR)
+
+    private val rollbackStore: PluginRollbackStore by lazy { PluginRollbackStore(rollbackDir()) }
+
+    // ---------------------------------------------------------------- P4：更新回滚
+
+    /**
+     * 为「即将被更新覆盖的当前版本」留一份快照。
+     *
+     * **更新前调用**。旧脚本文件**不删**（默认会删，见 [installMarketPlugin]）——
+     * 因为回滚需要它还在。返回的是被本次快照取代的旧备份，其脚本文件在这里顺手清理。
+     *
+     * 只对市场来源（`SOURCE_MARKET`）留快照：粘贴/文件导入的"上一版"没有可信来源，
+     * 回滚到它不如让用户重新导入。这也避免给手工导入的脚本留下难以解释的隐藏副本。
+     */
+    private fun snapshotBeforeUpdate(previous: PluginInstalledEntity?) {
+        val p = previous ?: return
+        if (!p.scriptKindEligibleForRollback()) return
+        if (p.scriptPath.isBlank() || p.version.isBlank()) return
+        val old = rollbackStore.save(
+            PluginRollbackStore.Snapshot(
+                id = p.id,
+                name = p.name,
+                version = p.version,
+                scriptPath = p.scriptPath,
+                scriptSha256 = p.scriptSha256,
+                sourceUri = p.sourceUri,
+                sourceKind = p.sourceKind,
+                manifestJson = p.manifestJson,
+                declaredPermissions = p.declaredPermissions,
+                trustLevel = p.trustLevel,
+                savedAt = System.currentTimeMillis(),
+            )
+        )
+        // 上一条备份的脚本文件已无用处（它比"上一可用版本"更旧），清掉避免堆积。
+        // 注意别删掉当前记录正在用的那个（版本回退后 scriptPath 可能等于它）。
+        old?.scriptPath?.takeIf { it.isNotBlank() && it != p.scriptPath }
+            ?.let { stale -> runCatching { deleteScriptQuietly(stale) } }
+    }
+
+    /**
+     * 把插件回滚到上一可用版本（P4）。
+     *
+     * @return 回滚到的版本号；没有可用快照（或脚本文件已不在）时返回 null
+     */
+    suspend fun rollbackToPrevious(id: String): String? = withContext(Dispatchers.IO) {
+        val snap = rollbackStore.load(id) ?: return@withContext null
+        val scriptFile = File(snap.scriptPath)
+        if (!PluginRollbackStore.matchesDigest(scriptFile, snap.scriptSha256)) {
+            // 快照指向的文件存在，但内容已被篡改 / 路径被复用 —— 不能把它当作上一可用版本加载。
+            rollbackStore.clear(id)
+            DiagLog.i(appContext, TAG, "回滚失败：$id 的备份摘要不匹配（${scriptFile.name}）")
+            return@withContext null
+        }
+        val now = System.currentTimeMillis()
+        val current = installedDao.getById(id)
+        // 先写库、再删新脚本：库里记录指向的文件必须已存在（与本文件其它写点同一原则）
+        installedDao.upsert(
+            PluginInstalledEntity(
+                id = id,
+                name = snap.name.ifBlank { current?.name ?: id },
+                version = snap.version,
+                sourceUri = snap.sourceUri,
+                sourceKind = snap.sourceKind,
+                manifestJson = snap.manifestJson,
+                scriptPath = snap.scriptPath,
+                scriptSha256 = snap.scriptSha256,
+                // 回滚不该改变用户的启停意愿：坏版本被用户关掉了，回滚后仍保持关着
+                enabled = current?.enabled ?: true,
+                declaredPermissions = snap.declaredPermissions,
+                trustLevel = snap.trustLevel,
+                installedAt = current?.installedAt ?: now,
+                updatedAt = now,
+                lastError = "",
+            )
+        )
+        // 回滚成功后清掉快照：它已经被消费，再留着会让用户以为"还能再退一版"
+        rollbackStore.clear(id)
+        // 删掉那个加载失败的新脚本文件（copy 冲突时保留，交由 GC/清理自然处理）
+        val replaced = current?.scriptPath
+        if (!replaced.isNullOrBlank() && replaced != snap.scriptPath) {
+            runCatching { deleteScriptQuietly(replaced) }
+        }
+        DiagLog.i(appContext, TAG, "已回滚插件 $id → ${snap.version}（${scriptFile.name}）")
+        snap.version
+    }
+
+    /** 某个插件是否有可回滚的上一版本（界面据此决定是否显示"回退"）。 */
+    fun hasRollback(id: String): Boolean {
+        val snap = rollbackStore.load(id) ?: return false
+        return File(snap.scriptPath).isFile
+    }
+
+    /**
+     * 这条记录是否值得为它留回滚快照。
+     *
+     * **只对市场来源**：粘贴/文件导入的"上一版"没有可信来源，
+     * 回滚到它不如让用户重新导入；而且给手工导入的脚本留隐藏副本会让人难以理解。
+     *
+     * 提成扩展函数是为了让 [snapshotBeforeUpdate] 与调用点用**同一个判据** ——
+     * 两处各写一遍迟早会不一致（一处留快照、另一处却把脚本删了，回滚就成了空指针）。
+     */
+    private fun PluginInstalledEntity.scriptKindEligibleForRollback(): Boolean =
+        sourceKind == PluginInstalledEntity.SOURCE_MARKET
 
     /** 脚本落盘路径：目录 + `PluginIds.fileNameFor` + canonicalPath 前缀校验。 */
     private fun scriptFileFor(id: String, sha8: String): File {
@@ -614,18 +740,6 @@ class PluginRepository(context: Context) {
         raw.trim().lowercase().takeIf { it in PluginInstalledEntity.TRUST_LEVELS }
             ?: PluginInstalledEntity.TRUST_COMMUNITY
 
-    /** 索引条数：数组根，或对象里的 `plugins` / `items` / `entries` 数组。 */
-    private fun countIndexEntries(json: String): Int {
-        val trimmed = json.trim()
-        if (trimmed.isEmpty()) return 0
-        val parsed = runCatching { JSONTokener(trimmed).nextValue() }.getOrNull() ?: return 0
-        return when (parsed) {
-            is JSONArray -> parsed.length()
-            is JSONObject -> INDEX_LIST_KEYS.firstNotNullOfOrNull { (parsed.opt(it) as? JSONArray)?.length() } ?: 0
-            else -> 0
-        }
-    }
-
     private fun sha256Hex(bytes: ByteArray): String =
         MessageDigest.getInstance("SHA-256").digest(bytes)
             .joinToString("") { (it.toInt() and 0xFF).toString(16).padStart(2, '0') }
@@ -636,8 +750,5 @@ class PluginRepository(context: Context) {
 
     private companion object {
         const val TAG = "插件"
-
-        /** 索引 JSON 里可能承载条目列表的字段名（不同市场写法不同，按优先级依次尝试）。 */
-        val INDEX_LIST_KEYS = listOf("plugins", "items", "entries")
     }
 }

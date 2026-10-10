@@ -30,8 +30,8 @@ import androidx.room.PrimaryKey
  * 索引内容缓存在应用私有目录（`filesDir/plugins/sources/<id>.json`），
  * 由上层 UI 展示后再逐个走 [PluginInstalledEntity] 那条安装链路。
  *
- * 表结构由迁移 `MIGRATION_19_20` 建立；字段与迁移 SQL 必须逐字对应
- * （见 `DatabaseMigrationContractTest`）。
+ * 表结构由迁移 `MIGRATION_19_20` 建立、`mirrorUrl` 由 `MIGRATION_20_21` 追加；
+ * 字段与迁移 SQL 必须逐字对应（见 `DatabaseMigrationContractTest`）。
  */
 @Entity(tableName = "plugin_source")
 data class PluginSourceEntity(
@@ -45,6 +45,15 @@ data class PluginSourceEntity(
     /** 索引地址（`https://.../plugins.json`） */
     @ColumnInfo(defaultValue = "''")
     val indexUrl: String = "",
+    /**
+     * 本源的镜像前缀（P5），形如 `https://mirror.example.com/`。
+     * 空串 = 不为本源单独配镜像，此时才考虑全局 GitHub 镜像（且仅对 GitHub 系地址生效）。
+     *
+     * **它只影响"从哪儿取字节"，不参与任何校验**：脚本的摘要与签名照验，
+     * 所以换镜像不会换来"没验签也装得上"。
+     */
+    @ColumnInfo(defaultValue = "''")
+    val mirrorUrl: String = "",
     /** 该源的信任级别，取值同 [PluginInstalledEntity.TRUST_LEVELS]；安装时写入插件记录 */
     @ColumnInfo(defaultValue = "''")
     val trustLevel: String = "",

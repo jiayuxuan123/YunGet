@@ -43,7 +43,18 @@ data class MarketIndex(
     /** 该源声明的公钥地址（按 keyId 找不到内置公钥时用它兜底）。 */
     val publicKeyUrl: String?,
     val plugins: List<MarketPlugin>,
+    /**
+     * 因为数据有问题而被丢掉的条目（P20 起）。
+     *
+     * 为什么要**记下来而不是只丢**：一条坏数据的表现是"插件凭空不见了"，
+     * 而用户看到列表里没有某个插件时，合理的推测是"源里没有" —— 于是他不会去想"是不是
+     * 这个版本的应用读不了它"。把原因摆出来，他才可能去升级应用。
+     */
+    val skippedEntries: List<SkippedEntry> = emptyList(),
 ) {
+    /** 一个被跳过的索引条目：id（可能为空）与可展示的原因。 */
+    data class SkippedEntry(val id: String, val reason: String)
+
     companion object {
 
         /** 本应用能读的索引格式版本。**
@@ -72,10 +83,22 @@ data class MarketIndex(
 
             val source = root.optJSONObject("source") ?: JSONObject()
             val arr = root.optJSONArray("plugins") ?: JSONArray()
+            val skipped = mutableListOf<SkippedEntry>()
             val plugins = buildList {
                 for (i in 0 until arr.length()) {
                     val o = arr.optJSONObject(i) ?: continue
-                    parseMarketPlugin(o)?.let { add(it) }
+                    val parsed = parseMarketPlugin(o)
+                    val plugin = parsed.getOrNull()
+                    if (plugin != null) {
+                        add(plugin)
+                    } else {
+                        // 丢掉的条目要留痕：否则用户只会看到"插件不见了"
+                        skipped += SkippedEntry(
+                            id = o.optString("id").trim(),
+                            reason = parsed.exceptionOrNull()?.message
+                                ?.takeIf { m -> m.isNotBlank() } ?: "条目字段不合法",
+                        )
+                    }
                 }
             }
 
@@ -86,6 +109,7 @@ data class MarketIndex(
                 trustLevel = source.optString("trustLevel").ifBlank { PluginInstalledEntity.TRUST_UNTRUSTED },
                 publicKeyUrl = source.optString("publicKeyUrl").takeIf { it.isNotBlank() },
                 plugins = plugins,
+                skippedEntries = skipped,
             )
         }
 
@@ -148,6 +172,8 @@ data class MarketPlugin(
     val homepage: String,
     val sourceUrl: String,
     val manifestUrl: String,
+    /** 能力级别（P20）。索引里没写 `level` 时按 [PluginLevel.DEFAULT]（L1）读。 */
+    val level: PluginLevel = PluginLevel.DEFAULT,
     val versions: List<Version>,
 ) {
     /** 索引里的一个版本。 */
@@ -195,10 +221,27 @@ data class MarketPlugin(
 internal fun compareSemver(a: String, b: String): Int =
     com.yunget.app.data.update.UpdateChecker.compareVersions(a, b)
 
-/** 从索引 JSON 里读一个插件条目；缺 id 或没有可用版本的条目按"坏数据"跳过。 */
-internal fun parseMarketPlugin(o: JSONObject): MarketPlugin? {
+/**
+ * 从索引 JSON 里读一个插件条目。
+ *
+ * 失败时**带上原因**（不是静默返回 null）：调用方要把被丢掉的条目记进
+ * [MarketIndex.skippedEntries] 并在界面上说清楚，否则用户只会看到"插件不见了"。
+ */
+internal fun parseMarketPlugin(o: JSONObject): Result<MarketPlugin> {
     val id = o.optString("id").trim()
-    if (id.isBlank()) return null
+    if (id.isBlank()) return Result.failure(IllegalArgumentException("条目缺少 id"))
+
+    // 级别：缺字段 → L1（存量索引兼容）；写了不认识的值 → 整条按坏数据丢掉。
+    // 不能"猜一个默认值"：猜错会把 L2 当 L1 装上，而界面正在告诉用户"即时生效"。
+    val levelRaw = o.optString("level").trim()
+    val level = if (levelRaw.isEmpty()) {
+        PluginLevel.DEFAULT
+    } else {
+        PluginLevel.parse(levelRaw)
+            ?: return Result.failure(
+                IllegalArgumentException("level「$levelRaw」不是当前应用支持的插件级别，请更新应用")
+            )
+    }
 
     val versions = o.optJSONArray("versions")?.let { arr ->
         buildList {
@@ -225,9 +268,9 @@ internal fun parseMarketPlugin(o: JSONObject): MarketPlugin? {
         }
     } ?: emptyList()
 
-    if (versions.isEmpty()) return null
+    if (versions.isEmpty()) return Result.failure(IllegalArgumentException("没有可用的版本条目"))
 
-    return MarketPlugin(
+    return Result.success(MarketPlugin(
         id = id,
         name = o.optString("name").ifBlank { id },
         summary = o.optString("summary"),
@@ -241,8 +284,9 @@ internal fun parseMarketPlugin(o: JSONObject): MarketPlugin? {
         homepage = o.optString("homepage"),
         sourceUrl = o.optString("sourceUrl"),
         manifestUrl = o.optString("manifestUrl"),
+        level = level,
         versions = versions,
-    )
+    ))
 }
 
 /** `JSONArray` → `List<String>`：非字符串元素直接丢掉，不抛。 */

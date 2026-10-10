@@ -29,7 +29,7 @@ import androidx.room.PrimaryKey
  * 库里的 [scriptPath] 是绝对路径。这样卸载/更新脚本不必把正文塞进数据库，
  * 也避免把用户脚本当作普通文本字段到处传递。
  *
- * 表结构由迁移 `MIGRATION_19_20` 建立。**每个字段都写了
+ * 表结构由迁移 `MIGRATION_19_20` 建立、`level` 由 `MIGRATION_21_22` 追加。**每个字段都写了
  * `@ColumnInfo(defaultValue = ...)` 且与迁移 SQL 逐字对应** ——
  * 实体与迁移不一致会让 Room 在打开库时抛 `Migration didn't properly handle`，
  * 表现为升级用户启动即崩（2.6.17 的真实事故，见 `DatabaseMigrationContractTest`）。
@@ -52,6 +52,14 @@ data class PluginInstalledEntity(
     /** 来源类别：[SOURCE_FILE] / [SOURCE_PASTE] / [SOURCE_MARKET] */
     @ColumnInfo(defaultValue = "''")
     val sourceKind: String = "",
+    /**
+     * 插件的能力级别（P20）：`js` 或 `native`，空串 = 存量数据，按 L1 读。
+     *
+     * 为什么要落库：装完之后源可能下线、也可能拉不到索引，而"换插件要不要重启"
+     * 这个问题在卸载、启停时都得当场回答 —— 那时已经拿不到索引了。
+     */
+    @ColumnInfo(defaultValue = "''")
+    val level: String = "",
     /** 清单原文（`turbodl-plugin.json`）。粘贴/文件导入通常为空串，市场安装时才有 */
     @ColumnInfo(defaultValue = "''")
     val manifestJson: String = "",

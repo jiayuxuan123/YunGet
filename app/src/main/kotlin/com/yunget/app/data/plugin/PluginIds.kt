@@ -64,6 +64,16 @@ object PluginIds {
     /** 插件源索引缓存目录名（相对 `filesDir`）。 */
     const val SOURCES_DIR = "plugins/sources"
 
+    /**
+     * 插件回滚快照目录名（相对 `filesDir`）。
+     *
+     * 用侧车文件保存"上一可用版本"而不是加数据库字段：加列需要 Room 迁移，
+     * 而本项目踩过迁移事故（2.6.17 实体与迁移 SQL 不一致 → 升级启动即崩，
+     * 见 `DatabaseMigrationContractTest`）。回滚记录是短期状态（每插件最多一条），
+     * 不值得为它动 schema。
+     */
+    const val ROLLBACK_DIR = "plugins/rollback"
+
     /** 合法 id 的全量字符集：小写字母、数字、点、连字符（顺手排除大小写不敏感文件系统的歧义）。 */
     private val ALLOWED_ID = Regex("[a-z0-9.\\-]+")
 

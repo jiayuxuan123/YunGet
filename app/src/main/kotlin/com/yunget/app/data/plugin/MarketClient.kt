@@ -37,6 +37,8 @@ import java.security.MessageDigest
  *
  *  1. 索引里的这一版必须齐备 `downloadUrl` + `sha256` + `signature` + `keyId`
  *     （[MarketPlugin.Version.isVerifiable]）；
+ *  1.5 `keyId` 不在吊销名单里（P6，见 [PluginTrust.verdictFor]）—— 这一关在任何
+ *     公钥查找与验签之前，因为"钥匙作废"是信任判断，签名有效并不代表还该认它；
  *  2. 宿主版本满足该版的 `minHostVersion`；
  *  3. 下载到的字节数必须等于索引里的 `sizeBytes`（不为 0 时），SHA-256 必须等于索引里的值；
  *  4. Ed25519 验签：**对脚本原始字节**验，公钥按 `keyId` 取（内置 → 源的 `publicKeyUrl`）；
@@ -46,11 +48,12 @@ import java.security.MessageDigest
  * **更新与安装走的是同一条链路**（本类只有一条 [fetchAndVerify]）：更新时没有任何一步被放宽，
  * 唯一多的动作是拿新版本号去覆盖记录。
  *
- * ## 镜像
+ * ## 镜像与回退（P5）
  *
- * 索引与脚本都可能挂在 GitHub raw 上（国内直连不稳），所以两处都走
- * [UpdateChecker.mirrorUrl] + 镜像前缀，并且在镜像失败时回退直连 —— 与更新检查、
- * Gopeed 内核获取用的是同一套做法，而不是各写一套。
+ * 索引、脚本、清单、公钥四类请求都走 [PluginMirror] 给出的候选顺序：
+ * 本源配了镜像先走本源镜像，否则 GitHub 系地址走全局镜像，**直连永远排在最后兜底**。
+ * 取字节（[httpGetBytes]）与校验（[fetchAndVerify]）是分开的两步 —— 所有通道取回的字节
+ * 走同一条校验链，所以换镜像只是换通道，不会换来"没验签也装得上"。
  */
 class MarketClient(private val context: Context) {
 
@@ -77,19 +80,24 @@ class MarketClient(private val context: Context) {
     /**
      * 拉取一个源的索引并解析。
      *
-     * 顺带把原始 JSON 存进私有目录（[PluginRepository.refreshSource] 的输入）——
+     * 顺带把原始 JSON 存进私有目录（[PluginRepository.cacheSourceIndex]）——
      * 这样"上次拉到的索引"在离线时仍然可看，而不是打开市场就是空白加一句网络错误。
+     *
+     * 取字节走 [PluginMirror]：本源配了镜像先走镜像，否则 GitHub 系地址走全局镜像，
+     * 直连永远排在最后兜底（见 [PluginMirror] 里"回退只对取不到字节生效"那条边界）。
      */
     suspend fun fetchIndex(source: PluginSourceEntity): Result<MarketIndex> = withContext(Dispatchers.IO) {
         runCatching {
-            val json = httpGetText(source.indexUrl, MAX_INDEX_BYTES)
+            val hit = httpGetText(source.indexUrl, MAX_INDEX_BYTES, source.mirrorUrl)
                 ?: throw IllegalStateException("索引下载失败（网络不可达或地址无效）")
+            val json = hit.value
             val index = MarketIndex.parse(json).getOrThrow()
             repo.cacheSourceIndex(source.id, json)
             repo.markSourceFetched(source.id)
             DiagLog.i(
                 context, TAG,
-                "索引已更新：${index.sourceName}（${index.plugins.size} 个插件，schema=${index.schemaVersion}）"
+                "索引已更新：${index.sourceName}（${index.plugins.size} 个插件，" +
+                    "schema=${index.schemaVersion}，经由${hit.routeLabel()}）"
             )
             index
         }
@@ -115,6 +123,13 @@ class MarketClient(private val context: Context) {
             if (!version.isVerifiable) {
                 throw IllegalStateException("该版本缺少校验信息（sha256 / 签名 / keyId），不予安装")
             }
+            // ---- 关 1.5：钥匙是否已被吊销（P6）----
+            // 必须在任何公钥查找与验签**之前**。签名在数学上永远有效，
+            // "这把钥匙作废了"是信任层面的判断，只有显式查名单才知道。
+            (PluginTrust.verdictFor(version.keyId) as? PluginTrust.KeyVerdict.Revoked)?.let {
+                throw IllegalStateException("该插件用的密钥「${it.keyId}」已被吊销：${it.reason}")
+            }
+
             // ---- 关 2：宿主版本 ----
             if (version.minHostVersion.isNotBlank()) {
                 val host = hostVersionName(context)
@@ -130,9 +145,12 @@ class MarketClient(private val context: Context) {
             }
 
             // ---- 关 3 + 4：下载、长度与摘要、验签 ----
-            val script = fetchAndVerify(plugin, version, index)
+            // 源的镜像配置取一次就够：本笔安装的三个请求（脚本、清单、公钥）走同一条回退链，
+            // 中途源被改了也不该让前半段走镜像、后半段走直连。
+            val sourceMirror = sourceMirror(sourceId)
+            val script = fetchAndVerify(plugin, version, index, sourceMirror)
 
-            // ---- 关 5：脚本自报的 id 与版本必须与索引一致 ----
+            // ---- 关 5：脚本自报 id 与版本必须与索引一致 ----
             verifySelfReportedIdentity(script, plugin.id, version.version)
 
             // ---- 关 6：清单（可选，但有就必须一致） ----
@@ -140,7 +158,7 @@ class MarketClient(private val context: Context) {
             // （签名只覆盖脚本字节），所以它只能当"辅助信息"用：拿它对一下 id/version 是否与
             // 脚本自报的一致、协议声明是否包含索引里写的那些。**拿不到就不装失败** ——
             // 很多源不提供清单，那不该拦住安装；但拿到了又不一致，说明索引在乱写。
-            val manifestJson = fetchAndCheckManifest(plugin, version)
+            val manifestJson = fetchAndCheckManifest(plugin, version, sourceMirror)
 
             // ---- 落盘 + 入库（更新 = 同一条路，只是版本号变了） ----
             repo.installMarketPlugin(
@@ -152,6 +170,7 @@ class MarketClient(private val context: Context) {
                 sourceId = sourceId,
                 sourceUri = version.downloadUrl,
                 trustLevel = trustLevel,
+                level = plugin.level,
                 declaredPermissions = version.permissions.joinToString(","),
                 manifestJson = manifestJson,
             ).getOrThrow()
@@ -170,9 +189,11 @@ class MarketClient(private val context: Context) {
         plugin: MarketPlugin,
         version: MarketPlugin.Version,
         index: MarketIndex,
+        sourceMirror: String,
     ): String {
-        val bytes = httpGetBytes(version.downloadUrl)
+        val hit = httpGetBytes(version.downloadUrl, MAX_SCRIPT_BYTES, sourceMirror)
             ?: throw IllegalStateException("脚本下载失败（网络不可达或地址无效）")
+        val bytes = hit.value
 
         if (bytes.size > MAX_SCRIPT_BYTES) {
             throw IllegalStateException("脚本体积 ${bytes.size} 字节，超过上限")
@@ -186,7 +207,7 @@ class MarketClient(private val context: Context) {
             throw IllegalStateException("脚本摘要与索引不符（可能被篡改或索引过期）")
         }
 
-        val publicKey = resolvePublicKey(version.keyId, index)
+        val publicKey = resolvePublicKey(version.keyId, index, sourceMirror)
             ?: throw IllegalStateException("找不到签名公钥（keyId=${version.keyId}）")
         if (!PluginSignature.verify(bytes, version.signature, publicKey)) {
             throw IllegalStateException("签名验证失败 —— 脚本内容与签名不匹配")
@@ -194,7 +215,8 @@ class MarketClient(private val context: Context) {
 
         DiagLog.i(
             context, TAG,
-            "校验通过：${plugin.id} ${version.version}（sha256=${actual.take(12)}… keyId=${version.keyId}）"
+            "校验通过：${plugin.id} ${version.version}（sha256=${actual.take(12)}… " +
+                "keyId=${version.keyId}，经由${hit.routeLabel()}）"
         )
         return bytes.toString(Charsets.UTF_8)
     }
@@ -205,12 +227,16 @@ class MarketClient(private val context: Context) {
      *
      * 找不到就返回 null，调用方拒绝安装 —— 不猜、不放行。
      */
-    private fun resolvePublicKey(keyId: String, index: MarketIndex): String? {
+    private fun resolvePublicKey(keyId: String, index: MarketIndex, sourceMirror: String): String? {
+        // 吊销检查放在这里而**不只**放在调用点上：这条回退路径（源自带公钥）
+        // 是一把独立的取钥匙途径，只在安装入口查一次的话，将来有人新增一个
+        // 调用 resolvePublicKey 的地方就会漏掉。
+        (PluginTrust.verdictFor(keyId) as? PluginTrust.KeyVerdict.Revoked)?.let { return null }
         PluginTrust.builtinPublicKey(keyId)?.let { return it }
         val url = index.publicKeyUrl ?: return null
         // 约定：公钥文件名就是 <keyId>.pub，替换源目录下的文件名
         val candidate = url.substringBeforeLast('/') + "/$keyId.pub"
-        return httpGetText(candidate, 64 * 1024)
+        return httpGetText(candidate, 64 * 1024, sourceMirror)?.value
     }
 
     /**
@@ -246,10 +272,14 @@ class MarketClient(private val context: Context) {
      *    不一致说明索引在乱写（清单是插件作者写的，索引是源维护者写的），这时**拒绝安装** ——
      *    因为用户看到的列表信息（协议、版本）会与实际装上的插件不符。
      */
-    private fun fetchAndCheckManifest(plugin: MarketPlugin, version: MarketPlugin.Version): String {
+    private fun fetchAndCheckManifest(
+        plugin: MarketPlugin,
+        version: MarketPlugin.Version,
+        sourceMirror: String,
+    ): String {
         val url = plugin.manifestUrl.trim()
         if (url.isEmpty()) return ""
-        val text = httpGetText(url, 256 * 1024)?.takeIf { it.isNotBlank() } ?: return ""
+        val text = httpGetText(url, 256 * 1024, sourceMirror)?.value?.takeIf { it.isNotBlank() } ?: return ""
 
         val parsed = runCatching { org.json.JSONObject(text) }.getOrNull() ?: return text
 
@@ -277,55 +307,52 @@ class MarketClient(private val context: Context) {
     // ---------------------------------------------------------------- HTTP
 
     /**
-     * GET 文本。**先镜像后直连**（仅 GitHub 域名走镜像，与项目里其它 GitHub 拉取一致），
-     * 镜像失败自动回退 —— 镜像只是分发通道，不是信任来源。
+     * GET 文本，返回内容 + **命中的是哪个通道**（日志里告诉用户"这次是走镜像拿到的"）。
      */
-    private fun httpGetText(url: String, maxBytes: Long): String? {
-        val bytes = httpGetBytes(url, maxBytes) ?: return null
-        return bytes.toString(Charsets.UTF_8)
-    }
+    private fun httpGetText(url: String, maxBytes: Long, sourceMirror: String = ""): PluginMirror.Hit<String>? =
+        httpGetBytes(url, maxBytes, sourceMirror)?.let { hit ->
+            PluginMirror.Hit(hit.candidate, hit.value.toString(Charsets.UTF_8))
+        }
 
-    private fun httpGetBytes(url: String, maxBytes: Long = MAX_SCRIPT_BYTES): ByteArray? {
-        val mirror = mirrorPrefix()
-        val candidates = buildList {
-            if (mirror.isNotBlank() && isGitHubUrl(url)) {
-                add(UpdateChecker.mirrorUrl(url, mirror))
-            }
-            add(url)
-        }
+    /**
+     * GET 字节，按 [PluginMirror] 给出的候选顺序依次尝试，全部失败才返回 null。
+     *
+     * 单个候选的失败判定（不抛异常，交给回退链继续）：抛异常 / 非 2xx /
+     * 声明长度超限 / 内容为空。**内容为空算失败**是有意的：空响应通常是
+     * 代理被限流或返回了一个错误页而不是真内容。
+     *
+     * 这里**只**负责"取到字节"。摘要与验签在 [fetchAndVerify] 里、拿到字节之后统一做，
+     * 与字节从哪个通道来无关 —— 这就是"镜像只分发、不给信任"在代码上的落点。
+     */
+    private fun httpGetBytes(
+        url: String,
+        maxBytes: Long = MAX_SCRIPT_BYTES,
+        sourceMirror: String = "",
+    ): PluginMirror.Hit<ByteArray>? {
+        val candidates = PluginMirror.candidates(url, mirrorPrefix(), sourceMirror)
+        if (candidates.isEmpty()) return null
         val client = HttpClients.apiClient()
-        for (candidate in candidates) {
-            val bytes = runCatching {
-                val req = Request.Builder().url(candidate)
-                    .header("User-Agent", "YunGet")
-                    .header("Accept", "application/json, text/plain, */*")
-                    .build()
-                client.newCall(req).execute().use { resp: Response ->
-                    if (!resp.isSuccessful) return@use null
-                    // 声明长度就超限的直接放弃（避免把大文件读进内存才发现）
-                    val declared = resp.body?.contentLength() ?: -1L
-                    if (declared > maxBytes) return@use null
-                    resp.body?.bytes()
-                }
-            }.getOrNull()
-            if (bytes != null && bytes.isNotEmpty()) return bytes
+        return PluginMirror.fetchFirst(candidates) { candidate ->
+            val req = Request.Builder().url(candidate.url)
+                .header("User-Agent", "YunGet")
+                .header("Accept", "application/json, text/plain, */*")
+                .build()
+            client.newCall(req).execute().use { resp: Response ->
+                if (!resp.isSuccessful) return@use null
+                // 声明长度就超限的直接放弃（避免把大文件读进内存才发现）
+                val declared = resp.body?.contentLength() ?: -1L
+                if (declared > maxBytes) return@use null
+                resp.body?.bytes()
+            }.let { bytes -> if (bytes == null || bytes.isEmpty()) null else bytes }
         }
-        return null
     }
 
     /**
-     * 是不是 GitHub 系地址 —— 只有这些才套镜像前缀。
-     *
-     * 刻意不套用一切地址：镜像服务是第三方，把非 GitHub 的地址（插件源可能是任意自建服务器、
-     * 网盘直链…）也推过去等于把它们的内容交给镜像，既无必要也不礼貌。
+     * 该源配置的镜像前缀。取不到（源被删了 / 读库失败）就当没配，
+     * 大不了退回全局镜像与直连 —— 不该因为一个辅助参数让整个安装失败。
      */
-    private fun isGitHubUrl(url: String): Boolean {
-        val host = runCatching { java.net.URI(url).host }.getOrNull()?.lowercase() ?: return false
-        return host == "github.com" ||
-            host == "raw.githubusercontent.com" ||
-            host == "objects.githubusercontent.com" ||
-            host.endsWith(".githubusercontent.com")
-    }
+    private suspend fun sourceMirror(sourceId: String): String =
+        runCatching { repo.getSource(sourceId)?.mirrorUrl.orEmpty() }.getOrDefault("")
 
     /** 用户配置的 GitHub 镜像前缀（没配就空串 = 直连）。 */
     private fun mirrorPrefix(): String =

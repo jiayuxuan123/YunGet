@@ -74,6 +74,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.yunget.app.data.plugin.PluginIds
 import com.yunget.app.data.plugin.PluginRepository
+import com.yunget.app.data.plugin.sharedPluginRuntime
 import com.yunget.app.ui.SnackbarController
 import com.yunget.app.ui.components.YunGetWavyLoading
 import com.yunget.app.ui.theme.effectsDefault

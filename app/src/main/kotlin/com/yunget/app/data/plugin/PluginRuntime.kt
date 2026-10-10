@@ -164,6 +164,55 @@ class PluginRuntime(private val context: Context) {
     /** 当前真正在跑的脚本插件（引擎侧视角，含状态与已注册项）。 */
     fun livePlugins(): List<JsScriptPlugin.Info> = loader()?.livePlugins() ?: emptyList()
 
+    /**
+     * 启动后的健康检查（P4，设计文档第 8.5 章）。
+     *
+     * ## 它检查什么
+     *
+     * 对**每个已启用**的插件确认两件事：脚本文件还在、装载后真的出现在运行列表里。
+     * 装载本身由 [start] 完成；这里只做"装载结果是否健康"的判定，并把不健康的
+     * **写回库里的 `lastError`**（界面据此显示），不弹窗、不打扰用户。
+     *
+     * ## 为什么在启动时做
+     *
+     * 插件坏了（脚本被系统清理、更新后不兼容、调用了未授予的能力）**只在加载时才暴露**。
+     * 而加载原先只发生在用户打开插件页时 —— 不进那个页面就永远发现不了，
+     * 表现为"下载功能莫名失效，但插件列表看起来一切正常"。
+     *
+     * ## 为什么不自动回滚
+     *
+     * 回滚是**用户的决定**：也许新版只是缺一个权限、用户更想授权而不是退回旧版。
+     * 所以这里只把状态记清楚（含"有可回滚版本"这一信息），把决定权留给用户 ——
+     * 自动回滚会让"我明明更新了，怎么还是旧版"变成一个更难解释的现象。
+     *
+     * @return 不健康的插件：`id` → 原因。空表示全部健康。
+     */
+    suspend fun healthCheck(): Map<String, String> = mutex.withLock {
+        withContext(Dispatchers.IO) {
+            val unhealthy = LinkedHashMap<String, String>()
+            val host = hostRef
+            if (host == null) {
+                // 宿主都没起来（例如引擎初始化失败）：这是整体故障，不该逐插件报错
+                return@withContext mapOf("*" to "插件宿主未初始化")
+            }
+            val live = livePlugins().associateBy { it.id }
+            for (p in repo.installedNow()) {
+                if (!p.enabled) continue
+                val file = File(p.entity.scriptPath)
+                val reason = when {
+                    !file.isFile -> "脚本文件不存在（可能被系统清理）"
+                    !live.containsKey(p.id) -> "未出现在运行列表中（加载失败或已被引擎卸下）"
+                    else -> null
+                }
+                if (reason != null) {
+                    unhealthy[p.id] = reason
+                    repo.recordLoadErrorBlocking(p.id, reason)
+                }
+            }
+            unhealthy
+        }
+    }
+
     /** 引擎拒绝关闭的运行时数量（drain 超时的脚本）。 */
     fun leakedRuntimeCount(): Int = loader()?.leakedRuntimeCount() ?: 0
 

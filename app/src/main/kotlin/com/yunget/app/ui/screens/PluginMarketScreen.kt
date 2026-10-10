@@ -52,6 +52,7 @@ import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.outlined.Add
 import androidx.compose.material.icons.outlined.ContentCopy
 import androidx.compose.material.icons.outlined.Delete
+import androidx.compose.material.icons.outlined.Dns
 import androidx.compose.material.icons.outlined.Error
 import androidx.compose.material.icons.outlined.ExpandLess
 import androidx.compose.material.icons.outlined.ExpandMore
@@ -101,10 +102,13 @@ import com.yunget.app.data.db.PluginSourceEntity
 import com.yunget.app.data.plugin.InstalledPlugin
 import com.yunget.app.data.plugin.MarketClient
 import com.yunget.app.data.plugin.MarketIndex
+import com.yunget.app.data.plugin.PluginMirror
+import com.yunget.app.data.plugin.PluginLevel
 import com.yunget.app.data.plugin.MarketPlugin
 import com.yunget.app.data.plugin.PluginRepository
 import com.yunget.app.data.plugin.PluginTrust
 import com.yunget.app.data.plugin.PluginUpdateChecker
+import com.yunget.app.data.plugin.sharedPluginRuntime
 import com.yunget.app.data.update.UpdateChecker
 import com.yunget.app.ui.SnackbarController
 import com.yunget.app.ui.components.compactMarkdownTypography
@@ -187,6 +191,7 @@ fun PluginMarketScreen(onBack: () -> Unit, modifier: Modifier = Modifier) {
 
     var showAddSheet by remember { mutableStateOf(false) }
     var pendingRemove by remember { mutableStateOf<PluginSourceEntity?>(null) }
+    var editingMirror by remember { mutableStateOf<PluginSourceEntity?>(null) }
     var detail by remember { mutableStateOf<PluginDetailTarget?>(null) }
     var pendingInstall by remember { mutableStateOf<PluginDetailTarget?>(null) }
     var installing by remember { mutableStateOf(false) }
@@ -391,6 +396,8 @@ fun PluginMarketScreen(onBack: () -> Unit, modifier: Modifier = Modifier) {
                     source = source,
                     loading = source.id in loadingSources,
                     pluginCount = indexes[source.id]?.plugins?.size,
+                    skippedCount = indexes[source.id]?.skippedEntries?.size,
+                    skippedReasons = indexes[source.id]?.skippedEntries?.map { it.reason }?.distinct().orEmpty(),
                     error = indexErrors[source.id],
                     onToggle = { enabled ->
                         scope.launch {
@@ -411,6 +418,7 @@ fun PluginMarketScreen(onBack: () -> Unit, modifier: Modifier = Modifier) {
                         }
                     },
                     onRefresh = { fetchSource(source, true) },
+                    onEditMirror = { editingMirror = source },
                     onRemove = { pendingRemove = source }
                 )
             }
@@ -619,6 +627,67 @@ fun PluginMarketScreen(onBack: () -> Unit, modifier: Modifier = Modifier) {
         )
     }
 
+    // 改本源镜像（P5）。空串 = 用默认（全局镜像仅对 GitHub 生效，否则直连）。
+    // 弹窗里写明"镜像不影响校验"，否则用户会以为这是个能绕过验签的开关。
+    editingMirror?.let { target ->
+        var value by remember(target.id) { mutableStateOf(target.mirrorUrl) }
+        AlertDialog(
+            onDismissRequest = { editingMirror = null },
+            title = { Text("「${target.displayName.ifBlank { target.id }}」的镜像") },
+            text = {
+                Column {
+                    Text(
+                        text = "拉不到索引或脚本时会自动换下一个地址，直连永远是最后一档。",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                    Spacer(Modifier.height(4.dp))
+                    Text(
+                        text = "镜像只负责分发：取回的内容照验 SHA-256 与签名，换镜像不会让没验签的插件装得上。",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                    Spacer(Modifier.height(12.dp))
+                    OutlinedTextField(
+                        value = value,
+                        onValueChange = { value = it },
+                        singleLine = true,
+                        label = { Text("镜像前缀（如 https://gh.dpik.top/）") },
+                        supportingText = { Text("留空 = 不用本源镜像") },
+                        modifier = Modifier.fillMaxWidth()
+                    )
+                }
+            },
+            confirmButton = {
+                TextButton(
+                    onClick = {
+                        val input = value
+                        editingMirror = null
+                        scope.launch {
+                            repo.setSourceMirror(target.id, input).fold(
+                                onSuccess = {
+                                    SnackbarController.show(
+                                        if (input.isBlank()) {
+                                            "已取消「${target.displayName}」的镜像"
+                                        } else {
+                                            "已设置「${target.displayName}」的镜像"
+                                        }
+                                    )
+                                },
+                                onFailure = { t ->
+                                    SnackbarController.show("设置镜像失败：${t.message ?: t.javaClass.simpleName}")
+                                }
+                            )
+                        }
+                    }
+                ) { Text("保存") }
+            },
+            dismissButton = {
+                TextButton(onClick = { editingMirror = null }) { Text("取消") }
+            }
+        )
+    }
+
     // 移除源是不可逆的（登记与索引缓存都没了），必须二次确认；
     // 但要**明确告诉用户已装的插件不会被卸载** —— 不然没人敢点这个按钮
     pendingRemove?.let { target ->
@@ -690,9 +759,13 @@ private fun SourceRow(
     source: PluginSourceEntity,
     loading: Boolean,
     pluginCount: Int?,
+    /** 因为数据不合法被丢掉的条目数（P20）。显示出来才不会变成"插件凭空不见了"。 */
+    skippedCount: Int?,
+    skippedReasons: List<String>,
     error: String?,
     onToggle: (Boolean) -> Unit,
     onRefresh: () -> Unit,
+    onEditMirror: () -> Unit,
     onRemove: () -> Unit
 ) {
     Card(
@@ -729,7 +802,26 @@ private fun SourceRow(
                     append("上次拉取：")
                     append(if (source.lastFetchedAt <= 0L) "从未" else marketFormatTime(source.lastFetchedAt))
                     if (pluginCount != null) append(" · 索引里有 $pluginCount 个插件")
+                    if (skippedCount != null && skippedCount > 0) {
+                        append(" · $skippedCount 个条目未显示")
+                    }
                 },
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant
+            )
+            if (skippedReasons.isNotEmpty()) {
+                Spacer(Modifier.height(4.dp))
+                Text(
+                    text = "未显示的原因：" + skippedReasons.joinToString("；"),
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.error
+                )
+            }
+            // 把"这次是走哪个通道拿到的"摆到明面上（P5）。回退是静默的，
+            // 而静默回退在用户看来就是"有时候快有时候慢"——不说清楚会一直找不到原因。
+            Spacer(Modifier.height(4.dp))
+            Text(
+                text = sourceChannelSummary(source),
                 style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant
             )
@@ -767,6 +859,20 @@ private fun SourceRow(
                     Text(if (loading) "拉取中…" else "刷新索引", style = MaterialTheme.typography.labelLarge)
                 }
                 OutlinedButton(
+                    onClick = onEditMirror,
+                    enabled = !loading,
+                    modifier = Modifier.height(40.dp),
+                    shape = RoundedCornerShape(14.dp)
+                ) {
+                    Icon(
+                        Icons.Outlined.Dns,
+                        contentDescription = null,
+                        modifier = Modifier.size(16.dp)
+                    )
+                    Spacer(Modifier.width(6.dp))
+                    Text("镜像", style = MaterialTheme.typography.labelLarge)
+                }
+                OutlinedButton(
                     onClick = onRemove,
                     enabled = !loading,
                     modifier = Modifier.height(40.dp),
@@ -784,6 +890,23 @@ private fun SourceRow(
             }
         }
     }
+}
+
+/**
+ * 这个源的取数通道说明（P5）：照 [PluginMirror] 的实际规则算一遍，人话讲出来。
+ *
+ * 为什么不直接把候选地址逐条列出来：用户关心的是"我配的镜像到底用不用得上、兜底是谁"，
+ * 而不是 URL 拼接结果。这里用的就是 [PluginMirror.candidates] 本身 ——
+ * 规则改了，展示会自动跟着变，不会出现"界面说一套、代码走另一套"。
+ */
+private fun sourceChannelSummary(source: PluginSourceEntity): String {
+    val routes = PluginMirror.candidates(source.indexUrl, "", source.mirrorUrl).map { it.route }
+    val prefix = when {
+        source.mirrorUrl.isNotBlank() -> "本源镜像 ${source.mirrorUrl}"
+        routes.any { it == PluginMirror.Route.GLOBAL_GITHUB_MIRROR } -> "全局镜像"
+        else -> "没有可用镜像"
+    }
+    return "取数通道：$prefix → 直连"
 }
 
 /**
@@ -1097,6 +1220,17 @@ private fun MarketPluginRow(
                     )
                 }
                 MarketTrustBadge(trustLevel)
+            }
+
+            // 级别徽标（P20）。原生插件放在市场列表里**必须**一眼能认出：
+            // 它的能力与宿主等同，装它是一次比装 JS 插件重得多的决定。
+            if (plugin.level.requiresRestart) {
+                Spacer(Modifier.height(6.dp))
+                Text(
+                    text = plugin.level.title + " · " + plugin.level.hotLoadNote(),
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.tertiary
+                )
             }
 
             if (plugin.summary.isNotBlank()) {
@@ -1481,6 +1615,29 @@ private fun InstallConfirmDialog(
                         color = MaterialTheme.colorScheme.error
                     )
                 }
+
+                // 级别说明（P20）。放在信任说明之后、能力清单之前：
+                // 它决定"装上之后会发生什么"，紧跟着能力清单才读得下去。
+                Spacer(Modifier.height(6.dp))
+                Text(
+                    text = target.plugin.level.capabilityNote(),
+                    style = MaterialTheme.typography.bodySmall,
+                    color = if (target.plugin.level.requiresRestart) {
+                        MaterialTheme.colorScheme.tertiary
+                    } else {
+                        MaterialTheme.colorScheme.onSurfaceVariant
+                    }
+                )
+                Spacer(Modifier.height(4.dp))
+                Text(
+                    text = target.plugin.level.hotLoadNote(),
+                    style = MaterialTheme.typography.bodySmall,
+                    color = if (target.plugin.level.requiresRestart) {
+                        MaterialTheme.colorScheme.tertiary
+                    } else {
+                        MaterialTheme.colorScheme.onSurfaceVariant
+                    }
+                )
 
                 Spacer(Modifier.height(10.dp))
                 Text(

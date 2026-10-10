@@ -21,6 +21,10 @@ package com.yunget.app
 import android.app.Application
 import android.content.ComponentCallbacks2
 import com.yunget.app.crash.CrashHandler
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.launch
 
 class YunGetApp : Application() {
     override fun onCreate() {
@@ -35,6 +39,9 @@ class YunGetApp : Application() {
         com.yunget.app.data.security.CredentialStore.installRecovery(this)
         // 下载引擎自愈 + 预热（选了 Gopeed 才加载内核，失败只记日志，绝不影响应用启动）
         autoStartGopeedIfSelected(this)
+        // 插件健康检查（P4）：把"已启用但加载不起来"的插件在启动时就记回库里。
+        // 刻意放后台线程且吞掉异常 —— 插件坏了不该影响应用启动，也不该阻塞首屏。
+        healthCheckPlugins(this)
     }
 
     /**
@@ -54,8 +61,51 @@ class YunGetApp : Application() {
 }
 
 /**
- * 选了 Gopeed 引擎时，应用启动就把引擎加载起来。
+ * 插件健康检查（P4，设计文档第 8.5 章）：启动时把"已启用但加载不起来"的插件记回库里。
  *
+ * ## 为什么需要
+ *
+ * 插件坏掉（脚本被系统清理、更新后不兼容、调用了未授予的能力）**只在加载时才暴露**，
+ * 而加载原先只在用户打开插件页时发生 —— 不进那个页面就永远发现不了，
+ * 表现为"下载功能莫名失效，但插件列表看起来一切正常"。
+ *
+ * ## 边界（刻意保守）
+ *
+ * - **后台协程**：要读库、要读脚本文件、要建 QuickJS 运行时，绝不能占主线程（首屏会被拖慢）。
+ * - **失败只记日志**：插件坏了不该影响应用启动 —— 与 [autoStartGopeedIfSelected] 同一原则。
+ * - **不自动回滚**：回滚是用户的决定（也许他只是想补一个权限）。这里只把状态记清楚，
+ *   详情页会显示"回退到上一版本"入口供他选。
+ * - **没有插件时直接返回**：绝大多数用户没装插件，不该为此付任何启动成本。
+ */
+private fun healthCheckPlugins(context: android.content.Context) {
+    // 用 IO 调度器而不是 Thread：下面三步全是 suspend（读库、装插件、写回错误状态），
+    // 裸线程里调 suspend 是编译不过的。各步骤本身已 flowOn/withContext(IO)，
+    // 这里只是给它们一个启动用的作用域。
+    CoroutineScope(SupervisorJob() + Dispatchers.IO).launch {
+        runCatching {
+            val repo = com.yunget.app.data.plugin.PluginRepository(context)
+            if (!repo.hasEnabledPlugins()) return@runCatching
+            // 与插件管理页 / 编辑器共用**进程内唯一**的运行时，不能各建一个 PluginHost。
+            val runtime = com.yunget.app.data.plugin.sharedPluginRuntime(context)
+            // start() 会把已启用的插件装进引擎；随后 healthCheck() 判定装载结果是否健康。
+            val started = runtime.start()
+            val unhealthy = runtime.healthCheck()
+            if (unhealthy.isNotEmpty()) {
+                android.util.Log.w(
+                    "YunGet",
+                    "插件健康检查：${unhealthy.size} 个插件不健康 → $unhealthy（已记录，可在插件页查看）"
+                )
+            } else if (started.isNotEmpty()) {
+                android.util.Log.i("YunGet", "插件健康检查：${started.size} 个插件全部正常")
+            }
+        }.onFailure {
+            android.util.Log.e("YunGet", "插件健康检查失败（不影响启动）：${it.message}", it)
+        }
+    }
+}
+
+/**
+ * 选了 Gopeed 引擎时，应用启动就把引擎加载起来。
  * 引擎是进程内单例，首次加载要 `System.load` 几十 MB 的 .so 并初始化 Go runtime，提前加载能让
  * 第一个下载任务不必等它。**任何失败都只记日志** —— 引擎起不来不能影响应用启动，下载侧会按失败任务处理。
  *
