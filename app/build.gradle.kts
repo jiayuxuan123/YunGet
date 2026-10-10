@@ -26,7 +26,22 @@ android {
         applicationId = "com.yunget.app"
         minSdk = 23
         targetSdk = 34
-        versionCode = 50
+        versionCode = 51
+        // 2.7.3 内容：**内嵌引擎升到 TurboDL 0.2.0.9 —— 并发按实测吞吐收敛**
+        //  ① 现象：高线程数并不更快。实测回环 16 连接 30.6 MB/s、128 连接只有 6.1 MB/s（慢 5 倍）；
+        //     真实链路上也存在「加连接不再变快」的聚合限速。而引擎在这两种情况下都不会自己退回来，
+        //     用户只能看着速度掉下去 —— 这正是「线程数滑块能把自己坑死」的机制。
+        //  ② 修法（引擎侧）：慢启动照旧把并发爬到设定值；爬到之后用**任务总吞吐**
+        //     （一段时间内真正写入的字节数）判断这些连接有没有换来速度，没有就退到更低的档位，
+        //     稳定一段时间后重新测一次（不会永久锁死），被拒的档位也不会反复重探（避免周期性掉速）。
+        //  ③ **判据只用总吞吐，不看每连接速度**：有些服务端按连接限速（每连接十几 KB/s），
+        //     单连接速度本来就低，但总吞吐 = 单连接 × 连接数，此时降档会白白丢速度 —— 这种模型下
+        //     下探会让吞吐腰斩，必须被拒。只有聚合封顶时降档才被接受。两种模型都有专门的端到端测试。
+        //  ④ 下探下限是 4 条连接而不是 1：连接数同时是应对链路不均的余量（工作窃取需要「块数 > 连接数」，
+        //     实测有 1 条慢连接时多块比少块快 3.78 倍）。封顶时多留几条几乎不花成本，却能在某个
+        //     CDN 节点变慢时顶上。用户设了全局限速时不启用该学习（那是你自己设的上限，不是服务端瓶颈）。
+        //  ⑤ 429/503 的背压仍优先：一旦被限流，档位与上限一起降到背压后的值并清除基线，
+        //     不会立刻爬回被拒的档。
         // 2.7.2 内容：**修 OOM（内存用满导致的崩溃）**
         //  ① 现象（用户实报）：`OutOfMemoryError: Failed to allocate a 64 byte allocation
         //     with 365360 free bytes ... target footprint 268435456`，崩在 Okio Watchdog 线程。
@@ -276,7 +291,7 @@ android {
         //     - 分片请求带 `If-Range`：防止 CDN 中途换文件时新旧字节拼出混杂文件
         //       （那种情况长度校验会通过，损坏会静默落地）。
         //     - 401/403/410 不再触发背压降并发（是授权/时效信号，不是"你太快了"）。
-        versionName = "2.7.2"
+        versionName = "2.7.3"
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
     }
@@ -431,12 +446,12 @@ dependencies {
     implementation("androidx.lifecycle:lifecycle-viewmodel-compose:2.8.7")
     implementation("com.squareup.okhttp3:okhttp:4.12.0")
 
-    // TurboDL SDK（纯 JVM 多线程下载引擎 + 可选插件框架），从 mavenLocal 解析 dev.turbodl:*:0.2.0.8
+    // TurboDL SDK（纯 JVM 多线程下载引擎 + 可选插件框架），从 mavenLocal 解析 dev.turbodl:*:0.2.0.9
     // 0.2.0.8：读缓冲改为按并发摊薄（修 256 连接 = 256MB = 整堆的 OOM，见 2.7.2 说明）
-    implementation("dev.turbodl:turbodl-core:0.2.0.8")
-    implementation("dev.turbodl:turbo-plugin-runtime:0.2.0.8")
-    implementation("dev.turbodl:turbo-plugin-bootstrap:0.2.0.8")
-    implementation("dev.turbodl:turbo-plugin-hls:0.2.0.8")
+    implementation("dev.turbodl:turbodl-core:0.2.0.9")
+    implementation("dev.turbodl:turbo-plugin-runtime:0.2.0.9")
+    implementation("dev.turbodl:turbo-plugin-bootstrap:0.2.0.9")
+    implementation("dev.turbodl:turbo-plugin-hls:0.2.0.9")
 
     // JavaScript 插件加载器：让用户能自己写/导入脚本插件。
     //
@@ -450,7 +465,7 @@ dependencies {
     //     公开 API（interruptEvaluation / memoryLimit / memoryUsage…）与 jvm 版逐名一致，
     //     且 Android 侧走 System.loadLibrary（不再有 createTempFile 问题）。
     // 所以：排掉 jvm 版，换成 android 版 —— turbo-plugin-js 自身一行代码都不用改。
-    implementation("dev.turbodl:turbo-plugin-js:0.2.0.8") {
+    implementation("dev.turbodl:turbo-plugin-js:0.2.0.9") {
         exclude(group = "io.github.dokar3", module = "quickjs-kt-jvm")
     }
     implementation("io.github.dokar3:quickjs-kt-android:1.0.15")
