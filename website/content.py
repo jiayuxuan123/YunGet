@@ -752,6 +752,41 @@ def _page_plugins(lang: str, href) -> str:
             ),
         )
         + section(
+            "能力级别：L1 与 L2",
+            "<p>除了「可不可信」，插件还有<strong>能力级别</strong>这一维。它回答的是"
+            "「这东西能碰到多大范围的能力」以及「<strong>改了要不要重启 App</strong>」—— "
+            "这两件事与信任等级无关：L1 插件可能是官方签名的，L2 插件也可能来自你信任的源。</p>"
+            '<div class="table-wrap"><table><thead><tr><th>级别</th><th>运行位置</th>'
+            "<th>能做什么</th><th>生效时机</th></tr></thead><tbody>"
+            '<tr><td><strong>L1 · JS 插件</strong><br><span class="mono small">level: "js"</span></td>'
+            "<td>应用内的 JS 沙箱，进程内</td>"
+            "<td>网盘登录 / 解析 / 取直链、网页与 API 调用、规则与轻逻辑</td>"
+            "<td>可热加载，<strong>装上或更新后立即生效</strong></td></tr>"
+            '<tr><td><strong>L2 · 原生插件</strong><br><span class="mono small">level: "native"</span></td>'
+            "<td>宿主进程内，Kotlin/JVM 原生代码</td>"
+            "<td>接入其他下载器的插件生态（Adapter）、新的下载后端、文件 Handler（播放器）、系统级集成</td>"
+            "<td><strong>不能热加载，必须重启 App</strong></td></tr>"
+            "</tbody></table></div>"
+            + note(
+                "<strong>L2 不能热加载是结构性的，不是偷懒。</strong>"
+                "原生插件注册进来的类在进程生命周期内无法替换（类加载器换不掉已加载的类），"
+                "它还可能持有播放器、硬件解码器、原生库句柄这类不可逆的系统资源，"
+                "而且它跑在宿主进程内、没有沙箱。L1 之所以能热加载，恰恰因为它在沙箱里："
+                "所有能力都要过宿主的权限门，运行时可以整体重建。",
+            )
+            + note(
+                "<strong>L2 的能力与宿主等同。</strong>它声明的能力只作展示，不是限制 —— "
+                "装一个 L2 插件，等同于允许那段原生代码在你的设备上以应用的权限执行。"
+                "我们把这一点写在安装确认里而不是藏起来：写轻了（暗示有沙箱）是误导，"
+                "写重了（说成「危险」）会让这类插件没人敢用。"
+                "是否可信仍然由签名与信任链决定，而不是由这个级别决定。",
+                "warn",
+            )
+            + "<p>索引里没写 <span class=\"mono\">level</span> 的存量条目一律按 L1 读；"
+            "写了当前应用不认识的值时，那条<strong>不会被安装</strong>，"
+            "并会在市场页显示「未显示」的原因（通常是提示升级应用）。</p>",
+        )
+        + section(
             "信任等级：四级都能装，差别在提醒",
             "<p>等级说的是「这个源 / 这个插件的<strong>身份</strong>可信到什么程度」，"
             "四级<strong>都能装</strong>，差别在界面上怎么显示、低等级时有没有醒目提示。</p>"
