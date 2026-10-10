@@ -45,7 +45,7 @@ VERSION = LATEST["tag"].lstrip("v")
 MIN_SDK = "Android 6.0（API 23）"
 TARGET_SDK = "API 34"
 #: YunGet 内置的下载引擎版本，取自 app/build.gradle.kts 的 dev.turbodl 依赖。
-TURBODL_VERSION = "0.2.0.7"
+TURBODL_VERSION = "0.2.0.8"
 
 REPO = "https://github.com/jiayuxuan123/YunGet"
 BLOB = f"{REPO}/blob/main"

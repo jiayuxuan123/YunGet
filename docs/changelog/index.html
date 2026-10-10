@@ -28,7 +28,19 @@
 </div>
 </header>
 <main id="main">
-<section><h1>更新日志</h1><p class="lead">由发布说明本身生成 —— 应用内的「检查更新」读的是同一份数据，所以两处看到的版本与内容永远一致。</p></section><section><div class="cards cols-2"><div class="card"><h3><span class="mono">v2.7.1</span></h3><p class="small">2026-10-09 · 1 个附件</p><p class="muted">YunGet 2.7.1：修下载页崩溃与 JS 引擎误报
+<section><h1>更新日志</h1><p class="lead">由发布说明本身生成 —— 应用内的「检查更新」读的是同一份数据，所以两处看到的版本与内容永远一致。</p></section><section><div class="cards cols-2"><div class="card"><h3><span class="mono">v2.7.2</span></h3><p class="small">2026-10-10 · 1 个附件</p><p class="muted">YunGet 2.7.2：修 OOM（下载时内存用满导致的崩溃）
+问题
+崩溃日志：
+两处容易看错的地方：
+**一是崩在了 Okio Watchdog 线程上。** 那只是&quot;受害者&quot;——它只是想在 socket 超时时关掉连接，
+结果连 64 字节都分配不出来。真正的原因在别处。
+**二是 268435456 这个数字。** 它是 256MiB，正好等于 Android 给这个应用的堆上限，
+也正好等于 256 × 1MB。这不是巧合。
+根因
+引擎每个在飞连接分配一个读缓冲，缓冲大小是固定的 **1MB**。这个数看着不大，乘上连接数就大了——
+而我在 2.6.22 那一版（提交 71d402e）把线程上限从 128 提到了**引擎支持的 256**：
+缓冲都是**活对象**（正被下载协程引用），GC 一个都回收不掉，所以是&quot;占满&quot;而不是&quot;垃圾太多&quot;。
+触发条件很普通：**线程数调到高 +…</p><p class="small"><a href="https://github.com/jiayuxuan123/YunGet/releases/tag/v2.7.2">发布页</a></p></div><div class="card"><h3><span class="mono">v2.7.1</span></h3><p class="small">2026-10-09 · 1 个附件</p><p class="muted">YunGet 2.7.1：修下载页崩溃与 JS 引擎误报
 这两个问题都在 2.7.0 引入，也都由你真机实报。它们有一个共同点：**错在判断，不在功能**——
 一个是把界面画崩的用法错误，一个是把好的引擎报成坏的。
 下载页一进去就崩
@@ -138,21 +150,11 @@ Android 禁止在主线程发起网络请求，于是抛出 `NetworkOnMainThread
 修复：登录成功后网盘页仍显示「请先登录」
 **现象**：首次登录某个网盘后，切到该网盘的文件页，仍停在「请先登录夸克网盘」之类的提示，
 必须手动点一次「重试」才能看到文件列表。
-**根因**：6 个云盘浏览 ViewModel 在构造时无条件执行 `init { loadRoot() }`。…</p><p class="small"><a href="https://github.com/jiayuxuan123/YunGet/releases/tag/v2.6.12">发布页</a></p></div><div class="card"><h3><span class="mono">v2.6.11</span></h3><p class="small">2026-09-29 · 1 个附件</p><p class="muted">同步上游 YunX 的安全加固、保存路径重构与 Material 3 Expressive 界面
-本版将上游 [CYQawa/YunX](https://github.com/CYQawa/YunX) 的多项改进合并进本项目。
-合并前先做了逐文件比对（归一化包名与许可证头后，122 个同名文件中 51 个内容完全一致），
-据此决定三类处理方式：可直接采用、需适配定制点、以及双方已分叉需保留各自的实现。
----
-安全：凭证加密存储
-**此前状态**：各网盘的登录凭证（cookie / accessToken / refreshToken）以**明文**存储在
-Room 数据库中。设备被 root 或数据库文件被取出时，账号凭证可直接读取。
-**改造后**：
-· 落库前使用 **AES-GCM** 加密，密钥由 **Android Keystore** 持有且不可导出
-· 附加认证数据（AAD…</p><p class="small"><a href="https://github.com/jiayuxuan123/YunGet/releases/tag/v2.6.11">发布页</a></p></div></div></section><section><h2>完整历史</h2><div class="btn-row"><a class="btn" href="https://github.com/jiayuxuan123/YunGet/releases">全部发布</a><a class="btn" href="https://github.com/jiayuxuan123/YunGet/commits/main">代码提交</a></div></section></main>
+**根因**：6 个云盘浏览 ViewModel 在构造时无条件执行 `init { loadRoot() }`。…</p><p class="small"><a href="https://github.com/jiayuxuan123/YunGet/releases/tag/v2.6.12">发布页</a></p></div></div></section><section><h2>完整历史</h2><div class="btn-row"><a class="btn" href="https://github.com/jiayuxuan123/YunGet/releases">全部发布</a><a class="btn" href="https://github.com/jiayuxuan123/YunGet/commits/main">代码提交</a></div></section></main>
 <footer class="site-foot">
 <div class="wrap">
 <div class="foot-cols"><div class="foot-col"><h4>项目</h4><ul><li><a href="https://github.com/jiayuxuan123/YunGet">GitHub</a></li><li><a href="../download/index.html">下载</a></li><li><a href="index.html">更新日志</a></li><li><a href="https://github.com/jiayuxuan123/YunGet/issues">问题反馈</a></li></ul></div><div class="foot-col"><h4>文档</h4><ul><li><a href="../docs/readme/index.html">项目说明</a></li><li><a href="../docs/guide/index.html">使用说明</a></li><li><a href="../docs/faq/index.html">常见问题</a></li><li><a href="../docs/engines/index.html">下载引擎</a></li><li><a href="../docs/build/index.html">从源码构建</a></li></ul></div><div class="foot-col"><h4>插件</h4><ul><li><a href="../plugins/index.html">插件（市场与安装）</a></li><li><a href="../developers/index.html">开发者（怎么写）</a></li><li><a href="../docs/plugin-dev/index.html">写一个插件</a></li><li><a href="../docs/plugin-api/index.html">插件 ABI 参考</a></li><li><a href="../docs/plugin-publish/index.html">打包与发布</a></li><li><a href="../docs/plugin-security/index.html">插件安全模型</a></li></ul></div><div class="foot-col"><h4>协议与说明</h4><ul><li><a href="../legal/license/index.html">AGPL-3.0 原文</a></li><li><a href="../legal/notice/index.html">署名与致谢</a></li><li><a href="../legal/privacy/index.html">隐私说明</a></li><li><a href="../legal/terms/index.html">使用条款</a></li><li><a href="../support/index.html">支持开发</a></li></ul></div><div class="foot-col"><h4>相关</h4><ul><li><a href="https://github.com/CYQawa/YunX">上游 CYQawa/YunX</a></li><li><a href="https://github.com/jiayuxuan123/TurboDL">下载引擎 TurboDL</a></li><li><a href="https://github.com/jiayuxuan123/YunGet-Plugins">插件源 YunGet-Plugins</a></li><li><a href="../community/index.html">社区</a></li></ul></div></div>
-<div class="foot-note"><p>云取 YunGet v2.7.1 · AGPL-3.0 · 内置 TurboDL 0.2.0.7 · Android 6.0（API 23）</p><p>本项目是 CYQawa/YunX（云析）的二次开发版本，与上游作者无隐性关联。仅供个人学习与技术交流，请勿用于商业用途；下载内容的版权归原作者及相关权利人所有。</p></div>
+<div class="foot-note"><p>云取 YunGet v2.7.2 · AGPL-3.0 · 内置 TurboDL 0.2.0.8 · Android 6.0（API 23）</p><p>本项目是 CYQawa/YunX（云析）的二次开发版本，与上游作者无隐性关联。仅供个人学习与技术交流，请勿用于商业用途；下载内容的版权归原作者及相关权利人所有。</p></div>
 </div>
 </footer>
 <script src="../assets/site.js" defer></script>

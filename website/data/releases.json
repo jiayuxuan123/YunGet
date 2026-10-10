@@ -1,23 +1,40 @@
 {
   "repo": "jiayuxuan123/YunGet",
   "latest": {
-    "tag": "v2.7.1",
-    "name": "YunGet 2.7.1：修下载页崩溃与 JS 引擎误报",
-    "published": "2026-10-09T16:48:28Z",
+    "tag": "v2.7.2",
+    "name": "YunGet 2.7.2：修 OOM（下载时内存用满导致的崩溃）",
+    "published": "2026-10-10T04:29:33Z",
     "prerelease": false,
-    "url": "https://github.com/jiayuxuan123/YunGet/releases/tag/v2.7.1",
-    "summary": "YunGet 2.7.1：修下载页崩溃与 JS 引擎误报\n这两个问题都在 2.7.0 引入，也都由你真机实报。它们有一个共同点：**错在判断，不在功能**——\n一个是把界面画崩的用法错误，一个是把好的引擎报成坏的。\n下载页一进去就崩\n崩在速度曲线的横轴上。我给横轴传了一个\"返回空串\"的格式化器，本意是让横轴不显示刻度，\n但 Vico 明确禁止这么做：它把空标签当成用法错误，在绘制阶段直接抛异常，并在报错里写明了\n正确做法——要控制哪些刻度显示标签，应该用 `ItemPlacer`，而不是让格式化器返回空串。\n纵轴的\"速度为零时不显示标签\"是同一类错误，只是恰好没被触发到，一并改掉了。\n横轴现在整条不传：它的刻度是采样点序号，对用户本来就没有信息量。\n顺带把格式化逻辑抽出来配了测试，锁住\"任何输入都不返回空串\"这条契约。它能让应用崩溃，\n但编译器不会拦——只能靠测试。覆盖了零、负数、各量级进…",
+    "url": "https://github.com/jiayuxuan123/YunGet/releases/tag/v2.7.2",
+    "summary": "YunGet 2.7.2：修 OOM（下载时内存用满导致的崩溃）\n问题\n崩溃日志：\n两处容易看错的地方：\n**一是崩在了 Okio Watchdog 线程上。** 那只是\"受害者\"——它只是想在 socket 超时时关掉连接，\n结果连 64 字节都分配不出来。真正的原因在别处。\n**二是 268435456 这个数字。** 它是 256MiB，正好等于 Android 给这个应用的堆上限，\n也正好等于 256 × 1MB。这不是巧合。\n根因\n引擎每个在飞连接分配一个读缓冲，缓冲大小是固定的 **1MB**。这个数看着不大，乘上连接数就大了——\n而我在 2.6.22 那一版（提交 71d402e）把线程上限从 128 提到了**引擎支持的 256**：\n缓冲都是**活对象**（正被下载协程引用），GC 一个都回收不掉，所以是\"占满\"而不是\"垃圾太多\"。\n触发条件很普通：**线程数调到高 +…",
     "assets": [
       {
-        "name": "YunGet-2.7.1-release.apk",
-        "size": 31586091,
-        "url": "https://github.com/jiayuxuan123/YunGet/releases/download/v2.7.1/YunGet-2.7.1-release.apk",
+        "name": "YunGet-2.7.2-release.apk",
+        "size": 31588032,
+        "url": "https://github.com/jiayuxuan123/YunGet/releases/download/v2.7.2/YunGet-2.7.2-release.apk",
         "downloads": 0,
-        "sha256": "4140068dadae124607ec22f7d23a297691690f3586c84c7f14fb8da4ce32992f"
+        "sha256": "38681a358c8ca14f2c661a072a3382cd8ab26e8c89ceda23f03bf863fe5933d7"
       }
     ]
   },
   "releases": [
+    {
+      "tag": "v2.7.2",
+      "name": "YunGet 2.7.2：修 OOM（下载时内存用满导致的崩溃）",
+      "published": "2026-10-10T04:29:33Z",
+      "prerelease": false,
+      "url": "https://github.com/jiayuxuan123/YunGet/releases/tag/v2.7.2",
+      "summary": "YunGet 2.7.2：修 OOM（下载时内存用满导致的崩溃）\n问题\n崩溃日志：\n两处容易看错的地方：\n**一是崩在了 Okio Watchdog 线程上。** 那只是\"受害者\"——它只是想在 socket 超时时关掉连接，\n结果连 64 字节都分配不出来。真正的原因在别处。\n**二是 268435456 这个数字。** 它是 256MiB，正好等于 Android 给这个应用的堆上限，\n也正好等于 256 × 1MB。这不是巧合。\n根因\n引擎每个在飞连接分配一个读缓冲，缓冲大小是固定的 **1MB**。这个数看着不大，乘上连接数就大了——\n而我在 2.6.22 那一版（提交 71d402e）把线程上限从 128 提到了**引擎支持的 256**：\n缓冲都是**活对象**（正被下载协程引用），GC 一个都回收不掉，所以是\"占满\"而不是\"垃圾太多\"。\n触发条件很普通：**线程数调到高 +…",
+      "assets": [
+        {
+          "name": "YunGet-2.7.2-release.apk",
+          "size": 31588032,
+          "url": "https://github.com/jiayuxuan123/YunGet/releases/download/v2.7.2/YunGet-2.7.2-release.apk",
+          "downloads": 0,
+          "sha256": "38681a358c8ca14f2c661a072a3382cd8ab26e8c89ceda23f03bf863fe5933d7"
+        }
+      ]
+    },
     {
       "tag": "v2.7.1",
       "name": "YunGet 2.7.1：修下载页崩溃与 JS 引擎误报",
@@ -30,7 +47,7 @@
           "name": "YunGet-2.7.1-release.apk",
           "size": 31586091,
           "url": "https://github.com/jiayuxuan123/YunGet/releases/download/v2.7.1/YunGet-2.7.1-release.apk",
-          "downloads": 0,
+          "downloads": 592,
           "sha256": "4140068dadae124607ec22f7d23a297691690f3586c84c7f14fb8da4ce32992f"
         }
       ]
@@ -47,7 +64,7 @@
           "name": "YunGet-2.7.0-release.apk",
           "size": 31586005,
           "url": "https://github.com/jiayuxuan123/YunGet/releases/download/v2.7.0/YunGet-2.7.0-release.apk",
-          "downloads": 54,
+          "downloads": 73,
           "sha256": "d35b27bf3a94e363b67f6c57a1a488bae07e5c276ccf3c5cec50980e2c06cc7e"
         }
       ]
@@ -64,7 +81,7 @@
           "name": "YunGet-2.6.21-release.apk",
           "size": 29256285,
           "url": "https://github.com/jiayuxuan123/YunGet/releases/download/v2.6.21/YunGet-2.6.21-release.apk",
-          "downloads": 1287,
+          "downloads": 1288,
           "sha256": "80e7d72941dec73605eb7b83a58843380bef89c039b8ed57ca705b91affbe67a"
         }
       ]
@@ -149,7 +166,7 @@
           "name": "YunGet-2.6.15-release.apk",
           "size": 28284269,
           "url": "https://github.com/jiayuxuan123/YunGet/releases/download/v2.6.15/YunGet-2.6.15-release.apk",
-          "downloads": 3936,
+          "downloads": 3939,
           "sha256": "27284307104496d94934cb94f82b2445d586bcebda3d0b4d1b74232427f0e845"
         }
       ]
@@ -268,7 +285,7 @@
           "name": "app-release.apk",
           "size": 18993570,
           "url": "https://github.com/jiayuxuan123/YunGet/releases/download/v2.6.7/app-release.apk",
-          "downloads": 3336,
+          "downloads": 3337,
           "sha256": "aea85a934fd642afc63fc87ef822914e37f63730f66993482f1e5c419f7218e6"
         }
       ]
@@ -508,23 +525,6 @@
           "url": "https://github.com/jiayuxuan123/YunGet/releases/download/v2.2.2/YunGet-2.2.2.apk",
           "downloads": 6,
           "sha256": "7cc3028b85f117df5e6de99237772ed33e0665eb5ad16dbb9041c7de01d97806"
-        }
-      ]
-    },
-    {
-      "tag": "v2.2.1",
-      "name": "YunGet 2.2.1：修复大小校验失败 / 满并发 / 更新崩溃",
-      "published": "2026-08-28T04:36:13Z",
-      "prerelease": false,
-      "url": "https://github.com/jiayuxuan123/YunGet/releases/tag/v2.2.1",
-      "summary": "重要修复版，建议手动安装覆盖（勿走应用内更新，旧版更新流程本身会崩）。\n修复：更新/下载时「大小校验失败」\n下载完成时莫名弹出大小校验失败、算下来字节少了约 2~3 倍。根因是底层 OkHttp 对未声明编码的请求\n自动启用 gzip 并透明解压，落盘字节与服务器声明的字节数不一致。已在引擎层强制 identity 编码修复。\n修复：设 64 线程只跑到约 16、速度暴跌\n上一版误加的 per-host 并发上限把每个下载直接限死到 16 并发（单个下载所有分片本就同一 host），\n科学上网直链、网盘转直链速度都暴跌到十几分之一。本版移除该限制，恢复满并发。\n修复：应用内更新时崩溃\nForegroundServiceDidNotStartInTimeException —— 任务秒失败时前台服务来不及完成启动契约导致崩溃。\n已修复前台服务启动时序。\n版本 2.2.0 → 2.2.1（ve…",
-      "assets": [
-        {
-          "name": "YunGet-2.2.1.apk",
-          "size": 18960819,
-          "url": "https://github.com/jiayuxuan123/YunGet/releases/download/v2.2.1/YunGet-2.2.1.apk",
-          "downloads": 3,
-          "sha256": "925124188414aff9d249e46e94e9c0e720f8c24bc4917214bcf59ccb35a5d47e"
         }
       ]
     }
