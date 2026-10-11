@@ -227,8 +227,20 @@ body.brand-turbodl[data-theme="light"] { --accent: #215bd1; --accent-fg: var(--w
 html {
   -webkit-text-size-adjust: 100%;
   scroll-behavior: smooth;
+  /* 锚点跳转时给吸顶的侧栏/页头留出空间，否则标题会被压在下面 */
   scroll-padding-top: var(--s6);
 }
+
+/* 触摸交互（Web Interface Guidelines 的 Touch 一节）：
+   - touch-action: manipulation 去掉移动端双击缩放的 300ms 延迟；
+   - tap-highlight 显式设成透明，避免安卓上点链接闪一块灰；
+   - overscroll-behavior: contain 防止滚到边界时把整页带着弹（抽屉展开时尤其明显）。 */
+a, button, .btn, summary, input, select, textarea { touch-action: manipulation; }
+html { -webkit-tap-highlight-color: transparent; }
+.side, .side-nav, .toc, .doc-aside { overscroll-behavior: contain; }
+
+/* 全出血布局给刘海/圆角留边 */
+.side { padding-left: max(var(--s5), env(safe-area-inset-left)); }
 
 @media (prefers-reduced-motion: reduce) {
   html { scroll-behavior: auto; }
@@ -607,13 +619,23 @@ p, li, td, .lead, .small, .muted, .card-body, .note, .doc-meta, .stat, .seg-meta
   .cards.cols-4 { grid-template-columns: repeat(4, minmax(0, 1fr)); }
 }
 
+/* 条目：不做卡片。每个条目左侧一段短竖线（"段"的最小单位），
+   与页面其余部分的分段语言一致；条目之间靠网格线分隔。 */
 .card {
+  position: relative;
   border: 0;
   border-bottom: 1px solid var(--rule);
   border-radius: 0;
-  padding: var(--s6) var(--s5) var(--s6) 0;
+  padding: var(--s6) var(--s5) var(--s6) var(--s5);
   background: none;
   min-width: 0;
+}
+.card::before {
+  content: ""; position: absolute;
+  left: 0; top: var(--s6);
+  width: 2px; height: 1.1em;
+  background: var(--accent);
+  opacity: .85;
 }
 /* 多列时给列之间加竖线 */
 @media (min-width: 700px) {
@@ -651,7 +673,12 @@ table { border-collapse: collapse; width: 100%; font-size: var(--t-base); }
 /* 窄屏：每条记录一行块，列名贴在值前 */
 .table-wrap table, .table-wrap thead, .table-wrap tbody, .table-wrap tr, .table-wrap td { display: block; }
 .table-wrap thead { display: none; }
-.table-wrap tr { padding: var(--s4) 0; border-bottom: 1px solid var(--rule); }
+.table-wrap tr { position: relative; padding: var(--s4) 0 var(--s4) var(--s4); border-bottom: 1px solid var(--rule); }
+.table-wrap tr::before {
+  content: ""; position: absolute; left: 0; top: var(--s4);
+  width: 2px; height: 1em; background: var(--rule-strong);
+}
+.table-wrap tr:hover::before { background: var(--accent); }
 .table-wrap td { padding: var(--s2) 0; border: 0; min-width: 0; }
 .table-wrap td::before {
   content: attr(data-label);
@@ -667,6 +694,7 @@ table { border-collapse: collapse; width: 100%; font-size: var(--t-base); }
   .table-wrap thead { display: table-header-group; }
   .table-wrap tbody { display: table-row-group; }
   .table-wrap tr { display: table-row; padding: 0; border-bottom: 0; }
+  .table-wrap tr::before { display: none; }
   .table-wrap td {
     display: table-cell; padding: var(--s4) var(--s5) var(--s4) 0;
     border-bottom: 1px solid var(--rule);
@@ -813,7 +841,7 @@ table { border-collapse: collapse; width: 100%; font-size: var(--t-base); }
 .toc a:hover { color: var(--accent); text-decoration: none; }
 .doc-nav { margin-top: var(--s6); padding-top: var(--s4); border-top: 1px solid var(--rule); }
 .doc-nav .cur { display: flex; align-items: center; gap: var(--s2); }
-.doc-nav .cur::before { content: ""; width: 10px; height: 2px; flex: none; background: var(--accent); }
+.doc-nav .cur::before { content: ""; width: 2px; height: 1em; flex: none; background: var(--accent); }
 .doc-nav .cur span { color: var(--fg); font-weight: 650; font-size: var(--t-sm); }
 
 .toc > summary {

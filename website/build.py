@@ -154,6 +154,8 @@ class Site:
 <meta property="og:url" content="{esc(canon)}">
 <meta property="og:image" content="{esc(og_image)}">
 <meta name="twitter:card" content="summary_large_image">
+<meta name="theme-color" content="#ffffff" media="(prefers-color-scheme: light)">
+<meta name="theme-color" content="#08090b" media="(prefers-color-scheme: dark)">
 <link rel="icon" href="{rel(page["dir"], "assets/favicon.svg")}" type="image/svg+xml">
 <link rel="apple-touch-icon" href="{rel(page["dir"], "assets/apple-touch-icon.png")}">
 <!-- 主题：在样式表之前定下 data-theme，避免深色偏好下闪一帧白 -->
