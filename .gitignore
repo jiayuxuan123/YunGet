@@ -30,3 +30,6 @@ local.properties
 # Python 站点生成器的字节码缓存（生成产物，不入库）
 __pycache__/
 *.pyc
+
+# Kotlin 编译期错误日志（构建产物，不入库）
+.kotlin/
