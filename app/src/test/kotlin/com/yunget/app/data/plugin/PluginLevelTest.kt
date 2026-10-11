@@ -173,8 +173,15 @@ class PluginLevelTest {
             index.skippedEntries.isEmpty(),
         )
         assertTrue(
-            "每个条目都要有级别字段（由 sign_plugin.py index 从 entry.language 推导）",
-            index.plugins.all { it.level == PluginLevel.JS },
+            "每个条目都要有级别字段（由 sign_plugin.py index 从 entry.language 推导：js→L1，kotlin→L2）",
+            index.plugins.all { it.level == PluginLevel.JS || it.level == PluginLevel.NATIVE },
+        )
+        // 首批网盘 Provider 已在真实索引里：kotlin 入口必须落在 L2 档，且数量与本轮发布一致。
+        // 数量变化时同步更新这里 —— 它钉住的是"推导规则没被悄悄改坏"。
+        val native = index.plugins.count { it.level == PluginLevel.NATIVE }
+        assertTrue(
+            "L2 条目数应当是 4（首批网盘 Provider），实际 $native",
+            native == 4,
         )
     }
 

@@ -82,12 +82,14 @@ import kotlinx.coroutines.withContext
  *
  * ## 数据来自哪里
  *
- * [DiagLog.recent] 读的是进程内环形缓冲（400 行）。它不读文件，因为：
- *  - 文件里只有 INFO 以上，而现场排查常常需要 DEBUG 细节；
- *  - 读文件要处理截断、多分类合并这些事，而"看最近发生了什么"不需要那些。
+ * 两个来源，用户可切：
  *
- * 环形缓冲只在进程内，所以**重启后这一页是空的** —— 那一页的说明里写清楚了，
- * 持久化的内容要靠导出。
+ *  - **实时**：[DiagLog.recent] 读进程内环形缓冲（400 行）。它不读文件，因为：
+ *    文件里只有 INFO 以上，而现场排查常常需要 DEBUG 细节。
+ *  - **落盘**：读已写盘的日志文件（错误汇总 / 全部分类）。环形缓冲重启就空，
+ *    "上次为什么崩了、刚才哪一步报错了"必须看落盘 —— 崩溃报告由
+ *    [com.yunget.app.util.DiagLog.recordCrash] 写进 boot.log 与 errors.log，
+ *    所以重启后在这里切换到落盘来源就能看到。
  */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -98,12 +100,17 @@ fun LogViewerScreen(onBack: () -> Unit, modifier: Modifier = Modifier) {
     var lines by remember { mutableStateOf<List<String>>(emptyList()) }
     var minLevel by remember { mutableStateOf(DiagLog.Level.INFO) }
     var autoRefresh by remember { mutableStateOf(true) }
+    var source by remember { mutableStateOf(Source.LIVE) }
+
+    // 系统返回键离开本页。2.7.5 漏了这条，在本页按返回会直接退出应用。
+    androidx.activity.compose.BackHandler { onBack() }
 
     // 自动刷新：日志是"边跑边看"的东西，不刷新就失去意义。
     // 用 1.2s 间隔 —— 更短会让长列表频繁重组（观感是闪），更长则跟不上操作节奏。
-    LaunchedEffect(minLevel, autoRefresh) {
+    // 落盘来源同样轮询：文件在应用继续运行时还会被写入（复现问题时切过来能看到增量）。
+    LaunchedEffect(minLevel, autoRefresh, source) {
         while (true) {
-            lines = DiagLog.recent(minLevel = minLevel, limit = 300)
+            lines = loadLines(context, source, minLevel)
             if (!autoRefresh) break
             delay(1200)
         }
@@ -125,7 +132,7 @@ fun LogViewerScreen(onBack: () -> Unit, modifier: Modifier = Modifier) {
                             autoRefresh = false
                         } else {
                             autoRefresh = true
-                            lines = DiagLog.recent(minLevel = minLevel, limit = 300)
+                            scope.launch { lines = loadLines(context, source, minLevel) }
                         }
                     }) {
                         Icon(
@@ -140,9 +147,9 @@ fun LogViewerScreen(onBack: () -> Unit, modifier: Modifier = Modifier) {
                     }
                     IconButton(onClick = {
                         scope.launch {
-                            val text = withContext(Dispatchers.IO) {
-                                DiagLog.recent(minLevel = null, limit = 400).joinToString("\n")
-                            }
+                            // 复制**当前正在显示**的内容：实时模式是缓冲，落盘模式是文件 ——
+                            // 这样"我在落盘·错误里看到一条报错，复制它"拿到的就是那条，而不是另一份缓冲。
+                            val text = lines.joinToString("\n")
                             val ok = withContext(Dispatchers.IO) {
                                 runCatching {
                                     val cm = context.getSystemService(
@@ -205,11 +212,33 @@ fun LogViewerScreen(onBack: () -> Unit, modifier: Modifier = Modifier) {
                 }
             }
 
+            // 来源切换：实时缓冲只有本次运行的内容，重启就空；落盘文件重启后仍在 ——
+            // "上次为什么崩了/刚才哪一步报错了"要看的是落盘，不是这份空的缓冲。
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .horizontalScroll(rememberScrollState())
+                    .padding(bottom = 8.dp),
+                horizontalArrangement = Arrangement.spacedBy(6.dp),
+            ) {
+                for (s in Source.entries) {
+                    FilterChip(
+                        selected = source == s,
+                        onClick = { source = s },
+                        label = { Text(s.label, style = MaterialTheme.typography.labelMedium) },
+                    )
+                }
+            }
+
             Text(
                 text = buildString {
                     append("显示 ${lines.size} 行")
-                    if (!autoRefresh) append("（已暂停自动刷新）")
-                    append(" · 仅本次运行 · 历史上限 400 行")
+                    if (source == Source.LIVE) {
+                        if (!autoRefresh) append("（已暂停自动刷新）")
+                        append(" · 仅本次运行 · 历史上限 400 行")
+                    } else {
+                        append(" · 来自落盘日志文件（重启后仍可查看）")
+                    }
                 },
                 style = MaterialTheme.typography.labelSmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
@@ -218,7 +247,10 @@ fun LogViewerScreen(onBack: () -> Unit, modifier: Modifier = Modifier) {
 
             if (lines.isEmpty()) {
                 Text(
-                    text = if (minLevel.ordinal >= DiagLog.Level.WARN.ordinal) {
+                    text = if (source != Source.LIVE) {
+                        "落盘日志还没有内容。用一下应用（下载、解析、开关插件）或发生崩溃后，" +
+                            "这里就会有内容 —— 且重启应用后依然能看。"
+                    } else if (minLevel.ordinal >= DiagLog.Level.WARN.ordinal) {
                         "当前级别下没有日志。说明到现在为止没出现过这个级别的记录 —— 换个级别看看。"
                     } else {
                         "还没有日志。用一下应用（下载、解析、开关插件），这里就会开始出现内容。"
@@ -260,4 +292,37 @@ fun LogViewerScreen(onBack: () -> Unit, modifier: Modifier = Modifier) {
             }
         }
     }
+}
+
+/** 数据来源。实时 = 进程内环形缓冲；落盘 = 已写盘的日志文件（重启后仍在）。 */
+private enum class Source(val label: String) {
+    LIVE("实时"),
+    ERRORS_FILE("错误汇总 · 落盘"),
+    ALL_FILES("全部分类 · 落盘"),
+}
+
+/** 按当前来源取一批行：实时走环形缓冲，落盘走文件（IO 切后台线程）。 */
+private suspend fun loadLines(
+    context: android.content.Context,
+    source: Source,
+    minLevel: DiagLog.Level,
+): List<String> = withContext(Dispatchers.IO) {
+    val raw = when (source) {
+        Source.LIVE -> DiagLog.recent(minLevel = minLevel, limit = 300)
+        Source.ERRORS_FILE -> (DiagLog.readErrors(context) ?: "").lines()
+        Source.ALL_FILES -> (DiagLog.readAll(context) ?: "").lines()
+    }
+    raw.filter { passesLevel(it, minLevel) }.takeLast(300)
+}
+
+/**
+ * 文件行的级别过滤，与 [DiagLog.recent] 的实时过滤同一判据：行内 ` [X] ` 标记。
+ * 没有级别标记的行（readAll 的分类标题行、空行）原样放行 —— 过滤不该把"这段是哪个文件"藏掉。
+ */
+private fun passesLevel(line: String, min: DiagLog.Level): Boolean {
+    val open = line.indexOf(" [")
+    if (open < 0) return true
+    val mark = line.getOrNull(open + 2) ?: return true
+    val actual = DiagLog.Level.entries.firstOrNull { it.mark == mark } ?: return true
+    return actual.ordinal >= min.ordinal
 }

@@ -246,7 +246,7 @@ python tools/sign_plugin.py index --key keys/my-id-2026.key --key-id my-id-2026
 
 ### 流程
 
-1. **Fork 仓库**，新建分支（如 `add-parser-mycloud`）。
+1. **Fork 仓库**（[github.com/jiayuxuan123/YunGet-Plugins/fork](https://github.com/jiayuxuan123/YunGet-Plugins/fork)），新建分支（如 `add-parser-mycloud`）。
 2. 建目录 `plugins/<你的插件 id>/`，目录名**必须等于**清单里的 `id`。
 3. 放齐 `<id>.js`、`turbodl-plugin.json`、`market.json`（+ 可选的 README）。
 4. 在仓库根目录跑一遍，确认工具能过：
@@ -259,6 +259,7 @@ python tools/sign_plugin.py index --key keys/my-id-2026.key --key-id my-id-2026
    想本地生成一份带自己签名的索引看看效果也可以，但**PR 里通常不要提交 `plugins.json` 的改动** —— 官方源的索引由**官方密钥**签，合并后由维护者用自己的密钥重新生成，这样 `keyId` 才一致（`index` 会拒绝生成"条目 keyId 与本次签名 keyId 不一致"的索引）。
 
 5. 提 PR，说明：插件做什么、支持哪些链接、声明了哪些权限、**为什么需要这些权限**。
+   直达入口：[github.com/jiayuxuan123/YunGet-Plugins/compare](https://github.com/jiayuxuan123/YunGet-Plugins/compare)（选你的分支 → `main`）。拿不准适不适合先发个 [Issue](https://github.com/jiayuxuan123/YunGet-Plugins/issues/new?template=plugin-question.md) 问一句，比写完被拒省事。
 6. 维护者审核合并 → 重新生成 `plugins.json` → 用户在 App 里就能看到。
 
 社区插件应当由**你自己**的 keyId 签名；`keygen` 生成的私钥放在你本机，公钥随 PR 一起进 `keys/`。

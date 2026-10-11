@@ -26,3 +26,6 @@ dependencyResolutionManagement {
 rootProject.name = "YunGet"
 
 include(":app")
+
+// L2 网盘 Provider 插件打包模块（不进 APK；产物是市场分发的 dex jar，见模块内说明）
+include(":l2-providers")

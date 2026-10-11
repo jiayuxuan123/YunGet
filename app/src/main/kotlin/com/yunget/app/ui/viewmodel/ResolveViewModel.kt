@@ -66,6 +66,8 @@ private const val DIRECT_DOWNLOAD_UA =
  * 按链接自动路由到对应平台仓库与凭证。
  */
 class ResolveViewModel(
+    /** 应用上下文：网盘插件路由（P0）的日志与运行时访问都要它。 */
+    private val appContext: android.content.Context,
     private val accountRepository: QuarkAccountRepository,
     private val resolveRepository: QuarkResolveRepository,
     private val ucAccountRepository: UCAccountRepository,
@@ -554,56 +556,72 @@ class ResolveViewModel(
     private var currentPlatform: SharePlatform = SharePlatform.QUARK
 
     /** 当前平台凭证（夸克/UC/百度/139/115/蓝奏用 cookie，迅雷/123 用 access_token，光鸭用 accessToken，蓝奏优享用 appToken） */
-    private suspend fun currentCredential(): String? = when (currentPlatform) {
-        SharePlatform.UC -> ucAccountRepository.getAccount()?.cookie
-        SharePlatform.XUNLEI -> xunleiAccountRepository.getAccount()?.accessToken
-        SharePlatform.BAIDU -> baiduAccountRepository.getAccount()?.cookie
-        SharePlatform.C139 -> c139AccountRepository.getAccount()?.cookie
-        SharePlatform.PAN123 -> pan123AccountRepository.getAccount()?.accessToken
-        SharePlatform.PAN115 -> pan115AccountRepository.getAccount()?.cookie
-        SharePlatform.GUANGYA -> guangyaAccountRepository.ensureAccessToken()
-        SharePlatform.ILANZOU -> ilanzouAccountRepository.getAccount()?.appToken
-        SharePlatform.LANZOU -> lanzouAccountRepository.getAccount()?.cookie
-        else -> accountRepository.getAccount()?.cookie
+    private suspend fun currentCredential(): String? {
+        // 插件路径不用宿主凭证：插件经宿主桥拿自己的登录态（见 YunHostBridge）
+        if (activeProvider != null) return ""
+        return when (currentPlatform) {
+            SharePlatform.UC -> ucAccountRepository.getAccount()?.cookie
+            SharePlatform.XUNLEI -> xunleiAccountRepository.getAccount()?.accessToken
+            SharePlatform.BAIDU -> baiduAccountRepository.getAccount()?.cookie
+            SharePlatform.C139 -> c139AccountRepository.getAccount()?.cookie
+            SharePlatform.PAN123 -> pan123AccountRepository.getAccount()?.accessToken
+            SharePlatform.PAN115 -> pan115AccountRepository.getAccount()?.cookie
+            SharePlatform.GUANGYA -> guangyaAccountRepository.ensureAccessToken()
+            SharePlatform.ILANZOU -> ilanzouAccountRepository.getAccount()?.appToken
+            SharePlatform.LANZOU -> lanzouAccountRepository.getAccount()?.cookie
+            else -> accountRepository.getAccount()?.cookie
+        }
     }
 
-    private fun currentRepo(): ShareResolveRepository = when (currentPlatform) {
-        SharePlatform.UC -> ucResolveRepository
-        SharePlatform.XUNLEI -> xunleiResolveRepository
-        SharePlatform.BAIDU -> baiduResolveRepository
-        SharePlatform.C139 -> c139ResolveRepository
-        SharePlatform.PAN123 -> pan123ResolveRepository
-        SharePlatform.PAN115 -> pan115ResolveRepository
-        SharePlatform.GUANGYA -> guangyaResolveRepository
-        SharePlatform.ILANZOU -> ilanzouResolveRepository
-        SharePlatform.LANZOU -> lanzouResolveRepository
-        else -> resolveRepository
+    private fun currentRepo(): ShareResolveRepository {
+        // 插件优先：有活动 Provider 时全部走适配器（失败回退由路由层在解析前决定，
+        // 到这里说明插件已认领且健康）
+        activeProvider?.let { return providerRepo() }
+        return when (currentPlatform) {
+            SharePlatform.UC -> ucResolveRepository
+            SharePlatform.XUNLEI -> xunleiResolveRepository
+            SharePlatform.BAIDU -> baiduResolveRepository
+            SharePlatform.C139 -> c139ResolveRepository
+            SharePlatform.PAN123 -> pan123ResolveRepository
+            SharePlatform.PAN115 -> pan115ResolveRepository
+            SharePlatform.GUANGYA -> guangyaResolveRepository
+            SharePlatform.ILANZOU -> ilanzouResolveRepository
+            SharePlatform.LANZOU -> lanzouResolveRepository
+            else -> resolveRepository
+        }
     }
 
-    private fun currentDefaultDirFid(): String = when (currentPlatform) {
-        SharePlatform.UC -> UCConstants.DEFAULT_PDIR_FID
-        SharePlatform.XUNLEI -> "0"
-        SharePlatform.BAIDU -> ""
-        SharePlatform.C139 -> "0"
-        SharePlatform.PAN123 -> "0"
-        SharePlatform.PAN115 -> Pan115Constants.ROOT_CID
-        SharePlatform.GUANGYA -> ""
-        SharePlatform.ILANZOU -> ""
-        SharePlatform.LANZOU -> ""
-        else -> QuarkConstants.DEFAULT_PDIR_FID
+    private fun currentDefaultDirFid(): String {
+        // 插件路径的根目录统一是空串（契约里 path="" 即根目录）
+        if (activeProvider != null) return ""
+        return when (currentPlatform) {
+            SharePlatform.UC -> UCConstants.DEFAULT_PDIR_FID
+            SharePlatform.XUNLEI -> "0"
+            SharePlatform.BAIDU -> ""
+            SharePlatform.C139 -> "0"
+            SharePlatform.PAN123 -> "0"
+            SharePlatform.PAN115 -> Pan115Constants.ROOT_CID
+            SharePlatform.GUANGYA -> ""
+            SharePlatform.ILANZOU -> ""
+            SharePlatform.LANZOU -> ""
+            else -> QuarkConstants.DEFAULT_PDIR_FID
+        }
     }
 
-    private fun platformName(): String = when (currentPlatform) {
-        SharePlatform.UC -> "UC 网盘"
-        SharePlatform.XUNLEI -> "迅雷网盘"
-        SharePlatform.BAIDU -> "百度网盘"
-        SharePlatform.C139 -> "139 网盘"
-        SharePlatform.PAN123 -> "123云盘"
-        SharePlatform.PAN115 -> "115网盘"
-        SharePlatform.GUANGYA -> "光鸭云盘"
-        SharePlatform.ILANZOU -> "蓝奏云优享版"
-        SharePlatform.LANZOU -> "蓝奏云"
-        else -> "夸克网盘"
+    private fun platformName(): String {
+        activeProvider?.let { return it.displayName }
+        return when (currentPlatform) {
+            SharePlatform.UC -> "UC 网盘"
+            SharePlatform.XUNLEI -> "迅雷网盘"
+            SharePlatform.BAIDU -> "百度网盘"
+            SharePlatform.C139 -> "139 网盘"
+            SharePlatform.PAN123 -> "123云盘"
+            SharePlatform.PAN115 -> "115网盘"
+            SharePlatform.GUANGYA -> "光鸭云盘"
+            SharePlatform.ILANZOU -> "蓝奏云优享版"
+            SharePlatform.LANZOU -> "蓝奏云"
+            else -> "夸克网盘"
+        }
     }
 
     /**
@@ -613,19 +631,58 @@ class ResolveViewModel(
      * - 蓝奏云：分享解析与取链完全匿名。
      * 其余平台仍要求登录。
      */
-    private fun supportsGuestDownload(): Boolean =
-        currentPlatform == SharePlatform.QUARK ||
+    private fun supportsGuestDownload(): Boolean {
+        // 插件路径允许"无宿主凭证"直接取链：登录态由插件经宿主桥自己解决
+        if (activeProvider != null) return true
+        return currentPlatform == SharePlatform.QUARK ||
             currentPlatform == SharePlatform.UC ||
             currentPlatform == SharePlatform.GUANGYA ||
             currentPlatform == SharePlatform.ILANZOU ||
             currentPlatform == SharePlatform.LANZOU
+    }
+
+    /**
+     * 网盘插件路由器（P0）。构造便宜（纯函数 + 日志判空）；providers **每次现查**：
+     * 插件的装载状态会变（新装 / 停用 / 重启后），缓存一份快照会让
+     * "刚装的插件不生效"变成无法解释的玄学。
+     */
+    private val cloudRouter by lazy {
+        com.yunget.app.data.cloud.CloudProviderResolver(appContext) {
+            com.yunget.app.data.plugin.sharedPluginRuntime(appContext).cloudProviders()
+        }
+    }
+
+    /**
+     * 本次解析由哪个网盘插件处理（null = 走内置实现）。startResolve 里由路由器决定；
+     * 一旦非空，下面所有 current* 都分流到插件适配器（[com.yunget.app.data.cloud.ProviderBackedShareRepository]），
+     * 解析页其余状态机（目录栈 / 下载入队 / 批量）原样复用。
+     */
+    private var activeProvider: com.yunget.app.data.cloud.CloudProvider? = null
+    private val providerRepos = mutableMapOf<String, com.yunget.app.data.cloud.ProviderBackedShareRepository>()
+
+    private fun providerRepo(): com.yunget.app.data.cloud.ProviderBackedShareRepository {
+        val p = activeProvider ?: throw IllegalStateException("无活动插件")
+        return providerRepos.getOrPut(p.providerId) {
+            com.yunget.app.data.cloud.ProviderBackedShareRepository(p)
+        }
+    }
 
     /** 开始解析：链接 → token →（密码）→ 根目录列表 */
     fun startResolve(link: String, pwd: String?) {
         viewModelScope.launch {
             uiState = ResolveUiState.Loading
+            // P0 路由：插件已装、已启用、认领链接且健康 → 插件优先；否则（或插件解析
+            // 抛异常时）走内置实现。认领本身写 CLOUD 日志，"插件装了没生效"必须可查。
+            activeProvider = runCatching { cloudRouter.providerFor(link) }.getOrNull()
+            if (activeProvider != null) {
+                com.yunget.app.util.DiagLog.i(
+                    appContext,
+                    com.yunget.app.util.DiagLog.Category.CLOUD,
+                    "这个链接由插件 ${activeProvider!!.providerId} 处理（插件优先，不可用自动回退内置）"
+                )
+            }
             val parsed = ShareLinkParser.parse(link)
-            if (parsed == null) {
+            if (parsed == null && activeProvider == null) {
                 // 非网盘分享链接：若是普通 http(s) 直链，交 TurboDL 多线程下载器正常下载。
                 val direct = extractDirectUrl(link)
                 if (direct != null) {
@@ -636,9 +693,11 @@ class ResolveViewModel(
                 uiState = ResolveUiState.Error("无法识别分享链接")
                 return@launch
             }
-            currentPlatform = parsed.platform
-            val credential = currentCredential()
-            if (credential.isNullOrBlank()) {
+            // 插件路径下 currentPlatform 只是占位（current* 已被 activeProvider 分流；
+            // 个别与平台相关的分支如"夸克刷新 Cookie"在插件模式多余但无害）
+            currentPlatform = parsed?.platform ?: SharePlatform.QUARK
+            val credential = currentCredential().orEmpty()
+            if (activeProvider == null && credential.isNullOrBlank()) {
                 uiState = ResolveUiState.Error("请先在「网盘」页登录${platformName()}")
                 return@launch
             }
@@ -965,6 +1024,7 @@ class ResolveViewModel(
     }
 
     class Factory(
+        private val appContext: android.content.Context,
         private val accountRepository: QuarkAccountRepository,
         private val resolveRepository: QuarkResolveRepository,
         private val ucAccountRepository: UCAccountRepository,
@@ -991,6 +1051,7 @@ class ResolveViewModel(
         override fun <T : ViewModel> create(modelClass: Class<T>): T {
             require(modelClass.isAssignableFrom(ResolveViewModel::class.java))
             return ResolveViewModel(
+                appContext,
                 accountRepository, resolveRepository,
                 ucAccountRepository, ucResolveRepository,
                 xunleiAccountRepository, xunleiResolveRepository,

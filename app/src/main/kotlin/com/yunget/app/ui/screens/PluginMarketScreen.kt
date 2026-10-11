@@ -37,6 +37,8 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.activity.compose.BackHandler
+import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
@@ -66,6 +68,7 @@ import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.FilterChip
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
@@ -195,6 +198,18 @@ fun PluginMarketScreen(onBack: () -> Unit, modifier: Modifier = Modifier) {
     var detail by remember { mutableStateOf<PluginDetailTarget?>(null) }
     var pendingInstall by remember { mutableStateOf<PluginDetailTarget?>(null) }
     var installing by remember { mutableStateOf(false) }
+
+    // 分类筛选（null = 全部）。候选分类从**当前拉到的索引**里现算：
+    // 分类是源声明什么就有什么，宿主不维护一份全局清单 —— 源加了新分类，
+    // 这里自然出现，不用发版。
+    var categoryFilter by remember { mutableStateOf<String?>(null) }
+
+    // 系统返回键：详情开着先收详情，否则离开页面。2.7.5 漏了这条处理，
+    // 在本页按返回会直接把应用退掉。确认弹窗与底部弹层是独立窗口，
+    // 它们自己消费返回键，轮不到这里。
+    BackHandler {
+        if (detail != null) detail = null else onBack()
+    }
 
     val installedById = remember(installed) { installed.associateBy { it.id } }
     val appVersion = remember { appVersionName(context) }
@@ -334,17 +349,29 @@ fun PluginMarketScreen(onBack: () -> Unit, modifier: Modifier = Modifier) {
                     index = target.index,
                 ).fold(
                     onSuccess = { row ->
-                        // 装完立刻加载：否则会看到"已安装"但脚本没跑起来，那比不装更让人困惑
-                        val error = runtime.load(row.id)
-                        pendingInstall = null
-                        detail = null
-                        SnackbarController.show(
-                            if (error == null) {
-                                "已安装「${target.plugin.name}」v${target.version.version}"
-                            } else {
-                                "已安装「${target.plugin.name}」，但加载失败：$error"
-                            }
-                        )
+                        // L1（JS）：装完立刻加载，否则会看到"已安装"但脚本没跑起来，那比不装更让人困惑。
+                        // L2（原生）恰恰相反 —— **不能**即时 load：类无法热替换（P16 硬约束），
+                        // 真正参与业务要等进程重启；调用 load 只会制造"看起来生效了"的假象，
+                        // 重启后状态又对不上。所以这里明确分流，并把"重启生效"说出口。
+                        if (target.plugin.level == PluginLevel.NATIVE) {
+                            pendingInstall = null
+                            detail = null
+                            SnackbarController.show(
+                                "已安装「${target.plugin.name}」v${target.version.version}（原生插件）：" +
+                                    "重启 App 后生效"
+                            )
+                        } else {
+                            val error = runtime.load(row.id)
+                            pendingInstall = null
+                            detail = null
+                            SnackbarController.show(
+                                if (error == null) {
+                                    "已安装「${target.plugin.name}」v${target.version.version}"
+                                } else {
+                                    "已安装「${target.plugin.name}」，但加载失败：$error"
+                                }
+                            )
+                        }
                     },
                     onFailure = { t ->
                         SnackbarController.show("安装失败：${t.message ?: t.javaClass.simpleName}")
@@ -541,7 +568,40 @@ fun PluginMarketScreen(onBack: () -> Unit, modifier: Modifier = Modifier) {
             item(key = "catalog:label") {
                 MarketSectionLabel("源里的插件")
             }
+            // 分类筛选行：从启用的源里现算候选。分类是"源声明什么就有什么"，
+            // 宿主不维护全局清单，加了新分类不用发版。
             val enabledSources = sources.filter { it.enabled }
+            val categories = enabledSources
+                .mapNotNull { indexes[it.id] }
+                .flatMap { it.plugins }
+                .map { it.category.trim() }
+                .filter { it.isNotEmpty() }
+                .distinct()
+                .sorted()
+            if (categories.size > 1) {
+                item(key = "catalog:filters") {
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .horizontalScroll(rememberScrollState())
+                            .padding(vertical = 2.dp),
+                        horizontalArrangement = Arrangement.spacedBy(6.dp),
+                    ) {
+                        FilterChip(
+                            selected = categoryFilter == null,
+                            onClick = { categoryFilter = null },
+                            label = { Text("全部", style = MaterialTheme.typography.labelMedium) },
+                        )
+                        for (cat in categories) {
+                            FilterChip(
+                                selected = categoryFilter == cat,
+                                onClick = { categoryFilter = if (categoryFilter == cat) null else cat },
+                                label = { Text(categoryLabel(cat), style = MaterialTheme.typography.labelMedium) },
+                            )
+                        }
+                    }
+                }
+            }
             if (enabledSources.isEmpty()) {
                 item(key = "catalog:empty") {
                     Text(
@@ -570,10 +630,17 @@ fun PluginMarketScreen(onBack: () -> Unit, modifier: Modifier = Modifier) {
                     )
                 }
                 val plugins = index?.plugins.orEmpty()
+                    // 分类筛选在**展示层**生效：不影响"这个源有几个插件"的计数，
+                    // 只影响这里列不列。筛选后为空时要给一句实话，不能是空白。
+                    .filter { categoryFilter == null || it.category.trim() == categoryFilter }
                 if (index != null && plugins.isEmpty()) {
                     item(key = "catalog:blank:" + source.id) {
                         Text(
-                            text = "这个源的索引里没有插件。",
+                            text = if (categoryFilter == null) {
+                                "这个源的索引里没有插件。"
+                            } else {
+                                "这个源里没有「${categoryLabel(categoryFilter.orEmpty())}」分类的插件。"
+                            },
                             style = MaterialTheme.typography.bodySmall,
                             color = MaterialTheme.colorScheme.onSurfaceVariant,
                             modifier = Modifier.padding(start = 4.dp, bottom = 4.dp)
@@ -1384,11 +1451,18 @@ private fun PluginMarketDetailSheet(
                 Text(plugin.summary, style = MaterialTheme.typography.bodyMedium)
             }
 
-            // 说明正文走仓库里已有的 Markdown 渲染（与 README 预览同一套排版），不自己解析
+            // 说明正文走仓库里已有的 Markdown 渲染（与 README 预览同一套排版），不自己解析。
+            //
+            // **只渲染表格之外的部分**。markdown-renderer 0.35.0 是按 compose-bom
+            // 2025.12 编译的，而本项目用的是 2026.06 —— 它的 MarkdownTableHeader
+            // 调用了已被移除的 RowScope.weight 签名，**只要描述里含表格就必崩**
+            // （NoSuchMethodError，真机 2.7.5 上复现）。所以这里把表格降级成
+            // 等宽文本块：信息完整、不崩，等依赖对齐后再恢复表格渲染。
             if (plugin.description.isNotBlank()) {
                 Spacer(Modifier.height(10.dp))
+                val text = stripMarkdownTables(plugin.description)
                 Markdown(
-                    content = plugin.description,
+                    content = text,
                     typography = typography,
                     modifier = Modifier.fillMaxWidth()
                 )
@@ -1753,4 +1827,51 @@ private fun appVersionName(context: Context): String = runCatching {
 private fun copyToClipboard(context: Context, text: String) {
     val cm = context.getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
     cm.setPrimaryClip(ClipData.newPlainText("yunget_plugin_market", text))
+}
+
+/**
+ * 把 Markdown 表格降级成等宽文本块。
+ *
+ * 存在的理由见调用处：当前 markdown-renderer 的表格渲染与本项目的 Compose 版本
+ * 不兼容，含表格的描述会**必崩**（真机 2.7.5 上复现 NoSuchMethodError）。
+ * 表格在插件描述里是常见写法（字段对照表、取值说明），不能因为它就把整个
+ * 详情页变成崩溃页 —— 所以这里保留行列内容与顺序，只去掉语法符号。
+ */
+
+/**
+ * 分类 id → 展示名。分类值由源自由声明（宿主不设全局清单），这里只翻译
+ * **约定内**的 id；约定外的原样显示 —— 宁可让用户看到一个生僻 id，
+ * 也不能把一个未知分类伪装成别的意思。
+ */
+private fun categoryLabel(id: String): String = when (id) {
+    "turbodl-parser" -> "链接解析"
+    "turbodl-backend" -> "下载后端"
+    "turbodl-adapter" -> "引擎适配"
+    "turbodl-protocol" -> "协议"
+    "turbodl-hook" -> "任务钩子"
+    "turbodl-loader" -> "加载器"
+    "yung-support" -> "支持页"
+    else -> id
+}
+
+internal fun stripMarkdownTables(md: String): String {
+    // 用 lines()/joinToString 代替手写换行符：脚本化编辑里反斜杠会被反复吃掉，
+    // 而这里并不需要精确控制换行位置。
+    val out = mutableListOf<String>()
+    var inTable = false
+    for (line in md.lines()) {
+        val trimmed = line.trim()
+        // 表头分隔行（|---|---|）是判断"进入表格"的可靠标志
+        val isSeparator = trimmed.startsWith("|") &&
+            trimmed.replace("|", "").replace("-", "").replace(":", "").replace(" ", "").isEmpty()
+        if (isSeparator) { inTable = true; continue }
+        if (trimmed.startsWith("|")) {
+            inTable = true
+            out.add("    " + trimmed.trim('|').split('|').joinToString("   ") { it.trim() })
+            continue
+        }
+        if (inTable && trimmed.isEmpty()) { inTable = false }
+        out.add(line)
+    }
+    return out.joinToString(separator = System.lineSeparator()).trimEnd()
 }

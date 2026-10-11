@@ -1,6 +1,8 @@
 # Android 构建输出
 /build/
 /app/build/
+# 任意层级（含 :l2-providers 等子模块）的构建产物
+build/
 /captures
 .externalNativeBuild/
 .cxx/

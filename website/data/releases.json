@@ -1,36 +1,53 @@
 {
   "repo": "jiayuxuan123/YunGet",
   "latest": {
-    "tag": "v2.7.5",
-    "name": "云取 YunGet 2.7.5",
-    "published": "2026-10-11T10:11:23Z",
+    "tag": "v2.7.6",
+    "name": "云取 YunGet 2.7.6",
+    "published": "2026-10-11T15:49:02Z",
     "prerelease": false,
-    "url": "https://github.com/jiayuxuan123/YunGet/releases/tag/v2.7.5",
-    "summary": "云取 YunGet 2.7.5\n网盘插件化的第一步，以及插件系统与日志系统的一轮补齐。\n网盘 Provider 契约（P0 第一步）\n新增由宿主定义的 `CloudProvider` 接口，作为网盘插件的统一契约：分享链接识别、分享解析、文件浏览、下载地址获取。\n下载地址仍由引擎下载——插件只提供结构化的下载信息（地址、请求头、有效期），不接管下载过程。这样多线程分片、断点续传这些能力不会因为用了插件而丢失。\n各网盘能力差异较大（115 需要应用内登录页，蓝奏云没有分享解析接口），所以能力是声明式的：宿主只调用插件声明过的能力，未声明的不会去调。\n**内置实现全部保留，作为回退。** 迁移是一个网盘一个网盘进行的，在新的 Provider 被验证可靠之前，内置路径一直可用。路由规则是：\n· 插件已安装、已启用、认领该链接、健康检查通过 → 使用插件\n· 以上任一不满足 → 使用内置实现，并…",
+    "url": "https://github.com/jiayuxuan123/YunGet/releases/tag/v2.7.6",
+    "summary": "云取 YunGet 2.7.6\n这个版本把插件系统真正接进了应用本体：此前完成的大部分插件能力只存在于底层，这一版补上了入口，并把一批影响日常使用的问题修掉。\n原生插件可以装了\n插件市场现在支持原生（L2）插件的完整流程：展示、安装、更新、卸载。原生插件以 jar 包分发，走与 JS 插件同一套校验（SHA-256 摘要、签名、吊销名单），体积上限 32 MB。\n原生插件运行在应用进程内，没有沙箱隔离，安装确认页会如实说明这一点。它的任何变更（安装、更新、启停、卸载）都需要重启应用才能生效，相关操作都会明确提示。\n插件能参与下载流程\n· 下载完成的文件可以交给处理器插件做收尾（按扩展名匹配；处理器出错不影响下载结果，也不会动到已下载的文件）。\n· 插件注册的下载后端会参与引擎的路由，优先级在内置后端之下。\n网盘迁移说明\n升级后首次启动会弹一次说明：网盘的分享解析将逐步交给插件处理，你的账号…",
     "assets": [
       {
-        "name": "YunGet-2.7.5-release.apk",
-        "size": 31681596,
-        "url": "https://github.com/jiayuxuan123/YunGet/releases/download/v2.7.5/YunGet-2.7.5-release.apk",
+        "name": "YunGet-2.7.6-release.apk",
+        "size": 31709721,
+        "url": "https://github.com/jiayuxuan123/YunGet/releases/download/v2.7.6/YunGet-2.7.6-release.apk",
         "downloads": 0,
-        "sha256": "57e0beee75c8f4041a25f97e7c79c2e143357018fadab214226bf95e5b202c64"
+        "sha256": "f4460bfe913836e83043ad7c212fc9d3c1749ccabffae2292d7cfa0ec9ea8732"
       }
     ]
   },
   "releases": [
+    {
+      "tag": "v2.7.6",
+      "name": "云取 YunGet 2.7.6",
+      "published": "2026-10-11T15:49:02Z",
+      "prerelease": false,
+      "url": "https://github.com/jiayuxuan123/YunGet/releases/tag/v2.7.6",
+      "summary": "云取 YunGet 2.7.6\n这个版本把插件系统真正接进了应用本体：此前完成的大部分插件能力只存在于底层，这一版补上了入口，并把一批影响日常使用的问题修掉。\n原生插件可以装了\n插件市场现在支持原生（L2）插件的完整流程：展示、安装、更新、卸载。原生插件以 jar 包分发，走与 JS 插件同一套校验（SHA-256 摘要、签名、吊销名单），体积上限 32 MB。\n原生插件运行在应用进程内，没有沙箱隔离，安装确认页会如实说明这一点。它的任何变更（安装、更新、启停、卸载）都需要重启应用才能生效，相关操作都会明确提示。\n插件能参与下载流程\n· 下载完成的文件可以交给处理器插件做收尾（按扩展名匹配；处理器出错不影响下载结果，也不会动到已下载的文件）。\n· 插件注册的下载后端会参与引擎的路由，优先级在内置后端之下。\n网盘迁移说明\n升级后首次启动会弹一次说明：网盘的分享解析将逐步交给插件处理，你的账号…",
+      "assets": [
+        {
+          "name": "YunGet-2.7.6-release.apk",
+          "size": 31709721,
+          "url": "https://github.com/jiayuxuan123/YunGet/releases/download/v2.7.6/YunGet-2.7.6-release.apk",
+          "downloads": 0,
+          "sha256": "f4460bfe913836e83043ad7c212fc9d3c1749ccabffae2292d7cfa0ec9ea8732"
+        }
+      ]
+    },
     {
       "tag": "v2.7.5",
       "name": "云取 YunGet 2.7.5",
       "published": "2026-10-11T10:11:23Z",
       "prerelease": false,
       "url": "https://github.com/jiayuxuan123/YunGet/releases/tag/v2.7.5",
-      "summary": "云取 YunGet 2.7.5\n网盘插件化的第一步，以及插件系统与日志系统的一轮补齐。\n网盘 Provider 契约（P0 第一步）\n新增由宿主定义的 `CloudProvider` 接口，作为网盘插件的统一契约：分享链接识别、分享解析、文件浏览、下载地址获取。\n下载地址仍由引擎下载——插件只提供结构化的下载信息（地址、请求头、有效期），不接管下载过程。这样多线程分片、断点续传这些能力不会因为用了插件而丢失。\n各网盘能力差异较大（115 需要应用内登录页，蓝奏云没有分享解析接口），所以能力是声明式的：宿主只调用插件声明过的能力，未声明的不会去调。\n**内置实现全部保留，作为回退。** 迁移是一个网盘一个网盘进行的，在新的 Provider 被验证可靠之前，内置路径一直可用。路由规则是：\n· 插件已安装、已启用、认领该链接、健康检查通过 → 使用插件\n· 以上任一不满足 → 使用内置实现，并…",
+      "summary": "云取 YunGet 2.7.5\n这个版本是网盘插件化的第一步，同时补齐了插件系统与日志系统的一轮能力。\n网盘插件化\n新增网盘插件统一契约：分享链接识别、分享解析、文件浏览、下载地址获取都由宿主定义接口，插件按契约实现。\n下载地址仍由下载引擎执行——插件只提供结构化的下载信息（地址、请求头、有效期），不接管下载过程。多线程分片、断点续传这些能力不会因为用了插件而丢失。\n各网盘能力差异较大（115 需要应用内登录页，蓝奏云没有分享解析接口），所以能力是声明式的：应用只调用插件声明过的能力，未声明的不会去调。\n内置实现全部保留作为回退：插件未安装、未启用或不可用时，自动使用内置实现并记录日志，网盘功能不会中断。错误也按业务结果区分：需要提取码、需要登录、被风控、分享失效各有各的提示，而不是统一报「出错了」。\n插件系统\n· **更新失败可回滚**：更新前保存当前版本，装载失败时自动回退并重新装载。…",
       "assets": [
         {
           "name": "YunGet-2.7.5-release.apk",
           "size": 31681596,
           "url": "https://github.com/jiayuxuan123/YunGet/releases/download/v2.7.5/YunGet-2.7.5-release.apk",
-          "downloads": 0,
+          "downloads": 498,
           "sha256": "57e0beee75c8f4041a25f97e7c79c2e143357018fadab214226bf95e5b202c64"
         }
       ]
@@ -47,7 +64,7 @@
           "name": "YunGet-2.7.4-release.apk",
           "size": 31621011,
           "url": "https://github.com/jiayuxuan123/YunGet/releases/download/v2.7.4/YunGet-2.7.4-release.apk",
-          "downloads": 1391,
+          "downloads": 1395,
           "sha256": "c6921e4d2a11d8e46239c84050c46a8cf9fa3bea45a920825725418f902bd32d"
         }
       ]
@@ -64,7 +81,7 @@
           "name": "YunGet-2.7.3-release.apk",
           "size": 31593625,
           "url": "https://github.com/jiayuxuan123/YunGet/releases/download/v2.7.3/YunGet-2.7.3-release.apk",
-          "downloads": 429,
+          "downloads": 431,
           "sha256": "2affb2e8958b8b147606aacd7c77815d238133c9e820e5110c41aebff8475767"
         }
       ]
@@ -98,7 +115,7 @@
           "name": "YunGet-2.7.1-release.apk",
           "size": 31586091,
           "url": "https://github.com/jiayuxuan123/YunGet/releases/download/v2.7.1/YunGet-2.7.1-release.apk",
-          "downloads": 605,
+          "downloads": 606,
           "sha256": "4140068dadae124607ec22f7d23a297691690f3586c84c7f14fb8da4ce32992f"
         }
       ]
@@ -217,7 +234,7 @@
           "name": "YunGet-2.6.15-release.apk",
           "size": 28284269,
           "url": "https://github.com/jiayuxuan123/YunGet/releases/download/v2.6.15/YunGet-2.6.15-release.apk",
-          "downloads": 3949,
+          "downloads": 3950,
           "sha256": "27284307104496d94934cb94f82b2445d586bcebda3d0b4d1b74232427f0e845"
         }
       ]
@@ -508,23 +525,6 @@
           "url": "https://github.com/jiayuxuan123/YunGet/releases/download/v2.4.2/YunGet-2.4.2.apk",
           "downloads": 3,
           "sha256": "f93dff18b1fa7b11ecef82d0e3c6c9ad52a040cc108db022ab8fe1495e426cdf"
-        }
-      ]
-    },
-    {
-      "tag": "v2.4.1",
-      "name": "YunGet 2.4.1：修复下载卡住不动 + 探测增强",
-      "published": "2026-08-29T07:47:08Z",
-      "prerelease": false,
-      "url": "https://github.com/jiayuxuan123/YunGet/releases/tag/v2.4.1",
-      "summary": "修复：有时显示「下载中」但一直不动\n这是引擎层的无界等待问题，本版彻底修复：\n· **探测阶段挂起**：服务器接受连接但迟迟不响应时，旧版会叠加等待近一分钟，期间界面已显示「下载中」但字节为 0（就是你看到的「连解析都没做」）；现在探测有硬超时并自动重试，全部失败才回退单线程。\n· **传输中卡死**：若 CDN 每隔很久才吐几字节，系统超时永远不触发，任务可挂到无限久；现在新增卡死守护，一段时间无进展就主动重连（可能换到其他 CDN 节点），连续多次失败才明确报错（分片保留，重试即续传）。\n· **连接预热挂起**：预热请求现在有独立超时，绝不拖慢正式下载。\n优化：部分链接白白退化成单线程\n某些 CDN 对探测请求返回 200 而非 206，即使它明确支持分片也被判为不支持，导致退化成单线程。本版会读取 `Accept-Ranges` 正确识别，多线程恢复生效。\n优化：续传更安全 + 文…",
-      "assets": [
-        {
-          "name": "YunGet-2.4.1.apk",
-          "size": 18977220,
-          "url": "https://github.com/jiayuxuan123/YunGet/releases/download/v2.4.1/YunGet-2.4.1.apk",
-          "downloads": 15,
-          "sha256": "7be07bda9c654e559cff8ceb5732ac802f0ec33abff65e4872390652e65048b5"
         }
       ]
     }

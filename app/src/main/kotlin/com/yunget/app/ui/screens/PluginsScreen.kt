@@ -148,8 +148,6 @@ import kotlinx.coroutines.withContext
 @OptIn(ExperimentalLayoutApi::class, ExperimentalMaterial3Api::class)
 @Composable
 fun PluginsScreen(onBack: () -> Unit, modifier: Modifier = Modifier) {
-    BackHandler { onBack() }
-
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
     val repo = remember { PluginRepository(context) }
@@ -181,6 +179,16 @@ fun PluginsScreen(onBack: () -> Unit, modifier: Modifier = Modifier) {
     // 逐项结果的展开状态提升到这里：底部的「引擎自检」要能把它展开给用户看。
     // null = 用户没手动点过（此时跟随结论：不可用就自动展开，那正是要看原因的时候）
     var probeStepsExpanded by remember { mutableStateOf<Boolean?>(null) }
+
+    // 系统返回键：编辑器 → 详情 → 离开页面，逐层收。2.7.5 漏了这条处理，
+    // 在本页按返回会直接把应用退掉。卸载确认与粘贴弹层是独立窗口，自己消费返回键。
+    BackHandler {
+        when {
+            showEditor -> showEditor = false
+            detailId != null -> detailId = null
+            else -> onBack()
+        }
+    }
 
     val refreshLive: () -> Unit = {
         livePlugins = runtime.livePlugins()
@@ -723,7 +731,7 @@ private fun PluginRow(
             }
 
             Spacer(Modifier.height(8.dp))
-            BadgeRow(sourceKind = plugin.sourceKind, trustLevel = plugin.trustLevel)
+            BadgeRow(sourceKind = plugin.sourceKind, level = plugin.level, trustLevel = plugin.trustLevel)
 
             Spacer(Modifier.height(6.dp))
             PluginRunState(plugin = plugin, live = live)
@@ -740,9 +748,9 @@ private fun PluginRow(
     }
 }
 
-/** 来源徽标 + 信任等级徽标（信任等级用四套不同配色，见文件头注释） */
+/** 来源徽标 + 能力级别徽标 + 信任等级徽标（信任等级用四套不同配色，见文件头注释） */
 @Composable
-private fun BadgeRow(sourceKind: String, trustLevel: String) {
+private fun BadgeRow(sourceKind: String, level: PluginLevel, trustLevel: String) {
     val (trustContainer, trustContent) = trustBadgeColors(trustLevel)
     FlowRow(
         horizontalArrangement = Arrangement.spacedBy(6.dp),
@@ -753,6 +761,21 @@ private fun BadgeRow(sourceKind: String, trustLevel: String) {
             text = sourceKindLabel(sourceKind),
             container = MaterialTheme.colorScheme.surfaceContainerHighest,
             content = MaterialTheme.colorScheme.onSurfaceVariant
+        )
+        // 级别（P20）：JS 与原生的"变更是否要重启"完全不同，用户应该一眼看出来装的是什么级。
+        // L2 用对比色标出 —— 它的启停/更新/卸载都要重启，这是最需要被看到的差异。
+        PluginBadge(
+            text = level.title,
+            container = if (level.requiresRestart) {
+                MaterialTheme.colorScheme.tertiaryContainer
+            } else {
+                MaterialTheme.colorScheme.surfaceContainerHighest
+            },
+            content = if (level.requiresRestart) {
+                MaterialTheme.colorScheme.onTertiaryContainer
+            } else {
+                MaterialTheme.colorScheme.onSurfaceVariant
+            }
         )
         PluginBadge(text = trustLabel(trustLevel), container = trustContainer, content = trustContent)
     }
@@ -1042,7 +1065,7 @@ private fun PluginDetailSheet(
         ) {
             Text(plugin.name, style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Medium)
             Spacer(Modifier.height(6.dp))
-            BadgeRow(sourceKind = plugin.sourceKind, trustLevel = plugin.trustLevel)
+            BadgeRow(sourceKind = plugin.sourceKind, level = plugin.level, trustLevel = plugin.trustLevel)
 
             Spacer(Modifier.height(8.dp))
             Row(verticalAlignment = Alignment.CenterVertically) {

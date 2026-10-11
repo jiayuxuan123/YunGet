@@ -612,6 +612,24 @@ TRUST_LEVELS = [
      "<strong>错误色系</strong>，标「未验证」+ 明确风险提示"),
 ]
 
+#: 分类 id → 展示名。与 App 内 `PluginMarketScreen.categoryLabel` 同一张表 ——
+#: 官网说的和 App 里看到的必须一致。约定之外的 id 原样显示（不猜）。
+CATEGORY_LABELS = {
+    "turbodl-parser": "链接解析",
+    "turbodl-backend": "下载后端",
+    "turbodl-adapter": "引擎适配",
+    "turbodl-protocol": "协议",
+    "turbodl-hook": "任务钩子",
+    "turbodl-loader": "加载器",
+    "yung-support": "支持页",
+}
+
+#: 能力级别 → 展示名（P20）：JS 可热加载，原生必须重启，两者对用户的预期完全不同。
+LEVEL_LABELS = {
+    "js": "L1 · JS 插件",
+    "native": "L2 · 原生插件",
+}
+
 
 def _plugin_card(entry: dict) -> tuple[str, str]:
     """索引里的一个插件 → 一张卡片。字段全用 `.get` 取，索引缺字段也不至于崩构建。"""
@@ -620,6 +638,14 @@ def _plugin_card(entry: dict) -> tuple[str, str]:
     version = latest.get("version") or "—"
 
     chips = [f'<span class="chip">v{esc(version)}</span>']
+    # 级别（P20）：它决定"变更要不要重启"，与版本号一样是用户该一眼看到的事实。
+    level = (entry.get("level") or "").strip()
+    if level:
+        chips.append(f'<span class="chip">{esc(LEVEL_LABELS.get(level, level))}</span>')
+    # 分类：约定内的 id 显示中文名，约定外的原样显示（不猜、不美化）。
+    category = (entry.get("category") or "").strip()
+    if category:
+        chips.append(f'<span class="chip">{esc(CATEGORY_LABELS.get(category, category))}</span>')
     for proto in entry.get("protocols") or []:
         chips.append(f'<span class="chip">{esc(proto)}://</span>')
     for label, value in (
@@ -701,7 +727,12 @@ def _plugin_card(entry: dict) -> tuple[str, str]:
 
 
 def _plugin_list() -> str:
-    """插件列表。读不到索引 / 索引里没有条目时都只显示一句实话，不摆占位卡片。"""
+    """插件列表，**按分类分组**渲染（与 App 内市场页的分类筛选同一套 id 与中文名）。
+
+    分组是确定性的：分类按展示名字典序、组内按插件 id 字典序 —— 同一份索引每次
+    构建都得到同一个页面，不会因为字典序之外的因素让条目跳来跳去。
+    没有分类字段的条目归入"未分类"，如实显示，不替源编一个分类。
+    """
     if PLUGIN_INDEX is None:
         return note(
             "暂时读不到插件源数据（构建这台机器上没找到 <span class=\"mono\">"
@@ -716,7 +747,23 @@ def _plugin_list() -> str:
             f'{esc((PLUGIN_INDEX.get("generatedAt") or "")[:10])}</span>）。'
             f'源里的内容以 <a href="{PLUGIN_INDEX_URL}">plugins.json</a> 为准。',
         )
-    return cards([_plugin_card(e) for e in entries], columns=2)
+
+    groups: dict[str, list[dict]] = {}
+    for e in entries:
+        cat = (e.get("category") or "").strip()
+        groups.setdefault(cat, []).append(e)
+
+    def group_key(cat: str) -> str:
+        # 空分类排最后，标签用"未分类"；其余按展示名排序
+        return (1, "") if not cat else (0, CATEGORY_LABELS.get(cat, cat))
+
+    parts: list[str] = []
+    for cat in sorted(groups, key=group_key):
+        label = CATEGORY_LABELS.get(cat, cat) if cat else "未分类"
+        members = sorted(groups[cat], key=lambda e: str(e.get("id") or ""))
+        parts.append(f"<h3>{esc(label)}</h3>")
+        parts.append(cards([_plugin_card(e) for e in members], columns=2))
+    return "".join(parts)
 
 
 def _plugin_source_facts() -> str:
@@ -762,6 +809,7 @@ def _page_plugins(lang: str, href) -> str:
         + buttons(
             [
                 ("打开官方插件源", PLUGINS_REPO),
+                ("提交插件到官方源", href("doc-plugin-publish")),
                 ("自己写一个插件", href("developers")),
                 ("看安全模型", href("doc-plugin-security")),
             ]

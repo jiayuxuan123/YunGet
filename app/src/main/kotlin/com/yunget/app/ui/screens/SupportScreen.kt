@@ -36,7 +36,6 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.automirrored.outlined.OpenInNew
 import androidx.compose.material.icons.outlined.ContentCopy
-import androidx.compose.material.icons.outlined.Info
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.ExperimentalMaterial3Api
@@ -53,14 +52,18 @@ import androidx.compose.runtime.produceState
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.asImageBitmap
+import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import com.yunget.app.R
 import com.yunget.app.data.plugin.SupportEntries
 import com.yunget.app.data.plugin.SupportEntry
 import com.yunget.app.data.plugin.sharedPluginRuntime
 import com.yunget.app.ui.SnackbarController
+import com.yunget.app.ui.components.RemoteImage
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import java.io.File
@@ -77,13 +80,19 @@ import java.io.File
  *  - 想换一种支持方式（比如换成另一个平台的码）就要改 App 发版；
  *  - 开发者之外的人无法替换它 —— 而这恰好是插件系统存在的理由。
  *
- * 现在这一页只做三件事：**读插件提供的条目 → 按类型渲染 → 没有条目时说实话**。
+ * 现在这一页只做三件事：**读插件提供的条目 → 按类型渲染 → 没有条目时显示内置兜底**
+ * （原赞赏码，见 [BuiltinSupport]）。
  *
- * ## 为什么没有条目时不回退到内置内容
+ * ## 插件优先，内置兜底
  *
- * P7 的验收标准是"卸载该插件后入口消失且不影响其他功能"。若这里回退到一个内置的
- * 写死页面，那条标准就**无法验证** —— 卸载后看起来"内容还在"，只是换了来源。
- * 所以没条目就显示"当前没有支持入口"，这是诚实的、也是可验证的。
+ * 正确的关系是：**插件有内容就用插件的，没有就用内置的**。
+ *
+ * 曾经写成"没有插件条目就显示空" —— 理由是"卸载插件后入口应当消失"。
+ * 那个推理是错的：它把**验收标准**当成了**默认行为**，于是发布后打开支持页
+ * 是一片空白，比改之前更差。
+ *
+ * 内置内容的作用是**兜底**，与 P0 网盘插件化里"内置实现保留作回退"是同一个道理：
+ * 渐进迁移期间，任何依赖新插件的功能都不能因此变得不可用。
  *
  * ## 视觉上的克制
  *
@@ -97,6 +106,9 @@ fun SupportScreen(
     modifier: Modifier = Modifier,
 ) {
     val context = LocalContext.current
+
+    // 系统返回键离开本页。2.7.5 漏了这条，在本页按返回会直接退出应用。
+    androidx.activity.compose.BackHandler { onBack() }
 
     // 条目来自插件运行时。用 produceState 在后台读：读 manifest 与净化都可能涉及
     // 文件操作，不该占主线程；同时它会在重组时重新读一次 —— 用户"装完插件回到这页"
@@ -140,7 +152,8 @@ fun SupportScreen(
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
 
-                list.isEmpty() -> NoSupportSource()
+                // 没有插件内容时用内置兜底，而不是空白页。
+                list.isEmpty() -> BuiltinSupport()
 
                 else -> list.forEach { item -> SupportEntryCard(item) }
             }
@@ -149,44 +162,76 @@ fun SupportScreen(
 }
 
 /**
- * 没有任何插件提供支持入口时显示的内容。
+ * 没有插件提供内容时显示的**内置兜底**。
  *
- * 措辞刻意**不道歉、不推销**：它不是说"很遗憾没有"，而是说清现状与怎么加一个。
- * 这正是设计文档第 26 章的口径 —— 不声称不存在的功能。
+ * 保留原来内置页面的实质内容（赞赏方式），但样式跟随当前设计语言：
+ * 没有渐变头、没有大插画，条目化呈现 —— 因为插件内容也走同一套渲染，
+ * 两者的观感应该一致，用户分不出哪个是内置、哪个是插件，那才是对的。
+ *
+ * 措辞按设计文档第 26 章：说清事实，不写"绝对安全"这类空话。
+ */
+/**
+ * 没有插件提供内容时显示的**内置兜底**。
+ *
+ * 内容就是改造前内置页的实质部分（微信赞赏码，`res/drawable/weixin.png` 一直都在）——
+ * 曾经写成"一张解释当前为什么是空的的卡片"，结果用户打开支持页看到的是**占位说明**
+ * 而不是任何实际内容：那等于把"赞赏入口由插件提供"当成了"没有插件就什么都不给"。
+ * 兜底的意义与 P0 网盘插件化的"内置实现保留作回退"相同：迁移期不能让功能消失。
+ *
+ * 装了提供支持条目的插件后，插件条目**整体取代**本兜底（见上方 when 分支）——
+ * 插件优先、内置兜底，两者不混排，用户不会看到两份赞赏入口。
+ *
+ * 旧的"保存二维码到相册"按钮没有搬回来：截图后微信扫一扫支持从相册识别，
+ * 为一个按钮引入存储权限流程不值得。
  */
 @Composable
-private fun NoSupportSource() {
-    Card(
-        modifier = Modifier.fillMaxWidth(),
-        shape = MaterialTheme.shapes.large,
-        colors = CardDefaults.cardColors(
-            containerColor = MaterialTheme.colorScheme.surfaceContainerLow
-        ),
-    ) {
-        Column(
-            modifier = Modifier.fillMaxWidth().padding(20.dp),
-            horizontalAlignment = Alignment.CenterHorizontally,
+private fun BuiltinSupport() {
+    Column(modifier = Modifier.fillMaxWidth()) {
+        Card(
+            modifier = Modifier.fillMaxWidth(),
+            shape = MaterialTheme.shapes.large,
+            colors = CardDefaults.cardColors(
+                containerColor = MaterialTheme.colorScheme.surfaceContainerLow
+            ),
         ) {
-            Icon(
-                imageVector = Icons.Outlined.Info,
-                contentDescription = null,
-                tint = MaterialTheme.colorScheme.onSurfaceVariant,
-                modifier = Modifier.size(28.dp),
-            )
-            Spacer(Modifier.height(10.dp))
-            Text(
-                text = "当前没有支持入口",
-                style = MaterialTheme.typography.titleMedium,
-                fontWeight = FontWeight.Medium,
-            )
-            Spacer(Modifier.height(6.dp))
-            Text(
-                text = "支持入口由插件提供 —— 装一个提供支持信息的插件，这里就会出现内容。" +
-                    "没有插件时这一页保持为空，而不是显示一份写死在应用里的清单。",
-                style = MaterialTheme.typography.bodySmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-            )
+            Column(
+                modifier = Modifier.fillMaxWidth().padding(20.dp),
+                horizontalAlignment = Alignment.CenterHorizontally,
+            ) {
+                Text(
+                    text = "微信扫码赞赏（本二次开发版）",
+                    style = MaterialTheme.typography.titleMedium,
+                    fontWeight = FontWeight.Medium,
+                )
+                Spacer(Modifier.height(4.dp))
+                Text(
+                    text = "你的支持，是持续维护与更新的动力",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+                Spacer(Modifier.height(14.dp))
+                Image(
+                    painter = painterResource(R.drawable.weixin),
+                    contentDescription = "微信赞赏码",
+                    modifier = Modifier.fillMaxWidth(),
+                    contentScale = ContentScale.Fit,
+                )
+                Spacer(Modifier.height(14.dp))
+                Text(
+                    text = "截图后在微信「扫一扫」里从相册识别即可赞赏",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+            }
         }
+        Spacer(Modifier.height(8.dp))
+        Text(
+            text = "此赞赏码仅用于支持本二次开发（多线程升级）版本的维护。若想支持上游原项目作者，" +
+                "请移步原仓库 CYQawa/YunX 的捐赠渠道，两者互不相关。" +
+                "装了提供支持信息的插件后，这一页会改为显示插件提供的内容。",
+            style = MaterialTheme.typography.labelSmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+        )
     }
 }
 
@@ -237,7 +282,21 @@ private fun SupportEntryCard(item: SupportEntries.SanitizedEntry) {
                     style = MaterialTheme.typography.bodyMedium,
                 )
 
-                SupportEntry.Kind.IMAGE -> SupportImage(entry.payload)
+                SupportEntry.Kind.IMAGE -> if (SupportEntries.isHttpUrl(entry.payload)) {
+                    // 插件没法在 manifest 里带二进制 —— 远程 URL 是它提供一张收款码的唯一途径。
+                    // 走公共图片加载器（缓存/降采样与 README 正文图片同一套）；URL 的
+                    // scheme 合法性在净化阶段已经把关（见 SupportEntries）。
+                    RemoteImage(
+                        url = entry.payload,
+                        contentDescription = entry.title,
+                        modifier = Modifier.fillMaxWidth(),
+                        contentScale = ContentScale.Fit,
+                        autoHeight = true,
+                        placeholderRatio = 1f,
+                    )
+                } else {
+                    SupportImage(entry.payload)
+                }
 
                 SupportEntry.Kind.LINK -> Row(
                     verticalAlignment = Alignment.CenterVertically,

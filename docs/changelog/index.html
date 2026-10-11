@@ -35,15 +35,24 @@
 <div class="side-tools"><button class="theme-toggle" type="button" aria-label="切换深色 / 浅色主题" title="切换深色 / 浅色主题"><svg class="icon-sun" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M4.9 4.9l1.4 1.4M17.7 17.7l1.4 1.4M2 12h2M20 12h2M4.9 19.1l1.4-1.4M17.7 6.3l1.4-1.4"/></svg><svg class="icon-moon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M21 12.8A9 9 0 1 1 11.2 3a7 7 0 0 0 9.8 9.8z"/></svg></button></div>
 </aside>
 <main id="main" class="canvas">
-<section><h1>更新日志</h1><p class="lead">由发布说明本身生成 —— 应用内的「检查更新」读的是同一份数据，所以两处看到的版本与内容永远一致。</p></section><section><div class="cards cols-2"><div class="card"><h3><span class="mono">v2.7.5</span></h3><p class="small">2026-10-11 · 1 个附件</p><p class="muted">云取 YunGet 2.7.5
-网盘插件化的第一步，以及插件系统与日志系统的一轮补齐。
-网盘 Provider 契约（P0 第一步）
-新增由宿主定义的 `CloudProvider` 接口，作为网盘插件的统一契约：分享链接识别、分享解析、文件浏览、下载地址获取。
-下载地址仍由引擎下载——插件只提供结构化的下载信息（地址、请求头、有效期），不接管下载过程。这样多线程分片、断点续传这些能力不会因为用了插件而丢失。
-各网盘能力差异较大（115 需要应用内登录页，蓝奏云没有分享解析接口），所以能力是声明式的：宿主只调用插件声明过的能力，未声明的不会去调。
-**内置实现全部保留，作为回退。** 迁移是一个网盘一个网盘进行的，在新的 Provider 被验证可靠之前，内置路径一直可用。路由规则是：
-· 插件已安装、已启用、认领该链接、健康检查通过 → 使用插件
-· 以上任一不满足 → 使用内置实现，并…</p><p class="small"><a href="https://github.com/jiayuxuan123/YunGet/releases/tag/v2.7.5">发布页</a></p></div><div class="card"><h3><span class="mono">v2.7.4</span></h3><p class="small">2026-10-10 · 1 个附件</p><p class="muted">插件系统的四项补齐，外加路上发现并修掉的两个真问题。
+<section><h1>更新日志</h1><p class="lead">由发布说明本身生成 —— 应用内的「检查更新」读的是同一份数据，所以两处看到的版本与内容永远一致。</p></section><section><div class="cards cols-2"><div class="card"><h3><span class="mono">v2.7.6</span></h3><p class="small">2026-10-11 · 1 个附件</p><p class="muted">云取 YunGet 2.7.6
+这个版本把插件系统真正接进了应用本体：此前完成的大部分插件能力只存在于底层，这一版补上了入口，并把一批影响日常使用的问题修掉。
+原生插件可以装了
+插件市场现在支持原生（L2）插件的完整流程：展示、安装、更新、卸载。原生插件以 jar 包分发，走与 JS 插件同一套校验（SHA-256 摘要、签名、吊销名单），体积上限 32 MB。
+原生插件运行在应用进程内，没有沙箱隔离，安装确认页会如实说明这一点。它的任何变更（安装、更新、启停、卸载）都需要重启应用才能生效，相关操作都会明确提示。
+插件能参与下载流程
+· 下载完成的文件可以交给处理器插件做收尾（按扩展名匹配；处理器出错不影响下载结果，也不会动到已下载的文件）。
+· 插件注册的下载后端会参与引擎的路由，优先级在内置后端之下。
+网盘迁移说明
+升级后首次启动会弹一次说明：网盘的分享解析将逐步交给插件处理，你的账号…</p><p class="small"><a href="https://github.com/jiayuxuan123/YunGet/releases/tag/v2.7.6">发布页</a></p></div><div class="card"><h3><span class="mono">v2.7.5</span></h3><p class="small">2026-10-11 · 1 个附件</p><p class="muted">云取 YunGet 2.7.5
+这个版本是网盘插件化的第一步，同时补齐了插件系统与日志系统的一轮能力。
+网盘插件化
+新增网盘插件统一契约：分享链接识别、分享解析、文件浏览、下载地址获取都由宿主定义接口，插件按契约实现。
+下载地址仍由下载引擎执行——插件只提供结构化的下载信息（地址、请求头、有效期），不接管下载过程。多线程分片、断点续传这些能力不会因为用了插件而丢失。
+各网盘能力差异较大（115 需要应用内登录页，蓝奏云没有分享解析接口），所以能力是声明式的：应用只调用插件声明过的能力，未声明的不会去调。
+内置实现全部保留作为回退：插件未安装、未启用或不可用时，自动使用内置实现并记录日志，网盘功能不会中断。错误也按业务结果区分：需要提取码、需要登录、被风控、分享失效各有各的提示，而不是统一报「出错了」。
+插件系统
+· **更新失败可回滚**：更新前保存当前版本，装载失败时自动回退并重新装载。…</p><p class="small"><a href="https://github.com/jiayuxuan123/YunGet/releases/tag/v2.7.5">发布页</a></p></div><div class="card"><h3><span class="mono">v2.7.4</span></h3><p class="small">2026-10-10 · 1 个附件</p><p class="muted">插件系统的四项补齐，外加路上发现并修掉的两个真问题。
 引擎同步到 TurboDL 0.2.1.0。
 **更新失败可回滚（P4）**
 一次坏更新过去会让插件彻底不可用：脚本已经被覆盖，而没有退路。
@@ -146,21 +155,12 @@ Room 在迁移完成后会校验表结构是否与实体一致，发现数据库
 | **蓝奏云优享版** | 账号密码或网页登录 |
 | **蓝奏云** | 网页登录（Cookie 需同时含 ylogin 与 phpdisk_info） |
 凭证与既有平台一致：**AES-GCM + Android Keystore 加密**后落库，密钥不可导出。
-数据库版本 11 →…</p><p class="small"><a href="https://github.com/jiayuxuan123/YunGet/releases/tag/v2.6.17">发布页</a></p></div><div class="card"><h3><span class="mono">v2.6.15</span></h3><p class="small">2026-09-30 · 1 个附件</p><p class="muted">YunGet 2.6.15：修复开发诊断报「NetworkOnMainThreadException」
----
-修复：诊断功能报「指定的链接不可用： NetworkOnMainThreadException」
-**现象**：连接数诊断（含粘贴了当前有效直链的情况）点击后直接报
-「❌ 指定的链接不可用： NetworkOnMainThreadException: 无法连接 https://…」。
-**根因**：链接本身没有问题。诊断开始前有一次预检探活（先确认链接可用、
-免得白等 1 分钟），这个探活是阻塞式网络调用，却被界面主线程的协程直接调用 ——
-Android 禁止在主线程发起网络请求，于是抛出 `NetworkOnMainThreadException`。
-该异常又被探活的异常处理捕获并转成「链接不可用： …」的文案，
-**伪装成了链接失效**，引导用户去换链接、怀疑网盘，而真正原…</p><p class="small"><a href="https://github.com/jiayuxuan123/YunGet/releases/tag/v2.6.15">发布页</a></p></div></div></section><section><div class="seg-rule" aria-hidden="true"><i class="done" style="width:23.333%"></i><i class="" style="width:10.000%"></i><i class="done" style="width:16.667%"></i><i class="" style="width:6.667%"></i><i class="" style="width:30.000%"></i><i class="done" style="width:13.333%"></i></div><h2>完整历史</h2><div class="btn-row"><a class="btn" href="https://github.com/jiayuxuan123/YunGet/releases">全部发布</a><a class="btn" href="https://github.com/jiayuxuan123/YunGet/commits/main">代码提交</a></div></section></main>
+数据库版本 11 →…</p><p class="small"><a href="https://github.com/jiayuxuan123/YunGet/releases/tag/v2.6.17">发布页</a></p></div></div></section><section><div class="seg-rule" aria-hidden="true"><i class="done" style="width:23.333%"></i><i class="" style="width:10.000%"></i><i class="done" style="width:16.667%"></i><i class="" style="width:6.667%"></i><i class="" style="width:30.000%"></i><i class="done" style="width:13.333%"></i></div><h2>完整历史</h2><div class="btn-row"><a class="btn" href="https://github.com/jiayuxuan123/YunGet/releases">全部发布</a><a class="btn" href="https://github.com/jiayuxuan123/YunGet/commits/main">代码提交</a></div></section></main>
 </div>
 <footer class="site-foot">
 <div class="wrap">
 <div class="foot-cols"><div class="foot-col"><h4>项目</h4><ul><li><a href="https://github.com/jiayuxuan123/YunGet">GitHub</a></li><li><a href="../download/index.html">下载</a></li><li><a href="index.html">更新日志</a></li><li><a href="https://github.com/jiayuxuan123/YunGet/issues">问题反馈</a></li></ul></div><div class="foot-col"><h4>文档</h4><ul><li><a href="../docs/readme/index.html">项目说明</a></li><li><a href="../docs/guide/index.html">使用说明</a></li><li><a href="../docs/faq/index.html">常见问题</a></li><li><a href="../docs/engines/index.html">下载引擎</a></li><li><a href="../docs/build/index.html">从源码构建</a></li></ul></div><div class="foot-col"><h4>插件</h4><ul><li><a href="../plugins/index.html">插件（市场与安装）</a></li><li><a href="../developers/index.html">开发者（怎么写）</a></li><li><a href="../docs/plugin-dev/index.html">写一个插件</a></li><li><a href="../docs/plugin-api/index.html">插件 ABI 参考</a></li><li><a href="../docs/plugin-publish/index.html">打包与发布</a></li><li><a href="../docs/plugin-security/index.html">插件安全模型</a></li></ul></div><div class="foot-col"><h4>协议与说明</h4><ul><li><a href="../legal/license/index.html">AGPL-3.0 原文</a></li><li><a href="../legal/notice/index.html">署名与致谢</a></li><li><a href="../legal/privacy/index.html">隐私说明</a></li><li><a href="../legal/terms/index.html">使用条款</a></li><li><a href="../support/index.html">支持开发</a></li></ul></div><div class="foot-col"><h4>相关</h4><ul><li><a href="https://github.com/CYQawa/YunX">上游 CYQawa/YunX</a></li><li><a href="https://github.com/jiayuxuan123/TurboDL">下载引擎 TurboDL</a></li><li><a href="https://github.com/jiayuxuan123/YunGet-Plugins">插件源 YunGet-Plugins</a></li><li><a href="../community/index.html">社区</a></li></ul></div></div>
-<div class="foot-note"><p>云取 YunGet v2.7.5 · AGPL-3.0 · 内置 TurboDL 0.2.1.0 · Android 6.0（API 23）</p><p>本项目是 CYQawa/YunX（云析）的二次开发版本，与上游作者无隐性关联。仅供个人学习与技术交流，请勿用于商业用途；下载内容的版权归原作者及相关权利人所有。</p></div>
+<div class="foot-note"><p>云取 YunGet v2.7.6 · AGPL-3.0 · 内置 TurboDL 0.2.1.0 · Android 6.0（API 23）</p><p>本项目是 CYQawa/YunX（云析）的二次开发版本，与上游作者无隐性关联。仅供个人学习与技术交流，请勿用于商业用途；下载内容的版权归原作者及相关权利人所有。</p></div>
 </div>
 </footer>
 <script src="../assets/site.js" defer></script>

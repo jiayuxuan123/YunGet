@@ -4,8 +4,11 @@ plugins {
     alias(libs.plugins.android.application) apply false
     alias(libs.plugins.kotlin.android) apply false
     alias(libs.plugins.kotlin.compose) apply false
-    
+
     alias(libs.plugins.ksp) apply false
+
+    // :l2-providers 用纯 JVM Kotlin（L2 插件打包模块）；版本与 app 一致
+    kotlin("jvm") version "2.1.0" apply false
 }
 
 tasks.register<Delete>("clean") {
