@@ -640,8 +640,44 @@ def _plugin_card(entry: dict) -> tuple[str, str]:
             + "、".join(f'<span class="mono">{esc(p)}</span>' for p in perms)
             + " —— 装之前请看清楚，<span class=\"mono\">http</span> 意味着它能把你的链接发出去。"
         )
+        # 凭据权限要单独说清（P2）：只列一个 `secrets` 读者不知道那意味着什么，
+        # 而它是这一套里最敏感的一项。
+        if any(str(p).strip().lower() == "secrets" for p in perms):
+            bits.append(
+                "<span class=\"mono\">secrets</span> 表示它能读写<strong>自己</strong>的加密凭据"
+                "（cookie、登录令牌）：由系统密钥库加密、别的插件读不到，卸载插件时一并删除。"
+            )
     if latest.get("minHostVersion"):
         bits.append(f'最低宿主版本 <span class="mono">{esc(latest["minHostVersion"])}</span>。')
+
+    # MIME 与依赖：设计文档 §12 要求 Manifest 有这两项，索引现在也支持了（P17）。
+    mimes = entry.get("supportedMimeTypes") or []
+    if mimes:
+        bits.append("可处理的类型：" + "、".join(f'<span class="mono">{esc(m)}</span>' for m in mimes) + "。")
+    deps = entry.get("dependencies") or []
+    if deps:
+        # 如实说明"只声明、不解析"——写清楚比让用户以为会自动装依赖好
+        bits.append(
+            "依赖：" + "、".join(f'<span class="mono">{esc(d)}</span>' for d in deps)
+            + "（应用目前<strong>不会</strong>自动安装依赖，需自行装齐）。"
+        )
+
+    # 签名状态：与 App 内一致地给出可核查材料（P17）。
+    # 措辞按设计文档第 26 章：说"校验流程通过"，不说"绝对安全"。
+    if latest.get("signature") and latest.get("keyId"):
+        bits.append(
+            "<strong>签名验证通过</strong>："
+            f'<span class="mono">keyId={esc(latest["keyId"])}</span>、'
+            f'<span class="mono">sha256={esc(str(latest.get("sha256") or "")[:16])}…</span>。'
+            "签名覆盖脚本原始字节，任何改动都会让校验失败并拒绝安装。"
+            "签名只回答「内容有没有被改过、是不是这把钥匙发的」，"
+            '<strong>不回答「作者写得好不好」</strong>。'
+        )
+    else:
+        bits.append(
+            "<strong>这一版没有齐全的校验信息</strong>（缺 sha256 / 签名 / keyId），应用会拒绝安装。"
+        )
+
     if latest.get("changelog"):
         bits.append(esc(latest["changelog"]))
 

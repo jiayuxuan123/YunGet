@@ -55,12 +55,37 @@ object Aria2Executor {
         Build.SUPPORTED_ABIS.any { it.equals("arm64-v8a", ignoreCase = true) }
 
     /**
+     * 最近一次 [probe] 的可用性结论缓存（未探测过为 null）。
+     *
+     * 为什么要缓存：引擎注册表要用它回答"这个引擎在这台设备上能不能用"，
+     * 而那个接口刻意不带 Context（见 `DownloadEngineRegistry.EngineProvider.isAvailable`）。
+     * 应用启动时已经探过一次（`DownloadManagerViewModel.probeAria2InBackground`），
+     * 那次的结果落在这里，注册表直接读。
+     */
+    @Volatile
+    private var cachedAvailability: Boolean? = null
+
+    /** 读缓存的可用性；从未探测过返回 null。 */
+    fun cachedAvailability(): Boolean? = cachedAvailability
+
+    /** 记录一次探测结果（[probe] 内部调用）。 */
+    private fun rememberAvailability(available: Boolean) {
+        cachedAvailability = available
+    }
+
+    /**
      * 探测可执行文件能否真正运行：执行 `--version` 并读回输出。
      *
      * @return 成功时返回版本首行；失败时返回**可读的失败原因**（含 errno 语义），
      *   供设置页/日志直接展示 —— 这样"为什么用不了 aria2"不用猜。
      */
     fun probe(context: Context): Aria2ProbeResult {
+        val result = probeInternal(context)
+        rememberAvailability(result.available)
+        return result
+    }
+
+    private fun probeInternal(context: Context): Aria2ProbeResult {
         if (!isSupportedAbi()) {
             return Aria2ProbeResult(
                 available = false,

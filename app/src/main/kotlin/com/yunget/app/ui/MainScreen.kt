@@ -121,6 +121,7 @@ import com.yunget.app.ui.screens.DownloadScreen
 import com.yunget.app.ui.screens.DriveScreen
 import com.yunget.app.ui.screens.OnboardingScreen
 import com.yunget.app.ui.screens.ResolveScreen
+import com.yunget.app.ui.screens.LogViewerScreen
 import com.yunget.app.ui.screens.SettingsScreen
 import com.yunget.app.ui.screens.SupportScreen
 import com.yunget.app.ui.screens.ThemeScreen
@@ -301,6 +302,11 @@ fun MainScreen() {
         factory = DownloadManagerViewModel.Factory(settings, db.downloadTaskDao(), context.applicationContext)
     )
     val downloadManager = managerViewModel.manager
+    // 订阅实时统计：设置页要显示"当前生效连接数"（P15），
+    // 直接读 StateFlow.value 不会触发重组，数值变了界面不刷新。
+    val liveStats by downloadManager.stats.collectAsState()
+    // 实时日志页（日志系统升级）
+    var showLogViewer by remember { mutableStateOf(false) }
     // Android 9- 写公共 Download 需要 WRITE_EXTERNAL_STORAGE 运行时授权：
     // 下载完成保存前由 DownloadManager.storagePermissionProvider 触发动态申请，授权后自动继续保存
     var pendingStoragePermission by remember { mutableStateOf<CompletableDeferred<Boolean>?>(null) }
@@ -861,11 +867,19 @@ fun MainScreen() {
                         onThemeClick = { showTheme = true },
                         onAboutClick = { showAbout = true },
                         onSupportClick = { showSupport = true },
+                        onLogViewClick = { showLogViewer = true },
                         backupManager = backupManager,
                         onConnectionDiagnose = { urlOverride -> downloadManager.diagnoseConnections(urlOverride = urlOverride) },
                         onConcurrentDiagnose = { downloadManager.diagnoseConcurrentTasks() },
                         diagStatusProvider = { downloadManager.diagnoseStatus },
                         diagResultProvider = { downloadManager.diagnoseLastResult },
+                        // 当前生效连接数（P15）：取活跃任务里最大的那个。
+                        // 为什么是"最大"而不是"求和"：这个数字是用来回答"我这个旋钮
+                        // 实际开到多少"的，单任务的连接数才是那个答案；
+                        // 多个任务并存时取最大，能显示引擎给某个任务放到的最高档。
+                        activeConnectionsProvider = {
+                            liveStats.values.maxOfOrNull { it.chunkCount }
+                        },
                         onDownloadUpdateApk = { url, name ->
                             scope.launch {
                                 downloadManager.enqueue(url = url, fileName = name)
@@ -956,6 +970,16 @@ fun MainScreen() {
     }
 
     // 支持开发：叠加覆盖层（淡入 + 轻微缩放过渡）
+    // 实时日志：叠加覆盖层，与其它设置子页同一套过渡
+    AnimatedVisibility(
+        visible = showLogViewer,
+        enter = fadeIn(effectsDefault()) + scaleIn(tween(220), initialScale = 0.96f),
+        exit = fadeOut(effectsFast()) + scaleOut(tween(160), targetScale = 0.96f),
+        modifier = Modifier.fillMaxSize()
+    ) {
+        LogViewerScreen(onBack = { showLogViewer = false })
+    }
+
     AnimatedVisibility(
         visible = showSupport,
         enter = fadeIn(effectsDefault()) + scaleIn(tween(220), initialScale = 0.96f),

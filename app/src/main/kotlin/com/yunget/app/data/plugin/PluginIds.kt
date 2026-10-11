@@ -65,6 +65,15 @@ object PluginIds {
     const val SOURCES_DIR = "plugins/sources"
 
     /**
+     * 插件凭据落盘目录（P2）。
+     *
+     * 与 `scripts/`、`sources/` 并列但在语义上**完全不同**：那里是插件本体与索引缓存，
+     * 这里是**加密后的凭据**。单独一个目录是为了卸载插件时能整目录删干净 ——
+     * 凭据留着一份再也访问不到，既占空间又是个隐患。
+     */
+    const val SECRETS_DIR = "plugins/secrets"
+
+    /**
      * 插件回滚快照目录名（相对 `filesDir`）。
      *
      * 用侧车文件保存"上一可用版本"而不是加数据库字段：加列需要 Room 迁移，

@@ -165,6 +165,132 @@ class PluginRuntime(private val context: Context) {
     fun livePlugins(): List<JsScriptPlugin.Info> = loader()?.livePlugins() ?: emptyList()
 
     /**
+     * 各插件声明的支持条目（P7）。
+     *
+     * ## 为什么用一张自己的表，而不是只走引擎的扩展点
+     *
+     * 设计上支持条目应当由插件**注册到扩展点**（`SupportEntryProvider.KEY`），
+     * 这样宿主只认契约、不认来源。但 JS 插件**无法实现 Kotlin 接口** ——
+     * 它只能通过 manifest 声明数据。所以路径是：
+     *
+     * ```
+     * 脚本/manifest 声明  →  这里解析成 SupportEntry  →  存表
+     *                                              ↘  同时注册进扩展点（供 L2 原生插件共用）
+     * ```
+     *
+     * 宿主查询**只查这张表**：它已经是两条路径的汇合点，再分别去问扩展点会得到两份真相。
+     * L2 原生插件将来注册进扩展点时，也由这里转存进表 —— 见 [registerSupportProvider]。
+     *
+     * ## 为什么权限检查在装载时而不是查询时
+     *
+     * 条目是插件**装载时**就确定的（manifest 里的静态数据），卸载时整条摘掉。
+     * 查询发生在打开设置页那一刻，那里不该再做权限判断 —— `host.secrets` 那种
+     * 运行时可变的权限才需要在调用时检查。
+     */
+    private val supportEntriesByPlugin =
+        java.util.concurrent.ConcurrentHashMap<String, List<SupportEntry>>()
+
+    /**
+     * 注册一个由原生代码提供的支持条目来源（L2 原生插件用）。
+     *
+     * 与 JS 路径汇合到同一张表，所以宿主查询不需要区分来源。
+     */
+    fun registerSupportProvider(ownerPluginId: String, provider: SupportEntryProvider) {
+        supportEntriesByPlugin[ownerPluginId] = runCatching { provider.entries() }
+            .onFailure {
+                android.util.Log.w("PluginRuntime", "插件 $ownerPluginId 的支持条目读取失败：${it.message}")
+            }
+            .getOrDefault(emptyList())
+    }
+
+    /** 注销（卸载时调用）。 */
+    fun unregisterSupportProvider(ownerPluginId: String) {
+        supportEntriesByPlugin.remove(ownerPluginId)
+    }
+
+    /**
+     * 已启用的支持条目（净化 + 排序后）。
+     *
+     * 净化在 [SupportEntries.merge] 里做 —— 条目来自第三方代码，
+     * 而打开链接与读图片是宿主替它做的动作，所以必须在这里挡住越界内容。
+     */
+    fun supportEntries(): List<SupportEntries.SanitizedEntry> =
+        SupportEntries.merge(supportEntriesByPlugin.entries.map { it.key to it.value }, privateRootPath())
+
+    /** 应用私有目录根（图片只能在这个前缀下）。 */
+    private fun privateRootPath(): String = context.filesDir.absolutePath
+
+    /**
+     * 按插件的 manifest 登记/清除它的支持条目（P7）。
+     *
+     * ## 为什么从 manifest 读，而不是让插件执行代码来注册
+     *
+     * JS 插件**无法实现 Kotlin 接口**（[SupportEntryProvider] 是 Kotlin 契约），
+     * 所以它没有"注册到扩展点"这条路径。manifest 是宿主本来就存着的数据
+     * （装插件时一起落库），从这里读让 JS 插件**不需要任何新能力**就能提供支持入口 ——
+     * 也就没有"为了显示一个赞赏码而给它开个执行接口"这种不必要的信任扩张。
+     *
+     * L2 原生插件将来走 [registerSupportProvider]（它能实现接口），两者在这里汇合。
+     *
+     * 解析失败**不清空已有条目**：manifest 坏掉是插件的状态问题，
+     * 不该顺带把上次正常登记的条目也抹掉（那会让"支持页突然空了"变成插件坏掉的表现之一）。
+     */
+    private fun syncSupportEntries(host: PluginHost, p: InstalledPlugin) {
+        val parsed = readSupportEntriesFromManifest(p.entity.manifestJson)
+        if (parsed == null) return   // 没声明或解析失败：维持现状
+        if (parsed.isEmpty()) {
+            supportEntriesByPlugin.remove(p.id)
+        } else {
+            supportEntriesByPlugin[p.id] = parsed
+        }
+    }
+
+    /**
+     * 从 manifest JSON 里读 `supportEntries` 数组。
+     *
+     * 返回 null = 没这个字段或解析失败（调用方据此决定"维持现状"）；
+     * 返回空列表 = 明确声明了"没有条目"（据此清掉旧条目）。
+     *
+     * 格式（写在 `turbodl-plugin.json` 里，与其它市场字段并列）：
+     * ```json
+     * "supportEntries": [
+     *   {"title": "赞赏开发者", "kind": "image", "payload": "/abs/path/qr.png", "note": "..."}
+     * ]
+     * ```
+     */
+    private fun readSupportEntriesFromManifest(manifestJson: String): List<SupportEntry>? {
+        if (manifestJson.isBlank()) return null
+        return runCatching {
+            val root = org.json.JSONObject(manifestJson)
+            val arr = root.optJSONArray("supportEntries") ?: return null
+            buildList {
+                for (i in 0 until arr.length()) {
+                    val o = arr.optJSONObject(i) ?: continue
+                    val title = o.optString("title").trim()
+                    if (title.isEmpty()) continue
+                    val kind = when (o.optString("kind").trim().lowercase()) {
+                        "", "text" -> SupportEntry.Kind.TEXT
+                        "image" -> SupportEntry.Kind.IMAGE
+                        "link" -> SupportEntry.Kind.LINK
+                        "copyable" -> SupportEntry.Kind.COPYABLE
+                        // 不认识的 kind 整条丢掉，而不是退化成 TEXT：
+                        // 退化成 TEXT 会把一个图片路径当文字显示出来，那比不显示更糟。
+                        else -> continue
+                    }
+                    add(
+                        SupportEntry(
+                            title = title,
+                            note = o.optString("note"),
+                            kind = kind,
+                            payload = o.optString("payload"),
+                        )
+                    )
+                }
+            }
+        }.getOrNull()
+    }
+
+    /**
      * 启动后的健康检查（P4，设计文档第 8.5 章）。
      *
      * ## 它检查什么
@@ -232,6 +358,12 @@ class PluginRuntime(private val context: Context) {
                 evaluationTimeoutMillis = EVALUATION_TIMEOUT_MS,
                 invocationTimeoutMillis = INVOCATION_TIMEOUT_MS,
                 sandboxRoot = sandboxRoot(),
+                // 凭据后端（P2）：宿主注入的加密实现。
+                // 命名空间不在这里 —— 它按插件派生（见引擎侧 JsHost 的注释）。
+                secretStore = PluginSecretStore(
+                    context = context,
+                    root = File(context.filesDir, PluginIds.SECRETS_DIR),
+                ),
             ),
         )
         // installAll 是宿主唯一的装载入口（PluginHost 没有 loadPlugin）。loader 类插件与普通
@@ -270,6 +402,9 @@ class PluginRuntime(private val context: Context) {
             if (info == null) {
                 "加载后未出现在运行列表中（脚本可能不合法）"
             } else {
+                // 装载成功才登记支持条目（P7）：失败时不登记，
+                // 否则设置页会出现一个"条目在、插件却没跑"的错位状态。
+                syncSupportEntries(host, p)
                 null
             }
         }.getOrElse { t ->

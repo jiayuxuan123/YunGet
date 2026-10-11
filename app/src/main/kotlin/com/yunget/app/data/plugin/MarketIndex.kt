@@ -82,12 +82,22 @@ data class MarketIndex(
             }
 
             val source = root.optJSONObject("source") ?: JSONObject()
+            // 只有自称 official 的源才可能声明保留命名空间下的能力。
+            // 真正的官方判定在安装时还会用"源是否用户主动添加 + 公钥是否为内置"复核一遍
+            // （见 PluginTrust.gradeFor），这里的判断只用于**拒绝明显越界的能力声明**，
+            // 不是信任判定的终点。
+            val sourceTrustForCapabilities =
+                source.optString("trustLevel").trim() ==
+                    PluginInstalledEntity.TRUST_OFFICIAL
             val arr = root.optJSONArray("plugins") ?: JSONArray()
             val skipped = mutableListOf<SkippedEntry>()
             val plugins = buildList {
                 for (i in 0 until arr.length()) {
                     val o = arr.optJSONObject(i) ?: continue
-                    val parsed = parseMarketPlugin(o)
+                    // 保留命名空间（yung / dev.turbodl）只允许**官方源**声明。
+                    // 源的信任等级是用户添加源时定的，索引自己写的等级不作数
+                    // （否则 fork 一份索引改个字段就能自称官方）。
+                    val parsed = parseMarketPlugin(o, sourceTrustForCapabilities)
                     val plugin = parsed.getOrNull()
                     if (plugin != null) {
                         add(plugin)
@@ -168,6 +178,22 @@ data class MarketPlugin(
     val category: String,
     val protocols: List<String>,
     val capabilities: List<String>,
+    /**
+     * 这个插件能处理的 MIME 类型（设计文档 §12 的 Manifest 字段）。
+     *
+     * 用途是让宿主/市场在不解析脚本的前提下判断"这个插件适不适合这个文件" ——
+     * 例如播放器类插件声明 `video/mp4`。空表示未声明（不限制，也不承诺）。
+     */
+    val supportedMimeTypes: List<String> = emptyList(),
+    /**
+     * 依赖的其他插件（`id` 或 `id@版本`）。
+     *
+     * **只解析与展示，不做依赖解析**（P17 的风险提示明确写了这一点）：
+     * 真做解析就要有版本约束求解、循环检测、缺失时的降级路径 ——
+     * 在还没有任何真实依赖关系之前实现它，只会做出一套没人验证过的规则。
+     * 所以现在的语义是"声明出来的信息"，装了缺依赖的插件不会被拦。
+     */
+    val dependencies: List<String> = emptyList(),
     val tags: List<String>,
     val homepage: String,
     val sourceUrl: String,
@@ -227,7 +253,11 @@ internal fun compareSemver(a: String, b: String): Int =
  * 失败时**带上原因**（不是静默返回 null）：调用方要把被丢掉的条目记进
  * [MarketIndex.skippedEntries] 并在界面上说清楚，否则用户只会看到"插件不见了"。
  */
-internal fun parseMarketPlugin(o: JSONObject): Result<MarketPlugin> {
+internal fun parseMarketPlugin(
+    o: JSONObject,
+    /** 该条目所属的源是否有权声明保留命名空间下的能力。 */
+    reservedNamespaceOwner: Boolean = false,
+): Result<MarketPlugin> {
     val id = o.optString("id").trim()
     if (id.isBlank()) return Result.failure(IllegalArgumentException("条目缺少 id"))
 
@@ -279,7 +309,12 @@ internal fun parseMarketPlugin(o: JSONObject): Result<MarketPlugin> {
         license = o.optString("license"),
         category = o.optString("category"),
         protocols = o.optJSONArray("protocols").toStringList(),
-        capabilities = o.optJSONArray("capabilities").toStringList(),
+        supportedMimeTypes = o.optJSONArray("supportedMimeTypes").toStringList(),
+        dependencies = o.optJSONArray("dependencies").toStringList(),
+        // 能力标识要过规范校验（P3 / 设计文档 §12.1–12.4）：不许裸名、必须带版本。
+        // 旧式裸名在迁移期内标为 legacy 而不是直接失败 —— 存量索引里就是那么写的，
+        // 直接判废会让一次格式收敛变成一次全量失效。
+        capabilities = capabilitySet(o.optJSONArray("capabilities"), reservedNamespaceOwner),
         tags = o.optJSONArray("tags").toStringList(),
         homepage = o.optString("homepage"),
         sourceUrl = o.optString("sourceUrl"),
@@ -287,6 +322,30 @@ internal fun parseMarketPlugin(o: JSONObject): Result<MarketPlugin> {
         level = level,
         versions = versions,
     ))
+}
+
+/**
+ * 把索引里的 capabilities 数组过一遍规范校验。
+ *
+ * 只保留**合规范**与**旧式**两种；非法项（缺命名空间且不在旧名单、版本不是三段式、
+ * 第三方声明保留命名空间）直接丢弃。丢弃而不是整体失败：一个源里有一条写错的能力，
+ * 不该让整个插件条目作废 —— 但也不能放过去，否则规则等于没写。
+ *
+ * @param reservedNamespaceOwner 该条目所属的源是否有权声明保留命名空间下的能力
+ */
+private fun capabilitySet(arr: JSONArray?, reservedNamespaceOwner: Boolean): List<String> {
+    if (arr == null) return emptyList()
+    val out = mutableListOf<String>()
+    for (i in 0 until arr.length()) {
+        val raw = arr.optString(i).trim()
+        if (raw.isEmpty()) continue
+        when (val r = PluginCapability.check(reservedNamespaceOwner, raw)) {
+            is PluginCapability.Result.Ok -> out.add(r.parsed.canonical)
+            is PluginCapability.Result.Legacy -> out.add(r.bare)
+            is PluginCapability.Result.Invalid -> Unit  // 明确丢弃，见上面注释
+        }
+    }
+    return out
 }
 
 /** `JSONArray` → `List<String>`：非字符串元素直接丢掉，不抛。 */

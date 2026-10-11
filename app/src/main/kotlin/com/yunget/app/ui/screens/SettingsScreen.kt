@@ -32,6 +32,7 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.outlined.Article
+import androidx.compose.material.icons.outlined.ReceiptLong
 import androidx.compose.material.icons.outlined.Backup
 import androidx.compose.material.icons.outlined.ChevronRight
 import androidx.compose.material.icons.outlined.Memory
@@ -90,6 +91,7 @@ import androidx.compose.ui.unit.dp
 import com.yunget.app.data.backup.AuthBackupManager
 import com.yunget.app.data.backup.AuthCrypto
 import com.yunget.app.data.download.DownloadSaver
+import com.yunget.app.data.download.ThreadCountAdvice
 import com.yunget.app.data.network.HttpClients
 import com.yunget.app.data.plugin.PluginRepository
 import com.yunget.app.data.prefs.SettingsRepository
@@ -141,6 +143,16 @@ fun SettingsScreen(
     onConcurrentDiagnose: suspend () -> Unit,
     diagStatusProvider: () -> String?,
     diagResultProvider: () -> String?,
+    /**
+     * 当前正在用的连接数（取活跃任务里最大的那个）；没有任务在跑时为 null。
+     *
+     * 为什么要有这个：P15 的核心是"让用户看得见自己这个旋钮的实际效果"。
+     * 设定值是 256 而引擎自适应收敛到 32，与设定值 32 实际用 32，
+     * 对用户是完全不同的两件事 —— 只显示设定值会让前者以为引擎没生效。
+     */
+    activeConnectionsProvider: () -> Int? = { null },
+    /** 打开实时日志页（日志系统升级）。 */
+    onLogViewClick: () -> Unit = {},
     modifier: Modifier = Modifier
 ) {
     var showThreadsDialog by remember { mutableStateOf(false) }
@@ -284,10 +296,22 @@ fun SettingsScreen(
         // 只放"改变下载行为本身"的项。下面按用途分了三组，而不是一长条平铺：
         // 原先 11 项挤在一个「下载」标题下，找一项要通读全部描述。
         SectionLabel("下载")
+        // 描述文字来自 ThreadCountAdvice（P15）：高档位会给出"调高有风险、但对每连接
+        // 限速的服务端有效"的说明。措辞是可测的（见 ThreadCountAdviceTest），
+        // 不写在这里 —— 写在 Composable 里就只能靠肉眼回归。
+        val activeConns = activeConnectionsProvider()
         SettingsItem(
             icon = Icons.Outlined.Tune,
             title = "最大下载线程数",
-            description = "并发上限：当前 $threads 线程（引擎慢启动从少逐步爬升到该值，最高 256）",
+            description = buildString {
+                append(ThreadCountAdvice.describe(threads))
+                // 有任务在跑时，把"引擎实际用到多少"也说出来。
+                // 设定值与实际值不一致是**正常的**（引擎会按实测吞吐自行收敛），
+                // 但用户看不见就会以为没生效。
+                if (activeConns != null) {
+                    append("\n当前生效：$activeConns 条连接（引擎按实测吞吐自动调整）")
+                }
+            },
             onClick = { showThreadsDialog = true }
         )
 
@@ -538,10 +562,20 @@ fun SettingsScreen(
         )
 
         Spacer(modifier = Modifier.height(8.dp))
+        // 入口拆成两个（日志系统升级）：实时查看与导出是两件不同的事 ——
+        // 前者回答"刚才那步有没有报错"，后者用于把证据交给别人。
+        // 旧版只有导出，为了看一眼错误也得走完整流程。
+        SettingsItem(
+            icon = Icons.Outlined.ReceiptLong,
+            title = "实时日志",
+            description = "当场看最近发生了什么事，按级别过滤（错误、警告…），可复制",
+            onClick = onLogViewClick
+        )
+        Spacer(modifier = Modifier.height(8.dp))
         SettingsItem(
             icon = Icons.Outlined.Article,
             title = "导出日志",
-            description = "导出崩溃日志与应用信息，便于排查问题",
+            description = "导出崩溃日志、分类日志与应用信息，便于排查问题",
             onClick = { showLogDialog = true }
         )
 
@@ -919,7 +953,7 @@ fun SettingsScreen(
             text = {
                 Column {
                     Text(
-                        text = "设置并发上限（最高 256，即引擎上限）；引擎会慢启动逐步爬升到该值（需服务器支持 Range）",
+                        text = ThreadCountAdvice.dialogNote(threads),
                         style = MaterialTheme.typography.bodyMedium,
                         color = MaterialTheme.colorScheme.onSurfaceVariant
                     )

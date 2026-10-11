@@ -103,7 +103,7 @@ import androidx.lifecycle.LifecycleEventObserver
 import androidx.lifecycle.compose.LocalLifecycleOwner
 import com.yunget.app.data.download.Aria2Executor
 import com.yunget.app.data.download.Aria2ProbeResult
-import com.yunget.app.data.download.DownloadEngine
+import com.yunget.app.data.download.DownloadEngineRegistry
 import com.yunget.app.data.gopeed.GopeedEngine
 import com.yunget.app.data.gopeed.KernelProvisioner
 import com.yunget.app.data.prefs.SettingsRepository
@@ -161,7 +161,10 @@ fun DownloadEngineScreen(onBack: () -> Unit, modifier: Modifier = Modifier) {
     // 内置下载器的**具体实现**（TurboDL / 内置兼容 / aria2）。
     // 这一项以前藏在「设置」页的一个弹窗里，和这里的「内置 vs Gopeed」分成两个入口 ——
     // 现在四个引擎都在这一页选：这个页面就是唯一的引擎入口。
-    var builtinImpl by remember { mutableStateOf(DownloadEngine.fromId(settings.downloadEngineId)) }
+    var builtinImpl by remember { mutableStateOf(
+        DownloadEngineRegistry.find(settings.downloadEngineId)?.id
+            ?: DownloadEngineRegistry.default().id
+    ) }
     var aria2Result by remember { mutableStateOf<Aria2ProbeResult?>(null) }
     var aria2Checking by remember { mutableStateOf(false) }
     var busy by remember { mutableStateOf(false) }
@@ -182,7 +185,8 @@ fun DownloadEngineScreen(onBack: () -> Unit, modifier: Modifier = Modifier) {
                 allFilesReady = PermissionState.allFilesAccessGranted()
                 legacyStorageReady = !PermissionState.engineStoragePermissionPending(context)
                 engineChoice = settings.downloadEngine
-                builtinImpl = DownloadEngine.fromId(settings.downloadEngineId)
+                builtinImpl = DownloadEngineRegistry.find(settings.downloadEngineId)?.id
+                    ?: DownloadEngineRegistry.default().id
             }
         }
         lifecycleOwner.lifecycle.addObserver(observer)
@@ -420,30 +424,50 @@ fun DownloadEngineScreen(onBack: () -> Unit, modifier: Modifier = Modifier) {
                                     style = MaterialTheme.typography.titleSmall,
                                     color = MaterialTheme.colorScheme.onSurface
                                 )
-                                DownloadEngine.entries.forEach { engine ->
+                                // 引擎清单来自注册表（P9），不是写在这页里的枚举 ——
+                                // 新增一个引擎只需注册一个 provider，这个页面自动出现它。
+                                // 可用性也由 provider 回答：不可用的引擎照样列出来（用户会问
+                                // "怎么就三个选项"），但标出原因并禁止切过去。
+                                DownloadEngineRegistry.all().forEach { engine ->
+                                    val available = engine.isAvailable()
                                     Row(
                                         modifier = Modifier
                                             .fillMaxWidth()
-                                            .clickable {
-                                                builtinImpl = engine
+                                            .clickable(enabled = available) {
+                                                builtinImpl = engine.id
                                                 settings.downloadEngineId = engine.id
-                                                notice = if (engine == DownloadEngine.TURBODL) {
-                                                    "已切换到 TurboDL，重启 App 后生效"
-                                                } else {
-                                                    "已切换到${engine.displayName}，重启 App 后生效"
-                                                }
+                                                notice = "已切换到${engine.displayName}，重启 App 后生效"
                                             }
                                             .padding(vertical = 6.dp),
                                         verticalAlignment = Alignment.Top
                                     ) {
-                                        RadioButton(selected = builtinImpl == engine, onClick = null)
+                                        RadioButton(
+                                            selected = builtinImpl == engine.id,
+                                            onClick = null,
+                                            enabled = available,
+                                        )
                                         Spacer(modifier = Modifier.width(8.dp))
                                         Column {
-                                            Text(engine.displayName, style = MaterialTheme.typography.bodyLarge)
                                             Text(
-                                                engine.description,
+                                                engine.displayName,
+                                                style = MaterialTheme.typography.bodyLarge,
+                                                color = if (available) {
+                                                    MaterialTheme.colorScheme.onSurface
+                                                } else {
+                                                    MaterialTheme.colorScheme.onSurfaceVariant
+                                                },
+                                            )
+                                            Text(
+                                                // 不可用时显示原因而不是描述 —— 用户此刻要的是
+                                                // "为什么不能选、怎么办"，不是这个引擎多好用。
+                                                if (available) engine.description
+                                                else engine.unavailableReason(),
                                                 style = MaterialTheme.typography.bodySmall,
-                                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                                                color = if (available) {
+                                                    MaterialTheme.colorScheme.onSurfaceVariant
+                                                } else {
+                                                    MaterialTheme.colorScheme.error
+                                                },
                                             )
                                         }
                                     }

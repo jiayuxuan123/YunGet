@@ -30,6 +30,7 @@ import java.security.MessageDigest
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.flowOn
+import dev.turbodl.plugin.js.JsSecretScope
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.withContext
 
@@ -381,6 +382,15 @@ class PluginRepository(context: Context) {
                 val row = installedDao.getById(id) ?: throw IllegalArgumentException("插件不存在：$id")
                 installedDao.delete(id)
                 if (deleteScript) deleteScriptQuietly(row.scriptPath)
+                // 凭据必须一并清掉（P2）：留着一份再也访问不到的加密数据，既占空间
+                // 也是个隐患 —— 用户以为卸载就清干净了。放在删库之后：即便这里失败，
+                // 插件记录已经没了，残留的凭据也读不出来（命名空间随 id 一起消失）。
+                runCatching {
+                    PluginSecretStore(appContext, File(appContext.filesDir, PluginIds.SECRETS_DIR))
+                        .purgeOwner(JsSecretScope.of(id))
+                }.onFailure {
+                    DiagLog.i(appContext, TAG, "清理插件凭据失败（$id）：${it.message.orEmpty()}")
+                }
                 DiagLog.i(appContext, TAG, "已卸载插件 $id（删除脚本=${deleteScript}）")
             }.onFailure { DiagLog.i(appContext, TAG, "卸载插件失败（$id）：${it.message.orEmpty()}") }
         }

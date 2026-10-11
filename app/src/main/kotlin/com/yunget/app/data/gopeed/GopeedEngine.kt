@@ -25,6 +25,7 @@ import android.os.Build
 import android.os.Environment
 import android.provider.DocumentsContract
 import android.util.Log
+import com.yunget.app.util.DiagLog
 import com.gopeed.libgopeed.InvokeResultListener
 import com.gopeed.libgopeed.Libgopeed
 import com.yunget.app.data.prefs.SettingsRepository
@@ -173,6 +174,12 @@ object GopeedEngine {
                     "allFilesAccess=${PermissionState.allFilesAccessGranted()} " +
                     "→ default=${StorageDirs.defaultDownloadPath()}"
             )
+            // 落盘（日志系统升级）：Gopeed 引擎出问题时（用户最常见的"装了却用不了"）
+            // 之前只有 logcat，而新系统上它只保留几秒 —— 等于没有证据。
+            DiagLog.e(
+                context, DiagLog.Category.STORAGE,
+                "Gopeed：自定义下载目录不可写，退回默认目录 custom=$custom"
+            )
         }
         val publicDir = StorageDirs.defaultDownloadDir()
         if (canWrite(publicDir)) return publicDir
@@ -182,6 +189,10 @@ object GopeedEngine {
             "公共下载目录不可写，退回私有目录：public=${publicDir.absolutePath} " +
                 "allFilesAccess=${PermissionState.allFilesAccessGranted()} " +
                 "allFilesRequired=${PermissionState.allFilesAccessRequired()} → private=${privateDir.absolutePath}"
+        )
+        DiagLog.e(
+            context, DiagLog.Category.STORAGE,
+            "Gopeed：公共下载目录不可写，退回私有目录 private=${privateDir.absolutePath}"
         )
         return privateDir
     }
@@ -262,6 +273,7 @@ object GopeedEngine {
         Log.d(TAG, "导入开始：uri=${LogRedactor.url(uri)} abi=$abi supportedAbis=${Build.SUPPORTED_ABIS.joinToString()} 目标=${so.absolutePath}")
         if (!dir.isDirectory && !dir.mkdirs()) {
             Log.e(TAG, "导入失败：无法创建目录 ${dir.absolutePath}（可写=${dir.canWrite()}）")
+            DiagLog.e(context, DiagLog.Category.STORAGE, "Gopeed：导入失败，无法创建目录 ${dir.absolutePath}")
             throw IllegalStateException("无法创建目录：${dir.absolutePath}")
         }
 
@@ -270,6 +282,7 @@ object GopeedEngine {
         val input = context.contentResolver.openInputStream(uri)
         if (input == null) {
             Log.e(TAG, "导入失败：contentResolver 打不开所选文件 uri=$uri")
+            DiagLog.e(context, DiagLog.Category.STORAGE, "Gopeed：导入失败，打不开所选文件 uri=$uri")
             throw IllegalStateException("无法读取所选文件")
         }
         input.use { raw ->
@@ -289,12 +302,14 @@ object GopeedEngine {
                 }
                 if (!found) {
                     Log.e(TAG, "导入失败：AAR 里没有 jni/$abi/$SO_NAME，实际条目=$entries")
+                    DiagLog.e(context, DiagLog.Category.STORAGE, "Gopeed：导入失败，AAR 里没有对应 ABI 的 so（$abi）")
                     throw IllegalStateException("这个 AAR 里没有 jni/$abi/$SO_NAME（本机首选 ABI：$abi）")
                 }
             }
         }
         if (written <= 0L) {
             Log.e(TAG, "导入失败：解出的引擎文件是空的（tmp=${tmp.absolutePath}）")
+            DiagLog.e(context, DiagLog.Category.STORAGE, "Gopeed：导入失败，解出的引擎文件为空")
             throw IllegalStateException("解出的引擎文件是空的")
         }
 

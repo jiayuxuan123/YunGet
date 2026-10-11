@@ -4,7 +4,7 @@
 >
 > **本项目是 [CYQawa/YunX（云析）](https://github.com/CYQawa/YunX) 的二次开发版本**，在其协议与架构基础上进行功能扩展，并将下载能力逐步迁移至独立的 [TurboDL](https://github.com/jiayuxuan123/TurboDL) 下载引擎。遵循 GNU AGPL-3.0 协议开源。
 
-当前版本 **2.7.2**（versionCode 50）· Android 6.0+（minSdk 23，targetSdk 34）· 内置 TurboDL 0.2.0.8
+当前版本 **2.7.4**（versionCode 52）· Android 6.0+（minSdk 23，targetSdk 34）· 内置 TurboDL 0.2.2.0
 
 **官网**：[jiayuxuan123.github.io/YunGet](https://jiayuxuan123.github.io/YunGet/) —— 下载、使用说明、常见问题、隐私与条款
 
@@ -293,10 +293,31 @@ HLS 下载功能主要面向**完整资源下载**，而不是实时播放。
 - Android SDK（`local.properties` 里的 `sdk.dir`，或环境变量 `ANDROID_HOME` / `ANDROID_SDK_ROOT`）
 - `compileSdk 36` / `minSdk 23` / `targetSdk 34`
 
-**先发布 TurboDL 到本地 Maven。** 依赖里的 `dev.turbodl:*:0.2.0.8` 不在公共仓库上，
-`settings.gradle.kts` 把 `mavenLocal()` 排在仓库列表最前，所以要先在 TurboDL 仓库执行
-`./gradlew publishToMavenLocal`（或从它的 Release 页取 mavenLocal 离线包解到 `~/.m2/repository`），
-否则构建会在依赖解析阶段直接失败。
+**获取 TurboDL SDK。** 依赖里的 `dev.turbodl:*:0.2.2.0` 可从 JitPack 解析：
+
+```kotlin
+// settings.gradle.kts 的 dependencyResolutionManagement
+repositories {
+    maven { url = uri("https://jitpack.io") }   // TurboDL SDK
+    google()
+    mavenCentral()
+}
+```
+
+```kotlin
+// app/build.gradle.kts
+dependencies {
+    implementation("com.github.jiayuxuan123.TurboDL:turbodl-core:0.2.2.0")
+}
+```
+
+若所在网络访问 JitPack 不稳，也可从 TurboDL 的 Release 页取离线包，
+解压到 `~/.m2/repository`（本地开发时 `settings.gradle.kts` 里的 `mavenLocal()` 会优先命中）。
+
+> `mavenLocal()` 排在仓库列表**最前**是有意的：本地开发时优先用它，
+> 避免每次构建都去远端拉一个还在改的版本。但这也意味着**本机 `~/.m2` 里的旧版本
+> 会遮住远端的新版本** —— 若改了引擎版本却构建报"解析不到 0.2.x.x"，
+> 先确认本地 Maven 里有没有那个坐标。
 
 正式签名需要仓库根目录的 `keystore.properties`（`storeFile` / `storePassword` / `keyAlias` /
 `keyPassword` 四个键）；没有它也能构建，会退回调试签名 —— 能装能跑，但不能用来发布。

@@ -84,22 +84,35 @@ object LogExporter {
             writer.write("\n")
 
             writer.write("\n")
-            writer.write("========== 关键诊断（落盘副本，含启动/续传判定）==========\n")
+            writer.write("========== 错误汇总 ==========\n")
+            // 错误单独放最前面：用户说"有问题"时，这一节是第一个该看的。
+            // 旧版所有级别混在一个文件里，找错误要通读全文 —— 这次日志升级要解决的主要问题。
+            val errors = DiagLog.readErrors(context)
+            if (errors.isNullOrBlank()) {
+                writer.write("（没有 ERROR 级别的记录）\n")
+            } else {
+                writer.write(errors)
+            }
+
+            writer.write("\n")
+            writer.write("========== 分类诊断日志 ==========\n")
+            writer.write("（按子系统分段：启动 / 网络 / 下载 / 解析 / 账号 / 插件 / 存储 / 界面 / 更新）\n")
+            writer.write("（每行格式：时间 [级别] [分类] 消息；级别 V/D/I/W/E，可直接搜 \" [E] \"）\n")
             val diag = DiagLog.readAll(context)
             if (diag.isNullOrBlank()) {
-                writer.write("（暂无。该文件只记录关键诊断行；跑过一次下载/诊断后即会有内容）\n")
+                writer.write("（暂无。跑过一次下载/解析/开关插件后即会有内容）\n")
             } else {
                 writer.write(diag)
             }
 
             // ---------- 运行日志：当前应用进程（logcat 按 pid 过滤，只保留本应用） ----------
-            // 注意：这一段**放在关键诊断之后**。实测在 OnePlus/ColorOS/Android 16 上，
+            // 注意：这一段**放在落盘日志之后**。实测在 OnePlus/ColorOS/Android 16 上，
             // logcat 的环形缓冲只保留数秒，用户按提示操作时这里往往一行本应用日志都没有
             // （全是 VRI/BufferQueue 等系统噪声）。把可靠的那段放前面，避免打开文件先看到一堆噪声。
             writer.write("\n")
             writer.write("========== 运行日志（logcat -d -v time --pid=${Process.myPid()}）==========\n")
             writer.write("（提示：本段依赖系统日志缓冲，新系统上可能只覆盖最近几秒；\n")
-            writer.write("  请以上面的「关键诊断」为准）\n")
+            writer.write("  请以上面的落盘日志为准）\n")
             dumpLogcat(
                 writer,
                 listOf("logcat", "-d", "-v", "time", "--pid=${Process.myPid()}")

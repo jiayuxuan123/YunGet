@@ -1658,6 +1658,17 @@ private fun InstallConfirmDialog(
                             style = MaterialTheme.typography.bodySmall.copy(fontFamily = FontFamily.Monospace)
                         )
                     }
+                    // 凭据权限要单独说清它意味着什么（P2）。只列一个 `secrets` 用户看不懂，
+                    // 而这是**这一版里最敏感的权限** —— 它能让插件把登录态存在应用里。
+                    if (target.version.permissions.any { it.trim().equals("secrets", ignoreCase = true) }) {
+                        Spacer(Modifier.height(6.dp))
+                        Text(
+                            text = "其中 secrets 表示这个插件可以读写它自己的加密凭据（cookie、登录令牌）。" +
+                                "凭据由系统密钥库加密、只能被它自己读到，卸载插件时会一并删除。",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                    }
                 }
 
                 Spacer(Modifier.height(10.dp))

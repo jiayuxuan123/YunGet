@@ -6,13 +6,10 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import androidx.lifecycle.ViewModelProvider
 import com.yunget.app.data.db.DownloadTaskDao
-import com.yunget.app.data.download.Aria2Runner
 import com.yunget.app.data.download.Aria2Executor
-import com.yunget.app.data.download.ChunkDownloader
-import com.yunget.app.data.download.ioBufferSizeFor
 import com.yunget.app.data.download.DownloadEngine
+import com.yunget.app.data.download.DownloadEngineRegistry
 import com.yunget.app.data.download.DownloadManager
-import com.yunget.app.data.download.LegacyDownloadManager
 import com.yunget.app.data.download.TurboDownloadManager
 import com.yunget.app.data.network.HttpClients
 import com.yunget.app.data.prefs.SettingsRepository
@@ -102,99 +99,24 @@ class DownloadManagerViewModel(
      *  - 新设置 `downloadEngine`（builtin / gopeed）决定「这一层用哪套下载器」；
      *  - 旧设置 `downloadEngineId`（turbodl / legacy / aria2）只在 `builtin` 时决定**内置实现**用哪个。
      *
-     * 选了 Gopeed 时固定由 [TurboDownloadManager] 承载：引擎路由（建任务 / 进度同步 / 暂停删除转发，
+     * 选了 Gopeed 时固定由 TurboDownloadManager 承载：引擎路由（建任务 / 进度同步 / 暂停删除转发，
      * 见 TurboDownloadManager 的「外部下载引擎（Gopeed）路由」一节）就写在它里面 —— 它在这里的角色
      * 是「任务登记 + 引擎路由」的宿主，具体字节由 GopeedEngine 下载，TurboDL 完全不参与。
      * 这样旧 engineId 选什么都不影响 Gopeed 生效，也就不会出现「设置说在用引擎、实际跑的是旧引擎」。
      */
     private fun createManager(): DownloadManager {
-        if (settings.downloadEngine == SettingsRepository.ENGINE_GOPEED) return createTurboManager()
-        val engine = DownloadEngine.fromId(settings.downloadEngineId)
-        return when (engine) {
-            DownloadEngine.TURBODL -> createTurboManager()
-            DownloadEngine.LEGACY -> createLegacyManager()
-            DownloadEngine.ARIA2 -> createAria2Manager()
+        // 选了 Gopeed 时固定由 TurboDownloadManager 承载：引擎路由（建任务 / 进度同步 /
+        // 暂停删除转发）就写在它里面 —— 它在这里的角色是「任务登记 + 引擎路由」的宿主，
+        // 具体字节由 GopeedEngine 下载，TurboDL 完全不参与。
+        if (settings.downloadEngine == SettingsRepository.ENGINE_GOPEED) {
+            return DownloadEngineRegistry.create(appContext, DownloadEngineRegistry.default().id)
         }
+        // 内置引擎走注册表：新增一个引擎 = 注册一个 provider，这里不需要改
+        //（P9；构造逻辑见 data/download/EngineManagerFactory.kt）。
+        // 未知 id 由注册表回退到默认引擎 —— 设置里存的是字符串，可能来自旧版本。
+        return DownloadEngineRegistry.create(appContext, settings.downloadEngineId)
     }
 
-    private fun createTurboManager(): DownloadManager = TurboDownloadManager(
-        context = appContext,
-        dao = dao,
-        threadProvider = settings::downloadThreads,
-        saveDirProvider = { settings.downloadDirUri },
-        concurrencyProvider = { settings.maxConcurrentDownloads },
-        speedLimitProvider = { settings.downloadSpeedLimit },
-        retryCountProvider = { settings.downloadRetryCount },
-        keepWhenLockedProvider = { settings.keepDownloadWhenLocked },
-        showSpeedProvider = { settings.notificationShowSpeed },
-        ignoreSslProvider = { settings.ignoreSslCert },
-        dohUrlProvider = { settings.dohUrl },
-        warmUpProvider = { settings.warmUpConnections },
-        slowStartProvider = { settings.slowStart },
-    )
-
-    /**
-     * 内置兼容引擎（兜底）。
-     *
-     * 它需要 [ChunkDownloader]，其 OkHttpClient 走 [HttpClients.downloadClient]（带缓存，
-     * 且忽略SSL 等开关变化时会 `rebuildAll` 重建）。
-     *
-     * 注意：Legacy 不持久化请求头（`requestHeadersJson`）、也不提供现场诊断 ——
-     * 这正是它只作兜底、不作默认的原因。
-     */
-    private fun createLegacyManager(): DownloadManager = LegacyDownloadManager(
-        context = appContext,
-        dao = dao,
-        downloader = chunkDownloaderWithThrottledBuffer(),
-        threadProvider = settings::downloadThreads,
-        saveDirProvider = { settings.downloadDirUri },
-        concurrencyProvider = { settings.maxConcurrentDownloads },
-        speedLimitProvider = { settings.downloadSpeedLimit },
-        retryCountProvider = { settings.downloadRetryCount },
-        keepWhenLockedProvider = { settings.keepDownloadWhenLocked },
-        showSpeedProvider = { settings.notificationShowSpeed },
-    )
-
-    /**
-     * 构造兜底引擎用的 [ChunkDownloader]，缓冲按「线程数 × 并发任务数」摊薄。
-     *
-     * 【为什么必须摊薄】旧行为是每连接固定 256KB。看着不大，乘上连接数就大了：
-     * 线程上限 256 × 256KB = 64MB，多任务并行还要再乘。
-     * 默认引擎（TurboDL）那边同期是 1MB/连接 → 256 × 1MB = 256MB = Android 默认整堆，
-     * 2026-10-10 真机 OOM 就是这么来的。这里用同一套口径把兜底引擎一并管住。
-     *
-     * 两个引擎的构造点共用本函数，避免"改一处漏一处"。
-     */
-    private fun chunkDownloaderWithThrottledBuffer() = ChunkDownloader(
-        clientProvider = { HttpClients.downloadClient() },
-        bufferSizeProvider = {
-            ioBufferSizeFor(settings.downloadThreads, settings.maxConcurrentDownloads)
-        },
-    )
-
-    /**
-     * aria2 原生引擎（实验性）。
-     *
-     * **复用 [LegacyDownloadManager] 的全部上层逻辑**（Room 持久化 / 进度 / 前台服务 /
-     * 合并 / 大小校验 / 保存到 MediaStore），只把"下载字节"这一层换成 [Aria2Runner]。
-     *
-     * 若设备不可用（非 arm64，或 APK 未以 useLegacyPackaging=true 打包导致 so 未落盘），
-     * [Aria2Runner] 会如实报错，`runTask` 随即回退到单流整文件下载 —— 不会卡死或产出坏文件。
-     * 设置页提供 [Aria2Executor.probe] 的显式检测入口，让用户能先确认再切。
-     */
-    private fun createAria2Manager(): DownloadManager = LegacyDownloadManager(
-        context = appContext,
-        dao = dao,
-        downloader = chunkDownloaderWithThrottledBuffer(),
-        threadProvider = settings::downloadThreads,
-        saveDirProvider = { settings.downloadDirUri },
-        concurrencyProvider = { settings.maxConcurrentDownloads },
-        speedLimitProvider = { settings.downloadSpeedLimit },
-        retryCountProvider = { settings.downloadRetryCount },
-        keepWhenLockedProvider = { settings.keepDownloadWhenLocked },
-        showSpeedProvider = { settings.notificationShowSpeed },
-        runner = Aria2Runner(appContext),
-    )
 
     /**
      * Activity 真正结束时释放引擎。

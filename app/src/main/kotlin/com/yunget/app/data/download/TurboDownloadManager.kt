@@ -839,6 +839,9 @@ class TurboDownloadManager(
             }
         } catch (e: Throwable) {
             Log.e(TAG, "引擎建任务失败：id=$id ${e.message}", e)
+            // 落盘（日志系统升级）：这一步失败意味着下载根本没开始，
+            // 而它是"用户点了下载但什么都没发生"最常见的成因 —— 必须有证据。
+            DiagLog.e(context, DiagLog.Category.DOWNLOAD, "引擎建任务失败：id=$id", e)
             dao.updateStatus(id, DownloadTaskEntity.STATUS_FAILED)
             dao.updateError(id, e.message ?: e.toString())
             return
@@ -1087,6 +1090,7 @@ class TurboDownloadManager(
                 lastSeenBytes.remove(roomId)
                 dao.updateStatus(roomId, DownloadTaskEntity.STATUS_FAILED)
                 dao.updateError(roomId, ev.reason)
+                DiagLog.e(context, DiagLog.Category.DOWNLOAD, "下载失败：id=$roomId 原因=${ev.reason}")
                 turboOutputs.remove(roomId)?.delete()
                 onTaskFinished()
             }
@@ -1205,6 +1209,7 @@ class TurboDownloadManager(
                 lastSeenBytes.remove(roomId)
                 dao.updateStatus(roomId, DownloadTaskEntity.STATUS_FAILED)
                 dao.updateError(roomId, "未授予存储权限，无法保存到下载目录（已保留临时文件，可重试）")
+                DiagLog.e(context, DiagLog.Category.STORAGE, "保存失败：未授予存储权限 id=$roomId")
                 onTaskFinished()
                 return
             }
@@ -1221,6 +1226,12 @@ class TurboDownloadManager(
             val finalTotal = maxOf(if (total > 0) total else 0L, actualSize)
             dao.complete(roomId, DownloadTaskEntity.STATUS_COMPLETED, savedPath, actualSize, finalTotal)
             Log.d(TAG, "onTurboCompleted: id=$roomId saved=$savedPath size=$actualSize total=$finalTotal")
+            // 完成也要落盘：用户说"文件不对"时，这行给出落盘路径与实际字节数，
+            // 是判断"下载坏了"还是"保存坏了"的第一手依据。
+            DiagLog.i(
+                context, DiagLog.Category.DOWNLOAD,
+                "下载完成：id=$roomId 实际=$actualSize 期望=$finalTotal 路径=$savedPath"
+            )
             // 保存成功才清理：临时文件 + 网盘临时转存回调。
             turboIds.remove(roomId)?.let { turboIdToRoomId.remove(it) }
             _stats.update { it - roomId }
@@ -1236,6 +1247,7 @@ class TurboDownloadManager(
             _stats.update { it - roomId }
             dao.updateStatus(roomId, DownloadTaskEntity.STATUS_FAILED)
             dao.updateError(roomId, (e.message ?: "保存失败") + "（已保留临时文件，可重试）")
+            DiagLog.e(context, DiagLog.Category.STORAGE, "保存到相册/目录失败：id=$roomId", e)
             onTaskFinished()
         }
     }
