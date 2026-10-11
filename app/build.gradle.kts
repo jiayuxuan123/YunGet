@@ -26,7 +26,7 @@ android {
         applicationId = "com.yunget.app"
         minSdk = 23
         targetSdk = 34
-        versionCode = 52
+        versionCode = 53
         // 2.7.3 内容：**内嵌引擎升到 TurboDL 0.2.0.9 —— 并发按实测吞吐收敛**
         //  ① 现象：高线程数并不更快。实测回环 16 连接 30.6 MB/s、128 连接只有 6.1 MB/s（慢 5 倍）；
         //     真实链路上也存在「加连接不再变快」的聚合限速。而引擎在这两种情况下都不会自己退回来，
@@ -291,7 +291,7 @@ android {
         //     - 分片请求带 `If-Range`：防止 CDN 中途换文件时新旧字节拼出混杂文件
         //       （那种情况长度校验会通过，损坏会静默落地）。
         //     - 401/403/410 不再触发背压降并发（是授权/时效信号，不是"你太快了"）。
-        versionName = "2.7.4"
+        versionName = "2.7.5"
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
     }

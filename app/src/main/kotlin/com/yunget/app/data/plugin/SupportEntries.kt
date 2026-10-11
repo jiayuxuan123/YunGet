@@ -40,7 +40,7 @@ package com.yunget.app.data.plugin
  * 每次打开页面看到的排列都不同，用户会以为页面上东西在乱跳。用 `(ownerId, title)`
  * 字典序，与注册先后无关。
  */
-internal object SupportEntries {
+object SupportEntries {
 
     /** 单条文本的字符上限。 */
     const val MAX_TEXT_CHARS = 4_000
