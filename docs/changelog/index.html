@@ -35,7 +35,15 @@
 <div class="side-tools"><button class="theme-toggle" type="button" aria-label="切换深色 / 浅色主题" title="切换深色 / 浅色主题"><svg class="icon-sun" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M4.9 4.9l1.4 1.4M17.7 17.7l1.4 1.4M2 12h2M20 12h2M4.9 19.1l1.4-1.4M17.7 6.3l1.4-1.4"/></svg><svg class="icon-moon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M21 12.8A9 9 0 1 1 11.2 3a7 7 0 0 0 9.8 9.8z"/></svg></button></div>
 </aside>
 <main id="main" class="canvas">
-<section><h1>更新日志</h1><p class="lead">由发布说明本身生成 —— 应用内的「检查更新」读的是同一份数据，所以两处看到的版本与内容永远一致。</p></section><section><div class="cards cols-2"><div class="card"><h3><span class="mono">v2.7.4</span></h3><p class="small">2026-10-10 · 1 个附件</p><p class="muted">插件系统的四项补齐，外加路上发现并修掉的两个真问题。
+<section><h1>更新日志</h1><p class="lead">由发布说明本身生成 —— 应用内的「检查更新」读的是同一份数据，所以两处看到的版本与内容永远一致。</p></section><section><div class="cards cols-2"><div class="card"><h3><span class="mono">v2.7.5</span></h3><p class="small">2026-10-11 · 1 个附件</p><p class="muted">云取 YunGet 2.7.5
+网盘插件化的第一步，以及插件系统与日志系统的一轮补齐。
+网盘 Provider 契约（P0 第一步）
+新增由宿主定义的 `CloudProvider` 接口，作为网盘插件的统一契约：分享链接识别、分享解析、文件浏览、下载地址获取。
+下载地址仍由引擎下载——插件只提供结构化的下载信息（地址、请求头、有效期），不接管下载过程。这样多线程分片、断点续传这些能力不会因为用了插件而丢失。
+各网盘能力差异较大（115 需要应用内登录页，蓝奏云没有分享解析接口），所以能力是声明式的：宿主只调用插件声明过的能力，未声明的不会去调。
+**内置实现全部保留，作为回退。** 迁移是一个网盘一个网盘进行的，在新的 Provider 被验证可靠之前，内置路径一直可用。路由规则是：
+· 插件已安装、已启用、认领该链接、健康检查通过 → 使用插件
+· 以上任一不满足 → 使用内置实现，并…</p><p class="small"><a href="https://github.com/jiayuxuan123/YunGet/releases/tag/v2.7.5">发布页</a></p></div><div class="card"><h3><span class="mono">v2.7.4</span></h3><p class="small">2026-10-10 · 1 个附件</p><p class="muted">插件系统的四项补齐，外加路上发现并修掉的两个真问题。
 引擎同步到 TurboDL 0.2.1.0。
 **更新失败可回滚（P4）**
 一次坏更新过去会让插件彻底不可用：脚本已经被覆盖，而没有退路。
@@ -147,24 +155,12 @@ Room 在迁移完成后会校验表结构是否与实体一致，发现数据库
 免得白等 1 分钟），这个探活是阻塞式网络调用，却被界面主线程的协程直接调用 ——
 Android 禁止在主线程发起网络请求，于是抛出 `NetworkOnMainThreadException`。
 该异常又被探活的异常处理捕获并转成「链接不可用： …」的文案，
-**伪装成了链接失效**，引导用户去换链接、怀疑网盘，而真正原…</p><p class="small"><a href="https://github.com/jiayuxuan123/YunGet/releases/tag/v2.6.15">发布页</a></p></div><div class="card"><h3><span class="mono">v2.6.14</span></h3><p class="small">2026-09-29 · 1 个附件</p><p class="muted">YunGet 2.6.14：DNS 自动择优（含端点延迟可视化）；修复诊断功能不可用
----
-新增：DNS 自动模式
-**此前的问题**：DNS 只能二选一 —— 「系统 DNS」或「手动填一个 DoH 地址」。
-而用户很难知道哪个 DoH 在当前网络下可用。实测国内网络环境：
-**境外 DoH（Google / Cloudflare）完全不可达，境内 DoH（阿里 / 腾讯）可用**。
-用户往往先填境外那几个知名地址，结果&quot;开了 DoH 反而更慢甚至解析失败&quot;。
-**自动模式**：并发探测全部候选端点，采用**最快给出有效结果**的那个，
-并在之后 10 分钟内固定复用它；选定端点失效或超过有效期时重新择优；
-全部失败则回退系统 DNS。
-候选端点**国内优先**：阿里 → 腾讯 → Google → Cloudflare。
-顺序只影响极端情况下的兜底，因为探测是并发的、取最快者。
-**…</p><p class="small"><a href="https://github.com/jiayuxuan123/YunGet/releases/tag/v2.6.14">发布页</a></p></div></div></section><section><div class="seg-rule" aria-hidden="true"><i class="done" style="width:23.333%"></i><i class="" style="width:10.000%"></i><i class="done" style="width:16.667%"></i><i class="" style="width:6.667%"></i><i class="" style="width:30.000%"></i><i class="done" style="width:13.333%"></i></div><h2>完整历史</h2><div class="btn-row"><a class="btn" href="https://github.com/jiayuxuan123/YunGet/releases">全部发布</a><a class="btn" href="https://github.com/jiayuxuan123/YunGet/commits/main">代码提交</a></div></section></main>
+**伪装成了链接失效**，引导用户去换链接、怀疑网盘，而真正原…</p><p class="small"><a href="https://github.com/jiayuxuan123/YunGet/releases/tag/v2.6.15">发布页</a></p></div></div></section><section><div class="seg-rule" aria-hidden="true"><i class="done" style="width:23.333%"></i><i class="" style="width:10.000%"></i><i class="done" style="width:16.667%"></i><i class="" style="width:6.667%"></i><i class="" style="width:30.000%"></i><i class="done" style="width:13.333%"></i></div><h2>完整历史</h2><div class="btn-row"><a class="btn" href="https://github.com/jiayuxuan123/YunGet/releases">全部发布</a><a class="btn" href="https://github.com/jiayuxuan123/YunGet/commits/main">代码提交</a></div></section></main>
 </div>
 <footer class="site-foot">
 <div class="wrap">
 <div class="foot-cols"><div class="foot-col"><h4>项目</h4><ul><li><a href="https://github.com/jiayuxuan123/YunGet">GitHub</a></li><li><a href="../download/index.html">下载</a></li><li><a href="index.html">更新日志</a></li><li><a href="https://github.com/jiayuxuan123/YunGet/issues">问题反馈</a></li></ul></div><div class="foot-col"><h4>文档</h4><ul><li><a href="../docs/readme/index.html">项目说明</a></li><li><a href="../docs/guide/index.html">使用说明</a></li><li><a href="../docs/faq/index.html">常见问题</a></li><li><a href="../docs/engines/index.html">下载引擎</a></li><li><a href="../docs/build/index.html">从源码构建</a></li></ul></div><div class="foot-col"><h4>插件</h4><ul><li><a href="../plugins/index.html">插件（市场与安装）</a></li><li><a href="../developers/index.html">开发者（怎么写）</a></li><li><a href="../docs/plugin-dev/index.html">写一个插件</a></li><li><a href="../docs/plugin-api/index.html">插件 ABI 参考</a></li><li><a href="../docs/plugin-publish/index.html">打包与发布</a></li><li><a href="../docs/plugin-security/index.html">插件安全模型</a></li></ul></div><div class="foot-col"><h4>协议与说明</h4><ul><li><a href="../legal/license/index.html">AGPL-3.0 原文</a></li><li><a href="../legal/notice/index.html">署名与致谢</a></li><li><a href="../legal/privacy/index.html">隐私说明</a></li><li><a href="../legal/terms/index.html">使用条款</a></li><li><a href="../support/index.html">支持开发</a></li></ul></div><div class="foot-col"><h4>相关</h4><ul><li><a href="https://github.com/CYQawa/YunX">上游 CYQawa/YunX</a></li><li><a href="https://github.com/jiayuxuan123/TurboDL">下载引擎 TurboDL</a></li><li><a href="https://github.com/jiayuxuan123/YunGet-Plugins">插件源 YunGet-Plugins</a></li><li><a href="../community/index.html">社区</a></li></ul></div></div>
-<div class="foot-note"><p>云取 YunGet v2.7.4 · AGPL-3.0 · 内置 TurboDL 0.2.1.0 · Android 6.0（API 23）</p><p>本项目是 CYQawa/YunX（云析）的二次开发版本，与上游作者无隐性关联。仅供个人学习与技术交流，请勿用于商业用途；下载内容的版权归原作者及相关权利人所有。</p></div>
+<div class="foot-note"><p>云取 YunGet v2.7.5 · AGPL-3.0 · 内置 TurboDL 0.2.1.0 · Android 6.0（API 23）</p><p>本项目是 CYQawa/YunX（云析）的二次开发版本，与上游作者无隐性关联。仅供个人学习与技术交流，请勿用于商业用途；下载内容的版权归原作者及相关权利人所有。</p></div>
 </div>
 </footer>
 <script src="../assets/site.js" defer></script>

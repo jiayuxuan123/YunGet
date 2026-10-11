@@ -1,23 +1,40 @@
 {
   "repo": "jiayuxuan123/YunGet",
   "latest": {
-    "tag": "v2.7.4",
-    "name": "YunGet 2.7.4",
-    "published": "2026-10-10T14:42:43Z",
+    "tag": "v2.7.5",
+    "name": "云取 YunGet 2.7.5",
+    "published": "2026-10-11T10:11:23Z",
     "prerelease": false,
-    "url": "https://github.com/jiayuxuan123/YunGet/releases/tag/v2.7.4",
-    "summary": "插件系统的四项补齐，外加路上发现并修掉的两个真问题。\n引擎同步到 TurboDL 0.2.1.0。\n**更新失败可回滚（P4）**\n一次坏更新过去会让插件彻底不可用：脚本已经被覆盖，而没有退路。\n现在更新前会把当前版本快照到 `filesDir/plugins/rollback/<id>.json`\n（用侧车文件而不是加数据库列——这个项目已经出过一次迁移事故，不值得\n为它冒风险）。装载失败会自动回滚、重新装载，并明确告诉你回退到了哪一版。\n应用启动时也会体检已启用的插件：过去装载失败只有在你恰好打开插件页时才\n暴露，不进那个页就永远发现不了，表现为\"下载功能莫名失效，但插件列表看着\n一切正常\"。\n**源镜像与失败回退（P5）**\n候选顺序抽成了纯函数：本源自定义镜像 → 全局 GitHub 镜像 → 直连，\n**直连永远排最后**。索引、脚本、清单、公钥四类请求走同一条回退链。\n顺序本身…",
+    "url": "https://github.com/jiayuxuan123/YunGet/releases/tag/v2.7.5",
+    "summary": "云取 YunGet 2.7.5\n网盘插件化的第一步，以及插件系统与日志系统的一轮补齐。\n网盘 Provider 契约（P0 第一步）\n新增由宿主定义的 `CloudProvider` 接口，作为网盘插件的统一契约：分享链接识别、分享解析、文件浏览、下载地址获取。\n下载地址仍由引擎下载——插件只提供结构化的下载信息（地址、请求头、有效期），不接管下载过程。这样多线程分片、断点续传这些能力不会因为用了插件而丢失。\n各网盘能力差异较大（115 需要应用内登录页，蓝奏云没有分享解析接口），所以能力是声明式的：宿主只调用插件声明过的能力，未声明的不会去调。\n**内置实现全部保留，作为回退。** 迁移是一个网盘一个网盘进行的，在新的 Provider 被验证可靠之前，内置路径一直可用。路由规则是：\n· 插件已安装、已启用、认领该链接、健康检查通过 → 使用插件\n· 以上任一不满足 → 使用内置实现，并…",
     "assets": [
       {
-        "name": "YunGet-2.7.4-release.apk",
-        "size": 31621011,
-        "url": "https://github.com/jiayuxuan123/YunGet/releases/download/v2.7.4/YunGet-2.7.4-release.apk",
+        "name": "YunGet-2.7.5-release.apk",
+        "size": 31681596,
+        "url": "https://github.com/jiayuxuan123/YunGet/releases/download/v2.7.5/YunGet-2.7.5-release.apk",
         "downloads": 0,
-        "sha256": "c6921e4d2a11d8e46239c84050c46a8cf9fa3bea45a920825725418f902bd32d"
+        "sha256": "57e0beee75c8f4041a25f97e7c79c2e143357018fadab214226bf95e5b202c64"
       }
     ]
   },
   "releases": [
+    {
+      "tag": "v2.7.5",
+      "name": "云取 YunGet 2.7.5",
+      "published": "2026-10-11T10:11:23Z",
+      "prerelease": false,
+      "url": "https://github.com/jiayuxuan123/YunGet/releases/tag/v2.7.5",
+      "summary": "云取 YunGet 2.7.5\n网盘插件化的第一步，以及插件系统与日志系统的一轮补齐。\n网盘 Provider 契约（P0 第一步）\n新增由宿主定义的 `CloudProvider` 接口，作为网盘插件的统一契约：分享链接识别、分享解析、文件浏览、下载地址获取。\n下载地址仍由引擎下载——插件只提供结构化的下载信息（地址、请求头、有效期），不接管下载过程。这样多线程分片、断点续传这些能力不会因为用了插件而丢失。\n各网盘能力差异较大（115 需要应用内登录页，蓝奏云没有分享解析接口），所以能力是声明式的：宿主只调用插件声明过的能力，未声明的不会去调。\n**内置实现全部保留，作为回退。** 迁移是一个网盘一个网盘进行的，在新的 Provider 被验证可靠之前，内置路径一直可用。路由规则是：\n· 插件已安装、已启用、认领该链接、健康检查通过 → 使用插件\n· 以上任一不满足 → 使用内置实现，并…",
+      "assets": [
+        {
+          "name": "YunGet-2.7.5-release.apk",
+          "size": 31681596,
+          "url": "https://github.com/jiayuxuan123/YunGet/releases/download/v2.7.5/YunGet-2.7.5-release.apk",
+          "downloads": 0,
+          "sha256": "57e0beee75c8f4041a25f97e7c79c2e143357018fadab214226bf95e5b202c64"
+        }
+      ]
+    },
     {
       "tag": "v2.7.4",
       "name": "YunGet 2.7.4",
@@ -30,7 +47,7 @@
           "name": "YunGet-2.7.4-release.apk",
           "size": 31621011,
           "url": "https://github.com/jiayuxuan123/YunGet/releases/download/v2.7.4/YunGet-2.7.4-release.apk",
-          "downloads": 0,
+          "downloads": 1391,
           "sha256": "c6921e4d2a11d8e46239c84050c46a8cf9fa3bea45a920825725418f902bd32d"
         }
       ]
@@ -47,7 +64,7 @@
           "name": "YunGet-2.7.3-release.apk",
           "size": 31593625,
           "url": "https://github.com/jiayuxuan123/YunGet/releases/download/v2.7.3/YunGet-2.7.3-release.apk",
-          "downloads": 410,
+          "downloads": 429,
           "sha256": "2affb2e8958b8b147606aacd7c77815d238133c9e820e5110c41aebff8475767"
         }
       ]
@@ -64,7 +81,7 @@
           "name": "YunGet-2.7.2-release.apk",
           "size": 31588032,
           "url": "https://github.com/jiayuxuan123/YunGet/releases/download/v2.7.2/YunGet-2.7.2-release.apk",
-          "downloads": 524,
+          "downloads": 525,
           "sha256": "38681a358c8ca14f2c661a072a3382cd8ab26e8c89ceda23f03bf863fe5933d7"
         }
       ]
@@ -81,7 +98,7 @@
           "name": "YunGet-2.7.1-release.apk",
           "size": 31586091,
           "url": "https://github.com/jiayuxuan123/YunGet/releases/download/v2.7.1/YunGet-2.7.1-release.apk",
-          "downloads": 602,
+          "downloads": 605,
           "sha256": "4140068dadae124607ec22f7d23a297691690f3586c84c7f14fb8da4ce32992f"
         }
       ]
@@ -115,7 +132,7 @@
           "name": "YunGet-2.6.21-release.apk",
           "size": 29256285,
           "url": "https://github.com/jiayuxuan123/YunGet/releases/download/v2.6.21/YunGet-2.6.21-release.apk",
-          "downloads": 1288,
+          "downloads": 1298,
           "sha256": "80e7d72941dec73605eb7b83a58843380bef89c039b8ed57ca705b91affbe67a"
         }
       ]
@@ -200,7 +217,7 @@
           "name": "YunGet-2.6.15-release.apk",
           "size": 28284269,
           "url": "https://github.com/jiayuxuan123/YunGet/releases/download/v2.6.15/YunGet-2.6.15-release.apk",
-          "downloads": 3942,
+          "downloads": 3949,
           "sha256": "27284307104496d94934cb94f82b2445d586bcebda3d0b4d1b74232427f0e845"
         }
       ]
@@ -217,7 +234,7 @@
           "name": "YunGet-2.6.14-release.apk",
           "size": 28282625,
           "url": "https://github.com/jiayuxuan123/YunGet/releases/download/v2.6.14/YunGet-2.6.14-release.apk",
-          "downloads": 339,
+          "downloads": 340,
           "sha256": "fc841063fe834dc5597208da749d9a99d2f23261d4200d0c0eaccae02c086216"
         }
       ]
@@ -319,7 +336,7 @@
           "name": "app-release.apk",
           "size": 18993570,
           "url": "https://github.com/jiayuxuan123/YunGet/releases/download/v2.6.7/app-release.apk",
-          "downloads": 3337,
+          "downloads": 3343,
           "sha256": "aea85a934fd642afc63fc87ef822914e37f63730f66993482f1e5c419f7218e6"
         }
       ]
@@ -438,7 +455,7 @@
           "name": "app-release.apk",
           "size": 18977193,
           "url": "https://github.com/jiayuxuan123/YunGet/releases/download/v2.6.0/app-release.apk",
-          "downloads": 49,
+          "downloads": 55,
           "sha256": "c8a5f9e66f4f17d54266814bab900af0903df4019881541b126e97177fddf28c"
         }
       ]
@@ -508,23 +525,6 @@
           "url": "https://github.com/jiayuxuan123/YunGet/releases/download/v2.4.1/YunGet-2.4.1.apk",
           "downloads": 15,
           "sha256": "7be07bda9c654e559cff8ceb5732ac802f0ec33abff65e4872390652e65048b5"
-        }
-      ]
-    },
-    {
-      "tag": "v2.4.0",
-      "name": "YunGet 2.4.0：设置页增强 / 线程上限 128 / 弹窗修复",
-      "published": "2026-08-28T06:58:04Z",
-      "prerelease": false,
-      "url": "https://github.com/jiayuxuan123/YunGet/releases/tag/v2.4.0",
-      "summary": "修复：更新弹窗按钮重叠\n「使用镜像站下载」与「忽略本次/稍后」挤在一起的排版问题已修复，按钮改为整齐的单列布局。\n下载线程上限 64 → 128\n设置页新增 128 线程档位（引擎能力不变，软件层放开到 128）。\n设置页新增性能选项（下载分组下）\n· **自定义 DNS (DoH)**：可选阿里/腾讯/Google/Cloudflare 或自定义 URL，下载走加密 DNS，绕过本地 DNS 污染。\n· **连接预热**（默认开）：下载前预建连接并解析 DNS，起步更快。\n· **慢启动**（默认开）：并发从少逐步爬升到设定值，更稳、不易触发 CDN 风控。\n以上选项修改后立即生效。\n版本 2.3.0 → 2.4.0（versionCode 7 → 8）。手动安装覆盖即可。",
-      "assets": [
-        {
-          "name": "YunGet-2.4.0.apk",
-          "size": 18960826,
-          "url": "https://github.com/jiayuxuan123/YunGet/releases/download/v2.4.0/YunGet-2.4.0.apk",
-          "downloads": 16,
-          "sha256": "2fe0a6273439a9245a0f18f099a378efdf9d90ede6c3cf9918caf70c2595117f"
         }
       ]
     }
