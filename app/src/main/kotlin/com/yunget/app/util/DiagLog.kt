@@ -326,6 +326,33 @@ object DiagLog {
         }
     }
 
+    /**
+     * 崩溃报告进诊断日志体系（CrashHandler 在进程退出前调用）。
+     *
+     * ## 为什么不能只写 `filesDir/crash/`
+     *
+     * 崩溃报告原先只落在独立的 crash 目录里，而「日志」这一侧（错误汇总、实时页、
+     * 导出）对它一无所知 —— 用户崩了一次，下次进来诊断日志里**毫无痕迹**，
+     * 「报问题必须附日志」的流程就断了。这里把崩溃正文同步写进：
+     *
+     *  - `boot.log`（启动分类，逐行带 `[E] [启动]` 标记，级别过滤能筛出来）；
+     *  - `errors.log`（错误汇总，导出时排在最前面 —— 用户报问题时第一眼看的就是它）。
+     *
+     * 调用发生在进程垂死之际：**同步写、锁内写**（环形缓冲此时没有意义，不推），
+     * 全程 `runCatching` —— 日志系统绝不能反过来影响崩溃处理本身。
+     * minLevel 在这里不生效：崩溃是最高优先级的证据，不受"详细日志"开关影响。
+     */
+    fun recordCrash(context: Context, crashText: String) {
+        runCatching {
+            val ts = SimpleDateFormat("MM-dd HH:mm:ss.SSS", Locale.getDefault()).format(Date())
+            val body = crashText.trim().lines().joinToString("\n") { line ->
+                if (line.isBlank()) "" else "$ts [E] [启动] $line"
+            }
+            appendTo(context, Category.BOOT.fileName, body)
+            appendTo(context, ERROR_FILE, "===== 进程崩溃（下次启动仍可在本文件看到）=====\n$body")
+        }
+    }
+
     /** 读取某个分类的全部日志；不存在返回 null。 */
     fun read(context: Context, category: Category): String? = readFile(context, category.fileName)
 

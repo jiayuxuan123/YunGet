@@ -68,6 +68,9 @@ internal class AndroidNativePluginLoader(private val context: Context) : NativeP
         const val TAG = "插件-L2"
         /** dex 的优化产物目录：AGP 对 jar 里没有的类会在这里落缓存。 */
         const val DEX_DIR = "plugin-l2"
+
+        /** 可加载 dex 的暂存目录（codeCacheDir 下，Android 10+ 唯一放行的可加载位置）。 */
+        const val STAGE_DIR = "l2-jars"
     }
 
     /** 已加载的 jar → 其类加载器。键含 mtime，更新后自然是新条目。 */
@@ -139,18 +142,41 @@ internal class AndroidNativePluginLoader(private val context: Context) : NativeP
         }
     }
 
-    /** 取（或建立）这个 jar 的类加载器。 */
+    /**
+     * 取（或建立）这个 jar 的类加载器。
+     *
+     * ## 为什么要先把 jar 复制进 codeCacheDir
+     *
+     * Android 10+（targetSdk 29+）**拒绝从应用可写目录加载 dex**
+     * （"Writable dex file is not allowed"——真机 2.7.6 上实测复现），
+     * 而市场安装的 jar 就落在 filesDir。唯一的例外路径是
+     * [Context.getCodeCacheDir]：把 jar **原样复制**一份到那里再交给
+     * [DexClassLoader]。复制按「源 mtime」做缓存键——jar 更新后自然得到新副本；
+     * 旧副本与旧加载器一起留在进程里直到重启（这正是"类不能热替换"的同一件事，无害）。
+     */
     private fun loaderFor(jarFile: File): ClassLoader {
         val key = "${jarFile.absolutePath}@${jarFile.lastModified()}"
         return loaders.getOrPut(key) {
+            val staged = stageForDexLoad(jarFile)
             val dexOut = File(context.codeCacheDir, DEX_DIR).apply { mkdirs() }
             DexClassLoader(
-                jarFile.absolutePath,
+                staged.absolutePath,
                 dexOut.absolutePath,
                 /* librarySearchPath */ null,
                 Plugin::class.java.classLoader,   // 父加载器：让它看见引擎的接口
             )
         }
+    }
+
+    /** dex 只能从 codeCacheDir 加载：把安装目录里的 jar 复制一份过去（幂等）。 */
+    private fun stageForDexLoad(jarFile: File): File {
+        val stageDir = File(context.codeCacheDir, STAGE_DIR).apply { mkdirs() }
+        val staged = File(stageDir, "${jarFile.nameWithoutExtension}.${jarFile.lastModified()}.jar")
+        if (!staged.isFile || staged.length() != jarFile.length()) {
+            jarFile.copyTo(staged, overwrite = true)
+            staged.setLastModified(jarFile.lastModified())
+        }
+        return staged
     }
 
     /** 已建立的加载器数量（诊断：理论上等于已加载且未重启的 L2 插件数）。 */
@@ -178,6 +204,34 @@ internal class NativeLoaderProvider(
     override fun canLoad(source: PluginSource): Boolean = source.kind == KIND
 
     override fun load(source: PluginSource): List<Plugin> = loader.load(source)
+}
+
+/**
+ * 把 [AndroidNativePluginLoader] 装进 [PluginHost] 的插件外壳。
+ *
+ * 内核只认 [Plugin]：loader 本身不是一个 Plugin，而是"注册进 `PluginLoaderProvider`
+ * 扩展点"的一段逻辑 —— 与 JS 加载器同一模式（引擎 `JsPluginLoaderPlugin.onLoad` 里
+ * `context.registerExtension(PluginLoaderProvider.KEY, …)`）。注册之后，内核收到
+ * `kind = "native"` 的 [PluginSource] 时就会派发给 [NativeLoaderProvider]，
+ * JS 与 L2 从此走同一个注册表、同一套生命周期。
+ *
+ * ## 为什么此前一直是死代码
+ *
+ * 这个外壳与 [AndroidNativePluginLoader] 都写完了，但 [PluginRuntime.createHost]
+ * 从来没有 install 过它 —— `scanNativePlugins` 无调用方、`plugins/native` 目录不存在、
+ * 市场也没有 jar 落盘路径。机制完整而没接线，等于没有（P16 的教训，记在这里防止复发）。
+ */
+internal class NativeLoaderPlugin(context: Context) : Plugin {
+
+    override val id: String = "loader.native"
+
+    override val name: String = "L2 原生插件加载器"
+
+    private val provider = NativeLoaderProvider(AndroidNativePluginLoader(context))
+
+    override fun onLoad(context: PluginContext) {
+        context.registerExtension(PluginLoaderProvider.KEY, provider)
+    }
 }
 
 /**

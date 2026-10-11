@@ -34,6 +34,12 @@ object LogExporter {
     /** 单缓冲区最多保留的行数（防止超大 buffer 导致内存/文件过大） */
     private const val MAX_LINES = 30000
 
+    /** 导出时带上的崩溃报告份数上限（新的在前）。 */
+    private const val MAX_CRASH_REPORTS = 3
+
+    /** 单份崩溃报告保留的字节数：堆栈超长时截断（根因异常段在文件开头，保头不保尾）。 */
+    private const val MAX_CRASH_REPORT_BYTES = 16 * 1024
+
     /** 生成日志文件（cacheDir 内）并返回；失败返回 null（不抛异常） */
     fun export(context: Context): File? = runCatching {
         val dir = File(context.cacheDir, EXPORT_DIR).apply { mkdirs() }
@@ -94,6 +100,22 @@ object LogExporter {
                 writer.write(errors)
             }
 
+            // ---------- 崩溃报告：紧跟错误汇总 ----------
+            // 崩溃正文原本只在 filesDir/crash/ 里，「导出日志」对它一无所知 ——
+            // 用户报"闪退"时附来的日志里没有崩溃现场，等于白导。
+            writer.write("\n")
+            writer.write("========== 崩溃报告（filesDir/crash，最近 3 份）==========\n")
+            val crashes = recentCrashReports(context)
+            if (crashes.isEmpty()) {
+                writer.write("（没有崩溃记录）\n")
+            } else {
+                crashes.forEachIndexed { i, c ->
+                    writer.write("\n----- 崩溃 ${i + 1}/${crashes.size} -----\n")
+                    writer.write(c)
+                    writer.write("\n")
+                }
+            }
+
             writer.write("\n")
             writer.write("========== 分类诊断日志 ==========\n")
             writer.write("（按子系统分段：启动 / 网络 / 下载 / 解析 / 账号 / 插件 / 存储 / 界面 / 更新）\n")
@@ -126,6 +148,26 @@ object LogExporter {
         ProcessBuilder("logcat", "-c").start().waitFor()
         true
     }.getOrDefault(false)
+
+    /**
+     * 最近的崩溃报告（新的在前）。
+     *
+     * 文件名 `crash_<millis>.txt`（[com.yunget.app.crash.CrashHandler] 生成），
+     * 按文件名倒序即按时间倒序。超长报告只保留**开头**：崩溃文件的第一段就是
+     * 异常类型与堆栈顶部，那是定位根因的部分。
+     */
+    private fun recentCrashReports(context: Context): List<String> = runCatching {
+        val dir = File(context.filesDir, "crash")
+        dir.listFiles { f: File -> f.isFile && f.name.startsWith("crash_") }
+            ?.sortedByDescending { it.name }
+            ?.take(MAX_CRASH_REPORTS)
+            ?.map { f ->
+                val text = runCatching { f.readText() }.getOrDefault("")
+                if (text.length <= MAX_CRASH_REPORT_BYTES) text
+                else text.take(MAX_CRASH_REPORT_BYTES) + "\n…（已截断，完整内容见 ${f.name}）"
+            }
+            ?: emptyList()
+    }.getOrDefault(emptyList())
 
     /** 执行 logcat 命令并写入 writer（仅保留最近 MAX_LINES 行） */
     private fun dumpLogcat(writer: OutputStreamWriter, command: List<String>) {

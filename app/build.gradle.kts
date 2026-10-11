@@ -26,7 +26,12 @@ android {
         applicationId = "com.yunget.app"
         minSdk = 23
         targetSdk = 34
-        versionCode = 54
+        versionCode = 55
+        // 2.7.7 内容：**真机修复版**
+        //  ① L2 插件加载改经 codeCacheDir 暂存——Android 10+ 拒绝从 filesDir 加载 dex
+        //    （"Writable dex file is not allowed"，真机实测），不修则原生插件重启后永远加载失败；
+        //  ② 市场：摘要/签名校验失败时把实际 sha256、签名字段与公钥来源写进诊断日志，
+        //    远程排查"签名验证失败"不再靠猜。
         // 2.7.6 内容：**插件生态接入应用本体（接线版本）**
         //  ① 原生（L2）插件端到端：加载器注册进宿主、市场可安装 jar（同一套验签链、
         //     32 MiB 上限、清单必须声明入口类）、装载与健康检查按级别分流；
@@ -299,7 +304,7 @@ android {
         //     - 分片请求带 `If-Range`：防止 CDN 中途换文件时新旧字节拼出混杂文件
         //       （那种情况长度校验会通过，损坏会静默落地）。
         //     - 401/403/410 不再触发背压降并发（是授权/时效信号，不是"你太快了"）。
-        versionName = "2.7.6"
+        versionName = "2.7.7"
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
     }

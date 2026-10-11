@@ -95,8 +95,17 @@ object SupportEntries {
             }
 
             SupportEntry.Kind.IMAGE -> {
-                if (!isInsidePrivateRoot(payload, privateRoot)) null
-                else entry.copy(title = title, note = note, payload = payload)
+                // 两条合法来源：
+                //  1. 应用私有目录内的文件（本地已存在的图）；
+                //  2. https 图片 URL —— manifest 是纯文本、带不了二进制，远程 URL 是
+                //     插件提供一张收款码的**唯一**途径。宿主用公共图片加载器（带缓存与
+                //     降采样）取图，与 README 正文图片同一套通道；scheme 在 [isHttpUrl]
+                //     把关（file://、intent:// 之类依旧进不来）。
+                if (isInsidePrivateRoot(payload, privateRoot) || isHttpUrl(payload)) {
+                    entry.copy(title = title, note = note, payload = payload)
+                } else {
+                    null
+                }
             }
 
             SupportEntry.Kind.LINK -> {

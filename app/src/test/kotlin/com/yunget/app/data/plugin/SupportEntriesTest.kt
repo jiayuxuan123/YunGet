@@ -94,6 +94,41 @@ class SupportEntriesTest {
         assertTrue("越界图片必须被丢", r.isEmpty)
     }
 
+    @Test
+    fun `https 图片 URL 的条目保留`() {
+        // manifest 是纯文本带不了二进制 —— 远程 URL 是插件提供一张收款码的唯一途径。
+        // 宿主用公共图片加载器取图（scheme 合法性已在 isHttpUrl 把关）。
+        val r = SupportEntries.sanitize(
+            "p",
+            listOf(
+                SupportEntry(
+                    "微信赞赏码",
+                    kind = SupportEntry.Kind.IMAGE,
+                    payload = "https://raw.githubusercontent.com/jiayuxuan123/YunGet-Plugins/main/assets/weixin.png",
+                ),
+            ),
+            root,
+        )
+        assertEquals(1, r.entries.size)
+        assertEquals(0, r.dropped)
+    }
+
+    @Test
+    fun `非 http 的图片地址被丢弃`() {
+        // file:// 的图片等于让宿主去读本地文件 —— 原有的越权担忧对它完全成立，
+        // 放开 URL 只放行 http/https，绝不能把本地 scheme 一起放进来。
+        val r = SupportEntries.sanitize(
+            "p",
+            listOf(
+                SupportEntry("本地文件", kind = SupportEntry.Kind.IMAGE, payload = "file:///etc/passwd"),
+                SupportEntry("脚本注入", kind = SupportEntry.Kind.IMAGE, payload = "javascript:alert(1)"),
+            ),
+            root,
+        )
+        assertTrue("两个都要被丢", r.isEmpty)
+        assertEquals(2, r.dropped)
+    }
+
     // ---------------------------------------------- 文本与标题
 
     @Test

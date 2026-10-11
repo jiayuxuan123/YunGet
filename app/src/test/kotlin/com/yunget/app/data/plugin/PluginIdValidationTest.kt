@@ -286,4 +286,18 @@ class PluginIdValidationTest {
         )
         assertTrue("没有 requires 时返回空列表，不抛异常", PluginIds.stringListField(null, "permissions").isEmpty())
     }
+
+    @Test
+    fun fileNameForSupportsJarSuffixForNativePlugins() {
+        // L2 插件包（jar）与 JS 脚本走同一条防穿越命名，只是后缀不同；
+        // 后缀必须是 .jar —— 市场落盘与原生加载扫描按它识别插件包。
+        // 摘要段最多取 16 个十六进制字符（与 .js 同一规则，只是后缀换了）。
+        val name = PluginIds.fileNameFor("adapter.example", "abcdef1234567890", PluginIds.JAR_SUFFIX)
+        assertEquals("adapter.example_abcdef1234567890.jar", name)
+        assertEquals(
+            "默认后缀保持 .js（JS 调用点不感知这个改动）",
+            "adapter.example_abcdef1234567890.js",
+            PluginIds.fileNameFor("adapter.example", "abcdef1234567890"),
+        )
+    }
 }

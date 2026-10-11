@@ -1,23 +1,40 @@
 {
   "repo": "jiayuxuan123/YunGet",
   "latest": {
-    "tag": "v2.7.6",
-    "name": "云取 YunGet 2.7.6",
-    "published": "2026-10-11T15:49:02Z",
+    "tag": "v2.7.7",
+    "name": "云取 YunGet 2.7.7",
+    "published": "2026-10-11T16:37:47Z",
     "prerelease": false,
-    "url": "https://github.com/jiayuxuan123/YunGet/releases/tag/v2.7.6",
-    "summary": "云取 YunGet 2.7.6\n这个版本把插件系统真正接进了应用本体：此前完成的大部分插件能力只存在于底层，这一版补上了入口，并把一批影响日常使用的问题修掉。\n原生插件可以装了\n插件市场现在支持原生（L2）插件的完整流程：展示、安装、更新、卸载。原生插件以 jar 包分发，走与 JS 插件同一套校验（SHA-256 摘要、签名、吊销名单），体积上限 32 MB。\n原生插件运行在应用进程内，没有沙箱隔离，安装确认页会如实说明这一点。它的任何变更（安装、更新、启停、卸载）都需要重启应用才能生效，相关操作都会明确提示。\n插件能参与下载流程\n· 下载完成的文件可以交给处理器插件做收尾（按扩展名匹配；处理器出错不影响下载结果，也不会动到已下载的文件）。\n· 插件注册的下载后端会参与引擎的路由，优先级在内置后端之下。\n网盘迁移说明\n升级后首次启动会弹一次说明：网盘的分享解析将逐步交给插件处理，你的账号…",
+    "url": "https://github.com/jiayuxuan123/YunGet/releases/tag/v2.7.7",
+    "summary": "云取 YunGet 2.7.7\n这个版本修复 2.7.6 在真机上的一个关键问题，建议所有安装了网盘插件的用户更新。\n修复\n· **原生插件重启后无法加载**：Android 10 及以上系统拒绝从应用数据目录直接加载插件包（系统安全限制，日志表现为 \"Writable dex file is not allowed\"）。现在加载前会把插件包复制到系统允许的位置，装过的原生插件重启后即可正常生效。2.7.6 里安装成功但一直显示\"未运行\"的插件，更新到本版并重启后即可使用。\n· **安装失败时日志更具体**：签名校验失败时，会把实际收到的文件指纹、索引里的签名字段与公钥来源写进诊断日志，远程排查\"签名验证失败\"类问题不再需要来回猜。",
     "assets": [
       {
-        "name": "YunGet-2.7.6-release.apk",
-        "size": 31709721,
-        "url": "https://github.com/jiayuxuan123/YunGet/releases/download/v2.7.6/YunGet-2.7.6-release.apk",
+        "name": "YunGet-2.7.7-release.apk",
+        "size": 31710643,
+        "url": "https://github.com/jiayuxuan123/YunGet/releases/download/v2.7.7/YunGet-2.7.7-release.apk",
         "downloads": 0,
-        "sha256": "f4460bfe913836e83043ad7c212fc9d3c1749ccabffae2292d7cfa0ec9ea8732"
+        "sha256": "a1fe22a7b0bbdc16df34ca48a643aa4b288b323d747eb73f364bac4d4ef6383d"
       }
     ]
   },
   "releases": [
+    {
+      "tag": "v2.7.7",
+      "name": "云取 YunGet 2.7.7",
+      "published": "2026-10-11T16:37:47Z",
+      "prerelease": false,
+      "url": "https://github.com/jiayuxuan123/YunGet/releases/tag/v2.7.7",
+      "summary": "云取 YunGet 2.7.7\n这个版本修复 2.7.6 在真机上的一个关键问题，建议所有安装了网盘插件的用户更新。\n修复\n· **原生插件重启后无法加载**：Android 10 及以上系统拒绝从应用数据目录直接加载插件包（系统安全限制，日志表现为 \"Writable dex file is not allowed\"）。现在加载前会把插件包复制到系统允许的位置，装过的原生插件重启后即可正常生效。2.7.6 里安装成功但一直显示\"未运行\"的插件，更新到本版并重启后即可使用。\n· **安装失败时日志更具体**：签名校验失败时，会把实际收到的文件指纹、索引里的签名字段与公钥来源写进诊断日志，远程排查\"签名验证失败\"类问题不再需要来回猜。",
+      "assets": [
+        {
+          "name": "YunGet-2.7.7-release.apk",
+          "size": 31710643,
+          "url": "https://github.com/jiayuxuan123/YunGet/releases/download/v2.7.7/YunGet-2.7.7-release.apk",
+          "downloads": 0,
+          "sha256": "a1fe22a7b0bbdc16df34ca48a643aa4b288b323d747eb73f364bac4d4ef6383d"
+        }
+      ]
+    },
     {
       "tag": "v2.7.6",
       "name": "云取 YunGet 2.7.6",
@@ -30,7 +47,7 @@
           "name": "YunGet-2.7.6-release.apk",
           "size": 31709721,
           "url": "https://github.com/jiayuxuan123/YunGet/releases/download/v2.7.6/YunGet-2.7.6-release.apk",
-          "downloads": 0,
+          "downloads": 67,
           "sha256": "f4460bfe913836e83043ad7c212fc9d3c1749ccabffae2292d7cfa0ec9ea8732"
         }
       ]
@@ -47,7 +64,7 @@
           "name": "YunGet-2.7.5-release.apk",
           "size": 31681596,
           "url": "https://github.com/jiayuxuan123/YunGet/releases/download/v2.7.5/YunGet-2.7.5-release.apk",
-          "downloads": 498,
+          "downloads": 505,
           "sha256": "57e0beee75c8f4041a25f97e7c79c2e143357018fadab214226bf95e5b202c64"
         }
       ]
@@ -508,23 +525,6 @@
           "url": "https://github.com/jiayuxuan123/YunGet/releases/download/v2.4.3/YunGet-2.4.3.apk",
           "downloads": 2,
           "sha256": "ce739517ed490cdc12338fd551d6855ae058669e9b9b7604499a29f35e24b0bc"
-        }
-      ]
-    },
-    {
-      "tag": "v2.4.2",
-      "name": "YunGet 2.4.2：线程数终于跑满 + 弱网卡顿修复",
-      "published": "2026-08-30T03:42:30Z",
-      "prerelease": false,
-      "url": "https://github.com/jiayuxuan123/YunGet/releases/tag/v2.4.2",
-      "summary": "针对你实测反馈的三个问题修复。\n修复：设 128 线程实际远达不到\n慢启动每次只加 1 个连接，从初始值爬到 128 需要上百次上调、几百个分片完成，中小文件根本爬不到顶。\n现改为**按比例上调**，十余次即可到顶，同时仍然是渐进的、不会一上来就冲击服务器。\n修复：速度变快，显示的线程数反而下降\n这是显示口径的问题（实际并发没降）。原先统计的是「这一瞬间正在传输的分片数」，\n而每个线程完成一个分片、领取下一个之间有极短空档；速度越快、分片完成越频繁，\n空档占比越大，采样到的数字反而越小。现在改为统计「当前有多少连接在干活」，\n下载末期剩余分片不足时数字下降属于正常现象。\n修复：2.4GHz Wi-Fi 等弱网下容易卡住\n连接预热此前会按下载线程数并发建连（最多 8 条）。弱网下一口气并发多个 TLS 握手会互相争抢信道，\n反而拖慢首字节时间、甚至堆积超时让任务看起来「卡在下载中」。\n现在预…",
-      "assets": [
-        {
-          "name": "YunGet-2.4.2.apk",
-          "size": 18977217,
-          "url": "https://github.com/jiayuxuan123/YunGet/releases/download/v2.4.2/YunGet-2.4.2.apk",
-          "downloads": 3,
-          "sha256": "f93dff18b1fa7b11ecef82d0e3c6c9ad52a040cc108db022ab8fe1495e426cdf"
         }
       ]
     }

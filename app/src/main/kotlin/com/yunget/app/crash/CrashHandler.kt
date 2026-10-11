@@ -24,6 +24,9 @@ class CrashHandler(private val context: Context) : Thread.UncaughtExceptionHandl
     override fun uncaughtException(thread: Thread, throwable: Throwable) {
         val log = buildCrashLog(thread, throwable)
         saveCrashLog(log)
+        // 同步进诊断日志体系（boot.log + errors.log）：否则下次启动的「日志」「导出」
+        // 对这次崩溃一无所知，用户报问题附来的日志里没有崩溃现场。
+        com.yunget.app.util.DiagLog.recordCrash(context, log)
 
         // 崩溃可能发生在主线程（主线程已终止），因此崩溃界面必须跑在独立进程
         val intent = Intent(context, CrashActivity::class.java).apply {

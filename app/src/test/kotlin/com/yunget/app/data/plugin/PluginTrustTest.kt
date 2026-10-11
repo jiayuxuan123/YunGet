@@ -237,7 +237,9 @@ class PluginTrustTest {
     fun `安装链路在任何验签之前就查吊销名单`() {
         val src = File("src/main/kotlin/com/yunget/app/data/plugin/MarketClient.kt").readText()
         val gate = src.indexOf("PluginTrust.verdictFor(version.keyId)")
-        val fetch = src.indexOf("val script = fetchAndVerify(")
+        // 匹配调用点用 "fetchAndVerify(" 而不是具体变量名 —— 局部变量叫 script 还是
+        // bytes 属于实现细节，改名不该弄断这条静态防线（它守的是**顺序**，不是命名）。
+        val fetch = src.indexOf("fetchAndVerify(")
         val keyLookup = src.indexOf("private fun resolvePublicKey(")
         assertTrue("安装链路上应当有吊销检查", gate >= 0)
         assertTrue("应当仍然走 fetchAndVerify 做校验", fetch >= 0)
@@ -245,8 +247,10 @@ class PluginTrustTest {
             "吊销检查必须排在取脚本（进而验签）**之前** —— 顺序反了这条防线就名存实亡",
             gate < fetch,
         )
-        // 独立的取钥匙通道（源自带公钥）也必须查一次
-        val resolveBody = src.substring(keyLookup, src.indexOf("index.publicKeyUrl"))
+        // 独立的取钥匙通道（源自带公钥）也必须查一次。
+        // 终点从 resolvePublicKey **之后**的第一个 index.publicKeyUrl 找起：
+        // 诊断日志等别的代码也可能提到这个字段，不能让它们截断子串。
+        val resolveBody = src.substring(keyLookup, src.indexOf("index.publicKeyUrl", keyLookup))
         assertTrue(
             "resolvePublicKey 回退到 publicKeyUrl 之前也要查吊销，否则换一个源就绕过去了",
             resolveBody.contains("PluginTrust.verdictFor"),

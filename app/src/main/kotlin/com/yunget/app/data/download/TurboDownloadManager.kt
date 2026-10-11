@@ -114,6 +114,27 @@ class TurboDownloadManager(
     )
     private val client get() = bootstrap.client
 
+    init {
+        // 把应用侧插件宿主注册的下载后端接进引擎路由。引擎的 backendResolver 已被
+        // TurboBootstrap 指向**引擎宿主**的注册表（HLS 后端在那里）；而 L2 插件装在
+        // **应用侧**宿主（sharedPluginRuntime）—— 两个注册表互相独立，不做这一步，
+        // 插件注册的后端对引擎永远是不可见的（P16"机制完整、接线缺失"的另一半）。
+        // 组合解析器：引擎宿主优先，应用侧宿主兜底；两边都不认领 → 引擎内置后端。
+        runCatching {
+            val engineResolver = bootstrap.client.backendResolver
+            bootstrap.client.backendResolver = dev.turbodl.core.BackendResolver { request ->
+                engineResolver?.resolve(request)
+                    ?: com.yunget.app.data.plugin.sharedPluginRuntime(context)
+                        .host?.extensions
+                        ?.let { dev.turbodl.plugin.runtime.ext.BackendRegistry(it) }
+                        ?.resolve(request)
+            }
+            DiagLog.i(context, DiagLog.Category.PLUGIN, "已接上插件后端路由（引擎宿主 + 应用插件宿主）")
+        }.onFailure {
+            DiagLog.w(context, DiagLog.Category.PLUGIN, "插件后端路由接线失败（不影响内置下载）：${it.message}")
+        }
+    }
+
     /** 分片临时目录根（应用专属缓存，避免被系统 tmpdir 清理）。 */
     private fun chunkWorkDir(): File =
         File(context.externalCacheDir ?: context.cacheDir, "turbodl_chunks")
@@ -1000,6 +1021,8 @@ class TurboDownloadManager(
         }
         taskEngineIds.remove(task.id)
         releaseEngineTaskMemory(task.id)
+        // 处理器插件：引擎路径与内置路径同一语义（落盘后交付，失败不影响完成状态）
+        dispatchToFileHandlers(task.copy(fileName = realName), savedPath, actualSize)
         // 保活收尾（可能从未计入，见 engineKeepAliveIds 注释）
         if (engineKeepAliveIds.remove(task.id)) onTaskFinished()
         // 保存成功才触发清理回调（如删除网盘临时转存文件），语义与内置路径一致
@@ -1198,9 +1221,43 @@ class TurboDownloadManager(
         }
     }
 
+    /**
+     * 下载完成后把文件交给处理器插件（P16 的 FileHandler 挂载点）。
+     *
+     * 处理器注册在**应用侧**插件宿主里，而下载跑在引擎宿主上 —— 两个注册表互相独立，
+     * 所以这里显式取应用侧的注册表，经 [com.yunget.app.data.plugin.PluginMountPoints]
+     * 分发。失败语义在那一侧约定：处理器出错只记日志，**不影响"下载已完成"**。
+     */
+    private fun dispatchToFileHandlers(task: DownloadTaskEntity, savedPath: String, sizeBytes: Long) {
+        val extensions = runCatching {
+            com.yunget.app.data.plugin.sharedPluginRuntime(context).host?.extensions
+        }.getOrNull() ?: return   // 插件宿主还没起来：没有处理器，直接返回
+        val ext = task.fileName.substringAfterLast('.', "").lowercase()
+        val mime = android.webkit.MimeTypeMap.getSingleton()
+            .getMimeTypeFromExtension(ext).orEmpty()
+        val handled = dev.turbodl.plugin.runtime.ext.HandledFile(
+            taskId = task.id,
+            absolutePath = savedPath,
+            fileName = task.fileName,
+            sizeBytes = sizeBytes,
+            // 平台 MIME 表查不到就是空串 —— 契约写明"不要猜"，猜错会让处理器选错
+            mimeType = mime,
+            extension = ext,
+            sourceUrl = task.url,
+        )
+        val handledCount = runCatching {
+            com.yunget.app.data.plugin.PluginMountPoints.dispatchToHandlers(context, extensions, handled)
+        }.getOrElse {
+            DiagLog.w(context, DiagLog.Category.PLUGIN, "文件处理器分发失败（不影响下载结果）：${it.message}")
+            0
+        }
+        if (handledCount > 0) {
+            DiagLog.i(context, DiagLog.Category.PLUGIN, "已把完成的文件交给 $handledCount 个处理器插件：${task.fileName}")
+        }
+    }
+
     /** TurboDL 下载完成：保存到公共目录（MediaStore/SAF）→ 更新状态 → 完成回调 → 清理。 */
-    private suspend fun onTurboCompleted(roomId: Long, file: File, total: Long) {
-        val task = dao.get(roomId) ?: return
+    private suspend fun onTurboCompleted(roomId: Long, file: File, total: Long) {        val task = dao.get(roomId) ?: return
         try {
             if (!storagePermissionProvider()) {
                 // 未授权：保留临时文件，标为失败供重试保存（不删）。
@@ -1238,6 +1295,9 @@ class TurboDownloadManager(
             metadataAtMs.remove(roomId)
             turboOutputs.remove(roomId)?.delete()
             file.delete()
+            // 处理器插件（P16 的 FileHandler 挂载点）：文件已落盘才交给它们，
+            // 失败只记日志、不影响"下载已完成"。
+            dispatchToFileHandlers(task, savedPath, actualSize)
             taskCallbacks.remove(roomId)?.let { cb -> runCatching { cb() } }
             onTaskFinished()
         } catch (e: Exception) {
