@@ -287,7 +287,10 @@ def _toc(heads: list[tuple[int, str, str]], toc_max: int) -> str:
     items = [(lv, t, s) for lv, t, s in heads if lv <= toc_max]
     if len(items) < 2:
         return ""
-    parts = ['<nav class="toc" aria-label="目录"><div class="toc-title">本页目录</div><ul>']
+    # 窄屏时整块折叠成一行可点标题（见 site.css 手机布局一节）：
+    # 19 条目录在手机上占 624px，会把正文整个推到屏幕外，打开页面一个字正文都看不到。
+    # 用原生 details/summary 而不是 JS 抽屉 —— 无脚本也成立，且不引入状态。
+    parts = ['<details class="toc" open><summary>本页目录</summary><ul>']
     depth = items[0][0]
     first = True
     for lv, title, slug in items:
@@ -300,13 +303,13 @@ def _toc(heads: list[tuple[int, str, str]], toc_max: int) -> str:
         while lv < depth:
             parts.append("</li></ul>")
             depth -= 1
-        if not parts[-1].startswith("<ul>") and not parts[-1].startswith('<nav'):
+        if not parts[-1].startswith("<ul>") and not parts[-1].startswith("<details"):
             parts.append("</li>")
         parts.append(f'<li><a href="#{slug}">{esc(title)}</a>')
     while depth > items[0][0]:
         parts.append("</li></ul>")
         depth -= 1
-    parts.append("</li></ul></nav>")
+    parts.append("</li></ul></details>")
     return "".join(parts)
 
 

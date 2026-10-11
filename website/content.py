@@ -32,7 +32,7 @@ import re
 from pathlib import Path
 
 import mdlite
-from sitekit import buttons, cards, code_block, esc, note, section, table
+from sitekit import buttons, cards, code_block, esc, note, section, seg_rule, table
 
 HERE = Path(__file__).resolve().parent
 ROOT = HERE.parent
@@ -45,7 +45,9 @@ VERSION = LATEST["tag"].lstrip("v")
 MIN_SDK = "Android 6.0（API 23）"
 TARGET_SDK = "API 34"
 #: YunGet 内置的下载引擎版本，取自 app/build.gradle.kts 的 dev.turbodl 依赖。
-TURBODL_VERSION = "0.2.0.8"
+#: 发版时**必须**与那五个 implementation("dev.turbodl:*:X") 一起改 ——
+#: 0.2.1.0 那次发版漏改了这里，站上一直显示 0.2.0.8，直到手机端验收时才被看见。
+TURBODL_VERSION = "0.2.1.0"
 
 REPO = "https://github.com/jiayuxuan123/YunGet"
 BLOB = f"{REPO}/blob/main"
@@ -321,10 +323,12 @@ def _doc_nav(current: dict, href) -> str:
             items.append(f'<li class="cur"><span>{esc(d["title"])}</span></li>')
         else:
             items.append(f'<li><a href="{href(d["key"])}">{esc(d["title"])}</a></li>')
+    # 与"本页目录"同理：手机上 12 条页面链接会把正文推出屏幕，折叠成一行标题。
+    # 桌面端仍是常驻侧栏（summary 在宽屏被 site.css 隐藏）。
     return (
-        '<nav class="toc doc-nav"><div class="toc-title">全部页面</div><ul>'
+        '<details class="toc doc-nav" open><summary>全部页面</summary><ul>'
         + "".join(items)
-        + "</ul></nav>"
+        + "</ul></details>"
     )
 
 
@@ -342,19 +346,53 @@ def _apk_rows() -> list[list[str]]:
     ] if APK else []
 
 
+def _segment_visual() -> str:
+    """首屏主体视觉：一条被切成不等宽分片、并行推进的下载数据带。
+
+    为什么是它而不是截图或插画：这个产品**就是**把文件切成分片并发下载的，
+    所以这张图直接说明产品在做什么，不是装饰。分片宽度不等 —— 真实分片也不等长。
+    进度值是固定的一组，保证每次构建结果一致。
+    """
+    segs = [
+        (14, 100), (9, 100), (17, 62), (7, 100), (13, 28),
+        (11, 100), (8, 45), (16, 88), (5, 100),
+    ]
+    lanes = "".join(
+        f'<span class="seg" style="flex:{w} 1 0"><i style="width:{done}%"></i></span>'
+        for w, done in segs
+    )
+    return (
+        '<div class="dl-visual" aria-hidden="true">'
+        f'<div class="dl-lane">{lanes}</div>'
+        '<div class="dl-legend">'
+        f'<span><b>{len(segs)}</b> 分片</span>'
+        '<span><b>4</b> 路并发</span>'
+        "<span>断点续传</span>"
+        "</div></div>"
+    )
+
+
 def _page_home(lang: str, href) -> str:
     dl_btn = f"下载 APK（{VERSION}）"
-    chip = f"{LATEST['tag']} · {MIN_SDK} · AGPL-3.0"
     parts = [
         f'<section class="hero"><div class="hero-grid"><div>'
         f"<h1>网盘分享链接解析与高速下载</h1>"
         f'<p class="lead">云取（YunGet）把分享链接变成文件：粘贴链接即可解析、浏览、取直链，'
         f"再用内置的多线程引擎高速下载。凭据加密留在本机，不经过第三方服务器。</p>"
         + buttons([(dl_btn, href("download")), ("看文档", href("docs")), ("GitHub", REPO)])
-        + f'</div><div class="hero-side"><div class="version-bar">'
-        f'<span class="tag">{esc(chip)}</span>'
-        f'<span>内置 TurboDL {TURBODL_VERSION}</span>'
-        f"</div></div></div></section>",
+        # 版本块：真实数据 + 一条分段带。元信息用「标签 + 值」的两行结构，
+        # 不用「A · B · C」中点串（那是模板化生成的典型特征之一）。
+        + '</div><div class="hero-side">'
+        # 主体视觉：把"分片并发下载"画出来。参考站首屏都放一个占据大面积的
+        # 真实主体（Linear 放真实界面、Resend 放 3D 图形）；这里放的是
+        # **产品真正在做的事** —— 一条被切成不等宽分片、并行推进的数据带。
+        + _segment_visual()
+        + '<div class="stat-band">'
+        f'<div class="stat"><span class="k">当前版本</span><span class="v accent">{esc(LATEST["tag"])}</span></div>'
+        f'<div class="stat"><span class="k">下载引擎</span><span class="v">TurboDL {TURBODL_VERSION}</span></div>'
+        f'<div class="stat"><span class="k">系统要求</span><span class="v">{esc(MIN_SDK)}</span></div>'
+        f'<div class="stat"><span class="k">开源协议</span><span class="v">AGPL-3.0</span></div>'
+        "</div></div></section>",
         section(
             "支持平台",
             note(
@@ -756,17 +794,23 @@ def _page_plugins(lang: str, href) -> str:
             "<p>除了「可不可信」，插件还有<strong>能力级别</strong>这一维。它回答的是"
             "「这东西能碰到多大范围的能力」以及「<strong>改了要不要重启 App</strong>」—— "
             "这两件事与信任等级无关：L1 插件可能是官方签名的，L2 插件也可能来自你信任的源。</p>"
-            '<div class="table-wrap"><table><thead><tr><th>级别</th><th>运行位置</th>'
-            "<th>能做什么</th><th>生效时机</th></tr></thead><tbody>"
-            '<tr><td><strong>L1 · JS 插件</strong><br><span class="mono small">level: "js"</span></td>'
-            "<td>应用内的 JS 沙箱，进程内</td>"
-            "<td>网盘登录 / 解析 / 取直链、网页与 API 调用、规则与轻逻辑</td>"
-            "<td>可热加载，<strong>装上或更新后立即生效</strong></td></tr>"
-            '<tr><td><strong>L2 · 原生插件</strong><br><span class="mono small">level: "native"</span></td>'
-            "<td>宿主进程内，Kotlin/JVM 原生代码</td>"
-            "<td>接入其他下载器的插件生态（Adapter）、新的下载后端、文件 Handler（播放器）、系统级集成</td>"
-            "<td><strong>不能热加载，必须重启 App</strong></td></tr>"
-            "</tbody></table></div>"
+            + table(
+                ["级别", "运行位置", "能做什么", "生效时机"],
+                [
+                    [
+                        '<strong>L1 · JS 插件</strong><br><span class="mono small">level: "js"</span>',
+                        "应用内的 JS 沙箱，进程内",
+                        "网盘登录 / 解析 / 取直链、网页与 API 调用、规则与轻逻辑",
+                        "可热加载，<strong>装上或更新后立即生效</strong>",
+                    ],
+                    [
+                        '<strong>L2 · 原生插件</strong><br><span class="mono small">level: "native"</span>',
+                        "宿主进程内，Kotlin/JVM 原生代码",
+                        "接入其他下载器的插件生态（Adapter）、新的下载后端、文件 Handler（播放器）、系统级集成",
+                        "<strong>不能热加载，必须重启 App</strong>",
+                    ],
+                ],
+            )
             + note(
                 "<strong>L2 不能热加载是结构性的，不是偷懒。</strong>"
                 "原生插件注册进来的类在进程生命周期内无法替换（类加载器换不掉已加载的类），"
@@ -1201,21 +1245,21 @@ SITE = {
         '<path d="M16 15.6l6.2 6.2H9.8z" fill="currentColor"/>'
         '<path d="M16 21v7" stroke="currentColor" stroke-width="2.3" stroke-linecap="round"/></svg>'
     ),
+    # 顶栏只放**最常走的五条路**。上一版列了九项（概览/下载/插件/文档/开发者/
+    # 更新日志/社区/支持开发/协议），一眼看过去是一排按钮墙，而且把"下载"这个
+    # 主行动淹掉了。其余入口在页脚按栏目分组列全（见下面 footer），一条也没少。
     "nav": [
         ("home", {"zh": "概览"}),
         ("download", {"zh": "下载"}),
         ("plugins", {"zh": "插件"}),
         ("docs", {"zh": "文档"}),
         ("developers", {"zh": "开发者"}),
-        ("changelog", {"zh": "更新日志"}),
-        ("community", {"zh": "社区"}),
-        ("support", {"zh": "支持开发"}),
-        ("legal", {"zh": "协议"}),
     ],
     "ui": {
         "zh": {
             "skip": "跳到正文",
             "menu": "菜单",
+            "theme": "切换深色 / 浅色主题",
             "notfound_title": "页面不存在",
             "notfound_body": "这个地址在本站不存在。全部内容就在下面这几处：",
         }

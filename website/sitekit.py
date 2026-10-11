@@ -12,6 +12,7 @@
 from __future__ import annotations
 
 import html
+import re
 from pathlib import Path
 
 
@@ -56,10 +57,32 @@ def code_block(code: str, caption: str = "") -> str:
 
 
 def table(headers: list[str], rows: list[list[str]]) -> str:
-    """数据表。单元格按 HTML 片段处理（调用方自行 esc 或给链接）。"""
+    """数据表。单元格按 HTML 片段处理（调用方自行 esc 或给链接）。
+
+    每个 `<td>` 都带上 `data-label="列名"`，这是**手机端卡片式堆叠**的前提：
+    窄屏时表头行会被隐藏，而 CSS 读不到"这一格属于哪一列"，只能靠这个属性
+    把列名重新贴回每个值前面。没有它，手机上的宽表格只能硬压成多行断句。
+    """
     head = "".join(f"<th>{h}</th>" for h in headers)
-    body = "".join("<tr>" + "".join(f"<td>{c}</td>" for c in r) + "</tr>" for r in rows)
+    body = "".join(
+        "<tr>"
+        + "".join(
+            f'<td data-label="{esc(_plain(h))}">{c}</td>'
+            for h, c in zip(headers, r)
+        )
+        + "</tr>"
+        for r in rows
+    )
     return f'<div class="table-wrap"><table><thead><tr>{head}</tr></thead><tbody>{body}</tbody></table></div>'
+
+
+def _plain(fragment: str) -> str:
+    """把一个可能是 HTML 片段的表头压成纯文本，用于 data-label。
+
+    表头里常有 `<span class="mono">` 这类标记；原样塞进属性会破坏标签。
+    """
+    text = re.sub(r"<[^>]+>", "", str(fragment))
+    return html.unescape(text).strip()
 
 
 def cards(items: list[tuple[str, str]], columns: int = 3) -> str:
@@ -79,7 +102,29 @@ def buttons(items: list[tuple[str, str]], kind: str = "") -> str:
 
 def section(title: str, body: str, anchor: str = "") -> str:
     aid = f' id="{anchor}"' if anchor else ""
-    return f"<section{aid}><h2>{title}</h2>{body}</section>"
+    return f"<section{aid}>{seg_rule()}<h2>{title}</h2>{body}</section>"
+
+
+def seg_rule(segments: list[tuple[int, bool]] | None = None) -> str:
+    """分段线：本站的标志性元素（设计说明见 `_audit/官网重设计计划.md`）。
+
+    这个软件把文件切成**不等长的分片**并发下载，所以区块之间的分隔线同样被切成
+    不等宽的分段：`(相对宽度, 是否已完成)`。已完成段用强调色。
+
+    为什么不用普通 1px 横线：一条横线不承载任何信息，只是装饰；而分段线本身
+    就是这个产品在做的事。默认给出的一组比例是固定的（不是随机数）——
+    随机会让同一页面在不同构建下长得不一样，而这里要的是"同一个记号反复出现"。
+    """
+    if segments is None:
+        # 一组不等宽的比例，模拟"下到一半"的真实观感。固定值，保证可复现。
+        segments = [(7, True), (3, False), (5, True), (2, False), (9, False), (4, True)]
+    total = sum(w for w, _ in segments) or 1
+    parts = []
+    for width, done in segments:
+        pct = width / total * 100
+        cls = "done" if done else ""
+        parts.append(f'<i class="{cls}" style="width:{pct:.3f}%"></i>')
+    return '<div class="seg-rule" aria-hidden="true">' + "".join(parts) + "</div>"
 
 
 def note(text: str, tone: str = "") -> str:

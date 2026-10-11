@@ -156,6 +156,10 @@ class Site:
 <meta name="twitter:card" content="summary_large_image">
 <link rel="icon" href="{rel(page["dir"], "assets/favicon.svg")}" type="image/svg+xml">
 <link rel="apple-touch-icon" href="{rel(page["dir"], "assets/apple-touch-icon.png")}">
+<!-- 主题：在样式表之前定下 data-theme，避免深色偏好下闪一帧白 -->
+<script>try{{var t=localStorage.getItem("theme");if(t)document.documentElement.setAttribute("data-theme",t)}}catch(e){{}}</script>
+<!-- Pico（classless，MIT）在前，site.css 在后：我们的规则覆盖它 -->
+<link rel="stylesheet" href="{rel(page["dir"], "assets/pico.min.css")}">
 <link rel="stylesheet" href="{rel(page["dir"], "assets/site.css")}">
 </head>
 <body class="{esc(cfg.get('body_class', ''))}">
@@ -189,15 +193,38 @@ class Site:
                     links.append(f'<a href="{rel(page["dir"], target)}">{esc(self.label((code, _lab), lang))}</a>')
             switcher = '<div class="langs">' + "".join(links) + "</div>"
 
-        return f"""<header class="site-head">
-<div class="wrap">
+        # 主题切换与语言切换都放进 .head-tools，作为**一组**工具贴在导航右侧。
+        # 上一版把它单独留在 nav 外面靠 margin-left:auto 挤过去，看起来像飘在角落、
+        # 不属于任何一组 —— 这是布局上的错位，不是样式问题。
+        tools = (
+            '<div class="head-tools">'
+            + switcher
+            + f'<button class="theme-toggle" type="button" aria-label="{esc(self.ui(lang, "theme"))}" title="{esc(self.ui(lang, "theme"))}">'
+            '<svg class="icon-sun" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M4.9 4.9l1.4 1.4M17.7 17.7l1.4 1.4M2 12h2M20 12h2M4.9 19.1l1.4-1.4M17.7 6.3l1.4-1.4"/></svg>'
+            '<svg class="icon-moon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M21 12.8A9 9 0 1 1 11.2 3a7 7 0 0 0 9.8 9.8z"/></svg>'
+            "</button></div>"
+        )
+        # 结构：**左侧固定侧栏 + 主画布**，不是顶部导航条。
+        # 这样在长文档页上导航始终可见（顶栏那种做法滚下去就没了），
+        # 而且把"站点身份 + 导航 + 语言/主题"收进一栏，主画布只放内容。
+        tools = (
+            '<div class="side-tools">'
+            + switcher
+            + f'<button class="theme-toggle" type="button" aria-label="{esc(self.ui(lang, "theme"))}" title="{esc(self.ui(lang, "theme"))}">'
+            '<svg class="icon-sun" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M4.9 4.9l1.4 1.4M17.7 17.7l1.4 1.4M2 12h2M20 12h2M4.9 19.1l1.4-1.4M17.7 6.3l1.4-1.4"/></svg>'
+            '<svg class="icon-moon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M21 12.8A9 9 0 1 1 11.2 3a7 7 0 0 0 9.8 9.8z"/></svg>'
+            "</button></div>"
+        )
+        return f"""<div class="app">
+<aside class="side" id="site-nav">
+<div class="side-top">
 <a class="brand" href="{brand_href}"><span class="brand-mark">{cfg['mark_svg']}</span><span class="brand-name">{esc(cfg['name'])}</span></a>
 <button class="nav-toggle" aria-expanded="false" aria-controls="site-nav">{esc(self.ui(lang, "menu"))}</button>
-<nav id="site-nav" class="site-nav">{nav}</nav>
-{switcher}
 </div>
-</header>
-<main id="main">
+<nav class="side-nav">{nav}</nav>
+{tools}
+</aside>
+<main id="main" class="canvas">
 """
 
     def footer(self, page: dict) -> str:
@@ -219,6 +246,7 @@ class Site:
         cols_html = "".join(cols)
         paras = "".join(f"<p>{p}</p>" for p in cols_cfg["paragraphs"])
         return f"""</main>
+</div>
 <footer class="site-foot">
 <div class="wrap">
 <div class="foot-cols">{cols_html}</div>
