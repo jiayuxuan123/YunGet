@@ -195,14 +195,19 @@ object PluginSignature {
         }
 
         private fun pointAdd(p: Point, q: Point): Point {
-            val a = (p.y - p.x) * (q.y - q.x) % P
-            val b = (p.y + p.x) * (q.y + q.x) % P
-            val c = BigInteger.TWO * p.t * q.t * D % P
-            val d = BigInteger.TWO * p.z * q.z % P
-            val e = b - a
-            val f = d - c
-            val g = d + c
-            val h = b + a
+            // ★ 减法必须用 `.mod(P)` 归一化，**不能用 `%`**：
+            //   BigInteger 的 `%`（remainder）保留被除数符号，减法一旦出负数就会把负坐标
+            //   带进后续乘法，最终两个表示同一坐标的点比不相等 —— 表现为"验签随机失败"。
+            //   这个缺陷**与输入相关**：只有恰好走到负数分支的那些签名会失败，
+            //   而 RFC 8032 官方向量恰好不触发它（真机事故：同一批签名的插件四过二不过）。
+            val a = ((p.y - p.x) * (q.y - q.x)).mod(P)
+            val b = ((p.y + p.x) * (q.y + q.x)).mod(P)
+            val c = (BigInteger.TWO * p.t * q.t * D).mod(P)
+            val d = (BigInteger.TWO * p.z * q.z).mod(P)
+            val e = (b - a).mod(P)
+            val f = (d - c).mod(P)
+            val g = (d + c).mod(P)
+            val h = (b + a).mod(P)
             return Point(e * f % P, g * h % P, f * g % P, e * h % P)
         }
 
@@ -257,8 +262,9 @@ object PluginSignature {
             if (x * x % P != x2) x = x * SQRT_M1 % P
             if (x * x % P != x2) return null
 
-            // 奇偶不符合就取反（-x mod p）
-            if (x.testBit(0) != xIsOdd) x = P - x
+            // 奇偶不符合就取反（-x mod p）；用 `.mod(P)` 而不是 `P - x`：
+            // x = 0 时 P - 0 = P 不是规范余数，会把一个非规范坐标带进后续运算。
+            if (x.testBit(0) != xIsOdd) x = (P - x).mod(P)
             return x
         }
 

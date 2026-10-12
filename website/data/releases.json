@@ -1,23 +1,40 @@
 {
   "repo": "jiayuxuan123/YunGet",
   "latest": {
-    "tag": "v2.7.7",
-    "name": "云取 YunGet 2.7.7",
-    "published": "2026-10-11T16:37:47Z",
+    "tag": "v2.7.8",
+    "name": "云取 YunGet 2.7.8",
+    "published": "2026-10-12T04:18:30Z",
     "prerelease": false,
-    "url": "https://github.com/jiayuxuan123/YunGet/releases/tag/v2.7.7",
-    "summary": "云取 YunGet 2.7.7\n这个版本修复 2.7.6 在真机上的一个关键问题，建议所有安装了网盘插件的用户更新。\n修复\n· **原生插件重启后无法加载**：Android 10 及以上系统拒绝从应用数据目录直接加载插件包（系统安全限制，日志表现为 \"Writable dex file is not allowed\"）。现在加载前会把插件包复制到系统允许的位置，装过的原生插件重启后即可正常生效。2.7.6 里安装成功但一直显示\"未运行\"的插件，更新到本版并重启后即可使用。\n· **安装失败时日志更具体**：签名校验失败时，会把实际收到的文件指纹、索引里的签名字段与公钥来源写进诊断日志，远程排查\"签名验证失败\"类问题不再需要来回猜。",
+    "url": "https://github.com/jiayuxuan123/YunGet/releases/tag/v2.7.8",
+    "summary": "云取 YunGet 2.7.8\n修掉一个会让插件装不上的验签缺陷，建议所有用户更新。\n修复\n· **同一批签名的插件，一部分能装、一部分报\"签名验证失败\"**：应用内自带的一套 Ed25519 验签实现里，坐标运算的中间减法没有做取模归一化，导致减法出负数时结果算错——表现为**与签名内容相关地随机失败**（实测同一批 6 个插件，4 个能装、2 个报错）。这不是发布侧或网络的问题，插件包本身完全正确。修复后所有已发布的插件都能正常校验通过。\n· 顺带修掉同一实现里另一处非规范余数（坐标取反）的隐患。\n· 新增一条回归测试：直接用**真实发布的插件文件与索引**验证两条验签路径（平台实现与内置实现），防止这类\"只有特定输入才触发\"的缺陷再次溜过去。\n如果你之前遇到\n升级前若在插件市场看到\"签名验证失败\"，那 2.7.8 之后重试即可正常安装；不需要重新下载任何插件源数据。",
     "assets": [
       {
-        "name": "YunGet-2.7.7-release.apk",
-        "size": 31710643,
-        "url": "https://github.com/jiayuxuan123/YunGet/releases/download/v2.7.7/YunGet-2.7.7-release.apk",
+        "name": "YunGet-2.7.8-release.apk",
+        "size": 31707834,
+        "url": "https://github.com/jiayuxuan123/YunGet/releases/download/v2.7.8/YunGet-2.7.8-release.apk",
         "downloads": 0,
-        "sha256": "a1fe22a7b0bbdc16df34ca48a643aa4b288b323d747eb73f364bac4d4ef6383d"
+        "sha256": "4e2b6c56068dada26802469b55b187573276a9909b34c1784ce39e2f55133d21"
       }
     ]
   },
   "releases": [
+    {
+      "tag": "v2.7.8",
+      "name": "云取 YunGet 2.7.8",
+      "published": "2026-10-12T04:18:30Z",
+      "prerelease": false,
+      "url": "https://github.com/jiayuxuan123/YunGet/releases/tag/v2.7.8",
+      "summary": "云取 YunGet 2.7.8\n修掉一个会让插件装不上的验签缺陷，建议所有用户更新。\n修复\n· **同一批签名的插件，一部分能装、一部分报\"签名验证失败\"**：应用内自带的一套 Ed25519 验签实现里，坐标运算的中间减法没有做取模归一化，导致减法出负数时结果算错——表现为**与签名内容相关地随机失败**（实测同一批 6 个插件，4 个能装、2 个报错）。这不是发布侧或网络的问题，插件包本身完全正确。修复后所有已发布的插件都能正常校验通过。\n· 顺带修掉同一实现里另一处非规范余数（坐标取反）的隐患。\n· 新增一条回归测试：直接用**真实发布的插件文件与索引**验证两条验签路径（平台实现与内置实现），防止这类\"只有特定输入才触发\"的缺陷再次溜过去。\n如果你之前遇到\n升级前若在插件市场看到\"签名验证失败\"，那 2.7.8 之后重试即可正常安装；不需要重新下载任何插件源数据。",
+      "assets": [
+        {
+          "name": "YunGet-2.7.8-release.apk",
+          "size": 31707834,
+          "url": "https://github.com/jiayuxuan123/YunGet/releases/download/v2.7.8/YunGet-2.7.8-release.apk",
+          "downloads": 0,
+          "sha256": "4e2b6c56068dada26802469b55b187573276a9909b34c1784ce39e2f55133d21"
+        }
+      ]
+    },
     {
       "tag": "v2.7.7",
       "name": "云取 YunGet 2.7.7",
@@ -30,7 +47,7 @@
           "name": "YunGet-2.7.7-release.apk",
           "size": 31710643,
           "url": "https://github.com/jiayuxuan123/YunGet/releases/download/v2.7.7/YunGet-2.7.7-release.apk",
-          "downloads": 0,
+          "downloads": 547,
           "sha256": "a1fe22a7b0bbdc16df34ca48a643aa4b288b323d747eb73f364bac4d4ef6383d"
         }
       ]
@@ -47,7 +64,7 @@
           "name": "YunGet-2.7.6-release.apk",
           "size": 31709721,
           "url": "https://github.com/jiayuxuan123/YunGet/releases/download/v2.7.6/YunGet-2.7.6-release.apk",
-          "downloads": 67,
+          "downloads": 81,
           "sha256": "f4460bfe913836e83043ad7c212fc9d3c1749ccabffae2292d7cfa0ec9ea8732"
         }
       ]
@@ -64,7 +81,7 @@
           "name": "YunGet-2.7.5-release.apk",
           "size": 31681596,
           "url": "https://github.com/jiayuxuan123/YunGet/releases/download/v2.7.5/YunGet-2.7.5-release.apk",
-          "downloads": 505,
+          "downloads": 509,
           "sha256": "57e0beee75c8f4041a25f97e7c79c2e143357018fadab214226bf95e5b202c64"
         }
       ]
@@ -81,7 +98,7 @@
           "name": "YunGet-2.7.4-release.apk",
           "size": 31621011,
           "url": "https://github.com/jiayuxuan123/YunGet/releases/download/v2.7.4/YunGet-2.7.4-release.apk",
-          "downloads": 1395,
+          "downloads": 1396,
           "sha256": "c6921e4d2a11d8e46239c84050c46a8cf9fa3bea45a920825725418f902bd32d"
         }
       ]
@@ -98,7 +115,7 @@
           "name": "YunGet-2.7.3-release.apk",
           "size": 31593625,
           "url": "https://github.com/jiayuxuan123/YunGet/releases/download/v2.7.3/YunGet-2.7.3-release.apk",
-          "downloads": 431,
+          "downloads": 432,
           "sha256": "2affb2e8958b8b147606aacd7c77815d238133c9e820e5110c41aebff8475767"
         }
       ]
@@ -132,7 +149,7 @@
           "name": "YunGet-2.7.1-release.apk",
           "size": 31586091,
           "url": "https://github.com/jiayuxuan123/YunGet/releases/download/v2.7.1/YunGet-2.7.1-release.apk",
-          "downloads": 606,
+          "downloads": 607,
           "sha256": "4140068dadae124607ec22f7d23a297691690f3586c84c7f14fb8da4ce32992f"
         }
       ]
@@ -149,7 +166,7 @@
           "name": "YunGet-2.7.0-release.apk",
           "size": 31586005,
           "url": "https://github.com/jiayuxuan123/YunGet/releases/download/v2.7.0/YunGet-2.7.0-release.apk",
-          "downloads": 74,
+          "downloads": 75,
           "sha256": "d35b27bf3a94e363b67f6c57a1a488bae07e5c276ccf3c5cec50980e2c06cc7e"
         }
       ]
@@ -251,7 +268,7 @@
           "name": "YunGet-2.6.15-release.apk",
           "size": 28284269,
           "url": "https://github.com/jiayuxuan123/YunGet/releases/download/v2.6.15/YunGet-2.6.15-release.apk",
-          "downloads": 3950,
+          "downloads": 3951,
           "sha256": "27284307104496d94934cb94f82b2445d586bcebda3d0b4d1b74232427f0e845"
         }
       ]
@@ -508,23 +525,6 @@
           "url": "https://github.com/jiayuxuan123/YunGet/releases/download/v2.5.0/YunGet-2.5.0.apk",
           "downloads": 138,
           "sha256": "b2ee411bfeef1a45ad7b2fb978aac65219b35a9c3c7a3baff93b9a0f1c3becdd"
-        }
-      ]
-    },
-    {
-      "tag": "v2.4.3",
-      "name": "YunGet 2.4.3：修复下载前「解析」卡近一分钟",
-      "published": "2026-08-30T04:21:56Z",
-      "prerelease": false,
-      "url": "https://github.com/jiayuxuan123/YunGet/releases/tag/v2.4.3",
-      "summary": "修复：点了下载后「解析」要等将近一分钟\r\n\r\n这是上两个版本引入的回归。三处串行等待叠加，最坏约 69 秒：\r\n\r\n1. **探测重试预算过大**：单次超时 20 秒、最多试 3 次，加上重试间隔，最坏要卡 **61 秒**。这期间任务已经显示「下载中」但字节为 0 —— 就是你看到的「一直在解析」。\r\n2. **连接预热同步等待**：预热要全部完成（最坏 8 秒）才开始下载，直接叠加在探测之后。这正是你之前发现「关掉连接预热会好些」的原因。\r\n3. **已知大小仍重复探测**：网盘解析已经给出准确文件大小了，还要再去探测一次，纯属浪费时间。\r\n现在\r\n· 探测超时 20 秒 → **6 秒**，最多重试 1 次：最坏等待从 61 秒降到约 12 秒。探测失败并不影响下载（大不了单线程），不值得久等。\r\n· 连接预热改为**后台进行**，下载立刻开始，预热好的连接会自动被后续分片复用。…",
-      "assets": [
-        {
-          "name": "YunGet-2.4.3.apk",
-          "size": 18977202,
-          "url": "https://github.com/jiayuxuan123/YunGet/releases/download/v2.4.3/YunGet-2.4.3.apk",
-          "downloads": 2,
-          "sha256": "ce739517ed490cdc12338fd551d6855ae058669e9b9b7604499a29f35e24b0bc"
         }
       ]
     }
