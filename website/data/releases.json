@@ -1,23 +1,40 @@
 {
   "repo": "jiayuxuan123/YunGet",
   "latest": {
-    "tag": "v2.7.8",
-    "name": "云取 YunGet 2.7.8",
-    "published": "2026-10-12T04:18:30Z",
+    "tag": "v2.7.9",
+    "name": "云取 YunGet 2.7.9",
+    "published": "2026-10-12T04:47:59Z",
     "prerelease": false,
-    "url": "https://github.com/jiayuxuan123/YunGet/releases/tag/v2.7.8",
-    "summary": "云取 YunGet 2.7.8\n修掉一个会让插件装不上的验签缺陷，建议所有用户更新。\n修复\n· **同一批签名的插件，一部分能装、一部分报\"签名验证失败\"**：应用内自带的一套 Ed25519 验签实现里，坐标运算的中间减法没有做取模归一化，导致减法出负数时结果算错——表现为**与签名内容相关地随机失败**（实测同一批 6 个插件，4 个能装、2 个报错）。这不是发布侧或网络的问题，插件包本身完全正确。修复后所有已发布的插件都能正常校验通过。\n· 顺带修掉同一实现里另一处非规范余数（坐标取反）的隐患。\n· 新增一条回归测试：直接用**真实发布的插件文件与索引**验证两条验签路径（平台实现与内置实现），防止这类\"只有特定输入才触发\"的缺陷再次溜过去。\n如果你之前遇到\n升级前若在插件市场看到\"签名验证失败\"，那 2.7.8 之后重试即可正常安装；不需要重新下载任何插件源数据。",
+    "url": "https://github.com/jiayuxuan123/YunGet/releases/tag/v2.7.9",
+    "summary": "云取 YunGet 2.7.9\n修好两件影响日常使用的事：原生插件真正能加载了，图片终于能显示出来。\n原生插件现在可以正常运行\n上一版换了个目录存放插件包，真机上仍被系统拒绝——原因是 Android 10 之后系统禁止加载\"位于可写目录里的插件文件\"，换到哪个可写目录都一样。这一版改为**把插件包读进内存直接加载**，全程不落盘，从机制上绕开了这条限制。\n装过的网盘插件更新到本版并重启后即可正常加载；插件页不再显示\"未运行\"。\n需要留意：加载原生插件需 Android 8.0 及以上；更低版本会给出明确提示，而不是静默失败。\n图片能显示出来了\n支持页的赞赏码、插件说明里的图片此前一律直连 GitHub，国内基本加载不出来。原因是应用里的\"镜像\"设置从来没有传给图片加载器——这个开关一直是空的。修复后：\n· 图片与插件源、应用更新走**同一套镜像规则**（只对 GitHub 地址生效，失败…",
     "assets": [
       {
-        "name": "YunGet-2.7.8-release.apk",
-        "size": 31707834,
-        "url": "https://github.com/jiayuxuan123/YunGet/releases/download/v2.7.8/YunGet-2.7.8-release.apk",
+        "name": "YunGet-2.7.9-release.apk",
+        "size": 31714296,
+        "url": "https://github.com/jiayuxuan123/YunGet/releases/download/v2.7.9/YunGet-2.7.9-release.apk",
         "downloads": 0,
-        "sha256": "4e2b6c56068dada26802469b55b187573276a9909b34c1784ce39e2f55133d21"
+        "sha256": "5d9520fa11c2ca3ce036f948e8c5de87cf1c5fb749fc1623e72edbfb4a19cc77"
       }
     ]
   },
   "releases": [
+    {
+      "tag": "v2.7.9",
+      "name": "云取 YunGet 2.7.9",
+      "published": "2026-10-12T04:47:59Z",
+      "prerelease": false,
+      "url": "https://github.com/jiayuxuan123/YunGet/releases/tag/v2.7.9",
+      "summary": "云取 YunGet 2.7.9\n修好两件影响日常使用的事：原生插件真正能加载了，图片终于能显示出来。\n原生插件现在可以正常运行\n上一版换了个目录存放插件包，真机上仍被系统拒绝——原因是 Android 10 之后系统禁止加载\"位于可写目录里的插件文件\"，换到哪个可写目录都一样。这一版改为**把插件包读进内存直接加载**，全程不落盘，从机制上绕开了这条限制。\n装过的网盘插件更新到本版并重启后即可正常加载；插件页不再显示\"未运行\"。\n需要留意：加载原生插件需 Android 8.0 及以上；更低版本会给出明确提示，而不是静默失败。\n图片能显示出来了\n支持页的赞赏码、插件说明里的图片此前一律直连 GitHub，国内基本加载不出来。原因是应用里的\"镜像\"设置从来没有传给图片加载器——这个开关一直是空的。修复后：\n· 图片与插件源、应用更新走**同一套镜像规则**（只对 GitHub 地址生效，失败…",
+      "assets": [
+        {
+          "name": "YunGet-2.7.9-release.apk",
+          "size": 31714296,
+          "url": "https://github.com/jiayuxuan123/YunGet/releases/download/v2.7.9/YunGet-2.7.9-release.apk",
+          "downloads": 0,
+          "sha256": "5d9520fa11c2ca3ce036f948e8c5de87cf1c5fb749fc1623e72edbfb4a19cc77"
+        }
+      ]
+    },
     {
       "tag": "v2.7.8",
       "name": "云取 YunGet 2.7.8",
@@ -30,7 +47,7 @@
           "name": "YunGet-2.7.8-release.apk",
           "size": 31707834,
           "url": "https://github.com/jiayuxuan123/YunGet/releases/download/v2.7.8/YunGet-2.7.8-release.apk",
-          "downloads": 0,
+          "downloads": 44,
           "sha256": "4e2b6c56068dada26802469b55b187573276a9909b34c1784ce39e2f55133d21"
         }
       ]
@@ -47,7 +64,7 @@
           "name": "YunGet-2.7.7-release.apk",
           "size": 31710643,
           "url": "https://github.com/jiayuxuan123/YunGet/releases/download/v2.7.7/YunGet-2.7.7-release.apk",
-          "downloads": 547,
+          "downloads": 554,
           "sha256": "a1fe22a7b0bbdc16df34ca48a643aa4b288b323d747eb73f364bac4d4ef6383d"
         }
       ]
@@ -508,23 +525,6 @@
           "url": "https://github.com/jiayuxuan123/YunGet/releases/download/v2.6.0/app-release.apk",
           "downloads": 55,
           "sha256": "c8a5f9e66f4f17d54266814bab900af0903df4019881541b126e97177fddf28c"
-        }
-      ]
-    },
-    {
-      "tag": "v2.5.0",
-      "name": "YunGet 2.5.0：吞吐量瓶颈修复——终于能跑满了",
-      "published": "2026-08-30T08:20:43Z",
-      "prerelease": false,
-      "url": "https://github.com/jiayuxuan123/YunGet/releases/tag/v2.5.0",
-      "summary": "吞吐量瓶颈修复：终于能跑满了\n你说「后期也只能稳定 3MB/s，别的下载器能跑几十 MB/s」——根因不是网络，是引擎内部三个自身瓶颈。\n主因：线程数硬天花板 64\n分片下载是阻塞式读取，一个分片占死一个线程。但 Kotlin 的 IO 调度器默认并行度只有 `max(64, CPU核数)`——设 128 连接时实际最多只有 ~64 个能同时搜数据，其余在队列里干等。\n这正是你之前反复看到的「线程数卡在 64」，也是吞吐上不去的硬天花板。\n现在为每个下载任务开专用 IO 线程池（并行度 = 你的连接数 + 余量），不再与其他任务或库抢线程，设 128 就能真正跑 128。\n次因：进度上报拖累 CPU\n每个缓冲块都要重建进度 Map、启协程发事件，高速多连接下每秒上千次，CPU 全耗在上报而不是搬数据。现在默认 200ms 节流；IO 缓冲从 256KB 放大到 1MB。\n三处一起修，本地测…",
-      "assets": [
-        {
-          "name": "YunGet-2.5.0.apk",
-          "size": 18977198,
-          "url": "https://github.com/jiayuxuan123/YunGet/releases/download/v2.5.0/YunGet-2.5.0.apk",
-          "downloads": 138,
-          "sha256": "b2ee411bfeef1a45ad7b2fb978aac65219b35a9c3c7a3baff93b9a0f1c3becdd"
         }
       ]
     }

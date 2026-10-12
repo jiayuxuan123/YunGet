@@ -242,6 +242,16 @@ fun MainScreen() {
     var credentialLostNotice by remember { mutableStateOf(CredentialStore.hasKeyLostNotice(context)) }
     // 启动时同步「忽略 SSL 证书」开关（设置页隐藏菜单持久化，全局客户端即时生效）
     LaunchedEffect(Unit) { HttpClients.ignoreSsl = settings.ignoreSslCert }
+    // 把用户配置的 GitHub 镜像前缀交给远程图片加载器。
+    //
+    // 此前这个全局变量**没有任何地方赋值**，于是 README 图片与插件支持条目里的图片
+    // 全部直连 raw.githubusercontent.com —— 国内基本加载不出来（支持页的赞赏码就是
+    // 第一个暴露出来的例子）。这里按设置注入：图片与插件源、更新检查走同一套镜像规则
+    // （仅对 GitHub 域生效、失败自动回退直连，见 RemoteImageLoader.load）。
+    val githubMirror = settings.githubMirrorPrefix.orEmpty()
+    LaunchedEffect(githubMirror) {
+        com.yunget.app.ui.components.RemoteImageLoader.mirrorPrefix = githubMirror
+    }
     val repository = remember {
         QuarkAccountRepository(db.quarkAccountDao(), api)
     }

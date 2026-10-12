@@ -19,7 +19,6 @@ package com.yunget.app.data.plugin
 
 import android.content.Context
 import android.util.Log
-import dalvik.system.DexClassLoader
 import dev.turbodl.core.ApiVersion
 import dev.turbodl.plugin.native.ATTR_DISPLAY_NAME
 import dev.turbodl.plugin.native.ATTR_ENTRY_CLASS
@@ -40,12 +39,12 @@ import java.io.File
  *
  * ## 为什么能热装却**不能**热生效
  *
- * 这里有个反直觉的地方：类**可以**在运行时加载（`DexClassLoader` 就是干这个的），
+ * 这里有个反直觉的地方：类**可以**在运行时加载（系统的 dex 加载器就是干这个的），
  * 但加载后**不能替换** —— 类加载器不卸载类，已加载的类定义无法改写。
  * 而插件还可能持有原生库句柄、解码器、文件描述符。所以：
  *
  * ```
- * 安装 jar  →  立刻可以「加载」（DexClassLoader 读得到）
+ * 安装 jar  →  立刻可以「加载」（字节交给系统就能读）
  *          →  但要等**进程重启**才真正参与业务
  * ```
  *
@@ -54,7 +53,7 @@ import java.io.File
  *
  * ## 类加载器的生命周期
  *
- * 每个 jar 一个 `DexClassLoader`，**缓存起来**而不是每次加载都新建：
+ * 每个 jar 一个类加载器，**缓存起来**而不是每次加载都新建：
  *
  *  - 反复新建会让同一个类被不同的加载器各加载一份，`instanceof` 与类型转换全乱；
  *  - 插件内部若持有静态状态（连接池、缓存），换加载器等于丢状态。
@@ -66,15 +65,10 @@ internal class AndroidNativePluginLoader(private val context: Context) : NativeP
 
     private companion object {
         const val TAG = "插件-L2"
-        /** dex 的优化产物目录：AGP 对 jar 里没有的类会在这里落缓存。 */
-        const val DEX_DIR = "plugin-l2"
-
-        /** 可加载 dex 的暂存目录（codeCacheDir 下，Android 10+ 唯一放行的可加载位置）。 */
-        const val STAGE_DIR = "l2-jars"
     }
 
     /** 已加载的 jar → 其类加载器。键含 mtime，更新后自然是新条目。 */
-    private val loaders = java.util.concurrent.ConcurrentHashMap<String, DexClassLoader>()
+    private val loaders = java.util.concurrent.ConcurrentHashMap<String, ClassLoader>()
 
     override fun load(source: PluginSource): List<Plugin> {
         val jarFile = File(source.uri)
@@ -145,38 +139,61 @@ internal class AndroidNativePluginLoader(private val context: Context) : NativeP
     /**
      * 取（或建立）这个 jar 的类加载器。
      *
-     * ## 为什么要先把 jar 复制进 codeCacheDir
+     * ## 为什么用 InMemoryDexClassLoader（这是 2.7.7 修错后的正解）
      *
-     * Android 10+（targetSdk 29+）**拒绝从应用可写目录加载 dex**
-     * （"Writable dex file is not allowed"——真机 2.7.6 上实测复现），
-     * 而市场安装的 jar 就落在 filesDir。唯一的例外路径是
-     * [Context.getCodeCacheDir]：把 jar **原样复制**一份到那里再交给
-     * [DexClassLoader]。复制按「源 mtime」做缓存键——jar 更新后自然得到新副本；
-     * 旧副本与旧加载器一起留在进程里直到重启（这正是"类不能热替换"的同一件事，无害）。
+     * Android 10+ 起，targetSdk ≥ 29 的应用**不能从任何应用可写目录加载 dex**
+     * （"Writable dex file is not allowed"）。2.7.7 试过把 jar 复制到
+     * `codeCacheDir` 再交给 [DexClassLoader] —— **真机实测仍然被拒**（Android 14+）：
+     * 系统禁的是"可写的 dex 文件"这个属性，而 filesDir 与 codeCacheDir 都算可写，
+     * 换目录解决不了问题（2.7.6 的报错在 files 路径、2.7.7 的在 code_cache 路径，
+     * 同一个拒绝）。
+     *
+     * 唯一的正路是 [dalvik.system.InMemoryDexClassLoader]（API 26+）：把 dex **字节**
+     * 直接交给系统，全程不落盘，于是不存在"可写的 dex 文件"。插件包本身就是 d8 产出的
+     * jar（内含 `classes.dex`，见 `:l2-providers` 的 `packageL2Jars`），这里按 zip
+     * 取出那一条目即可。
+     *
+     * 代价：每次启动读一次 dex 到内存（插件包几十 KB，可忽略）；API < 26 的设备
+     * 无法加载 L2 插件，此时给一句可读的拒绝原因，而不是一个没有上下文的异常。
      */
     private fun loaderFor(jarFile: File): ClassLoader {
         val key = "${jarFile.absolutePath}@${jarFile.lastModified()}"
         return loaders.getOrPut(key) {
-            val staged = stageForDexLoad(jarFile)
-            val dexOut = File(context.codeCacheDir, DEX_DIR).apply { mkdirs() }
-            DexClassLoader(
-                staged.absolutePath,
-                dexOut.absolutePath,
-                /* librarySearchPath */ null,
+            if (android.os.Build.VERSION.SDK_INT < 26) {
+                throw NativePluginLoadException(
+                    "当前系统（Android ${android.os.Build.VERSION.RELEASE}）不支持原生插件：" +
+                        "加载原生代码需要 Android 8.0 及以上",
+                    NativePluginLoadException.Kind.LOAD_FAILED,
+                )
+            }
+            val dexBytes = readDexBytes(jarFile)
+            dalvik.system.InMemoryDexClassLoader(
+                java.nio.ByteBuffer.wrap(dexBytes),
                 Plugin::class.java.classLoader,   // 父加载器：让它看见引擎的接口
             )
         }
     }
 
-    /** dex 只能从 codeCacheDir 加载：把安装目录里的 jar 复制一份过去（幂等）。 */
-    private fun stageForDexLoad(jarFile: File): File {
-        val stageDir = File(context.codeCacheDir, STAGE_DIR).apply { mkdirs() }
-        val staged = File(stageDir, "${jarFile.nameWithoutExtension}.${jarFile.lastModified()}.jar")
-        if (!staged.isFile || staged.length() != jarFile.length()) {
-            jarFile.copyTo(staged, overwrite = true)
-            staged.setLastModified(jarFile.lastModified())
+    /**
+     * 从插件包里取出 `classes.dex` 字节。
+     *
+     * 取不到就明确失败：混进一个只有 `.class` 的普通 jar（没有 dex）时，
+     * 报"插件包格式不对"比让系统抛一个没有上下文的异常好得多。
+     */
+    private fun readDexBytes(jarFile: File): ByteArray {
+        val dex = runCatching {
+            java.util.zip.ZipFile(jarFile).use { zip ->
+                val entry = zip.getEntry("classes.dex") ?: return@use null
+                zip.getInputStream(entry).use { it.readBytes() }
+            }
+        }.getOrNull()
+        if (dex == null || dex.isEmpty()) {
+            throw NativePluginLoadException(
+                "插件包里没有 classes.dex（${jarFile.name}）—— 原生插件包必须由 d8 打包",
+                NativePluginLoadException.Kind.JAR_UNREADABLE,
+            )
         }
-        return staged
+        return dex
     }
 
     /** 已建立的加载器数量（诊断：理论上等于已加载且未重启的 L2 插件数）。 */

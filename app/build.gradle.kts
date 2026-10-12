@@ -26,7 +26,13 @@ android {
         applicationId = "com.yunget.app"
         minSdk = 23
         targetSdk = 34
-        versionCode = 56
+        versionCode = 57
+        // 2.7.9 内容：**原生插件加载正解 + 图片镜像**
+        //  ① L2 加载改用 InMemoryDexClassLoader：Android 10+ 禁的是"可写的 dex 文件"，
+        //     换目录（files → code_cache）解决不了，必须让 dex 全程不落盘；
+        //  ② 远程图片（支持页赞赏码、README 图片）接入 GitHub 镜像 —— 此前
+        //     RemoteImageLoader.mirrorPrefix 从没有地方赋值，镜像等于没生效；
+        //  ③ 设置页新增「GitHub 网络镜像」入口（此前只有插件源能单独配镜像）。
         // 2.7.8 内容：**验签修复**
         //  纯 Kotlin 的 Ed25519 验签实现里，点加法的中间减法用了 `%`（保留符号）而不是
         //  `.mod()`，减法出负数会把负坐标带进后续运算 → 与输入相关地验签失败：
@@ -308,7 +314,7 @@ android {
         //     - 分片请求带 `If-Range`：防止 CDN 中途换文件时新旧字节拼出混杂文件
         //       （那种情况长度校验会通过，损坏会静默落地）。
         //     - 401/403/410 不再触发背压降并发（是授权/时效信号，不是"你太快了"）。
-        versionName = "2.7.8"
+        versionName = "2.7.9"
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
     }

@@ -184,6 +184,10 @@ fun SettingsScreen(
     var showPlugins by remember { mutableStateOf(false) }
     // 插件市场页（插件源管理 / 检查更新 / 从源安装）：与插件页并列的独立全屏页
     var showMarket by remember { mutableStateOf(false) }
+    // GitHub 镜像前缀：市场里插件源、更新检查与远程图片（支持页赞赏码等）共用。
+    // 存草稿而不是直接读设置，是为了让"编辑中"与"已保存"分离 —— 取消不该已经改掉。
+    var mirrorDraft by remember { mutableStateOf(settingsRepo.githubMirrorPrefix.orEmpty()) }
+    var showMirrorDialog by remember { mutableStateOf(false) }
     // 插件副标题的计数：直接从插件仓库的 Flow 取，装上/卸掉/启停后这一行会自己更新，
     // 不必等用户进插件页再回来。Flow 记住：listInstalled() 每次返回新 Flow，不记会反复重启收集。
     val installedPluginsFlow = remember(pluginRepo) { pluginRepo.listInstalled() }
@@ -461,6 +465,22 @@ fun SettingsScreen(
             title = "插件市场",
             description = "从插件源浏览并安装 · 检查插件更新",
             onClick = { showMarket = true }
+        )
+
+        Spacer(modifier = Modifier.height(8.dp))
+
+        // GitHub 镜像前缀：插件源、更新检查与**远程图片**都走它。
+        // 暴露这一项是因为国内直连 raw.githubusercontent.com 基本取不到东西 ——
+        // 此前只有插件源能单独配镜像，而支持页图片与 README 图片没有入口，
+        // 表现为"插件装了、支持页却一直空白"。
+        SettingsItem(
+            icon = Icons.Outlined.Dns,
+            title = "GitHub 网络镜像",
+            description = when {
+                mirrorDraft.isNullOrBlank() -> "未设置（直连；国内可能加载不出图片与插件源）"
+                else -> "已启用：$mirrorDraft"
+            },
+            onClick = { showMirrorDialog = true }
         )
 
         Spacer(modifier = Modifier.height(8.dp))
@@ -1380,6 +1400,82 @@ fun SettingsScreen(
     if (showMarket) {
         PluginMarketScreen(onBack = { showMarket = false })
     }
+
+    // GitHub 镜像前缀编辑。与市场里的"按源配镜像"是两件事：这一项是**全局**的，
+    // 作用于插件源、更新检查与远程图片（支持页赞赏码、README 图片）。
+    if (showMirrorDialog) {
+        GitHubMirrorDialog(
+            initial = mirrorDraft,
+            onDismiss = { showMirrorDialog = false },
+            onSave = { value ->
+                // 与 PluginRepository.setSourceMirror 同一套校验：镜像前缀必须是 http/https。
+                // 这里**只校验不猜**：非法就退回原值并告知，不做静默修正。
+                val trimmed = value.trim()
+                if (trimmed.isNotEmpty()) {
+                    val scheme = trimmed.substringBefore(':', "").lowercase()
+                    if (scheme != "http" && scheme != "https") {
+                        SnackbarController.show("镜像前缀必须是 http/https 地址")
+                        return@GitHubMirrorDialog
+                    }
+                }
+                settingsRepo.githubMirrorPrefix = trimmed.ifEmpty { null }
+                mirrorDraft = trimmed
+                showMirrorDialog = false
+                SnackbarController.show(
+                    if (trimmed.isEmpty()) "已取消镜像（直连）" else "镜像已设为：$trimmed"
+                )
+            },
+        )
+    }
+}
+
+/**
+ * GitHub 镜像前缀编辑弹窗。
+ *
+ * 文案要说清两件容易误解的事：
+ *  1. 它作用于**所有** GitHub 系地址（插件源、更新检查、图片），不只是插件；
+ *  2. 换镜像**不影响校验** —— 插件照验 SHA-256 与签名（否则用户会以为这是个能绕验签的开关）。
+ */
+@Composable
+private fun GitHubMirrorDialog(
+    initial: String,
+    onDismiss: () -> Unit,
+    onSave: (String) -> Unit,
+) {
+    var draft by remember(initial) { mutableStateOf(initial) }
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text("GitHub 网络镜像") },
+        text = {
+            Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                Text(
+                    text = "国内直连 raw.githubusercontent.com 经常取不到内容。填一个镜像前缀后，" +
+                        "插件源、插件图片与应用更新会先走镜像、失败再回退直连。",
+                    style = MaterialTheme.typography.bodyMedium,
+                )
+                OutlinedTextField(
+                    value = draft,
+                    onValueChange = { draft = it },
+                    label = { Text("镜像前缀（留空 = 直连）") },
+                    placeholder = { Text("https://gh.example.com/") },
+                    singleLine = true,
+                    modifier = Modifier.fillMaxWidth(),
+                )
+                Text(
+                    text = "镜像只负责分发：取回的内容照验 SHA-256 与签名，换镜像不会让没验签的插件装得上。" +
+                        "它只对 GitHub 系地址生效，其它图床不受影响。",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+            }
+        },
+        confirmButton = {
+            TextButton(onClick = { onSave(draft) }) { Text("保存") }
+        },
+        dismissButton = {
+            TextButton(onClick = onDismiss) { Text("取消") }
+        },
+    )
 }
 
 /** 导出网盘认证弹窗：AES 加密密码 + 导出范围（仅已登录 / 全部绑定） */
