@@ -32,7 +32,7 @@ import re
 from pathlib import Path
 
 import mdlite
-from sitekit import buttons, cards, code_block, esc, note, section, seg_rule, table
+from sitekit import buttons, cards, code_block, esc, md_inline, note, section, seg_rule, table
 
 HERE = Path(__file__).resolve().parent
 ROOT = HERE.parent
@@ -98,38 +98,6 @@ PLATFORMS = [
     ("蓝奏云", "网页登录", "解析、下载"),
     ("蓝奏云优享版", "账号密码", "解析、下载"),
 ]
-
-FEATURES = [
-    (
-        "分享链接解析",
-        "识别夸克 / UC / 迅雷 / 百度 / 139 / 123 的分享链接；支持带提取码的链接并尽量自动识别；"
-        "解析后可浏览分享内的文件与目录，再取下载直链。",
-    ),
-    (
-        "多线程分片下载",
-        "基于内置的 TurboDL 引擎：分片并发 + 动态分块 + 工作窃取调度，支持断点续传、"
-        "暂停 / 继续 / 删除 / 打开，服务器不支持 Range 时自动回退单流。",
-    ),
-    (
-        "HLS 下载",
-        "通过 TurboDL 插件机制接入 HLS：解析 M3U8 清单、分片并发下载、AES-128 解密。"
-        "它是**下载能力**，不是播放器。",
-    ),
-    (
-        "账号与凭证",
-        "夸克 / UC / 百度 / 139 走 WebView Cookie，迅雷走密码或短信，123 走网页登录；"
-        "凭证用 Android Keystore 加密落库，且只存在本机。",
-    ),
-    (
-        "认证备份与恢复",
-        "用自定义口令派生密钥，以 AES-GCM 加密导出 / 导入网盘认证信息，换机不必逐个重登。",
-    ),
-    (
-        "取链即删",
-        "转存后立即清理临时文件：百度 / 迅雷取链后清理，夸克保留到下载完成或删除任务后清理。",
-    ),
-]
-
 
 # --------------------------------------------------------------------------- #
 # 文档页：官网上的每一篇文档，源头都是仓库里的那个文件
@@ -373,102 +341,430 @@ def _segment_visual() -> str:
 
 
 def _page_home(lang: str, href) -> str:
+    """首页：按主张表组织（每节一条主张 + 它的证据），不按"功能清单"排。
+
+    taste-skill 的方向 `product-performs`：首屏就是**真能用的控件**（粘贴链接就地切开），
+    其余每节是"两行陈述 + 它的证据"（界面碎片 / 真实截图 / 表格）。
+
+    章节顺序 = 访客会依次问的问题：
+      它是什么（首屏）→ 怎么用（三步）→ 支持哪些网盘 → 为什么快（分片）→
+      安全吗（凭证不出本机）→ 能扩展吗（插件）→ 常见疑问 → 现在装。
+    """
     dl_btn = f"下载 APK（{VERSION}）"
+    size_txt = f'{APK["size"] / 1048576:.1f} MB' if APK else "—"
+
     parts = [
-        f'<section class="hero"><div class="hero-grid"><div>'
-        f"<h1>网盘分享链接解析与高速下载</h1>"
-        f'<p class="lead">云取（YunGet）把分享链接变成文件：粘贴链接即可解析、浏览、取直链，'
-        f"再用内置的多线程引擎高速下载。凭据加密留在本机，不经过第三方服务器。</p>"
+        # ---- 1. 首屏：标题 + 一句话 + 真能用的解析控件 ----
+        '<section class="hero"><div class="wrap">'
+        '<h1><span class="line"><span>把分享链接</span></span>'
+        '<span class="line"><span>变成你的文件</span></span></h1>'
+        '<p class="hero-lead">粘贴一次，认出十个网盘，分片并发下载。'
+        "登录凭据加密留在这台手机上，不经过任何第三方服务器。</p>"
+        f'<div class="hero-actions">'
         + buttons([(dl_btn, href("download")), ("看文档", href("docs")), ("GitHub", REPO)])
-        # 版本块：真实数据 + 一条分段带。元信息用「标签 + 值」的两行结构，
-        # 不用「A · B · C」中点串（那是模板化生成的典型特征之一）。
-        + '</div><div class="hero-side">'
-        # 主体视觉：把"分片并发下载"画出来。参考站首屏都放一个占据大面积的
-        # 真实主体（Linear 放真实界面、Resend 放 3D 图形）；这里放的是
-        # **产品真正在做的事** —— 一条被切成不等宽分片、并行推进的数据带。
-        + _segment_visual()
-        + '<div class="stat-band">'
-        f'<div class="stat"><span class="k">当前版本</span><span class="v accent">{esc(LATEST["tag"])}</span></div>'
-        f'<div class="stat"><span class="k">下载引擎</span><span class="v">TurboDL {TURBODL_VERSION}</span></div>'
-        f'<div class="stat"><span class="k">系统要求</span><span class="v">{esc(MIN_SDK)}</span></div>'
-        f'<div class="stat"><span class="k">开源协议</span><span class="v">AGPL-3.0</span></div>'
-        "</div></div></section>",
+        + "</div>"
+        f'<p class="hero-meta">{esc(LATEST["tag"])} · {size_txt} · {esc(MIN_SDK)} · AGPL-3.0</p>'
+        # 活着的东西：真能跑的解析控件（本地计算，不发请求）
+        + _resolver_widget()
+        + "</div></section>",
+
+        # ---- 2. 怎么用：三步（每步一个界面碎片）----
         section(
-            "支持平台",
-            note(
-                "<strong>不建议使用百度网盘</strong>，可能触发账号风控，请谨慎使用。",
-                "warn",
-            )
+            "三步拿到文件",
+            '<p class="section-lead">没有账号体系、没有中转服务器：链接在手机上被解析，'
+            "直链直接交给下载引擎。</p>"
+            + '<div class="panel"><div class="split">'
+            '<div class="defs rise">'
+            + _step_row("粘贴链接", "分享文案整段粘进来也行，应用会自己挑出链接与提取码。")
+            + _step_row("选要下的文件", "解析后能浏览目录、多选、按文件夹批量入队。")
+            + _step_row("下载", "分片并发、断点续传；锁屏也能接着下。")
+            + _step_row("剪贴板识别", "复制一条分享链接再回到应用，解析页会自动提示粘贴，不用手动找输入框。")
+            + _step_row("多任务并行", "默认同时下载三个任务，并发数可在设置里调；每个任务内部再分片并发。")
+            + '<p class="small">右图取自正在运行的应用，不是设计稿。解析页的输入框'
+            "同时接受整段分享文案与单独的提取码。</p>"
+            + "</div>"
+            '<div class="rise">'
+            + _ui_fragment_parse()
+            + '<figure class="shot phone" style="max-width:320px;margin-top:1.5rem">'
+              '<img src="{IMG:parsing}" alt="解析页：粘贴分享链接与提取码的输入框" '
+              'width="720" height="1600" loading="lazy">'
+              "<figcaption>解析页</figcaption></figure>"
+            + "</div>"
+            "</div></div>",
+        ),
+
+        # ---- 3. 支持哪些网盘（真实平台表）----
+        section(
+            "认十个网盘",
+            '<div class="panel">'
+            '<p class="section-lead">能登录的都能解析；未登录时，夸克、UC、光鸭、蓝奏云的分享链接也能直接下载。'
+            "登录只发生在你与网盘之间 —— 应用不代收密码，也没有中转服务器。</p>"
             + table(
                 ["网盘", "登录方式", "能做什么"],
-                [[f"<strong>{esc(n)}</strong>", esc(login), desc] for n, login, desc in PLATFORMS],
-            ),
-        ),
-        section(
-            "能做什么",
-            cards([(t, f"<p>{b}</p>") for t, b in FEATURES], columns=3),
-        ),
-        section(
-            "界面截图",
-            '<p class="lead">下面是应用的真实界面（解析页与设置页）。</p>'
-            + '<div class="shots">'
-            + '<figure class="shot phone"><img src="{IMG:parsing}" alt="解析页" loading="lazy" width="720" height="1600">'
-            + "<figcaption>解析页：粘贴分享链接，一键解析</figcaption></figure>"
-            + '<figure class="shot phone"><img src="{IMG:setting}" alt="设置页" loading="lazy" width="720" height="1600">'
-            + "<figcaption>设置页：下载线程数、认证备份、日志导出</figcaption></figure>"
-            + "</div>"
+                [[f"<strong>{esc(n)}</strong>", esc(login), md_inline(desc)] for n, login, desc in PLATFORMS],
+            )
             + note(
-                "这里的截图都取自真实运行的应用。另外几张没有放上来：它们分别含真实账号昵称与用量、"
-                "一条带签名的下载直链、以及上游旧版界面 —— 那些不是拿来给人看的。",
-            ),
-        ),
-        section(
-            "下载引擎",
-            f"<p>下载由 <a href=\"{TURBODL_REPO}\">TurboDL</a> 承担 —— 一个纯 Kotlin/JVM 的多线程下载引擎，"
-            f"当前内置版本 <span class=\"mono\">{TURBODL_VERSION}</span>。它的分片调度、动态并发与断点续传"
-            f"都不是本应用自己实现的，因此也可以被别的应用复用。</p>"
-            + table(
-                ["能力", "说明"],
-                [
-                    ["分片并发", "按 HTTP Range 并行下载；服务器不支持 Range 时回退单流"],
-                    ["动态分块 + 工作窃取", "慢连接不拖垮整体，消除「最后一片单线程收尾」的长尾"],
-                    ["断点续传", "分片状态落盘，暂停后续传按真实进度接着下"],
-                    ["限速与并发", "全局速度上限；并发任务数可调"],
-                    ["代理与 DNS", "直连 / 系统 / 手动代理；系统 DNS / DoH"],
-                ],
+                "<strong>不建议使用百度网盘</strong>：解析可能触发账号风控。"
+                "其余平台的登录态都保存在本机，随时可在「网盘」页退出。",
+                "warn",
             )
-            + '<p class="small">本应用把并发装配为：连接数上限 16，诊断档位上限 64 —— '
-            "网盘服务端普遍有风控，拉满反而更慢。",
+            + "</div>",
         ),
+
+        # ---- 4. 为什么快：分片（点子所在的一节，配历史图片）----
         section(
-            "不止一个引擎",
-            "<p>默认的 TurboDL 覆盖绝大多数场景，但有些任务它做不了，有些能力是历史留下来的：</p>"
-            + table(
-                ["引擎", "用在什么时候"],
-                [
-                    ["<strong>TurboDL</strong>", "默认。普通直链、网盘直链、HLS"],
-                    ["内置兼容引擎", "项目早期的实现，作为兜底；不支持现场诊断，也不持久化请求头"],
-                    ["aria2", "实验性，用于对照排查；<strong>仅 arm64 设备</strong>"],
-                    ["Gopeed", "磁力 / BT 这类内置分片器做不到的任务，需要先导入内核"],
-                ],
-            )
-            + '<p class="small">切换引擎在设置里，重启应用后生效。内核来源、校验方式与各自的边界，'
-            f'写在<a href="{href("doc-engines")}">下载引擎</a>里。</p>',
+            "它把文件切成段，同时下",
+            '<p class="section-lead">服务器支持 Range 时，文件被切成不等长的分片并发拉取；'
+            "慢的那片不会拖住整体。这件事 1857 年就有人做过 —— 大西洋海底电报线也是一条线切成几段接力。</p>"
+            + '<div class="split split-wide">'
+            '<div class="rise">'
+            + f'<figure class="pic-drift"><img src="{{IMG:map-of-the-submarine-telegraph-between-america}}" '
+            'alt="1857 年大西洋海底电报线路图：一条线从纽芬兰分成数段抵达爱尔兰" '
+            'width="1920" height="827">'
+            "<figcaption>1857 年的海底电报线路图（Boston Public Library，CC BY 2.0，via Wikimedia Commons）</figcaption></figure>"
+            "</div>"
+            '<div class="defs rise">'
+            + _engine_row("分片并发", "按 HTTP Range 并行拉取；服务器不支持时自动回退单流。")
+            + _engine_row("动态分块 + 工作窃取", "慢连接不拖垮整体，消除最后一片单线程收尾的长尾。")
+            + _engine_row("断点续传", "分片状态落盘，暂停后按真实进度接着下。")
+            + _engine_row("并发会自己收敛", "并发升高而总吞吐不再提升时自动退回较低档位，"
+                          "不会出现「线程数拉满反而更慢」。")
+            + "</div></div>"
+            + '<figure class="pic-drift pic-band rise">'
+            '<img src="{IMG:musee-des-arts-et-metiers-cables-sous}" '
+            'alt="博物馆里一排海底电缆的剖面：外皮里包着一圈铜芯" '
+            'width="1920" height="1280">'
+            "<figcaption>海底电缆的剖面（Musée des Arts et Métiers，Frédéric BISSON，CC BY 2.0，"
+            "via Wikimedia Commons）—— 一根线由许多段包成，和分片下载是一回事。</figcaption></figure>"
+            + f'<p class="small">下载引擎是 <a href="{TURBODL_REPO}">TurboDL</a> —— 一个纯 Kotlin/JVM 的'
+            f"多线程下载引擎，当前内置版本 {esc(TURBODL_VERSION)}；它也可以被别的应用直接复用。</p>",
         ),
+
+        # ---- 5. 安全：凭证不出本机（白场整段换色）----
+        # 换场的理由：这是全页唯一谈"凭据"的地方；方向单说"一节可以换整个场色"，
+        # 而换色让它在视觉上跟"下载能力"那几节分开。截图用设置页 —— 备份与导出都在那里。
+        '<section class="section field-light"><div class="wrap">'
+        '<h2>你的 Cookie 不离开这台手机</h2>'
+        '<p class="section-lead">网盘登录凭据用系统密钥库加密后存在应用私有目录；'
+        "解析与取直链都在本机完成，没有任何中转服务器经手你的账号。</p>"
+        '<div class="split">'
+        '<div class="defs rise">'
+        + _engine_row("系统密钥库加密", "改锁屏密码或换设备会让密钥失效，那时应用会明确告诉你需要重新登录。")
+        + _engine_row("不出网", "凭证只发给对应网盘的官方域名；应用不收集、不上报。")
+        + _engine_row("可导出备份", "换手机时用自设密码加密导出，不依赖云端。")
+        + "</div>"
+        '<div class="rise">'
+        + _ui_fragment_secure()
+        + '<figure class="shot phone" style="max-width:320px;margin-top:1.5rem">'
+          '<img src="{IMG:setting}" alt="设置页：下载线程数、认证备份与日志导出" '
+          'width="720" height="1600" loading="lazy">'
+          "<figcaption>设置页：认证备份与日志导出都在本机</figcaption></figure>"
+        + "</div></div></div></section>",
+
+        # ---- 6. 插件：接口变了不用等发版 ----
         section(
-            "从哪里开始",
-            "<p>装好应用后：复制一条分享链接 → 回到应用会自动提示粘贴 → 解析 → 浏览 → 下载。</p>"
-            + buttons(
-                [
-                    ("下载 APK", href("download")),
-                    ("使用说明", href("doc-guide")),
-                    ("常见问题", href("doc-faq")),
-                    ("从源码构建", href("doc-build")),
-                ]
-            ),
+            "网盘接口变了，不用等应用更新",
+            '<p class="section-lead">解析逻辑可以做进插件：装一个、启用，立即生效；'
+            "网盘改接口时更新插件即可，不用等应用发版。</p>"
+            + '<div class="split">'
+            '<div class="defs rise">'
+            + _engine_row("跑在沙箱里", "插件是 JavaScript，只能通过宿主开放的接口访问网络与存储，"
+                          "越界调用会被拒绝并留下日志。")
+            + _engine_row("装上就生效", "沙箱可以整体重建，所以插件启用、更新都不需要重启应用。")
+            + _engine_row("校验后才安装", "每个版本都验 SHA-256 与签名；密钥被吊销的发布者即使签名有效也会被拒绝。")
+            + _engine_row("坏了能回退", "更新失败自动回退上一可用版本；内置实现始终保留作兜底。")
+            + "</div>"
+            '<div class="rise">' + _ui_fragment_plugins() + "</div>"
+            "</div>"
+            + f'<p class="small">官方源与已发布的插件在<a href="{href("plugins")}">插件页</a>；'
+            f'自己写一个看<a href="{href("doc-plugin-dev")}">插件开发</a>。</p>',
         ),
+
+        # ---- 8. 常见疑问（问题索引 + 单答案）----
+        section(
+            "常见疑问",
+            '<div class="panel">' + _faq_block() + "</div>",
+        ),
+
+        # ---- 9. 收尾 ----
+        '<section class="cta"><div class="wrap">'
+        f'<p class="cta-line"><span class="line">下载 <span class="fill">云取 {esc(VERSION)}</span>，</span>'
+        f'<span class="line">把下一条链接变成文件。</span></p>' 
+        f'<div class="hero-actions">'
+        + buttons([(f"下载 APK（{size_txt}）", href("download")), ("更新日志", href("changelog"))])
+        + "</div>"
+        f'<p class="cta-note">{esc(MIN_SDK)} · AGPL-3.0 · 源码在 <a href="{REPO}">GitHub</a></p>'
+        "</div></section>",
     ]
     return "".join(parts)
+
+
+def _resolver_widget() -> str:
+    """首屏的"活着的东西"：粘贴链接 → 就地切开。
+
+    全部本地计算（识别平台、提取码、分片计划），**不发任何网络请求** ——
+    所以它既不伪造结果，也不会把访客粘贴的链接送出去。无 JS 时这里是一段说明文字，
+    内容仍然完整可读（技能要求：动效与交互都不承担信息表达）。
+
+    data-ui：这是"产品界面碎片"，内部的输入框与按钮保留产品自己的控件外观。
+    """
+    return (
+        '<div class="resolver" data-ui>'
+        '<label for="share-input">粘贴一条分享链接试试</label>'
+        '<div class="resolver-row">'
+        '<input id="share-input" type="text" autocomplete="off" spellcheck="false" '
+        'placeholder="https://pan.quark.cn/s/… 或整段分享文案">'
+        "</div>"
+        '<div class="resolver-out" id="resolver-out">'
+        '<p class="resolver-empty">还没识别到分享链接。把它粘进来，这里会显示识别到的网盘、'
+        "提取码与分片计划 —— 全部在这台设备上完成，不会联网。</p>"
+        "</div>"
+        '<div class="seg" id="seg" aria-hidden="true"></div>'
+        '<div class="seg-legend" id="seg-legend"></div>'
+        "</div>"
+    )
+
+
+def _step_row(title: str, body: str) -> str:
+    """一步：名称加粗领起，后面接一句说明。
+
+    不用"左名右值"的两端行：那种形态适合短值（日期、价格），而这里的说明是完整句子，
+    塞进右列会在中文里断成三四个字的残行（截图评审时抓到过）。
+    也不用 01/02/03 编号 —— 顺序由位置与文字本身表达。
+    """
+    return f'<p class="def"><strong>{esc(title)}</strong> {esc(body)}</p>'
+
+
+def _engine_row(title: str, body: str) -> str:
+    return f'<p class="def"><strong>{esc(title)}</strong> {esc(body)}</p>' 
+
+
+def _ui_fragment_parse() -> str:
+    """界面碎片：解析结果（真实标签、能对上的数字、一行选中态）。"""
+    rows = [
+        ("宣传片-4K.mp4", "1.8 GB"),
+        ("素材包.zip", "412 MB"),
+        ("说明书.pdf", "2.1 MB"),
+    ]
+    inner = "".join(
+        f'<div class="frag-row{" sel" if i == 0 else ""}"><span class="name">{esc(n)}</span>'
+        f'<span class="val">{esc(v)}</span></div>'
+        for i, (n, v) in enumerate(rows)
+    )
+    return (
+        '<div class="frag" data-ui>'
+        '<div class="frag-head"><span class="frag-title">分享内容</span>'
+        '<span class="frag-sub">3 项 · 已选 2</span></div>'
+        + inner
+        + '<div class="frag-bar"><i style="width:34%"></i></div>'
+        '<p class="frag-note">正在取直链…已完成的段用浅绿标出</p>'
+        "</div>"
+    )
+
+
+def _ui_fragment_secure() -> str:
+    """界面碎片：凭据存储（说明"存在哪、谁能读"）。"""
+    rows = [
+        ("夸克网盘", "已加密"),
+        ("UC 网盘", "已加密"),
+        ("迅雷网盘", "未登录"),
+    ]
+    inner = "".join(
+        f'<div class="frag-row"><span class="name">{esc(n)}</span>'
+        f'<span class="val">{esc(v)}</span></div>'
+        for n, v in rows
+    )
+    return (
+        '<div class="frag" data-ui>'
+        '<div class="frag-head"><span class="frag-title">登录凭据</span>'
+        '<span class="frag-sub">仅本机</span></div>'
+        + inner
+        + '<p class="frag-note">加密密钥由系统密钥库保管，导出备份需自设密码</p>'
+        "</div>"
+    )
+
+
+def _ui_fragment_plugins() -> str:
+    """界面碎片：插件列表（真实插件名与级别，取自官方索引）。"""
+    entries = (PLUGIN_INDEX or {}).get("plugins") or []
+    picked = entries[:3]
+    inner = "".join(
+        f'<div class="frag-row"><span class="name">{esc(e.get("name") or e.get("id"))}</span>'
+        f'<span class="val">v{esc(((e.get("versions") or [{}])[0]).get("version") or "—")}</span></div>'
+        for e in picked
+    )
+    total = len(entries)
+    return (
+        '<div class="frag" data-ui>'
+        f'<div class="frag-head"><span class="frag-title">已安装插件</span>'
+        f'<span class="frag-sub">官方源 {total} 个可选</span></div>'
+        + inner
+        + '<p class="frag-note">插件装好后立即生效；更新不需要重启应用</p>'
+        "</div>"
+    )
+
+
+def ledger(title: str, sub: str, rows: list[tuple[str, str]], note_text: str = "") -> str:
+    """通用台账碎片（`[data-ui]`）：左列是名目、右列是值，四行以上才够一块。
+
+    为什么需要它：内页（下载/插件/文档/开发者/更新日志/协议）本来只有文字与表格，
+    一屏里几乎没东西可看。把**真实存在的数字与判断**摊成台账 —— 体积、哈希、
+    信任等级、权限、附件数 —— 既填了内容，也让这些值各有着落。
+    这些行里的每一个值都能在仓库或 `releases.json` 里核对，没有"演示数据"。
+    """
+    inner = "".join(
+        f'<div class="frag-row"><span class="name">{esc(k)}</span>'
+        f'<span class="val">{v if isinstance(v, str) and v.startswith("<") else esc(v)}</span></div>'
+        for k, v in rows
+    )
+    sub_html = f'<span class="frag-sub">{esc(sub)}</span>' if sub else ""
+    note_html = f'<p class="frag-note">{esc(note_text)}</p>' if note_text else ""
+    return (
+        '<div class="frag" data-ui>'
+        f'<div class="frag-head"><span class="frag-title">{esc(title)}</span>{sub_html}</div>'
+        + inner
+        + note_html
+        + "</div>"
+    )
+
+
+def _ui_fragment_release() -> str:
+    """界面碎片：这次发布装了什么（版本、体积、SHA-256 前缀、运行要求）。
+
+    内页要用的那类碎片：下载页的首屏只有标题与一段说明，一屏里几乎没东西；
+    把**这次发布的元数据**摆成一块台账，既填了内容也让数字（体积、哈希、SDK）
+    有个可核对的位置 —— 它们全部来自 releases.json，不是手写。
+    """
+    size = f'{APK["size"] / 1048576:.1f} MB' if APK else "—"
+    sha = (APK["sha256"][:16] + "…") if APK and APK.get("sha256") else "—"
+    rows = [
+        ("版本", LATEST["tag"]),
+        ("发布日", (LATEST["published"] or "")[:10]),
+        ("安装包", APK["name"] if APK else "—"),
+        ("体积", size),
+        ("SHA-256", sha),
+        ("运行要求", MIN_SDK),
+        ("内置引擎", f"TurboDL {TURBODL_VERSION}"),
+    ]
+    inner = "".join(
+        f'<div class="frag-row"><span class="name">{esc(k)}</span>'
+        f'<span class="val">{esc(v)}</span></div>'
+        for k, v in rows
+    )
+    return (
+        '<div class="frag" data-ui>'
+        '<div class="frag-head"><span class="frag-title">本次发布</span>'
+        '<span class="frag-sub">GitHub Release 附件</span></div>'
+        + inner
+        + '<p class="frag-note">全部字段由 GitHub API 读取，与下载直链同源</p>'
+        "</div>"
+    )
+
+
+def _ui_fragment_segments() -> str:
+    """界面碎片：一次下载的分片视图（引擎真实在做的事）。
+
+    用在「开发者」页与文档页：与其说"支持多线程"，不如把分片、工作窃取、
+    收尾阶段摆出来 —— 每根柱子的推进由 site.js 按固定序列推，不是随机装饰。
+    """
+    widths = [7, 3, 5, 4, 9, 2, 6, 3, 8, 5, 4, 6, 2, 7, 5, 3]
+    total = sum(widths)
+    bars = "".join(
+        f'<i class="{"done" if i < 9 else ""}" style="width:{w / total * 100:.3f}%"></i>'
+        for i, w in enumerate(widths)
+    )
+    return (
+        '<div class="frag" data-ui>'
+        '<div class="frag-head"><span class="frag-title">分片视图</span>'
+        '<span class="frag-sub">16 片 · 9 片已完成</span></div>'
+        f'<div class="seg seg-in-frag">{bars}</div>'
+        '<p class="frag-note">块数约为连接数的四倍：慢连接不会独占最后剩下的那点工作</p>'
+        "</div>"
+    )
+
+
+def _ui_fragment_plugins_page() -> str:
+    """界面碎片：插件市场的分类与筛选（与 App 内市场页同一套 id 与中文名）。"""
+    cats = [("网盘解析", "4"), ("下载后端", "1"), ("其它", "2")]
+    inner = "".join(
+        f'<div class="frag-row{" sel" if i == 0 else ""}"><span class="name">{esc(n)}</span>'
+        f'<span class="val">{esc(c)} 个</span></div>'
+        for i, (n, c) in enumerate(cats)
+    )
+    return (
+        '<div class="frag" data-ui>'
+        '<div class="frag-head"><span class="frag-title">插件市场</span>'
+        '<span class="frag-sub">按分类筛选</span></div>'
+        + inner
+        + '<p class="frag-note">分类来自插件清单，不是客户端写死的</p>'
+        "</div>"
+    )
+
+
+def _ui_fragment_backup() -> str:
+    """界面碎片：凭据备份与恢复（口令派生密钥、AES-GCM 落盘）。
+
+    用在文档页：迁移与换机是读者真会遇到的事，把这几步摆出来比一句"支持备份"清楚。
+    """
+    rows = [
+        ("导出", "口令 → 密钥 → AES-GCM 加密"),
+        ("导入", "同一口令解密后逐条写回"),
+        ("密钥存储", "系统密钥库（Android Keystore）"),
+        ("是否联网", "不联网 —— 文件由你自己保管"),
+    ]
+    inner = "".join(
+        f'<div class="frag-row"><span class="name">{esc(k)}</span>'
+        f'<span class="val">{esc(v)}</span></div>'
+        for k, v in rows
+    )
+    return (
+        '<div class="frag" data-ui>'
+        '<div class="frag-head"><span class="frag-title">认证备份</span>'
+        '<span class="frag-sub">换机不必逐个重登</span></div>'
+        + inner
+        + '<p class="frag-note">口令不保存、不上传；忘了口令就只能重新登录</p>'
+        "</div>"
+    )
+
+
+#: 首页问答：问题 + 一段答案。真实答案写在文档里，这里给最短可用的那一段。
+HOME_FAQ = [
+    ("要登录才能用吗",
+     "夸克、UC、光鸭、蓝奏云的分享链接不登录也能解析与下载；其余网盘需要先登录。"
+     "登录只在你与网盘之间发生，应用不经手你的密码。"),
+    ("会把我粘的链接发出去吗",
+     "不会。解析在你的手机上直接请求网盘官方接口，应用自身没有中转服务器，"
+     "也没有任何埋点上报。首屏那个演示控件同样不联网。"),
+    ("支持哪些网盘",
+     "夸克、UC、迅雷、百度、123、139、115、光鸭、蓝奏云、蓝奏云优享版，共十个。"
+     "百度网盘可能触发风控，不建议使用。"),
+    ("插件是什么",
+     "把解析逻辑做成可更新的部件：网盘改接口时更新插件即可，不用等应用发版。"
+     "插件是跑在应用沙箱里的 JavaScript，只能通过宿主开放的接口访问网络与存储，"
+     "安装前会验签名。"),
+    ("为什么比浏览器下载快",
+     "浏览器单连接下载；云取把文件切成不等长的分片并发拉取，并能在暂停后按分片续传。"
+     "并发会自己收敛到这条链路的合适水平，不会因为线程数调太高反而变慢。"),
+]
+
+
+def _faq_block() -> str:
+    """问答：左列问题索引，右侧答案面板（窄屏由 JS 改为就地展开）。"""
+    qs = "".join(
+        f'<button class="faq-q" type="button" data-q="q{i}" aria-expanded="false">{esc(q)}</button>'
+        for i, (q, _a) in enumerate(HOME_FAQ)
+    )
+    answers = "".join(
+        f'<div class="faq-answer" data-a="q{i}"><p class="faq-a">{esc(a)}</p></div>'
+        for i, (_q, a) in enumerate(HOME_FAQ)
+    )
+    return (
+        '<div class="faq"><div class="faq-list rise">'
+        + qs
+        + '</div><div class="faq-panel rise">'
+        + answers
+        + "</div></div>"
+    )
 
 
 def _page_download(lang: str, href) -> str:
@@ -481,7 +777,15 @@ def _page_download(lang: str, href) -> str:
         f'<a href="{esc(LATEST["url"])}">GitHub Release</a>。</p>'
         f'<div class="version-bar"><span class="tag">{esc(LATEST["tag"])}</span>'
         f"<span>{esc(MIN_SDK)}</span><span>{esc(size)}</span>"
-        f"<span>内置 TurboDL {TURBODL_VERSION}</span></div></section>",
+        f"<span>内置 TurboDL {TURBODL_VERSION}</span></div>"
+        # 首屏的台账：把体积、哈希、SDK、引擎版本摆出来 —— 首屏有东西可读，
+        # 数字也各有着落（全部来自 releases.json）
+        + '<div class="split" style="margin-top:2rem">'
+        + _ui_fragment_release()
+        + '<div><h2 style="font-size:var(--t-head)">装上就能用</h2>'
+        '<p class="section-lead">覆盖安装即可升级；登录状态与下载任务都会保留。'
+        "应用未上架任何应用商店，安装时系统会提示「未知来源」，允许本次安装即可。</p>"
+        "</div></div></section>",
         section(
             "Android",
             table(["文件", "大小", "SHA-256（前 16 位）"], _apk_rows())
@@ -510,7 +814,7 @@ sha256sum {APK["name"] if APK else "YunGet-<version>-release.apk"}
         section(
             "其它平台",
             '<p class="lead">YunGet 目前只有 Android 构建。下面几个平台是规划中的目标 —— '
-            "**现在没有可下载的构建**，所以这里也不放下载按钮。</p>"
+            "<strong>现在没有可下载的构建</strong>，所以这里也不放下载按钮。</p>"
             '<div class="platforms">'
             '<div class="platform is-available"><div class="state">可下载</div>'
             "<h3>Android</h3>"
@@ -522,7 +826,21 @@ sha256sum {APK["name"] if APK else "YunGet-<version>-release.apk"}
             '<p class="small">同上；内核（TurboDL）本身是纯 JVM 的，平台工作主要在界面与系统集成</p></div>'
             '<div class="platform is-planned"><div class="state">规划中</div><h3>Linux</h3>'
             '<p class="small">同上</p></div>'
-            "</div>",
+            "</div>"
+            # 平台台账：每个平台各自的状态与理由（与上面几块卡是同源的另一视角）
+            + '<div class="rise" style="max-width:640px;margin-top:1.5rem">'
+            + ledger(
+                "各平台状态",
+                "只有 Android 有可下载的构建",
+                [
+                    ("Android", f"可下载 · 6.0+（API 23）· targetSdk {TARGET_SDK}"),
+                    ("Windows", "规划中 · 窗口、键鼠、文件选择器、托盘各是一摊事"),
+                    ("macOS", "规划中 · 内核是纯 JVM，工作主要在界面与系统集成"),
+                    ("Linux", "规划中 · 同上"),
+                ],
+                "没有构建的平台不放下载按钮 —— 点了没反应比没有按钮更糟",
+            )
+            + "</div>",
         ),
         section(
             "历史版本",
@@ -539,7 +857,35 @@ sha256sum {APK["name"] if APK else "YunGet-<version>-release.apk"}
                     for r in RELEASES[:12]
                 ],
             )
-            + '<p class="small">更新说明与应用内的「检查更新」读的是同一份数据。</p>',
+            + '<p class="small">更新说明与应用内的「检查更新」读的是同一份数据。</p>'
+            # 升级台账：覆盖安装之后哪些东西会保留（这是用户最关心的一件事实）
+            + '<div class="rise" style="max-width:640px;margin-top:1.5rem">'
+            + ledger(
+                "装之前确认这两条",
+                "来源与哈希",
+                [
+                    ("来源", "只从本页或 GitHub Release 取，不从第三方镜像取"),
+                    ("哈希", "sha256sum 与发布页附件的 SHA-256 比对"),
+                    ("签名", "APK 由项目自己的密钥签名；换签名会导致无法覆盖安装"),
+                    ("系统提示", "「未知来源」是正常的 —— 应用未上架任何应用商店"),
+                ],
+                "装不上先别报 bug：核对哈希与签名，再确认是不是同一个包",
+            )
+            + "</div>"
+            + '<div class="rise" style="max-width:680px;margin-top:1.25rem">'
+            + ledger(
+                "升级之后什么被保留",
+                "从 2.6.16 起都走同一条迁移链",
+                [
+                    ("覆盖安装", "支持 · 不需要先卸载"),
+                    ("登录状态", "保留 · 凭证库不重建"),
+                    ("下载任务", "保留 · 分片状态继续可用"),
+                    ("数据迁移", "随版本自带 · 迁移链逐级执行"),
+                    ("换机", "先用「认证备份」导出，再在新机导入"),
+                ],
+                "迁移链是逐级的：跨几个版本升级也走同一条链，不需要逐版升级",
+            )
+            + "</div>",
         ),
     ]
     return "".join(parts)
@@ -580,17 +926,62 @@ cd YunGet
 # 产物：app/build/outputs/apk/release/app-release.apk""",
                 "shell",
             )
+            # 凭据备份碎片：换机与迁移是读者真会遇到的事（这几步就是代码在做的事）
+            + '<div class="rise" style="margin-top:2rem;max-width:520px">'
+            + _ui_fragment_backup()
+            + "</div>"
         )
         + section(
             "全部文档",
-            cards(items, columns=2),
+            cards(items, columns=2)
+            # 文档台账：每篇既是官网一页、也是仓库里一个文件（左列是路径，右列是它讲什么）
+            + '<div class="rise" style="max-width:640px;margin-top:1.5rem">'
+            + ledger(
+                "官网每一页 = 仓库一个文件",
+                f"{len(DOC_PAGES)} 篇",
+                [
+                    (d["src"] or "（由代码生成）", d["title"])
+                    for d in DOC_PAGES
+                ],
+                "改仓库里的文件、重建站点，官网就跟着变 —— 两边不会各说各话",
+            )
+            + "</div>"
+            # 文档体系台账：哪几篇来自仓库文件、哪几篇由代码现场生成
+            + '<div class="rise" style="max-width:680px;margin-top:1.25rem">'
+            + ledger(
+                "文档从哪来",
+                "两类",
+                [
+                    ("仓库文件", f"{sum(1 for d in DOC_PAGES if d.get('src'))} 篇 · 与 GitHub 读同一份源"),
+                    ("由代码生成", f"{sum(1 for d in DOC_PAGES if not d.get('src'))} 篇 · 如清单字段参考"),
+                    ("原文入口", "每页都留了 raw 文件链接"),
+                    ("构建", "python website/build.py（纯标准库）"),
+                ],
+                "官网一份、GitHub 一份如果各写一遍，迟早会各说各话 —— 所以这里让两者同源",
+            )
+            + "</div>",
         )
         + section(
             "技术栈",
             '<p class="mono small">Kotlin · Jetpack Compose · Material 3 · Room · OkHttp · '
             f'<a href="{TURBODL_REPO}">TurboDL</a> · KSP</p>'
             "<p>下载引擎与 HLS 都由 TurboDL 提供，所以引擎的改进可以单独升级、也可以被别的应用复用。"
-            "应用自己负责的是网盘解析、文件浏览、任务管理与界面。</p>",
+            "应用自己负责的是网盘解析、文件浏览、任务管理与界面。</p>"
+            # 引擎台账：分片、并发、多引擎这几个值就是代码里的默认值
+            + '<div class="rise" style="max-width:640px;margin-top:1.5rem">'
+            + ledger(
+                "下载引擎",
+                f"内置 TurboDL {TURBODL_VERSION}",
+                [
+                    ("分片方式", "HTTP Range 分片并发 + 动态分块 + 工作窃取"),
+                    ("块与连接", "块数约为连接数的四倍"),
+                    ("断点续传", "分片状态落盘，按已写完的字节接着下"),
+                    ("收尾阶段", "空闲连接接手剩余部分，消除单线程长尾"),
+                    ("其它引擎", "可切换到 aria2 / Gopeed"),
+                ],
+                "引擎不认识任何协议；HLS 也是通过插件接进来的",
+            )
+            + "</div>",
         )
     )
 
@@ -624,10 +1015,12 @@ CATEGORY_LABELS = {
     "yung-support": "支持页",
 }
 
-#: 能力级别 → 展示名（P20）：JS 可热加载，原生必须重启，两者对用户的预期完全不同。
+#: 能力级别 → 展示名。Android 端现在只有 JS 一档（原生插件已停止支持，
+#: 见 docs 里的「能力级别」一节与 App 的 PluginLevel.kt）；这里保留 native 的
+#: 文案只为如实标注可能残留在旧索引里的条目，不是承诺它可用。
 LEVEL_LABELS = {
-    "js": "L1 · JS 插件",
-    "native": "L2 · 原生插件",
+    "js": "JS 插件",
+    "native": "原生插件（已停止支持）",
 }
 
 
@@ -832,7 +1225,9 @@ def _page_plugins(lang: str, href) -> str:
                     ("任务结束后收尾", "<p>结束后钩子：记日志、清理临时转存这类只观察的事。</p>"),
                 ],
                 columns=3,
-            ),
+            )
+            # 分片碎片：说明白"脚本不在数据路径上"——分片与字节面都在 Kotlin 一侧
+            + '<div class="rise" style="max-width:520px">' + _ui_fragment_segments() + "</div>",
         )
         + section(
             "官方插件源",
@@ -841,6 +1236,21 @@ def _page_plugins(lang: str, href) -> str:
             "App 拉的是它根目录下的 <span class=\"mono\">plugins.json</span>。"
             f"本页的条目直接从那份索引里读出来渲染，{esc(count_text)}</p>"
             + _plugin_source_facts()
+            + '<div class="rise" style="max-width:680px;margin-top:1.25rem">'
+            + ledger(
+                "这个源里有什么",
+                "plugins.json",
+                [
+                    ("源身份", (PLUGIN_INDEX or {}).get("source", {}).get("name") or "云取官方插件源"),
+                    ("信任等级", (PLUGIN_INDEX or {}).get("source", {}).get("trustLevel") or "official"),
+                    ("插件数", f"{len((PLUGIN_INDEX or {}).get('plugins') or [])} 个"),
+                    ("索引生成时间", ((PLUGIN_INDEX or {}).get("generatedAt") or "—")[:10]),
+                    ("索引地址", PLUGIN_INDEX_RAW),
+                    ("公钥", "随应用内置（判定 official 的两个条件之一）"),
+                ],
+                "本节的所有数字都是从那份索引文件里读的，不是手抄的",
+            )
+            + "</div>"
             + _plugin_list(),
         )
         + section(
@@ -874,51 +1284,94 @@ def _page_plugins(lang: str, href) -> str:
             ),
         )
         + section(
-            "能力级别：L1 与 L2",
-            "<p>除了「可不可信」，插件还有<strong>能力级别</strong>这一维。它回答的是"
-            "「这东西能碰到多大范围的能力」以及「<strong>改了要不要重启 App</strong>」—— "
-            "这两件事与信任等级无关：L1 插件可能是官方签名的，L2 插件也可能来自你信任的源。</p>"
+            "能力级别：Android 上只有一档",
+            "<p>插件还有<strong>能力级别</strong>这一维。它回答的是「这东西能碰到多大范围的能力」"
+            "以及「<strong>改了要不要重启 App</strong>」。云取曾经规划过两档："
+            "沙箱里的 JS（L1）与宿主进程内的原生代码（L2）。"
+            "<strong>Android 端现在只保留 JS 一档</strong>——原生插件以后只在 PC 端做。</p>"
             + table(
                 ["级别", "运行位置", "能做什么", "生效时机"],
                 [
                     [
-                        '<strong>L1 · JS 插件</strong><br><span class="mono small">level: "js"</span>',
+                        '<strong>JS 插件</strong><br><span class="mono small">level: "js"</span>',
                         "应用内的 JS 沙箱，进程内",
                         "网盘登录 / 解析 / 取直链、网页与 API 调用、规则与轻逻辑",
                         "可热加载，<strong>装上或更新后立即生效</strong>",
                     ],
                     [
-                        '<strong>L2 · 原生插件</strong><br><span class="mono small">level: "native"</span>',
+                        "<strong>原生插件（已停止支持）</strong>"
+                        '<br><span class="mono small">level: "native"</span>',
                         "宿主进程内，Kotlin/JVM 原生代码",
-                        "接入其他下载器的插件生态（Adapter）、新的下载后端、文件 Handler（播放器）、系统级集成",
-                        "<strong>不能热加载，必须重启 App</strong>",
+                        "曾经用来承载新的下载后端、Adapter 与文件 Handler",
+                        "<strong>Android 端不再支持</strong>：条目会被拒绝，并说明原因",
                     ],
                 ],
             )
             + note(
-                "<strong>L2 不能热加载是结构性的，不是偷懒。</strong>"
-                "原生插件注册进来的类在进程生命周期内无法替换（类加载器换不掉已加载的类），"
-                "它还可能持有播放器、硬件解码器、原生库句柄这类不可逆的系统资源，"
-                "而且它跑在宿主进程内、没有沙箱。L1 之所以能热加载，恰恰因为它在沙箱里："
-                "所有能力都要过宿主的权限门，运行时可以整体重建。",
-            )
-            + note(
-                "<strong>L2 的能力与宿主等同。</strong>它声明的能力只作展示，不是限制 —— "
-                "装一个 L2 插件，等同于允许那段原生代码在你的设备上以应用的权限执行。"
-                "我们把这一点写在安装确认里而不是藏起来：写轻了（暗示有沙箱）是误导，"
-                "写重了（说成「危险」）会让这类插件没人敢用。"
-                "是否可信仍然由签名与信任链决定，而不是由这个级别决定。",
+                "<strong>为什么 Android 上撤下原生插件：</strong>"
+                "Android 10 起系统禁止加载应用可写目录里的 dex（换到缓存目录也一样被拒），"
+                "限制一代比一代严；而且首批四个原生网盘插件实际上只是把工作转回宿主既有实现，"
+                "<strong>从没提供过宿主做不到的能力</strong>。与其留着一个装不上、"
+                "或装上也不多给任何东西的档位，不如把这一档从应用里整个拿掉。",
                 "warn",
             )
-            + "<p>索引里没写 <span class=\"mono\">level</span> 的存量条目一律按 L1 读；"
-            "写了当前应用不认识的值时，那条<strong>不会被安装</strong>，"
-            "并会在市场页显示「未显示」的原因（通常是提示升级应用）。</p>",
+            + "<p>索引里没写 <span class=\"mono\">level</span> 的存量条目一律按 JS 读；"
+            "条目写着 <span class=\"mono\">native</span> 时，应用会<strong>拒绝安装它</strong>，"
+            "并给出「Android 版已不再支持原生插件」这句明确说明 —— "
+            "而不是含糊地提示去升级应用。</p>",
         )
         + section(
             "信任等级：四级都能装，差别在提醒",
             "<p>等级说的是「这个源 / 这个插件的<strong>身份</strong>可信到什么程度」，"
             "四级<strong>都能装</strong>，差别在界面上怎么显示、低等级时有没有醒目提示。</p>"
             + _trust_table()
+            # 等级台账（同一份事实表的另一视角：左列是等级、右列是它的判据）
+            + '<div class="rise" style="max-width:680px;margin-top:1.5rem">'
+            + ledger(
+                "四级各自的判据",
+                "越往下越依赖你自己判断",
+                [
+                    (f"{name}（{code}）", why)
+                    for code, name, why, _ui in TRUST_LEVELS
+                ],
+                "官方 = 源是官方 且 公钥随应用内置；其余等级只有签名，发布者身份靠源自己声明",
+            )
+            + "</div>"
+            # 市场碎片：分类与筛选（与 App 内市场页同一套 id）
+            + '<div class="rise" style="max-width:520px;margin-top:1.25rem">'
+            + _ui_fragment_plugins_page()
+            + "</div>"
+            # 清单台账：写插件要填的那几个字段（与开发者页的最小示例同一份事实）
+            + '<div class="rise" style="max-width:680px;margin-top:1.25rem">'
+            + ledger(
+                "一份插件清单要填什么",
+                "turbodl-plugin.json",
+                [
+                    ("id", "唯一标识，如 parser.example"),
+                    ("name / version", "显示名与版本（semver，升版本才能推更新）"),
+                    ("category", "turbodl-parser / turbodl-hook / turbodl-loader …"),
+                    ("capabilities", "声明要用到的能力（用户会在安装前看到）"),
+                    ("protocols", "认哪些 scheme / 域名"),
+                    ("entry", "脚本入口（本地文件或 inline）"),
+                ],
+                "实际授予 = 声明 ∩ 加载器上限 ∩ 用户已确认 —— 没有任何 API 能改它",
+            )
+            + "</div>"
+            # 第四块：哪些是插件、哪些是内置（这一条最容易被搞混）
+            + '<div class="rise" style="max-width:680px;margin-top:1.25rem">'
+            + ledger(
+                "哪些是插件、哪些是内置",
+                "分界线",
+                [
+                    ("内置", "夸克 / UC / 迅雷 / 百度 / 139 / 123 / 115 / 光鸭 / 蓝奏云的解析"),
+                    ("内置", "分片下载（TurboDL 引擎）· 任务管理 · 界面"),
+                    ("插件", "其余站点与网盘：装一个，认一种链接"),
+                    ("插件", "额外的钩子 / 别的语言写的插件"),
+                    ("不可能是插件", "下载数据流与字节面（留在 Kotlin 一侧）"),
+                ],
+                "所以「网盘接口变了要等应用更新」这件事，对内置的那几个成立、对插件不成立",
+            )
+            + "</div>"
             + "<p>两条不肯让步的规则：</p>"
             "<ul>"
             "<li><strong>内置公钥只认官方源。</strong>判定 <span class=\"mono\">official</span> "
@@ -1054,9 +1507,59 @@ def _page_developers(lang: str, href) -> str:
             + note(
                 "声明了 <span class=\"mono\">http</span> 就意味着它能上网、能把你的链接发出去。"
                 "用户装之前会看到这份权限清单 —— 所以<strong>只声明真正用到的能力</strong>。",
-            ),
+            )
+            # 边界台账：把上面三张卡讲的事压成一张表（左列"能/不能"，右列具体项）
+            + '<div class="rise" style="max-width:680px;margin-top:1.5rem">'
+            + ledger(
+                "这套 ABI 的边界",
+                "脚本侧",
+                [
+                    ("能", "http 请求 · 摘要与 HMAC · base64/hex · 自己的小存储 · 日志 · 定时器"),
+                    ("能", "注册解析器 / pre-hook / post-hook，并订阅引擎事件"),
+                    ("不能", "接触下载数据流（无流式 API、无 body 句柄、无分块回调）"),
+                    ("不能", "注册下载后端 —— 返回 unsupported"),
+                    ("不能", "运行时给自己加权限：实际授予 = 声明 ∩ 加载器上限 ∩ 用户确认"),
+                    ("沙箱", "每个脚本一个 QuickJS runtime 与 context"),
+                ],
+                "这条边界的理由：脚本若站在数据路径上，一个写得不好的插件就是整条链路的瓶颈",
+            )
+            + "</div>"
+            # 签名台账：签名能证明什么、不能证明什么（常被误解的一处）
+            + '<div class="rise" style="max-width:680px;margin-top:1.25rem">'
+            + ledger(
+                "签名能证明什么",
+                "以及不能证明什么",
+                [
+                    ("能证明", "脚本字节与某个密钥持有者发布的一致（sha256 + 签名）"),
+                    ("能证明", "内容被改过一个字节，校验就失败并拒绝安装"),
+                    ("不能证明", "作者是好人、脚本没有恶意行为、没有 bug"),
+                    ("不能证明", "声明的权限是「必要的」而不是「能拿就拿」"),
+                    ("覆盖范围", "只覆盖脚本原始字节，不覆盖它对网络的后续行为"),
+                ],
+                "所以等级只影响提示强度，不影响校验 —— 四级都要验签名",
+            )
+            + "</div>",
         )
         + section("四份文档", cards(docs_items, columns=2))
+        # 扩展点台账：四类插件各自挂在哪（与清单的 category 一一对应）
+        + section(
+            "四类扩展点",
+            "<p>清单里填的 <span class=\"mono\">category</span> 决定插件能挂到哪里。"
+            "四类之间不通用：解析器改不了请求头，钩子也认不了链接。</p>"
+            + '<div class="rise" style="max-width:680px">'
+            + ledger(
+                "挂载点",
+                "四类",
+                [
+                    ("turbodl-parser", "认链接 → 一条或多条下载请求"),
+                    ("turbodl-hook", "提交前改写请求 / 任务结束后收尾"),
+                    ("turbodl-backend", "不支持 —— 字节面留在 Kotlin 一侧"),
+                    ("turbodl-loader", "加载别的语言写的插件（JS 加载器属于这一类）"),
+                ],
+                "分类来自清单字段，不是客户端写死的",
+            )
+            + "</div>",
+        )
         + section(
             "最小示例插件",
             "<p>这个插件认 <span class=\"mono\">demo://</span> 链接，把它变成一条可下载的 https 请求。"
@@ -1120,6 +1623,25 @@ python tools/sign_plugin.py index --key keys/my-id-2026.key --key-id my-id-2026"
             f'<p><a href="{TURBODL_SITE}">TurboDL</a> 是下载引擎（纯 Kotlin/JVM），'
             "插件框架与 ABI 由它提供 —— 所以引擎的改进可以单独升级，也可以被别的应用复用。"
             "ABI 的完整清单在本站就有：<a href=\"" + href("doc-plugin-api") + "\">插件 ABI 参考</a>。</p>"
+            # 分片碎片：讲 ABI 的那一节里最该看到的是"字节面不在脚本里"
+            + '<div class="rise" style="max-width:520px;margin-top:1.5rem">'
+            + _ui_fragment_segments()
+            + "</div>"
+            # 发布链路台账：从写脚本到用户装到，中间每一环都是真的
+            + '<div class="rise" style="max-width:680px;margin-top:1.25rem">'
+            + ledger(
+                "从脚本到用户手里",
+                "这条链上每一步都能核对",
+                [
+                    ("写", "一个 .js 文件 + turbodl-plugin.json + market.json"),
+                    ("签名", "签名工具在 YunGet-Plugins 仓库里"),
+                    ("发布", "往官方源仓库提 PR（也可以自建源）"),
+                    ("更新", "改脚本必须同时升版本号，否则用户收不到更新"),
+                    ("安装", "App 里加源 → 看权限 → 确认 → 下载 → 启用"),
+                ],
+                "同一版本但字节变了会被索引直接拒绝 —— 已发布版本的字节不可改写",
+            )
+            + "</div>"
             + buttons(
                 [
                     ("YunGet-Plugins", PLUGINS_REPO),
@@ -1150,6 +1672,62 @@ def _page_legal(lang: str, href) -> str:
         '<p class="lead">四份不长的文档，回答"用了它之后，我的数据和权利是什么状态"：'
         "凭证存在哪、会发给谁、出了事谁负责、以及 AGPL-3.0 对本项目和二次分发意味着什么。</p></section>"
         + section("这四份", cards(items, columns=2))
+        # 协议台账：哪份文件管什么（左列路径、右列问题）
+        + section(
+            "每一份管什么",
+            "<p>四份文件、四个问题。如果两份看着有重叠，仓库路径能告诉你哪一份是准的。</p>"
+            + '<div class="rise" style="max-width:680px">'
+            + ledger(
+                "docs/ 与仓库根目录",
+                "四份",
+                [(d["src"] or "—", d["title"]) for d in DOC_PAGES if d["key"].startswith("legal-")],
+                "这些页面就是从那些文件渲染的：改文件即改页面",
+            )
+            + "</div>"
+            # 数据去向台账：读者最想知道的四件事（与隐私文档同源）
+            + '<div class="rise" style="max-width:680px;margin-top:1.25rem">'
+            + ledger(
+                "数据去向",
+                "一句话各一条",
+                [
+                    ("登录凭据", "加密存本机（Android Keystore），不上传任何服务器"),
+                    ("解析与下载", "链接由本机解析、直链由本机请求，没有中转服务器"),
+                    ("日志", "只在本机；导出由你自己发起"),
+                    ("认证备份", "由你自己保管的文件；口令不保存、不上传"),
+                ],
+                "本项目没有服务器 —— 没有「我们的服务器」可以收集你的东西",
+            )
+            + "</div>"
+            # 第三块：AGPL-3.0 对本项目与二次分发意味着什么
+            + '<div class="rise" style="max-width:680px;margin-top:1.25rem">'
+            + ledger(
+                "AGPL-3.0 意味着什么",
+                "本项目",
+                [
+                    ("自用", "随便用，不需要公开任何东西"),
+                    ("分发修改版", "要按同一协议提供源码"),
+                    ("通过网络提供服务", "也要提供源码（AGPL 与 GPL 的区别在这里）"),
+                    ("上游来源", "本应用取自上游 YunX（CYQawa），协议一脉相承"),
+                    ("第三方组件", "各自协议见「第三方组件」那一份"),
+                ],
+                "这条协议管的是代码，不管你的下载内容 —— 那是另一回事",
+            )
+            + "</div>"
+            # 第四块：日志里可能有什么（这一条最容易被忽略）
+            + '<div class="rise" style="max-width:680px;margin-top:1.25rem">'
+            + ledger(
+                "把日志贴出去之前",
+                "里面可能有这些",
+                [
+                    ("带签名的直链", "可能含有临时授权参数"),
+                    ("网盘域名与路径", "会暴露你在下哪个网盘的内容"),
+                    ("设备与系统信息", "机型、系统版本、应用版本"),
+                    ("出错堆栈", "可能含请求头（含 Cookie 的部分会被打码）"),
+                ],
+                "分享日志前先扫一遍；导出功能只是把文件交给你，不会自动上传",
+            )
+            + "</div>",
+        )
         + section(
             "为什么写得这么直白",
             "<p>因为不这样写就没人会读。这几页说的是代码真实在做的事，包括不方便的部分："
@@ -1159,12 +1737,27 @@ def _page_legal(lang: str, href) -> str:
     )
 
 
+def _excerpt(text: str) -> str:
+    """把 Release 说明的摘要转成一段能读的文本。
+
+    摘要是从 GitHub 的 Markdown 正文里截出来的，所以带着 `**强调**`、`` `代码` `` 与
+    行首的项目符号。这里是一段摘要而不是清单，所以：强调保留成粗体、代码标记去掉、
+    项目符号去掉；截断处可能留下**半个**标记，最后统一清掉 —— 不然页面上会露出 `**`。
+    """
+    if not text:
+        return ""
+    out = re.sub(r"\*\*(.+?)\*\*", r"<strong>\1</strong>", esc(text.strip()))
+    out = re.sub(r"`([^`]+)`", r"\1", out)
+    out = re.sub(r"(?m)^\s*[·•\-]\s*", "", out)
+    return out.replace("**", "").strip()
+
+
 def _page_changelog(lang: str, href) -> str:
     entries = []
     for r in RELEASES[:12]:
         badge = ' <span class="chip">pre</span>' if r["prerelease"] else ""
-        summary = (r["summary"] or "").strip()
-        body = f'<p class="muted">{esc(summary)}</p>' if summary else ""
+        summary = _excerpt(r["summary"] or "")
+        body = f'<p class="muted">{summary}</p>' if summary else ""
         entries.append(
             f'<div class="card"><h3><span class="mono">{esc(r["tag"])}</span>{badge}</h3>'
             f'<p class="small">{esc((r["published"] or "")[:10])} · {len(r["assets"])} 个附件</p>'
@@ -1174,6 +1767,68 @@ def _page_changelog(lang: str, href) -> str:
         "<section><h1>更新日志</h1>"
         '<p class="lead">由发布说明本身生成 —— 应用内的「检查更新」读的是同一份数据，'
         "所以两处看到的版本与内容永远一致。</p></section>"
+        # 发布台账：把"哪一版带多少附件、是不是预发布"先摊开，再往下才是逐条摘要
+        + section(
+            "发布台账",
+            '<p>每次发布、日期、附件数与预发布标记。这里没有一处是手写摘要 ——'
+            "与下载页渲染的是同一份数据。</p>"
+            + '<div class="rise" style="max-width:520px">'
+            + _ui_fragment_release()
+            + "</div>"
+            + '<div class="rows rise" style="margin-top:1.5rem">'
+            + "".join(
+                f'<div class="row"><span class="name mono">{esc(r["tag"])}'
+                + (' <span class="chip">pre</span>' if r["prerelease"] else "")
+                + f'</span><span class="val">{esc((r["published"] or "")[:10])} · '
+                + f'{len(r["assets"])} 个附件</span></div>'
+                for r in RELEASES[:12]
+            )
+            + "</div>"
+            # 台账的第二块：按附件数排一遍（一眼看出哪一版动了多少东西）
+            + '<div class="rise" style="max-width:680px;margin-top:1.5rem">'
+            + ledger(
+                "按体量排",
+                "附件数最多的六次",
+                [
+                    (
+                        f'{len(r["assets"])} 个附件',
+                        f'{r["tag"]} · {(r["published"] or "")[:10]}',
+                    )
+                    for r in sorted(RELEASES[:12], key=lambda x: -len(x["assets"]))[:6]
+                ],
+                "这里突然多出来，通常意味着构建里新加了一个产物",
+            )
+            + "</div>"
+            # 第三块：更新怎么到达设备（应用内检查更新的机制）
+            + '<div class="rise" style="max-width:680px;margin-top:1.25rem">'
+            + ledger(
+                "更新怎么到达设备",
+                "应用内「检查更新」",
+                [
+                    ("数据来源", "GitHub Release（与本页同一份）"),
+                    ("判据", "semver 比大小，不看发布时间"),
+                    ("提醒方式", "应用内提示 + 变更说明"),
+                    ("下载", "同样从 Release 附件取，可核对 SHA-256"),
+                    ("升级", "覆盖安装，登录状态与下载任务保留"),
+                ],
+                "改脚本不升版本号的话，用户永远收不到更新 —— 判据是版本号",
+            )
+            + "</div>"
+            # 第四块：版本号怎么读（pre 标记与「字节不可改写」这两条最容易被误解）
+            + '<div class="rise" style="max-width:680px;margin-top:1.25rem">'
+            + ledger(
+                "版本号怎么读",
+                "semver",
+                [
+                    ("正式版", "修 bug、加功能都会升这个号"),
+                    ("pre 标记", "预发布：功能可能还在改，装之前想清楚"),
+                    ("判据", "应用内「检查更新」按版本号比大小，不看发布时间"),
+                    ("不可改写", "同一版本的字节变了会被索引拒绝"),
+                ],
+                "改了东西就必须升版本号 —— 这是本项目的硬规则，不是建议",
+            )
+            + "</div>",
+        )
         + f'<section><div class="cards cols-2">{"".join(entries)}</div></section>'
         + section("完整历史", buttons([("全部发布", f"{REPO}/releases"), ("代码提交", f"{REPO}/commits/main")]))
     )
@@ -1346,6 +2001,10 @@ SITE = {
             "theme": "切换深色 / 浅色主题",
             "notfound_title": "页面不存在",
             "notfound_body": "这个地址在本站不存在。全部内容就在下面这几处：",
+            # 重构新增：页脚图片来源的署名标题与收尾瓦片的召唤语。
+            # 署名必须上页面（技能要求每张外来的真实图片都在页面上署名）。
+            "credits": "图片来源",
+            "foot_cta": "下载云取，把链接变成文件",
         }
     },
     "footer": {

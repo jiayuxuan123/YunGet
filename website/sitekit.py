@@ -85,6 +85,17 @@ def _plain(fragment: str) -> str:
     return html.unescape(text).strip()
 
 
+def md_inline(text: object) -> str:
+    """把事实文本里的 `**强调**` 渲染成 <strong>。
+
+    事实表（支持平台、能力清单）当初是按 Markdown 写的，直接拼 HTML 的地方如果不转换，
+    页面上就会露出字面的 `**不推荐**`。只认这一种标记，并且**先转义再替换**，
+    所以内容里的 `<` 依然是安全的。
+    """
+    out = re.sub(r"\*\*(.+?)\*\*", r"<strong>\1</strong>", esc(text))
+    return out.replace("**", "")  # 截断过的文案可能留下孤立的半个标记
+
+
 def cards(items: list[tuple[str, str]], columns: int = 3) -> str:
     """卡片网格：`(标题, 正文HTML)`。"""
     inner = "".join(
@@ -102,7 +113,10 @@ def buttons(items: list[tuple[str, str]], kind: str = "") -> str:
 
 def section(title: str, body: str, anchor: str = "") -> str:
     aid = f' id="{anchor}"' if anchor else ""
-    return f"<section{aid}>{seg_rule()}<h2>{title}</h2>{body}</section>"
+    # class="section" 负责章节间距（clamp 后的 56–108px 双侧留白）。
+    # 没有它时区块彼此贴住：门禁会把上一节尾部的说明读成下一节标题上的
+    # "眉标"（小字标签）并判 FAIL —— 间距在这里是功能，不只是观感。
+    return f'<section{aid} class="section">{seg_rule()}<h2>{title}</h2>{body}</section>'
 
 
 def seg_rule(segments: list[tuple[int, bool]] | None = None) -> str:

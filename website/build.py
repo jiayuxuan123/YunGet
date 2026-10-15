@@ -85,6 +85,10 @@ class Site:
         self.out = repo_root / cfg.get("out_dir", "docs")
         self.pages: list[dict] = cfg["pages"]
         self.assets_dir: Path = repo_root / cfg["assets_dir"]
+        # 图片来源署名：由 assets/credits.json（下载图片时自动记录）生成，
+        # **不手写** —— 手写的署名迟早与真实来源脱节，而技能要求每张外来的
+        # 真实图片都在页面上署名。没有这个文件（还没下载过图片）时为空串。
+        self.foot_credits: str = self._build_credits()
         # `dir` 由 `path` 推导，避免手写两处导致相对链接算错
         for p in self.pages:
             p.setdefault("lang", cfg["default_lang"])
@@ -97,6 +101,31 @@ class Site:
             self.index.setdefault(p["key"], {})[p["lang"]] = p["path"]
 
     # ---- 文案 ----
+
+    def _build_credits(self) -> str:
+        """把 assets/credits.json 里的图片来源拼成一行页脚署名。
+
+        格式：`标题（作者，许可，via 来源）` —— 技能要求署名可核查：
+        标题、作者、许可、来源四样齐全，点标题回到原始页面。
+        """
+        path = self.assets_dir / "credits.json"
+        if not path.exists():
+            return ""
+        try:
+            items = json.loads(path.read_text(encoding="utf-8"))
+        except Exception:
+            return ""
+        parts = []
+        for it in items if isinstance(items, list) else []:
+            title = esc(it.get("title") or it.get("file") or "图片")
+            page = it.get("page") or it.get("image") or ""
+            creator = esc(it.get("creator") or "")
+            lic = esc(it.get("license") or "")
+            via = esc(it.get("via") or "")
+            link = f'<a href="{esc(page)}">{title}</a>' if page else title
+            meta = "，".join(x for x in (creator, lic, f"via {via}" if via else "") if x)
+            parts.append(f"{link}（{meta}）" if meta else link)
+        return "；".join(parts)
 
     def ui(self, lang: str, key: str) -> str:
         """取该语言的界面文案（缺该语言时回退默认语言）。"""
@@ -159,9 +188,9 @@ class Site:
 <link rel="icon" href="{rel(page["dir"], "assets/favicon.svg")}" type="image/svg+xml">
 <link rel="apple-touch-icon" href="{rel(page["dir"], "assets/apple-touch-icon.png")}">
 <!-- 主题：在样式表之前定下 data-theme，避免深色偏好下闪一帧白 -->
-<script>try{{var t=localStorage.getItem("theme");if(t)document.documentElement.setAttribute("data-theme",t)}}catch(e){{}}</script>
-<!-- Pico（classless，MIT）在前，site.css 在后：我们的规则覆盖它 -->
-<link rel="stylesheet" href="{rel(page["dir"], "assets/pico.min.css")}">
+<script>document.documentElement.className+=" js";try{{var t=localStorage.getItem("theme");if(t)document.documentElement.setAttribute("data-theme",t)}}catch(e){{}}setTimeout(function(){{if(!window.__motionReady){{var n=document.querySelectorAll(".rise");for(var i=0;i<n.length;i++)n[i].classList.add("in")}}}},2500);</script>
+<!-- 单一样式表：上一版依赖 Pico（classless）再逐条覆盖，重构后全部规则都在 site.css 里，
+     少一层第三方样式与 5 条兼容 hack（见 site.css 头部注释） -->
 <link rel="stylesheet" href="{rel(page["dir"], "assets/site.css")}">
 </head>
 <body class="{esc(cfg.get('body_class', ''))}">
@@ -169,17 +198,22 @@ class Site:
 """
 
     def header(self, page: dict) -> str:
+        """顶栏：词标 + 几个纯文本链接 + 语言切换。
+
+        重构后从"左侧固定侧栏"改为顶部一行（方向单要求：没有 bar chrome、
+        没有玻璃模糊、没有阴影，就是词标与几个链接）。窄屏由 .nav-toggle 展开。
+        """
         cfg = self.cfg
         lang = page["lang"]
         brand_href = rel(page["dir"], self.index["home"].get(lang) or self.index["home"][cfg["default_lang"]])
         nav_items = []
         for key, _labels in cfg["nav"]:
             href = self.href(page, key)
-            active = ' class="active" aria-current="page"' if page["key"] == key else ""
+            active = ' aria-current="page"' if page["key"] == key else ""
             nav_items.append(f'<a href="{href}"{active}>{esc(self.label((key, _labels), lang))}</a>')
         nav = "".join(nav_items)
 
-        # 语言切换：同一 page key 在另一个语言下的地址
+        # 语言切换：同一 page key 在另一个语言下的地址；目标语言没有该页时退回其首页（不做死链）
         switcher = ""
         langs = cfg.get("langs") or []
         if len(langs) > 1:
@@ -190,50 +224,30 @@ class Site:
                 else:
                     target = self.index.get(page["key"], {}).get(code)
                     if target is None:
-                        # 该页在目标语言不存在：退回目标语言的首页，不做死链
                         target = self.index["home"].get(code)
                     links.append(f'<a href="{rel(page["dir"], target)}">{esc(self.label((code, _lab), lang))}</a>')
             switcher = '<div class="langs">' + "".join(links) + "</div>"
 
-        # 主题切换与语言切换都放进 .head-tools，作为**一组**工具贴在导航右侧。
-        # 上一版把它单独留在 nav 外面靠 margin-left:auto 挤过去，看起来像飘在角落、
-        # 不属于任何一组 —— 这是布局上的错位，不是样式问题。
-        tools = (
-            '<div class="head-tools">'
-            + switcher
-            + f'<button class="theme-toggle" type="button" aria-label="{esc(self.ui(lang, "theme"))}" title="{esc(self.ui(lang, "theme"))}">'
-            '<svg class="icon-sun" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M4.9 4.9l1.4 1.4M17.7 17.7l1.4 1.4M2 12h2M20 12h2M4.9 19.1l1.4-1.4M17.7 6.3l1.4-1.4"/></svg>'
-            '<svg class="icon-moon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M21 12.8A9 9 0 1 1 11.2 3a7 7 0 0 0 9.8 9.8z"/></svg>'
-            "</button></div>"
-        )
-        # 结构：**左侧固定侧栏 + 主画布**，不是顶部导航条。
-        # 这样在长文档页上导航始终可见（顶栏那种做法滚下去就没了），
-        # 而且把"站点身份 + 导航 + 语言/主题"收进一栏，主画布只放内容。
-        tools = (
-            '<div class="side-tools">'
-            + switcher
-            + f'<button class="theme-toggle" type="button" aria-label="{esc(self.ui(lang, "theme"))}" title="{esc(self.ui(lang, "theme"))}">'
-            '<svg class="icon-sun" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M4.9 4.9l1.4 1.4M17.7 17.7l1.4 1.4M2 12h2M20 12h2M4.9 19.1l1.4-1.4M17.7 6.3l1.4-1.4"/></svg>'
-            '<svg class="icon-moon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M21 12.8A9 9 0 1 1 11.2 3a7 7 0 0 0 9.8 9.8z"/></svg>'
-            "</button></div>"
-        )
-        return f"""<div class="app">
-<aside class="side" id="site-nav">
-<div class="side-top">
+        return f"""<header class="top">
+<div class="wrap top-in">
 <a class="brand" href="{brand_href}"><span class="brand-mark">{cfg['mark_svg']}</span><span class="brand-name">{esc(cfg['name'])}</span></a>
-<button class="nav-toggle" aria-expanded="false" aria-controls="site-nav">{esc(self.ui(lang, "menu"))}</button>
+<button class="nav-toggle" type="button" aria-expanded="false" aria-controls="top-nav">{esc(self.ui(lang, "menu"))}</button>
+<nav class="top-nav" id="top-nav">{nav}</nav>
+{switcher}
 </div>
-<nav class="side-nav">{nav}</nav>
-{tools}
-</aside>
-<main id="main" class="canvas">
+</header>
+<main id="main">
 """
 
     def footer(self, page: dict) -> str:
-        """页脚。链接以 `@` 开头表示"站内页面 key"，渲染时才解析成相对路径。
+        """页脚：瓦片式（方向单 A footer of tiles）。
 
-        页脚出现在每一种深度的页面上（`/`、`/legal/privacy/`……），写死的相对路径
-        只会在其中一层对；所以站内链接走 key 解析，站外链接（GitHub 等）照原样输出。
+        布局：词标大瓦片占满一行 → 导航/元信息/图片来源三片 → 强调色收尾瓦片。
+        链接以 `@` 开头表示"站内页面 key"，渲染时才解析成相对路径 —— 页脚出现在
+        `/` 与 `/legal/privacy/` 两种深度下，写死相对路径只会在其中一层对。
+
+        图片致谢放在页脚而不是藏在某页角落：技能要求每一张外来的真实图片
+        都在页面上署名（`assets/credits.json` 是署名数据的唯一来源）。
         """
         cfg = self.cfg
         lang = page["lang"]
@@ -244,15 +258,32 @@ class Site:
                 f'<li><a href="{self.href(page, h[1:]) if h.startswith("@") else h}">{esc(t)}</a></li>'
                 for t, h in links
             )
-            cols.append(f'<div class="foot-col"><h4>{esc(title)}</h4><ul>{items}</ul></div>')
-        cols_html = "".join(cols)
+            cols.append(f'<div class="tile tile-nav"><h3>{esc(title)}</h3><ul>{items}</ul></div>')
+
+        # 导航只保留第一列（技能：页脚是设计过的收尾，不是站点地图）
+        nav_tile = cols[0] if cols else ""
         paras = "".join(f"<p>{p}</p>" for p in cols_cfg["paragraphs"])
+        meta_tile = f'<div class="tile tile-meta">{paras}</div>'
+
+        # 图片来源：只在有真实图片署名时出现
+        credits = getattr(self, "foot_credits", "")
+        credits_tile = (
+            f'<div class="tile tile-credits"><h3>{esc(self.ui(lang, "credits"))}</h3><p>{credits}</p></div>'
+            if credits else ""
+        )
+
+        dl_href = self.href(page, "download")
         return f"""</main>
-</div>
 <footer class="site-foot">
-<div class="wrap">
-<div class="foot-cols">{cols_html}</div>
-<div class="foot-note">{paras}</div>
+<div class="foot-grid">
+<div class="tile tile-wordmark"><span>{esc(cfg['name'])}</span></div>
+{nav_tile}
+{meta_tile}
+{credits_tile}
+<div class="tile tile-cta">
+<a href="{dl_href}"><strong>{esc(self.ui(lang, "foot_cta"))}</strong>
+<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 4v16M5 13l7 7 7-7"/></svg></a>
+</div>
 </div>
 </footer>
 <script src="{rel(page["dir"], "assets/site.js")}" defer></script>

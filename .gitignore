@@ -35,3 +35,10 @@ __pycache__/
 
 # Kotlin 编译期错误日志（构建产物，不入库）
 .kotlin/
+
+# 网站构建产物与本地产物
+website/__pycache__/
+__pycache__/
+*.pyc
+# taste-skill 的测量产物（截图与 report.json）；方向单与设计笔记要留
+.taste-skill/inspect*/
