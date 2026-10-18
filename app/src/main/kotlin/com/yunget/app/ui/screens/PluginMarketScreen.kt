@@ -349,29 +349,19 @@ fun PluginMarketScreen(onBack: () -> Unit, modifier: Modifier = Modifier) {
                     index = target.index,
                 ).fold(
                     onSuccess = { row ->
-                        // L1（JS）：装完立刻加载，否则会看到"已安装"但脚本没跑起来，那比不装更让人困惑。
-                        // L2（原生）恰恰相反 —— **不能**即时 load：类无法热替换（P16 硬约束），
-                        // 真正参与业务要等进程重启；调用 load 只会制造"看起来生效了"的假象，
-                        // 重启后状态又对不上。所以这里明确分流，并把"重启生效"说出口。
-                        if (target.plugin.level == PluginLevel.NATIVE) {
-                            pendingInstall = null
-                            detail = null
-                            SnackbarController.show(
-                                "已安装「${target.plugin.name}」v${target.version.version}（原生插件）：" +
-                                    "重启 App 后生效"
-                            )
-                        } else {
-                            val error = runtime.load(row.id)
-                            pendingInstall = null
-                            detail = null
-                            SnackbarController.show(
-                                if (error == null) {
-                                    "已安装「${target.plugin.name}」v${target.version.version}"
-                                } else {
-                                    "已安装「${target.plugin.name}」，但加载失败：$error"
-                                }
-                            )
-                        }
+                        // 装完立刻加载：否则会看到"已安装"但脚本没跑起来，那比不装更让人困惑。
+                        // （原先这里按级别分流，原生插件的变更**不能**即时 load。Android 只剩 JS
+                        // 插件后那条分支不存在了 —— 所有插件都是"装完即可加载"。）
+                        val error = runtime.load(row.id)
+                        pendingInstall = null
+                        detail = null
+                        SnackbarController.show(
+                            if (error == null) {
+                                "已安装「${target.plugin.name}」v${target.version.version}"
+                            } else {
+                                "已安装「${target.plugin.name}」，但加载失败：$error"
+                            }
+                        )
                     },
                     onFailure = { t ->
                         SnackbarController.show("安装失败：${t.message ?: t.javaClass.simpleName}")
@@ -1289,17 +1279,6 @@ private fun MarketPluginRow(
                 MarketTrustBadge(trustLevel)
             }
 
-            // 级别徽标（P20）。原生插件放在市场列表里**必须**一眼能认出：
-            // 它的能力与宿主等同，装它是一次比装 JS 插件重得多的决定。
-            if (plugin.level.requiresRestart) {
-                Spacer(Modifier.height(6.dp))
-                Text(
-                    text = plugin.level.title + " · " + plugin.level.hotLoadNote(),
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.tertiary
-                )
-            }
-
             if (plugin.summary.isNotBlank()) {
                 Spacer(Modifier.height(6.dp))
                 Text(
@@ -1690,27 +1669,22 @@ private fun InstallConfirmDialog(
                     )
                 }
 
-                // 级别说明（P20）。放在信任说明之后、能力清单之前：
+                // 沙箱说明：放在信任说明之后、能力清单之前 ——
                 // 它决定"装上之后会发生什么"，紧跟着能力清单才读得下去。
+                //
+                // （这里原先是"级别说明"，按级别给两种措辞。Android 只剩 JS 插件后没有级别
+                // 可分，只留 JS 那一段 —— 原来 L2 那段"能力与宿主等同、没有沙箱"的文案不再适用。）
                 Spacer(Modifier.height(6.dp))
                 Text(
-                    text = target.plugin.level.capabilityNote(),
+                    text = PluginLevel.JS.capabilityNote(),
                     style = MaterialTheme.typography.bodySmall,
-                    color = if (target.plugin.level.requiresRestart) {
-                        MaterialTheme.colorScheme.tertiary
-                    } else {
-                        MaterialTheme.colorScheme.onSurfaceVariant
-                    }
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
                 Spacer(Modifier.height(4.dp))
                 Text(
-                    text = target.plugin.level.hotLoadNote(),
+                    text = PluginLevel.JS.hotLoadNote(),
                     style = MaterialTheme.typography.bodySmall,
-                    color = if (target.plugin.level.requiresRestart) {
-                        MaterialTheme.colorScheme.tertiary
-                    } else {
-                        MaterialTheme.colorScheme.onSurfaceVariant
-                    }
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
 
                 Spacer(Modifier.height(10.dp))

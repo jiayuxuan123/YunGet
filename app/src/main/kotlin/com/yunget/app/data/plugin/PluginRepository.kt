@@ -53,10 +53,13 @@ data class InstalledPlugin(
     val sourceKind: String get() = entity.sourceKind
 
     /**
-     * 能力级别（P20）。空串 = 升级前装的老数据，按 L1 读。
+     * 能力级别。**Android 上现在只有一个取值：JS**（见 [PluginLevel]）。
      *
-     * 界面靠它决定要不要提示"需重启 App 生效"——卸载与启停时源可能已经拉不到了，
-     * 所以这个判断不能依赖索引，只能看库里这一列。
+     * 这一列没有从实体里删掉：它是已发布的 schema（迁移 `MIGRATION_21_22`），
+     * 删列要动 Room 迁移，而本项目在迁移上出过事故（2.6.17）。旧版本装过的原生
+     * 插件在库里会留下 `level = "native"` 的行 —— [PluginLevel.parseOrDefault]
+     * 会把不认识的取值退回 [PluginLevel.DEFAULT]，于是它们按 JS 读，
+     * 后续加载会以"脚本内容不是 JS"的形式明确失败，而不是静默走一条不存在的加载路径。
      */
     val level: PluginLevel get() = PluginLevel.parseOrDefault(entity.level) ?: PluginLevel.DEFAULT
     val trustLevel: String get() = entity.trustLevel
@@ -203,9 +206,8 @@ class PluginRepository(context: Context) {
                     id = id,
                     name = displayName,
                     version = PluginIds.stringField(meta, "version") ?: "",
-                    sourceUri = sourceUri ?: sourceUriForPaste(fileName, id),
-                    sourceKind = sourceKind,
-                    // 重复导入保持原级别：L2 插件的 jar 不能被一次文本重导降级回 L1
+                    // 重复导入保持原级别：升级前的行可能留着 `native`，一次文本重导不该
+                    // 悄悄把它洗成别的值（这一列现在唯一的合法取值是 `js`，但旧数据仍在）。
                     level = previous?.level ?: "",
                     manifestJson = "",
                     scriptPath = target.absolutePath,
@@ -241,92 +243,6 @@ class PluginRepository(context: Context) {
     // ---------------------------------------------------------------- 从市场安装 / 更新
 
     /**
-     * 从插件市场安装（或更新）一个**原生（L2）插件**：内容是 jar 字节，落 `plugins/native/`。
-     *
-     * 与 [installMarketPlugin]（JS）共用同一套顺序与安全边界 —— 先落盘再写库、
-     * 更新前留回滚快照、防穿越命名与 [resolveInDir] 前缀校验 —— 差别只有三点：
-     *
-     *  1. 内容是**二进制**：不能走 `writeText`，更不能被 UTF-8 解码（那会破坏字节，
-     *     DexClassLoader 就加载不出来了）；
-     *  2. `level` 固定 [PluginLevel.NATIVE]：这条路径只服务 L2；
-     *  3. 入口类在 manifest 的 `entryClass` 字段里（由 `MarketClient` 校验过存在并写回），
-     *     装载时 [PluginRuntime] 从存储的 manifest 文本里读它。
-     */
-    suspend fun installNativePlugin(
-        id: String,
-        name: String,
-        version: String,
-        jar: ByteArray,
-        sha256: String,
-        sourceId: String,
-        sourceUri: String,
-        trustLevel: String,
-        manifestJson: String,
-    ): Result<InstalledPlugin> = withContext(Dispatchers.IO) {
-        runCatching {
-            val validId = PluginIds.validate(id)
-                ?: throw IllegalArgumentException("索引里的插件 id 不合法：$id")
-
-            val target = resolveInDir(
-                nativeDir().apply { mkdirs() },
-                PluginIds.fileNameFor(validId, sha256.take(8), PluginIds.JAR_SUFFIX),
-            )
-            target.writeBytes(jar)
-
-            val previous = installedDao.getById(validId)
-            // 【P4】更新前给旧版本留快照 —— 必须在改库之前，否则拿不到旧版本信息。
-            val hadSnapshotBefore = rollbackStore.load(validId) != null
-            snapshotBeforeUpdate(previous)
-            val keepOldFile = previous != null &&
-                previous.scriptKindEligibleForRollback() &&
-                rollbackStore.load(validId) != null
-
-            val now = System.currentTimeMillis()
-            installedDao.upsert(
-                PluginInstalledEntity(
-                    id = validId,
-                    name = name.ifBlank { validId },
-                    version = version,
-                    sourceUri = sourceUri,
-                    sourceKind = PluginInstalledEntity.SOURCE_MARKET,
-                    level = PluginLevel.NATIVE.id,
-                    manifestJson = manifestJson,
-                    scriptPath = target.absolutePath,
-                    scriptSha256 = sha256,
-                    enabled = previous?.enabled ?: true,
-                    declaredPermissions = "",
-                    trustLevel = trustLevel,
-                    installedAt = previous?.installedAt ?: now,
-                    updatedAt = now,
-                    lastError = "",
-                )
-            )
-            // 旧包只在"没有为它留快照"时才删：留了快照说明它是回滚目标，必须保留。
-            previous?.scriptPath?.takeIf {
-                it.isNotBlank() && it != target.absolutePath && !keepOldFile
-            }?.let { deletePluginFileQuietly(it) }
-            if (keepOldFile) {
-                DiagLog.i(appContext, TAG, "已为 $validId 保留上一版本插件包以备回滚")
-            } else if (hadSnapshotBefore) {
-                DiagLog.i(appContext, TAG, "$validId 的旧回滚快照已被本次更新取代")
-            }
-
-            val action = if (previous == null) "安装" else "更新"
-            DiagLog.i(
-                appContext, TAG,
-                "$action 原生插件 $validId → $version（源=$sourceId，信任=$trustLevel，" +
-                    "sha=${sha256.take(12)}…，${jar.size} 字节）"
-            )
-            InstalledPlugin(
-                entity = installedDao.getById(validId)!!,
-                scriptExists = target.isFile,
-            )
-        }.onFailure {
-            DiagLog.i(appContext, TAG, "市场安装失败（$id $version）：${it.message.orEmpty()}")
-        }
-    }
-
-    /**
      * 从插件市场安装（或更新）一个插件。
      *
      * 与 [installFromText] 的关系：**落盘与入库只有一份实现**（下面复用了同一个写法），
@@ -335,6 +251,10 @@ class PluginRepository(context: Context) {
      *
      * 更新与安装走同一条路：id 已存在就是更新（REPLACE），版本号与来源被刷新，
      * **启停状态保持用户原来的选择** —— 用户手动关掉的插件不该因为"更新了一次"被悄悄打开。
+     *
+     * （这里原先还有一个 [installNativePlugin] 走二进制 jar 落盘。Android 只保留 JS 插件后
+     * 它被移除：那份实现的价值只在"jar 不能被 UTF-8 解码"这一点上，而现在已经没有任何插件
+     * 内容是二进制。）
      *
      * @param sourceId 该插件来自哪个源（用于界面上显示"来自哪个源"）
      * @param sourceUri 下载地址（可追溯：这个脚本是从哪一行 URL 拿到的）
@@ -352,8 +272,8 @@ class PluginRepository(context: Context) {
         declaredPermissions: String,
         /** 插件自带清单的原文；拿不到就空串（见 `MarketClient.fetchAndCheckManifest`）。 */
         manifestJson: String = "",
-        /** 能力级别（P20）；默认 L1。 */
-        level: PluginLevel = PluginLevel.DEFAULT,
+        // 级别不再作为参数：Android 只剩 JS 一档（见 [PluginLevel]），
+        // 而"永远只可能是一个值"的参数只会让人以为还有别的形态。
     ): Result<InstalledPlugin> = withContext(Dispatchers.IO) {
         runCatching {
             val validId = PluginIds.validate(id)
@@ -380,7 +300,7 @@ class PluginRepository(context: Context) {
                     version = version,
                     sourceUri = sourceUri,
                     sourceKind = PluginInstalledEntity.SOURCE_MARKET,
-                    level = level.id,
+                    level = PluginLevel.DEFAULT.id,
                     manifestJson = manifestJson,
                     scriptPath = target.absolutePath,
                     scriptSha256 = sha256,
@@ -637,8 +557,15 @@ class PluginRepository(context: Context) {
 
     private fun scriptsDir(): File = File(appContext.filesDir, PluginIds.SCRIPTS_DIR)
 
-    /** 原生（L2）插件包目录：jar 的唯一落点（见 [installNativePlugin]）。 */
-    private fun nativeDir(): File = File(appContext.filesDir, PluginIds.NATIVE_DIR)
+    /**
+     * 遗留的 L2 插件包目录（`filesDir/plugins/native`）。
+     *
+     * **不主动创建、不主动删除**，只是在清理时把它也认作"允许删的目录"之一：
+     * 旧版本装过原生插件的用户，库里会留着指向该目录的 `scriptPath`，
+     * 删记录时若不认这个目录，那条 jar 会永远留在私有目录里（几 MB 的死数据，
+     * 且用户以为卸载就清干净了）。这是**只读识别**，不是恢复一条写入路径。
+     */
+    private fun legacyNativeDir(): File = File(appContext.filesDir, LEGACY_NATIVE_DIR)
 
     private fun sourcesDir(): File = File(appContext.filesDir, PluginIds.SOURCES_DIR)
 
@@ -707,9 +634,9 @@ class PluginRepository(context: Context) {
                 version = snap.version,
                 sourceUri = snap.sourceUri,
                 sourceKind = snap.sourceKind,
-                // 快照没记级别（快照格式是 P4 定的，加字段要动它的序列化）——
-                // 同一插件 id 的级别不会随版本改变（js 始终 js、native 始终 native），
-                // 保留当前记录的级别即可，避免回滚把 L2 降级回 L1。
+                // 快照没记级别（快照格式是 P4 定的，加字段要动它的序列化）。
+                // 保留当前记录里的值即可：这一列现在只有"存量数据可能是 native"这一种
+                // 历史包袱，回滚不该顺手把它改成别的写法（改 schema 的风险见 MIGRATION_21_22）。
                 level = current?.level ?: "",
                 manifestJson = snap.manifestJson,
                 scriptPath = snap.scriptPath,
@@ -784,14 +711,17 @@ class PluginRepository(context: Context) {
     }
 
     /**
-     * 删除插件包文件（JS 脚本或 L2 jar）；**只允许删 scripts / native 两个目录内的直接子项**，
+     * 删除插件脚本文件；**只允许删 scripts 目录（以及遗留的 native 目录）内的直接子项**，
      * 失败只记日志（不打断卸载流程）。
+     *
+     * 为什么还认 `native/`：见 [legacyNativeDir] —— 旧版本装过的原生插件在库里留着指向
+     * 那里的路径，不认它就会把那些 jar 永远留在用户的私有目录里。
      */
     private fun deletePluginFileQuietly(path: String) {
         if (path.isBlank()) return
         runCatching {
             val target = File(path).canonicalFile
-            val insideAllowedDir = listOf(scriptsDir(), nativeDir()).any { dir ->
+            val insideAllowedDir = listOf(scriptsDir(), legacyNativeDir()).any { dir ->
                 dir.canonicalFile.let { target.parentFile?.canonicalPath == it.path }
             }
             if (!insideAllowedDir) {
@@ -859,6 +789,14 @@ class PluginRepository(context: Context) {
         "src." + sha256Hex(indexUrl.lowercase().toByteArray(Charsets.UTF_8)).take(8)
 
     private companion object {
+
+        /**
+         * 遗留的 L2 插件包目录名。**只用于清理**，不再有任何写入路径指向它 ——
+         * 保留这个常量是为了让 [legacyNativeDir] 的用途一眼可见（它是一份兼容残留，
+         * 不是一条还在用的约定）。
+         */
+        const val LEGACY_NATIVE_DIR = "plugins/native"
+
         const val TAG = "插件"
     }
 }

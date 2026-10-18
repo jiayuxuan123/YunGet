@@ -1,23 +1,40 @@
 {
   "repo": "jiayuxuan123/YunGet",
   "latest": {
-    "tag": "v2.7.9",
-    "name": "云取 YunGet 2.7.9",
-    "published": "2026-10-12T04:47:59Z",
+    "tag": "v2.7.10",
+    "name": "云取 YunGet 2.7.10",
+    "published": "2026-10-18T13:57:15Z",
     "prerelease": false,
-    "url": "https://github.com/jiayuxuan123/YunGet/releases/tag/v2.7.9",
-    "summary": "云取 YunGet 2.7.9\n修好两件影响日常使用的事：原生插件真正能加载了，图片终于能显示出来。\n原生插件现在可以正常运行\n上一版换了个目录存放插件包，真机上仍被系统拒绝——原因是 Android 10 之后系统禁止加载\"位于可写目录里的插件文件\"，换到哪个可写目录都一样。这一版改为**把插件包读进内存直接加载**，全程不落盘，从机制上绕开了这条限制。\n装过的网盘插件更新到本版并重启后即可正常加载；插件页不再显示\"未运行\"。\n需要留意：加载原生插件需 Android 8.0 及以上；更低版本会给出明确提示，而不是静默失败。\n图片能显示出来了\n支持页的赞赏码、插件说明里的图片此前一律直连 GitHub，国内基本加载不出来。原因是应用里的\"镜像\"设置从来没有传给图片加载器——这个开关一直是空的。修复后：\n· 图片与插件源、应用更新走**同一套镜像规则**（只对 GitHub 地址生效，失败…",
+    "url": "https://github.com/jiayuxuan123/YunGet/releases/tag/v2.7.10",
+    "summary": "云取 YunGet 2.7.10\n这一版只做一件事：原生插件在手机上暂时停用。\n为什么停用\n原生插件（以前的\"L2\"）是让插件直接以应用的身份跑在应用进程里的一档。它在手机上一直不稳：Android 10 之后系统不允许加载应用自己写出来的插件文件，最后只能靠\"读进内存再加载\"绕过，越往后系统限制越严。\n而且实际效果也配不上这份麻烦——此前发布的四个网盘原生插件，做的事情只是把解析请求转回应用内部本来就有的实现，并没有带来应用自己做不到的能力。\n停用之后会怎样\n· 手机版现在只支持脚本插件（JS 插件），装上或更新后立即生效；\n· 插件市场里如果出现原生插件条目，会显示\"暂不支持\"，并在安装时说明原因；\n· 已经装过原生插件的用户：那些插件不再参与工作，网盘解析走应用内置实现，功能不受影响；需要的话可以在插件列表里把它们卸载掉。\n之后\n等云推出了 Windows 版，原生插件会在 Wind…",
     "assets": [
       {
-        "name": "YunGet-2.7.9-release.apk",
-        "size": 31714296,
-        "url": "https://github.com/jiayuxuan123/YunGet/releases/download/v2.7.9/YunGet-2.7.9-release.apk",
+        "name": "YunGet-2.7.10-release.apk",
+        "size": 31682190,
+        "url": "https://github.com/jiayuxuan123/YunGet/releases/download/v2.7.10/YunGet-2.7.10-release.apk",
         "downloads": 0,
-        "sha256": "5d9520fa11c2ca3ce036f948e8c5de87cf1c5fb749fc1623e72edbfb4a19cc77"
+        "sha256": "8d1c4662667ba104ae4208a7113c4fd646314508218df021559de1c5dbcc184e"
       }
     ]
   },
   "releases": [
+    {
+      "tag": "v2.7.10",
+      "name": "云取 YunGet 2.7.10",
+      "published": "2026-10-18T13:57:15Z",
+      "prerelease": false,
+      "url": "https://github.com/jiayuxuan123/YunGet/releases/tag/v2.7.10",
+      "summary": "云取 YunGet 2.7.10\n这一版只做一件事：原生插件在手机上暂时停用。\n为什么停用\n原生插件（以前的\"L2\"）是让插件直接以应用的身份跑在应用进程里的一档。它在手机上一直不稳：Android 10 之后系统不允许加载应用自己写出来的插件文件，最后只能靠\"读进内存再加载\"绕过，越往后系统限制越严。\n而且实际效果也配不上这份麻烦——此前发布的四个网盘原生插件，做的事情只是把解析请求转回应用内部本来就有的实现，并没有带来应用自己做不到的能力。\n停用之后会怎样\n· 手机版现在只支持脚本插件（JS 插件），装上或更新后立即生效；\n· 插件市场里如果出现原生插件条目，会显示\"暂不支持\"，并在安装时说明原因；\n· 已经装过原生插件的用户：那些插件不再参与工作，网盘解析走应用内置实现，功能不受影响；需要的话可以在插件列表里把它们卸载掉。\n之后\n等云推出了 Windows 版，原生插件会在 Wind…",
+      "assets": [
+        {
+          "name": "YunGet-2.7.10-release.apk",
+          "size": 31682190,
+          "url": "https://github.com/jiayuxuan123/YunGet/releases/download/v2.7.10/YunGet-2.7.10-release.apk",
+          "downloads": 0,
+          "sha256": "8d1c4662667ba104ae4208a7113c4fd646314508218df021559de1c5dbcc184e"
+        }
+      ]
+    },
     {
       "tag": "v2.7.9",
       "name": "云取 YunGet 2.7.9",
@@ -30,7 +47,7 @@
           "name": "YunGet-2.7.9-release.apk",
           "size": 31714296,
           "url": "https://github.com/jiayuxuan123/YunGet/releases/download/v2.7.9/YunGet-2.7.9-release.apk",
-          "downloads": 0,
+          "downloads": 6523,
           "sha256": "5d9520fa11c2ca3ce036f948e8c5de87cf1c5fb749fc1623e72edbfb4a19cc77"
         }
       ]
@@ -47,7 +64,7 @@
           "name": "YunGet-2.7.8-release.apk",
           "size": 31707834,
           "url": "https://github.com/jiayuxuan123/YunGet/releases/download/v2.7.8/YunGet-2.7.8-release.apk",
-          "downloads": 44,
+          "downloads": 65,
           "sha256": "4e2b6c56068dada26802469b55b187573276a9909b34c1784ce39e2f55133d21"
         }
       ]
@@ -64,7 +81,7 @@
           "name": "YunGet-2.7.7-release.apk",
           "size": 31710643,
           "url": "https://github.com/jiayuxuan123/YunGet/releases/download/v2.7.7/YunGet-2.7.7-release.apk",
-          "downloads": 554,
+          "downloads": 563,
           "sha256": "a1fe22a7b0bbdc16df34ca48a643aa4b288b323d747eb73f364bac4d4ef6383d"
         }
       ]
@@ -81,7 +98,7 @@
           "name": "YunGet-2.7.6-release.apk",
           "size": 31709721,
           "url": "https://github.com/jiayuxuan123/YunGet/releases/download/v2.7.6/YunGet-2.7.6-release.apk",
-          "downloads": 81,
+          "downloads": 82,
           "sha256": "f4460bfe913836e83043ad7c212fc9d3c1749ccabffae2292d7cfa0ec9ea8732"
         }
       ]
@@ -98,7 +115,7 @@
           "name": "YunGet-2.7.5-release.apk",
           "size": 31681596,
           "url": "https://github.com/jiayuxuan123/YunGet/releases/download/v2.7.5/YunGet-2.7.5-release.apk",
-          "downloads": 509,
+          "downloads": 514,
           "sha256": "57e0beee75c8f4041a25f97e7c79c2e143357018fadab214226bf95e5b202c64"
         }
       ]
@@ -115,7 +132,7 @@
           "name": "YunGet-2.7.4-release.apk",
           "size": 31621011,
           "url": "https://github.com/jiayuxuan123/YunGet/releases/download/v2.7.4/YunGet-2.7.4-release.apk",
-          "downloads": 1396,
+          "downloads": 1410,
           "sha256": "c6921e4d2a11d8e46239c84050c46a8cf9fa3bea45a920825725418f902bd32d"
         }
       ]
@@ -132,7 +149,7 @@
           "name": "YunGet-2.7.3-release.apk",
           "size": 31593625,
           "url": "https://github.com/jiayuxuan123/YunGet/releases/download/v2.7.3/YunGet-2.7.3-release.apk",
-          "downloads": 432,
+          "downloads": 442,
           "sha256": "2affb2e8958b8b147606aacd7c77815d238133c9e820e5110c41aebff8475767"
         }
       ]
@@ -149,7 +166,7 @@
           "name": "YunGet-2.7.2-release.apk",
           "size": 31588032,
           "url": "https://github.com/jiayuxuan123/YunGet/releases/download/v2.7.2/YunGet-2.7.2-release.apk",
-          "downloads": 525,
+          "downloads": 526,
           "sha256": "38681a358c8ca14f2c661a072a3382cd8ab26e8c89ceda23f03bf863fe5933d7"
         }
       ]
@@ -166,7 +183,7 @@
           "name": "YunGet-2.7.1-release.apk",
           "size": 31586091,
           "url": "https://github.com/jiayuxuan123/YunGet/releases/download/v2.7.1/YunGet-2.7.1-release.apk",
-          "downloads": 607,
+          "downloads": 614,
           "sha256": "4140068dadae124607ec22f7d23a297691690f3586c84c7f14fb8da4ce32992f"
         }
       ]
@@ -200,7 +217,7 @@
           "name": "YunGet-2.6.21-release.apk",
           "size": 29256285,
           "url": "https://github.com/jiayuxuan123/YunGet/releases/download/v2.6.21/YunGet-2.6.21-release.apk",
-          "downloads": 1298,
+          "downloads": 1302,
           "sha256": "80e7d72941dec73605eb7b83a58843380bef89c039b8ed57ca705b91affbe67a"
         }
       ]
@@ -285,7 +302,7 @@
           "name": "YunGet-2.6.15-release.apk",
           "size": 28284269,
           "url": "https://github.com/jiayuxuan123/YunGet/releases/download/v2.6.15/YunGet-2.6.15-release.apk",
-          "downloads": 3951,
+          "downloads": 3976,
           "sha256": "27284307104496d94934cb94f82b2445d586bcebda3d0b4d1b74232427f0e845"
         }
       ]
@@ -404,7 +421,7 @@
           "name": "app-release.apk",
           "size": 18993570,
           "url": "https://github.com/jiayuxuan123/YunGet/releases/download/v2.6.7/app-release.apk",
-          "downloads": 3343,
+          "downloads": 3349,
           "sha256": "aea85a934fd642afc63fc87ef822914e37f63730f66993482f1e5c419f7218e6"
         }
       ]
@@ -508,23 +525,6 @@
           "url": "https://github.com/jiayuxuan123/YunGet/releases/download/v2.6.1/app-release.apk",
           "downloads": 226,
           "sha256": "903e288ec9f4754c408c07e2d68b58f75a4e88be4618222172786e7df39deb14"
-        }
-      ]
-    },
-    {
-      "tag": "v2.6.0",
-      "name": "YunGet 2.6.0：修复低限速下下载卡死（升级 TurboDL rc13）",
-      "published": "2026-09-14T07:55:02Z",
-      "prerelease": false,
-      "url": "https://github.com/jiayuxuan123/YunGet/releases/tag/v2.6.0",
-      "summary": "YunGet 2.6.0：修复低限速下下载卡死（升级 TurboDL 0.2.0-rc13）\n本次修复\n关键修复：限速调低后下载会「卡住不动」\nTurboDL 的 `SpeedLimiter` 令牌桶容量固定为「1 秒额度」。当**单次要消费的字节数\n大于该额度**时，`bytes <= tokens` 永远不成立，限速器陷入无限等待 ——\n下载既不报错也不推进，任务彻底卡死。\n对本 App 来说这个触发条件很容易碰到：\n· 设置页允许把**全局限速**调到很低；\n· 而引擎的 IO 缓冲默认是 **1MB**（`ioBufferSize`）。\n也就是说 **只要限速低于约 1MB/s，恢复下载后就可能永久卡住**。\n升级到 TurboDL 0.2.0-rc13 后，桶容量改为 `max(1 秒额度, 本次要消费的量)`，\n该自锁被消除。\n一并带上 rc12 的数据正确性修复\n本次依赖同时…",
-      "assets": [
-        {
-          "name": "app-release.apk",
-          "size": 18977193,
-          "url": "https://github.com/jiayuxuan123/YunGet/releases/download/v2.6.0/app-release.apk",
-          "downloads": 55,
-          "sha256": "c8a5f9e66f4f17d54266814bab900af0903df4019881541b126e97177fddf28c"
         }
       ]
     }

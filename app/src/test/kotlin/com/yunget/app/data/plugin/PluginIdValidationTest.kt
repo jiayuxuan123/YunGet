@@ -288,16 +288,19 @@ class PluginIdValidationTest {
     }
 
     @Test
-    fun fileNameForSupportsJarSuffixForNativePlugins() {
-        // L2 插件包（jar）与 JS 脚本走同一条防穿越命名，只是后缀不同；
-        // 后缀必须是 .jar —— 市场落盘与原生加载扫描按它识别插件包。
-        // 摘要段最多取 16 个十六进制字符（与 .js 同一规则，只是后缀换了）。
-        val name = PluginIds.fileNameFor("adapter.example", "abcdef1234567890", PluginIds.JAR_SUFFIX)
-        assertEquals("adapter.example_abcdef1234567890.jar", name)
+    fun fileNameForAlwaysEndsWithJsSuffix() {
+        // 插件只有 JS 一种形态（原生/L2 已移除），所以文件名后缀不再有第二个取值 ——
+        // 这条钉住的是"没有别的形态"这件事本身：将来若有人又加一种可加载的东西，
+        // 会先在这里失败，逼他明确说明那种形态的后缀与加载器。
+        // 摘要段最多取 16 个十六进制字符。
         assertEquals(
-            "默认后缀保持 .js（JS 调用点不感知这个改动）",
             "adapter.example_abcdef1234567890.js",
             PluginIds.fileNameFor("adapter.example", "abcdef1234567890"),
+        )
+        assertEquals(
+            "超长摘要只取前 16 位",
+            "adapter.example_abcdef1234567890.js",
+            PluginIds.fileNameFor("adapter.example", "abcdef1234567890abcdef1234567890"),
         )
     }
 }

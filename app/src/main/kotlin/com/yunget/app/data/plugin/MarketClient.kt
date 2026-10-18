@@ -69,15 +69,11 @@ class MarketClient(private val context: Context) {
         /**
          * 单个脚本体积上限，与引擎加载器的上限一致（512 KiB）。
          * 在**下载前**用索引里的 `sizeBytes` 先挡一次，下载后再按实际字节数校验一次。
+         *
+         * （原先还有一个 32 MiB 的"原生插件包"上限。手机端暂时停用原生插件后，脚本上限
+         * 就是唯一的体积上限；留两个永远只会用到其中一个的常量，等于让人以为还有别的形态。）
          */
         const val MAX_SCRIPT_BYTES = 512L * 1024
-
-        /**
-         * 原生（L2）插件包体积上限。jar 里是编译后的类（可能还带 .so），512 KiB 的脚本
-         * 上限对它没有意义；32 MiB 覆盖现实中会出现的 Adapter，再大的"插件包"更可能是
-         * 拿错了文件而不是真的插件。
-         */
-        const val MAX_NATIVE_BYTES = 32L * 1024 * 1024
     }
 
     private val repo = PluginRepository(context)
@@ -147,10 +143,7 @@ class MarketClient(private val context: Context) {
                 }
             }
             // ---- 关 2.5：体积（按索引声明值先挡一次，省一次下载） ----
-            // L2 jar 与 JS 脚本的上限不同（见 MAX_NATIVE_BYTES），按级别取对应上限。
-            val isNative = plugin.level == PluginLevel.NATIVE
-            val maxBytes = if (isNative) MAX_NATIVE_BYTES else MAX_SCRIPT_BYTES
-            if (version.sizeBytes > maxBytes) {
+            if (version.sizeBytes > MAX_SCRIPT_BYTES) {
                 throw IllegalStateException("插件包体积 ${version.sizeBytes} 字节，超过上限")
             }
 
@@ -158,105 +151,51 @@ class MarketClient(private val context: Context) {
             // 源的镜像配置取一次就够：本笔安装的三个请求（脚本、清单、公钥）走同一条回退链，
             // 中途源被改了也不该让前半段走镜像、后半段走直连。
             val sourceMirror = sourceMirror(sourceId)
-            val bytes = fetchAndVerify(plugin, version, index, sourceMirror, maxBytes)
+            val bytes = fetchAndVerify(plugin, version, index, sourceMirror, MAX_SCRIPT_BYTES)
 
-            if (isNative) {
-                // L2：jar 字节直接落盘；跳过 JS 专有的 defineMeta 自报校验，
-                // 改为要求清单声明入口类（见 [installNative]）。
-                installNative(plugin, version, sourceId, trustLevel, bytes, sourceMirror)
-            } else {
-                val script = bytes.toString(Charsets.UTF_8)
+            val script = bytes.toString(Charsets.UTF_8)
+            // ---- 关 5：脚本自报 id 与版本必须与索引一致 ----
+            verifySelfReportedIdentity(script, plugin.id, version.version)
 
-                // ---- 关 5：脚本自报 id 与版本必须与索引一致 ----
-                verifySelfReportedIdentity(script, plugin.id, version.version)
+            // ---- 关 6：清单（可选，但有就必须一致） ----
+            // 索引里的 manifestUrl 指到插件自带的 turbodl-plugin.json。它**不在签名覆盖范围内**
+            // （签名只覆盖脚本字节），所以它只能当"辅助信息"用：拿它对一下 id/version 是否与
+            // 脚本自报的一致、协议声明是否包含索引里写的那些。**拿不到就不装** ——
+            // 很多源不提供清单，那不该拦住安装；但拿到了又不一致，说明索引在乱写。
+            val manifestJson = fetchAndCheckManifest(plugin, version, sourceMirror)
 
-                // ---- 关 6：清单（可选，但有就必须一致） ----
-                // 索引里的 manifestUrl 指到插件自带的 turbodl-plugin.json。它**不在签名覆盖范围内**
-                // （签名只覆盖脚本字节），所以它只能当"辅助信息"用：拿它对一下 id/version 是否与
-                // 脚本自报的一致、协议声明是否包含索引里写的那些。**拿不到就不装失败** ——
-                // 很多源不提供清单，那不该拦住安装；但拿到了又不一致，说明索引在乱写。
-                val manifestJson = fetchAndCheckManifest(plugin, version, sourceMirror)
-
-                // ---- 落盘 + 入库（更新 = 同一条路，只是版本号变了） ----
-                repo.installMarketPlugin(
-                    id = plugin.id,
-                    name = plugin.name,
-                    version = version.version,
-                    script = script,
-                    sha256 = version.sha256,
-                    sourceId = sourceId,
-                    sourceUri = version.downloadUrl,
-                    trustLevel = trustLevel,
-                    level = plugin.level,
-                    declaredPermissions = version.permissions.joinToString(","),
-                    manifestJson = manifestJson,
-                ).getOrThrow()
-            }
+            // ---- 落盘 + 入库（更新 = 同一条路，只是版本号变了） ----
+            repo.installMarketPlugin(
+                id = plugin.id,
+                name = plugin.name,
+                version = version.version,
+                script = script,
+                sha256 = version.sha256,
+                sourceId = sourceId,
+                sourceUri = version.downloadUrl,
+                trustLevel = trustLevel,
+                declaredPermissions = version.permissions.joinToString(","),
+                manifestJson = manifestJson,
+            ).getOrThrow()
         }.onFailure {
             DiagLog.i(context, TAG, "安装/更新失败（${plugin.id} ${version.version}）：${it.message.orEmpty()}")
         }
     }
 
     /**
-     * L2 安装分支：清单在这里从"可选的辅助信息"变成**必需品** —— 因为入口类
-     * （`entryClass`，L2 加载契约，见引擎 `NativePluginSource`）只存在于 manifest 里。
-     *
-     * 信任链不经过 manifest：jar 字节的 sha256 与 Ed25519 签名在 [fetchAndVerify] 已经过完；
-     * manifest 提供的只是"加载这份已验证字节所需的定位信息"。但**没有它就装不了** ——
-     * 没有入口类的 jar 谁也加载不出来，与其装一个启动必然失败的插件，不如装的时候就报清楚。
-     */
-    private suspend fun installNative(
-        plugin: MarketPlugin,
-        version: MarketPlugin.Version,
-        sourceId: String,
-        trustLevel: String,
-        bytes: ByteArray,
-        sourceMirror: String,
-    ): InstalledPlugin {
-        val manifestJson = fetchAndCheckManifest(plugin, version, sourceMirror)
-        val entryClass = if (manifestJson.isNotBlank()) {
-            runCatching { org.json.JSONObject(manifestJson).optString("entryClass").trim() }
-                .getOrDefault("")
-        } else {
-            ""
-        }
-        if (entryClass.isEmpty()) {
-            throw IllegalStateException(
-                "原生插件必须在清单（turbodl-plugin.json）里声明 entryClass（入口类的全限定名）"
-            )
-        }
-        // 把入口类回写进要存储的 manifest 文本：装载时 PluginRuntime 从这里读，
-        // 不需要另开一个数据库列（manifestJson 本来就是 L2 元数据的落点）。
-        val stored = runCatching {
-            org.json.JSONObject(manifestJson).put("entryClass", entryClass).toString()
-        }.getOrDefault(manifestJson)
-
-        return repo.installNativePlugin(
-            id = plugin.id,
-            name = plugin.name,
-            version = version.version,
-            jar = bytes,
-            sha256 = version.sha256,
-            sourceId = sourceId,
-            sourceUri = version.downloadUrl,
-            trustLevel = trustLevel,
-            manifestJson = stored,
-        ).getOrThrow()
-    }
-
-    /**
      * 下载插件包并完成"长度 → SHA-256 → Ed25519"三道校验，返回**原始字节**。
-     *
      * 单独抽出来是为了让 **安装与更新共用同一条校验链**：更新路径没有独立的实现，
-     * 也就不存在"更新时忘了验签"这种漂移。返回字节而不是解码后的文本 ——
-     * 文本解码是 JS 分支调用方的事，L2 jar 是二进制，在这里解码就毁了它。
+     * 也就不存在"更新时忘了验签"这种漂移。
+     *
+     * 返回**原始字节**而不是解码后的文本：校验必须对字节做（sha256 与签名都覆盖字节），
+     * 解码是调用方那一步的事。
      */
     private suspend fun fetchAndVerify(
         plugin: MarketPlugin,
         version: MarketPlugin.Version,
         index: MarketIndex,
         sourceMirror: String,
-        maxBytes: Long,
+        maxBytes: Long = MAX_SCRIPT_BYTES,
     ): ByteArray {
         val hit = httpGetBytes(version.downloadUrl, maxBytes, sourceMirror)
             ?: throw IllegalStateException("插件包下载失败（网络不可达或地址无效）")

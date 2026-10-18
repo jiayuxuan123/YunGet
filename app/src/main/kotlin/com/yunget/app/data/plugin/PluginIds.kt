@@ -54,24 +54,12 @@ object PluginIds {
 
     /** 脚本文件后缀（模块系统约定：可以被 `require`/`import` 的资源就是 `.js`）。 */
     const val SCRIPT_SUFFIX = ".js"
-
-    /** 原生（L2）插件包后缀。分发形态是 jar（能同时装类与 .so），取舍记录见引擎 NativePluginSource。 */
-    const val JAR_SUFFIX = ".jar"
-
     /** 兜底 id 前缀：文件名完全不可用（中文名 / 空名 / 纯符号）时使用。 */
     const val FALLBACK_PREFIX = "plugin"
 
     /** 脚本目录名（相对 `filesDir`）：**唯一**允许写用户脚本的地方。 */
+    /** 脚本目录名（相对 `filesDir`）：**唯一**允许写用户脚本的地方。 */
     const val SCRIPTS_DIR = "plugins/scripts"
-
-    /**
-     * 原生（L2）插件包目录名（相对 `filesDir`）：jar 只允许落在这里。
-     *
-     * 与 `scripts/` 并列而不是混在一起：两者的加载方式（DexClassLoader vs QuickJS 沙箱）、
-     * 风险等级与清理逻辑都不同，目录分开让"删干净"有明确边界（卸载时按目录校验删除）。
-     */
-    const val NATIVE_DIR = "plugins/native"
-
     /** 插件源索引缓存目录名（相对 `filesDir`）。 */
     const val SOURCES_DIR = "plugins/sources"
 
@@ -138,23 +126,26 @@ object PluginIds {
     }
 
     /**
-     * 插件包文件名：[sanitized-id]`_`[sha 前若干位] + 后缀（默认 `.js`，L2 jar 传 [JAR_SUFFIX]）。
+     * 插件包文件名：[sanitized-id]`_`[sha 前若干位]`.js`。
      *
      * 带摘要后缀是为了让**同一插件的不同版本落在不同文件**上：
      * 升级时先写新文件、成功后再切换数据库里的 `scriptPath`，
      * 半途失败也不会留下一个「内容被截断但看起来正常」的脚本。
      *
      * 输出保证只含 `[A-Za-z0-9._-]`（无 `/`、无 `\`、无 `..`）。
+     *
+     * （这里原先还有一个 `suffix` 参数，只服务原生（L2）插件的 jar 落盘；L2 移除后
+     * 后缀不再有第二个取值，参数就去掉了 —— 保留一个永远传同一个值的参数只会让
+     * "是否还有别的形态"变成需要查调用点才能回答的问题。）
      */
-    fun fileNameFor(id: String, sha8: String, suffix: String = SCRIPT_SUFFIX): String {
+    fun fileNameFor(id: String, sha8: String): String {
         val safeId = sanitizeForFileName(id)
             .take(MAX_LENGTH)
             .trimEnd('.', '-')
             .ifEmpty { FALLBACK_PREFIX }
         val safeSha = sha8.lowercase().filter { it in '0'..'9' || it in 'a'..'f' }.take(16)
-        return safeId + "_" + safeSha + suffix
+        return safeId + "_" + safeSha + SCRIPT_SUFFIX
     }
-
     /**
      * 从用户给的文件名派生一个**一定合法**的 id（脚本没声明 id 时的兜底）。
      *

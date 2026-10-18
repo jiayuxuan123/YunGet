@@ -101,7 +101,6 @@ import com.yunget.app.data.db.PluginInstalledEntity
 import com.yunget.app.data.plugin.InstalledPlugin
 import com.yunget.app.data.plugin.JsEngineProbe
 import com.yunget.app.data.plugin.PluginRepository
-import com.yunget.app.data.plugin.PluginLevel
 import com.yunget.app.data.plugin.sharedPluginRuntime
 import com.yunget.app.ui.SnackbarController
 import com.yunget.app.ui.resolve.formatSize
@@ -234,22 +233,19 @@ fun PluginsScreen(onBack: () -> Unit, modifier: Modifier = Modifier) {
             scope.launch {
                 repo.setEnabled(plugin.id, enabled).fold(
                     onSuccess = {
-                        // L2 每次启停都要说清"重启才生效"（P20）：不提示的话，
-                        // 用户点了开关插件却毫无变化，只会当成坏了。
-                        val restartTail = if (plugin.level.requiresRestart) "，重启 App 后生效" else ""
                         if (enabled) {
                             val error = runtime.load(plugin.id)
                             SnackbarController.show(
-                                when {
-                                    error != null -> "「${plugin.name}」加载失败：$error"
-                                    plugin.level.requiresRestart -> "已启用「${plugin.name}」$restartTail"
-                                    else -> "已启用「${plugin.name}」"
+                                if (error != null) {
+                                    "「${plugin.name}」加载失败：$error"
+                                } else {
+                                    "已启用「${plugin.name}」"
                                 }
                             )
                         } else {
                             // 停用只从引擎里摘掉，不删脚本：用户随时可以再打开
                             runtime.unload(plugin.id)
-                            SnackbarController.show("已停用「${plugin.name}」$restartTail")
+                            SnackbarController.show("已停用「${plugin.name}」")
                         }
                     },
                     onFailure = { t ->
@@ -507,10 +503,7 @@ fun PluginsScreen(onBack: () -> Unit, modifier: Modifier = Modifier) {
                         runtime.unload(id)
                         repo.uninstall(id).fold(
                             onSuccess = {
-                                SnackbarController.show(
-                                    "已卸载「${target.name}」" +
-                                        if (target.level.requiresRestart) "，重启 App 后彻底生效" else ""
-                                )
+                                SnackbarController.show("已卸载「${target.name}」")
                             },
                             onFailure = { t ->
                                 SnackbarController.show("卸载失败：${t.message ?: t.javaClass.simpleName}")
@@ -731,7 +724,7 @@ private fun PluginRow(
             }
 
             Spacer(Modifier.height(8.dp))
-            BadgeRow(sourceKind = plugin.sourceKind, level = plugin.level, trustLevel = plugin.trustLevel)
+            BadgeRow(sourceKind = plugin.sourceKind, trustLevel = plugin.trustLevel)
 
             Spacer(Modifier.height(6.dp))
             PluginRunState(plugin = plugin, live = live)
@@ -748,9 +741,9 @@ private fun PluginRow(
     }
 }
 
-/** 来源徽标 + 能力级别徽标 + 信任等级徽标（信任等级用四套不同配色，见文件头注释） */
+/** 来源徽标 + 信任等级徽标（信任等级用四套不同配色，见文件头注释） */
 @Composable
-private fun BadgeRow(sourceKind: String, level: PluginLevel, trustLevel: String) {
+private fun BadgeRow(sourceKind: String, trustLevel: String) {
     val (trustContainer, trustContent) = trustBadgeColors(trustLevel)
     FlowRow(
         horizontalArrangement = Arrangement.spacedBy(6.dp),
@@ -761,21 +754,6 @@ private fun BadgeRow(sourceKind: String, level: PluginLevel, trustLevel: String)
             text = sourceKindLabel(sourceKind),
             container = MaterialTheme.colorScheme.surfaceContainerHighest,
             content = MaterialTheme.colorScheme.onSurfaceVariant
-        )
-        // 级别（P20）：JS 与原生的"变更是否要重启"完全不同，用户应该一眼看出来装的是什么级。
-        // L2 用对比色标出 —— 它的启停/更新/卸载都要重启，这是最需要被看到的差异。
-        PluginBadge(
-            text = level.title,
-            container = if (level.requiresRestart) {
-                MaterialTheme.colorScheme.tertiaryContainer
-            } else {
-                MaterialTheme.colorScheme.surfaceContainerHighest
-            },
-            content = if (level.requiresRestart) {
-                MaterialTheme.colorScheme.onTertiaryContainer
-            } else {
-                MaterialTheme.colorScheme.onSurfaceVariant
-            }
         )
         PluginBadge(text = trustLabel(trustLevel), container = trustContainer, content = trustContent)
     }
@@ -1065,7 +1043,7 @@ private fun PluginDetailSheet(
         ) {
             Text(plugin.name, style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Medium)
             Spacer(Modifier.height(6.dp))
-            BadgeRow(sourceKind = plugin.sourceKind, level = plugin.level, trustLevel = plugin.trustLevel)
+            BadgeRow(sourceKind = plugin.sourceKind, trustLevel = plugin.trustLevel)
 
             Spacer(Modifier.height(8.dp))
             Row(verticalAlignment = Alignment.CenterVertically) {

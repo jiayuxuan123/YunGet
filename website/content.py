@@ -1015,12 +1015,12 @@ CATEGORY_LABELS = {
     "yung-support": "支持页",
 }
 
-#: 能力级别 → 展示名。Android 端现在只有 JS 一档（原生插件已停止支持，
+#: 能力级别 → 展示名。Android 端现在只有 JS 一档（原生插件在手机端暂时停用，
 #: 见 docs 里的「能力级别」一节与 App 的 PluginLevel.kt）；这里保留 native 的
-#: 文案只为如实标注可能残留在旧索引里的条目，不是承诺它可用。
+#: 文案只为如实标注可能残留在旧索引里的条目，不是承诺它在手机上可用。
 LEVEL_LABELS = {
     "js": "JS 插件",
-    "native": "原生插件（已停止支持）",
+    "native": "原生插件（手机端暂时停用）",
 }
 
 
@@ -1284,11 +1284,12 @@ def _page_plugins(lang: str, href) -> str:
             ),
         )
         + section(
-            "能力级别：Android 上只有一档",
+            "能力级别：手机上只有一档",
             "<p>插件还有<strong>能力级别</strong>这一维。它回答的是「这东西能碰到多大范围的能力」"
             "以及「<strong>改了要不要重启 App</strong>」。云取曾经规划过两档："
             "沙箱里的 JS（L1）与宿主进程内的原生代码（L2）。"
-            "<strong>Android 端现在只保留 JS 一档</strong>——原生插件以后只在 PC 端做。</p>"
+            "<strong>Android 端现在只保留 JS 一档</strong>——原生插件在手机端暂时停用，"
+            "后续出 Windows 版时在 Windows 端启用。</p>"
             + table(
                 ["级别", "运行位置", "能做什么", "生效时机"],
                 [
@@ -1299,25 +1300,27 @@ def _page_plugins(lang: str, href) -> str:
                         "可热加载，<strong>装上或更新后立即生效</strong>",
                     ],
                     [
-                        "<strong>原生插件（已停止支持）</strong>"
+                        "<strong>原生插件（手机端暂时停用）</strong>"
                         '<br><span class="mono small">level: "native"</span>',
                         "宿主进程内，Kotlin/JVM 原生代码",
                         "曾经用来承载新的下载后端、Adapter 与文件 Handler",
-                        "<strong>Android 端不再支持</strong>：条目会被拒绝，并说明原因",
+                        "<strong>手机端不生效</strong>：条目会被拒绝，并说明原因；"
+                        "计划在 Windows 端启用",
                     ],
                 ],
             )
             + note(
-                "<strong>为什么 Android 上撤下原生插件：</strong>"
+                "<strong>为什么手机上先停用原生插件：</strong>"
                 "Android 10 起系统禁止加载应用可写目录里的 dex（换到缓存目录也一样被拒），"
                 "限制一代比一代严；而且首批四个原生网盘插件实际上只是把工作转回宿主既有实现，"
                 "<strong>从没提供过宿主做不到的能力</strong>。与其留着一个装不上、"
-                "或装上也不多给任何东西的档位，不如把这一档从应用里整个拿掉。",
+                "或装上也不多给任何东西的档位，不如先在手机上把这一档收起来，"
+                "等 Windows 端那边不受这条限制时再启用。",
                 "warn",
             )
             + "<p>索引里没写 <span class=\"mono\">level</span> 的存量条目一律按 JS 读；"
             "条目写着 <span class=\"mono\">native</span> 时，应用会<strong>拒绝安装它</strong>，"
-            "并给出「Android 版已不再支持原生插件」这句明确说明 —— "
+            "并给出「原生插件在手机端暂时停用，后续 Windows 版将启用」这句明确说明 —— "
             "而不是含糊地提示去升级应用。</p>",
         )
         + section(

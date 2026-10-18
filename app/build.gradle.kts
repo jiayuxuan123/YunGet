@@ -26,7 +26,15 @@ android {
         applicationId = "com.yunget.app"
         minSdk = 23
         targetSdk = 34
-        versionCode = 57
+        versionCode = 58
+        // 2.7.10 内容：**原生（L2）插件在手机端暂时禁用**
+        //  ① 移除整条 dex 加载链：AndroidNativePluginLoader、YunHostBridge、l2-providers 模块；
+        //  ② 移除网盘 CloudProvider 抽象（CloudProvider.kt / Resolver / ShareRepository）
+        //     与迁移弹窗 CloudMigrationDialog —— 那批 Provider 本来就只是委托宿主既有仓库；
+        //  ③ 插件市场：level 写 native 的条目仍会被拒绝，但理由改成"手机端暂时停用，
+        //     后续 Windows 版将启用"，不再说"请更新应用"；
+        //  ④ 后续计划：云取出 Windows 端时在 Windows 端启用原生插件（那边没有
+        //     Android 10+ 的"可写 dex 不许加载"限制）。
         // 2.7.9 内容：**原生插件加载正解 + 图片镜像**
         //  ① L2 加载改用 InMemoryDexClassLoader：Android 10+ 禁的是"可写的 dex 文件"，
         //     换目录（files → code_cache）解决不了，必须让 dex 全程不落盘；
@@ -314,7 +322,7 @@ android {
         //     - 分片请求带 `If-Range`：防止 CDN 中途换文件时新旧字节拼出混杂文件
         //       （那种情况长度校验会通过，损坏会静默落地）。
         //     - 401/403/410 不再触发背压降并发（是授权/时效信号，不是"你太快了"）。
-        versionName = "2.7.9"
+        versionName = "2.7.10"
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
     }

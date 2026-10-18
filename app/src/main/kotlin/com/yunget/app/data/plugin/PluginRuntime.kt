@@ -24,12 +24,6 @@ import dev.turbodl.plugin.js.JsPluginConfig
 import dev.turbodl.plugin.js.JsPluginLoaderPlugin
 import dev.turbodl.plugin.js.JsScriptPlugin
 import dev.turbodl.plugin.js.JsScriptValidator
-import dev.turbodl.plugin.native.ATTR_API_VERSION
-import dev.turbodl.plugin.native.ATTR_DISPLAY_NAME
-import dev.turbodl.plugin.native.ATTR_ENTRY_CLASS
-import dev.turbodl.plugin.native.ATTR_PLUGIN_ID
-import dev.turbodl.plugin.native.KIND
-import dev.turbodl.plugin.runtime.Plugin
 import dev.turbodl.plugin.runtime.PluginHost
 import dev.turbodl.plugin.runtime.PluginSource
 import kotlinx.coroutines.Dispatchers
@@ -177,15 +171,20 @@ class PluginRuntime(private val context: Context) {
      *
      * 设计上支持条目应当由插件**注册到扩展点**（`SupportEntryProvider.KEY`），
      * 这样宿主只认契约、不认来源。但 JS 插件**无法实现 Kotlin 接口** ——
-     * 它只能通过 manifest 声明数据。所以路径是：
+     * 引擎明确拒绝 JS 注册 service（"a service is a Kotlin object graph"），
+     * 所以脚本只能通过 manifest 声明数据。路径是：
      *
      * ```
-     * 脚本/manifest 声明  →  这里解析成 SupportEntry  →  存表
-     *                                              ↘  同时注册进扩展点（供 L2 原生插件共用）
+     * 脚本/manifest 声明  →  这里解析成 SupportEntry  →  存表  →  [supportEntries] 供界面查询
      * ```
      *
-     * 宿主查询**只查这张表**：它已经是两条路径的汇合点，再分别去问扩展点会得到两份真相。
-     * L2 原生插件将来注册进扩展点时，也由这里转存进表 —— 见 [registerSupportProvider]。
+     * 宿主查询**只查这张表**，不去问扩展点：只有一条来源时，多问一处不会多出信息，
+     * 只会多出一份可能不一致的真相。
+     *
+     * （这里原有两个给原生（L2）插件用的入口 `registerSupportProvider` /
+     * `unregisterSupportProvider`：原生插件能实现 Kotlin 接口，所以它可以直接把
+     * `SupportEntryProvider` 注册进来。L2 移除后没有任何调用方 —— 死代码与"机制存在
+     * 而没接线"一样糟，一并删掉。将来真有第二条来源时按那时的事实重新设计。）
      *
      * ## 为什么权限检查在装载时而不是查询时
      *
@@ -195,24 +194,6 @@ class PluginRuntime(private val context: Context) {
      */
     private val supportEntriesByPlugin =
         java.util.concurrent.ConcurrentHashMap<String, List<SupportEntry>>()
-
-    /**
-     * 注册一个由原生代码提供的支持条目来源（L2 原生插件用）。
-     *
-     * 与 JS 路径汇合到同一张表，所以宿主查询不需要区分来源。
-     */
-    fun registerSupportProvider(ownerPluginId: String, provider: SupportEntryProvider) {
-        supportEntriesByPlugin[ownerPluginId] = runCatching { provider.entries() }
-            .onFailure {
-                android.util.Log.w("PluginRuntime", "插件 $ownerPluginId 的支持条目读取失败：${it.message}")
-            }
-            .getOrDefault(emptyList())
-    }
-
-    /** 注销（卸载时调用）。 */
-    fun unregisterSupportProvider(ownerPluginId: String) {
-        supportEntriesByPlugin.remove(ownerPluginId)
-    }
 
     /**
      * 已启用的支持条目（净化 + 排序后）。
@@ -232,11 +213,9 @@ class PluginRuntime(private val context: Context) {
      * ## 为什么从 manifest 读，而不是让插件执行代码来注册
      *
      * JS 插件**无法实现 Kotlin 接口**（[SupportEntryProvider] 是 Kotlin 契约），
-     * 所以它没有"注册到扩展点"这条路径。manifest 是宿主本来就存着的数据
-     * （装插件时一起落库），从这里读让 JS 插件**不需要任何新能力**就能提供支持入口 ——
-     * 也就没有"为了显示一个赞赏码而给它开个执行接口"这种不必要的信任扩张。
-     *
-     * L2 原生插件将来走 [registerSupportProvider]（它能实现接口），两者在这里汇合。
+     * 所以它没有"注册到扩展点"这条路径（引擎会明确拒绝 JS 注册 service）。manifest 是宿主
+     * 本来就存着的数据（装插件时一起落库），从这里读让 JS 插件**不需要任何新能力**就能提供
+     * 支持入口 —— 也就没有"为了显示一个赞赏码而给它开个执行接口"这种不必要的信任扩张。
      *
      * 解析失败**不清空已有条目**：manifest 坏掉是插件的状态问题，
      * 不该顺带把上次正常登记的条目也抹掉（那会让"支持页突然空了"变成插件坏掉的表现之一）。
@@ -322,25 +301,15 @@ class PluginRuntime(private val context: Context) {
     suspend fun healthCheck(): Map<String, String> = mutex.withLock {
         withContext(Dispatchers.IO) {
             val unhealthy = LinkedHashMap<String, String>()
-            val host = hostRef
-            if (host == null) {
-                // 宿主都没起来（例如引擎初始化失败）：这是整体故障，不该逐插件报错
-                return@withContext mapOf("*" to "插件宿主未初始化")
-            }
+            // 宿主都没起来（例如引擎初始化失败）：这是整体故障，不该逐插件报错
+            if (hostRef == null) return@withContext mapOf("*" to "插件宿主未初始化")
             val live = livePlugins().associateBy { it.id }
             for (p in repo.installedNow()) {
                 if (!p.enabled) continue
                 val file = File(p.entity.scriptPath)
-                // L2 与 JS 的健康判据不同：原生插件不进 QuickJS 的运行列表，
-                // 看的是宿主里有没有同 id 的 Plugin（DexClassLoader 装载失败/被拒都在这里显形）
                 val reason = when {
-                    !file.isFile ->
-                        if (p.level == PluginLevel.NATIVE) "插件包不存在（可能被系统清理）"
-                        else "脚本文件不存在（可能被系统清理）"
-                    p.level == PluginLevel.NATIVE && host.plugin<Plugin>(p.id) == null ->
-                        "原生插件未加载：更新或启停后需要重启 App 才生效；重启后仍提示请卸载重装"
-                    p.level != PluginLevel.NATIVE && !live.containsKey(p.id) ->
-                        "未出现在运行列表中（加载失败或已被引擎卸下）"
+                    !file.isFile -> "脚本文件不存在（可能被系统清理）"
+                    !live.containsKey(p.id) -> "未出现在运行列表中（加载失败或已被引擎卸下）"
                     else -> null
                 }
                 if (reason != null) {
@@ -354,19 +323,6 @@ class PluginRuntime(private val context: Context) {
 
     /** 引擎拒绝关闭的运行时数量（drain 超时的脚本）。 */
     fun leakedRuntimeCount(): Int = loader()?.leakedRuntimeCount() ?: 0
-
-    /**
-     * 当前已装载的网盘 Provider 实例（P0）。
-     *
-     * 发现方式：L2 插件的入口类可以**同时实现** [CloudProvider] —— 装载进宿主后实例
-     * 就在宿主里，按接口筛出来。JS 插件结构上无法实现 Kotlin 接口（契约注释里写明了
-     * 原因），所以这里只会有 L2 提供的实例；没有 L2 网盘插件时返回空表。
-     *
-     * [com.yunget.app.data.cloud.CloudProviderResolver] 的路由判据全部在这里之后：
-     * 认领链接（handles）与健康检查（health）由它逐个问，本方法只负责"有哪些"。
-     */
-    fun cloudProviders(): List<com.yunget.app.data.cloud.CloudProvider> =
-        hostRef?.plugins()?.filterIsInstance<com.yunget.app.data.cloud.CloudProvider>() ?: emptyList()
 
     /**
      * 校验一份脚本（不执行），用于导入前与编辑器保存前。
@@ -394,84 +350,27 @@ class PluginRuntime(private val context: Context) {
         )
         // installAll 是宿主唯一的装载入口（PluginHost 没有 loadPlugin）。loader 类插件与普通
         // 插件走同一条 install 路径，装载失败会体现在它自己的 state/error 上，不抛异常。
-        // JS 加载器之外必须装上 L2 加载器（[NativeLoaderPlugin]）：不装它，
-        // `kind = "native"` 的 PluginSource 没有任何 loader 认领，市场装上的原生插件
-        // 永远无法出现在宿主里 —— P16 的"机制完整、接线缺失"就发生在这一行。
+        //
+        // 只装 JS 加载器：Android 只保留 JS 插件（原生插件要从可写目录加载 dex，Android 10+
+        // 起系统禁止，见 [PluginLevel] 的类注释），所以没有第二个加载器要注册。
         PluginHost().apply {
-            // 宿主桥在任何插件装载之前注册：网盘 Provider 插件靠它拿应用上下文
-            // 与已登录账号（见 [YunHostBridge] 的信任边界说明）。
-            services.register(YunHostBridge.SERVICE_ID, YunHostBridge(context), "host")
-            installAll(listOf(loader, NativeLoaderPlugin(context)))
+            installAll(listOf(loader))
         }
     }.onFailure {
         android.util.Log.e("PluginRuntime", "创建插件宿主失败：${it.message}", it)
     }.getOrNull()
 
     /**
-     * 真正的装载：先卸载同名实例（改过脚本后重新启用就走这条），再按级别分流。
+     * 真正的装载：先卸载同名实例（改过脚本后重新启用就走这条）。
      *
      * 失败一律**不抛出**：装载失败是"这一个插件的问题"，记回库里给用户看，其余插件继续。
-     */
-    private fun loadLocked(host: PluginHost, p: InstalledPlugin): String? =
-        if (p.level == PluginLevel.NATIVE) loadNativeLocked(host, p) else loadJsLocked(host, p)
-
-    /**
-     * L2（原生插件）装载：把 jar 交给原生加载器（DexClassLoader）。
      *
-     * 与 JS 的两个差别：
-     *  1. 成功判据不是"出现在 JS 运行列表"，而是宿主里出现了同 id 的 [Plugin]
-     *     （原生插件不走 QuickJS，`loader().livePlugins()` 里永远看不到它们）；
-     *  2. 入口类从存储的 manifest 文本读（`entryClass`，市场安装 L2 时由 MarketClient
-     *     校验过存在并回写）。没有它就明确报错 —— 引擎的加载契约是"显式一个类名，
-     *     不扫 jar"，猜是猜不出来的。
-     *
-     * L2 的更新/卸载/启停**不能热生效**（类无法替换，见 [AndroidNativePluginLoader]
-     * 的类注释）—— 首次装载可以即时生效，其余场景 UI 负责提示"重启 App 后生效"。
+     * （原先这里按 `level` 分流到一条原生加载路径。Android 只保留 JS 插件后，那个分支连同它
+     * 依赖的 dex 加载器一起移除 —— 一条永远不会被走到的分支，只会让下次读代码的人以为它有用。）
      */
-    private fun loadNativeLocked(host: PluginHost, p: InstalledPlugin): String? {
-        val file = File(p.entity.scriptPath)
-        if (!file.isFile) {
-            val msg = "插件包不存在（可能被系统清理）：${file.name}"
-            repo.recordLoadErrorBlocking(p.id, msg)
-            return msg
-        }
-        // 同 id 先卸：与 JS 同一原则，保证旧实例的 disposer 先跑完
-        runCatching { host.uninstall(p.id) }
+    private fun loadLocked(host: PluginHost, p: InstalledPlugin): String? = loadJsLocked(host, p)
 
-        return runCatching {
-            val manifest = p.entity.manifestJson.takeIf { it.isNotBlank() }
-                ?.let { runCatching { org.json.JSONObject(it) }.getOrNull() }
-            val entryClass = manifest?.optString("entryClass")?.trim().orEmpty()
-            if (entryClass.isEmpty()) {
-                throw IllegalStateException(
-                    "缺少入口类声明（manifest.entryClass）—— 请卸载后重新安装该插件"
-                )
-            }
-            val attributes = buildMap {
-                put(ATTR_PLUGIN_ID, p.id)
-                put(ATTR_ENTRY_CLASS, entryClass)
-                put(ATTR_DISPLAY_NAME, p.name)
-                manifest?.optString("requiredApiVersion")?.trim()
-                    ?.takeIf { it.isNotEmpty() }?.let { put(ATTR_API_VERSION, it) }
-            }
-            host.loadSource(PluginSource(kind = KIND, uri = file.absolutePath, attributes = attributes))
-
-            if (host.plugin<Plugin>(p.id) == null) {
-                "加载后未在宿主中出现（入口类缺失、API 版本不满足或 onLoad 抛异常）"
-            } else {
-                // 与 JS 同一原则：装载成功才登记支持条目
-                syncSupportEntries(host, p)
-                null
-            }
-        }.getOrElse { t ->
-            val msg = t.message ?: t.javaClass.simpleName
-            android.util.Log.w("PluginRuntime", "原生插件 ${p.id} 加载失败：$msg", t)
-            repo.recordLoadErrorBlocking(p.id, msg)
-            msg
-        }
-    }
-
-    /** JS（L1）装载：QuickJS 沙箱路径。 */
+    /** JS 装载：QuickJS 沙箱路径（现在只剩这一条）。 */
     private fun loadJsLocked(host: PluginHost, p: InstalledPlugin): String? {
         val file = File(p.entity.scriptPath)
         if (!file.isFile) {

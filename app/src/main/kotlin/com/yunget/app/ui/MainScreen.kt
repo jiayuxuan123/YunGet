@@ -69,8 +69,6 @@ import com.yunget.app.ui.theme.spatialFast
 import com.yunget.app.ui.theme.effectsDefault
 import com.yunget.app.ui.theme.effectsFast
 import com.yunget.app.data.db.AppDatabase
-import com.yunget.app.data.plugin.PluginLevel
-import com.yunget.app.data.plugin.PluginRepository
 import com.yunget.app.data.db.DownloadTaskEntity
 import com.yunget.app.data.download.DownloadManager
 import com.yunget.app.data.backup.AuthBackupManager
@@ -119,8 +117,6 @@ import com.yunget.app.ui.login.XunleiLoginScreen
 import com.yunget.app.ui.login.XunleiVerifyWebViewScreen
 import com.yunget.app.ui.navigation.MainTab
 import com.yunget.app.ui.screens.AboutScreen
-import com.yunget.app.ui.screens.CloudMigrationDialog
-import com.yunget.app.ui.screens.CloudMigrationNotice
 import com.yunget.app.ui.screens.DownloadScreen
 import com.yunget.app.ui.screens.DriveScreen
 import com.yunget.app.ui.screens.OnboardingScreen
@@ -1037,46 +1033,6 @@ fun MainScreen() {
     }
     }
 
-    // 网盘插件化迁移告知：升级到 2.7.6+ 后首次启动、且登录过网盘时弹一次（版本号级一次性）。
-    // 账号摘要复用 AuthBackupManager 的"已登录"口径；回退行为本身在 CloudProviderResolver，
-    // 这个弹窗只负责把"账号保留 + 插件优先 + 自动回退"说清楚。
-    var migrationAccounts by remember { mutableStateOf<List<Pair<String, String>>>(emptyList()) }
-    var migrationProviderNames by remember { mutableStateOf<List<String>>(emptyList()) }
-    var showMigrationNotice by remember { mutableStateOf(false) }
-    val appVersionName = remember {
-        runCatching {
-            context.packageManager.getPackageInfo(context.packageName, 0).versionName.orEmpty()
-        }.getOrDefault("")
-    }
-    LaunchedEffect(Unit) {
-        if (!CloudMigrationNotice.shouldShow(context, appVersionName)) return@LaunchedEffect
-        val accounts = withContext(Dispatchers.IO) {
-            CloudMigrationNotice.accountSummaries(context)
-        }
-        if (accounts.isEmpty()) {
-            // 没有已登录账号：没有需要安抚的迁移疑虑，静默记为已告知
-            CloudMigrationNotice.acknowledge(context, appVersionName)
-            return@LaunchedEffect
-        }
-        migrationProviderNames = withContext(Dispatchers.IO) {
-            PluginRepository(context).installedNow()
-                .filter { it.level == PluginLevel.NATIVE }
-                .map { it.name }
-        }
-        migrationAccounts = accounts
-        showMigrationNotice = true
-    }
-    if (showMigrationNotice) {
-        CloudMigrationDialog(
-            accounts = migrationAccounts,
-            providerCount = migrationProviderNames.size,
-            providerNames = migrationProviderNames,
-            onAcknowledge = {
-                showMigrationNotice = false
-                CloudMigrationNotice.acknowledge(context, appVersionName)
-            },
-        )
-    }
 
     // 首次下载引导：加入「忽略电池优化」白名单（锁屏保持下载生效的前提）
     if (showBatteryGuide) {

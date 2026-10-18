@@ -198,7 +198,11 @@ data class MarketPlugin(
     val homepage: String,
     val sourceUrl: String,
     val manifestUrl: String,
-    /** 能力级别（P20）。索引里没写 `level` 时按 [PluginLevel.DEFAULT]（L1）读。 */
+    /**
+     * 能力级别。索引里写了别的值（含 `native`）时**整条会被丢掉**，不留到这里 ——
+     * 所以这个字段现在的取值只有 [PluginLevel.DEFAULT]。保留它是因为索引是外部格式，
+     * 模型如实反映"索引里有这个字段"，而拒绝逻辑集中在一处（见 [parseMarketPlugin]）。
+     */
     val level: PluginLevel = PluginLevel.DEFAULT,
     val versions: List<Version>,
 ) {
@@ -261,15 +265,25 @@ internal fun parseMarketPlugin(
     val id = o.optString("id").trim()
     if (id.isBlank()) return Result.failure(IllegalArgumentException("条目缺少 id"))
 
-    // 级别：缺字段 → L1（存量索引兼容）；写了不认识的值 → 整条按坏数据丢掉。
-    // 不能"猜一个默认值"：猜错会把 L2 当 L1 装上，而界面正在告诉用户"即时生效"。
+    // 级别：缺字段 → JS（存量索引兼容）；写了别的值 → 整条按坏数据丢掉。
+    //
+    // `native` 现在也走"丢掉"这条路，但**必须给出专门的说明**：它不是"未知的新级别"，
+    // 而是"Android 版应用不再支持的东西"。笼统报"级别不受支持、请更新应用"会让用户
+    // 去升级一个永远不会支持它的版本 —— 那条 L2 路已经在 Android 上放弃了（见 [PluginLevel]）。
     val levelRaw = o.optString("level").trim()
     val level = if (levelRaw.isEmpty()) {
         PluginLevel.DEFAULT
     } else {
         PluginLevel.parse(levelRaw)
             ?: return Result.failure(
-                IllegalArgumentException("level「$levelRaw」不是当前应用支持的插件级别，请更新应用")
+                IllegalArgumentException(
+                    if (levelRaw.equals("native", ignoreCase = true)) {
+                        "这是一个原生（L2）插件。Android 版云取只支持 JS 插件，" +
+                            "原生插件在手机端暂时停用，后续 Windows 版将启用"
+                    } else {
+                        "level「$levelRaw」不是当前应用支持的插件级别，请更新应用"
+                    }
+                )
             )
     }
 

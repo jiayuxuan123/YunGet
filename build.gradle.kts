@@ -7,7 +7,8 @@ plugins {
 
     alias(libs.plugins.ksp) apply false
 
-    // :l2-providers 用纯 JVM Kotlin（L2 插件打包模块）；版本与 app 一致
+    // 根项目不再声明 kotlin("jvm")：它只为 :l2-providers（L2 插件打包模块）存在，
+    // 那个模块已随「Android 只保留 JS 插件」移除。app 用 android/compose/ksp 三个插件。
     kotlin("jvm") version "2.1.0" apply false
 }
 

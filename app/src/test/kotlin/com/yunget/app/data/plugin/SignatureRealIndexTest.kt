@@ -25,10 +25,17 @@ class SignatureRealIndexTest {
 
     private val indexFile = File("../../YunGet-Plugins/plugins.json")
 
-    private fun payloadPath(pluginId: String, level: String): File {
-        val ext = if (level == "native") "jar" else "js"
-        return File("../../YunGet-Plugins/plugins/$pluginId/$pluginId.$ext")
-    }
+    /**
+     * 插件文件的路径。
+     *
+     * **只认 `.js`**：Android 端只剩 JS 插件（原生/L2 已移除，见 `PluginLevel` 的类注释），
+     * 所以这条回归测试只覆盖"这台设备真的能装上的东西"。索引里那 4 条 `level: "native"`
+     * 在 Android 上会被市场直接跳过，验它们等于验一份永远不会被安装的字节。
+     * （Ed25519 实现本身没有变，仍是 PC 与 Android 共用的那一份；将来若需要覆盖 jar 条目，
+     * 这里放开后缀即可。）
+     */
+    private fun payloadPath(pluginId: String): File =
+        File("../../YunGet-Plugins/plugins/$pluginId/$pluginId.js")
 
     private fun entries(): List<Entry> {
         if (!indexFile.isFile) return emptyList()
@@ -39,8 +46,9 @@ class SignatureRealIndexTest {
             val p = plugins.getJSONObject(i)
             val id = p.getString("id")
             val level = p.optString("level", "js")
+            if (level != "js") continue   // 原生（L2）条目在 Android 上不会被安装，见 payloadPath
             val v = p.getJSONArray("versions").getJSONObject(0)
-            val file = payloadPath(id, level)
+            val file = payloadPath(id)
             if (!file.isFile) continue
             val bytes = file.readBytes()
             val digest = java.security.MessageDigest.getInstance("SHA-256").digest(bytes)
