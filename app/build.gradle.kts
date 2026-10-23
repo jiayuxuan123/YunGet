@@ -26,7 +26,7 @@ android {
         applicationId = "com.yunget.app"
         minSdk = 23
         targetSdk = 34
-        versionCode = 58
+        versionCode = 59
         // 2.7.10 内容：**原生（L2）插件在手机端暂时禁用**
         //  ① 移除整条 dex 加载链：AndroidNativePluginLoader、YunHostBridge、l2-providers 模块；
         //  ② 移除网盘 CloudProvider 抽象（CloudProvider.kt / Resolver / ShareRepository）
@@ -328,7 +328,23 @@ android {
         //  CDN 反复 502/503、按连接数封禁都只能等发新版。
         //  入口：设置 → 引擎与插件 → 引擎高级参数。
         //  默认值与旧硬编码逐项一致，不动这些开关时行为与之前完全相同。
-        versionName = "2.7.10"
+        // 2.7.11：
+        //  ① 引擎升级到 TurboDL 0.2.3.0。该版本此前**只发了 CLI 制品**，
+        //     turbodl-core 与四个插件模块没发布，所以 App 一直解析的是 0.2.2.0 ——
+        //     UA 协商 / 失败快速收敛 / 错误归因三项改进从未在 App 里生效过。
+        //     现在制品补齐，App 真正用上了。
+        //  ② 修了 0.2.3.0 里的死代码：SegmentDownloader 记录了分片层的真实失败原因
+        //     （HTTP 状态码 / 连接重置 / body 截断），并通过 takeWholeError() 暴露，
+        //     但 TurboClient 发 Failed 事件时仍用 e.message（已退化成"failed to connect"）。
+        //     现在优先取归因结果，失败提示终于能说清到底哪里出错。
+        //  ③ 引擎可配项从 21/43 补到 32/43：新增分片粒度（单块上限 / 最小分片 /
+        //     分片总数 / 再切次数）、超时（连接 / 读 / 探测 / 探测重试）、
+        //     慢启动起始并发、User-Agent、HTTP 版本三态策略。
+        //     其中 slowStartInitial 让「慢启动」开关从半截效果变完整；
+        //     userAgent 是 UA 协商的起点；httpVersionPolicy 优先于旧的 forceHttp1。
+        //  剩余 11 项（内存预算、连接池、预热细节）刻意保持引擎默认：
+        //  调错会让每个下载都退化，用户也没有判断依据。
+        versionName = "2.7.11"
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
     }
