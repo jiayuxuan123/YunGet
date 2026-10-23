@@ -26,7 +26,7 @@ android {
         applicationId = "com.yunget.app"
         minSdk = 23
         targetSdk = 34
-        versionCode = 59
+        versionCode = 60
         // 2.7.10 内容：**原生（L2）插件在手机端暂时禁用**
         //  ① 移除整条 dex 加载链：AndroidNativePluginLoader、YunHostBridge、l2-providers 模块；
         //  ② 移除网盘 CloudProvider 抽象（CloudProvider.kt / Resolver / ShareRepository）
@@ -344,7 +344,18 @@ android {
         //     userAgent 是 UA 协商的起点；httpVersionPolicy 优先于旧的 forceHttp1。
         //  剩余 11 项（内存预算、连接池、预热细节）刻意保持引擎默认：
         //  调错会让每个下载都退化，用户也没有判断依据。
-        versionName = "2.7.11"
+        // 2.7.12：
+        //  修三个"只在同时打开两个开关时才发作"的缺陷（引擎 0.2.3.1）：
+        //  ① 预先合并 + 收尾托管会写坏文件 —— 托管把分片缩到 [A,M] 并新建 [M+1,B]，
+        //     而预先合并把已完成分片直接写进目标文件，原分片若已越过 M 就会覆盖接管区间。
+        //     表现是长度正确、SHA-256 不符，长度校验拦不住，损坏静默落地。
+        //     现在托管优先（它消除几十秒收尾长尾，预先合并只省 6% 合并 I/O）。
+        //  ② 「HTTP 版本策略」选 AUTO 却被「强制 HTTP/1.1」改写：策略默认值本身就是 AUTO，
+        //     无法区分"显式选了自动"和"没设置"，于是关掉强制后 AUTO 变成了 FORCE_HTTP2
+        //     （全链路 h2，多线程可能完全没加速）——界面说的和实际做的相反。
+        //     引擎新增 UNSET 哨兵，只有它才回退到旧字段；界面也合并成一个三选一。
+        //  ③ 慢启动起始并发超过总 worker 数时"起步就超发"，现在夹到 worker 数。
+        versionName = "2.7.12"
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
     }
