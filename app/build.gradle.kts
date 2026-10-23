@@ -493,6 +493,87 @@ tasks.register("verifyApkVersion") {
     }
 }
 
+    /**
+     * 【防"版本号跑飞"事故】发布前校验版本号**高于**已发布的最高版本。
+     *
+     * ## 起因（真实事故，2026-10）
+     *
+     * 做 iOS 风格界面时，为了让"大版本更新"看起来合理，把 versionName 写成了 `2.8.0`。
+     * 那次只打了测试版、没发正式版，随后整套改动回退，版本号改回 `2.7.x`。
+     *
+     * 但问题留下了：装过那个测试版的手机会一直认为自己在 `2.8.0`，
+     * 而之后所有正式版（2.7.11…）在 `compareVersions` 里都**小于**它 ——
+     * 检查更新永远提示"已是最新"，从此收不到任何更新。
+     *
+     * ## 规则（这一条要一直守）
+     *
+     * **测试版与正式版必须共用同一套版本号序列。**
+     * 测试版可以是 `2.7.11-dev1`、`2.7.12`，但绝不能为了"看起来是个大版本"
+     * 就跳到 `2.8.0` 再退回 `2.7.x` —— 那会让所有装过测试版的设备永久掉队。
+     *
+     * 本任务通过 GitHub API 取已发布 Release 的最高版本做对比。离线或未装 gh 时
+     * 只打印警告、不阻断构建（不能在没网时把人卡死），但会明确提示"未校验"。
+     */
+    tasks.register("verifyVersionIsNewest") {
+        group = "verification"
+        description = "校验 versionName 高于已发布的最高 Release（防版本号倒退导致收不到更新）"
+
+        doLast {
+            val current = android.defaultConfig.versionName
+                ?: throw GradleException("android.defaultConfig 未设置 versionName")
+
+            val gh = sequenceOf(
+                File("C:\\Program Files\\GitHub CLI\\gh.exe"),
+                File(System.getenv("LOCALAPPDATA") ?: "", "Programs/GitHub CLI/gh.exe"),
+            ).firstOrNull { it.isFile }
+            if (gh == null) {
+                logger.warn("verifyVersionIsNewest: 未找到 gh CLI，跳过校验（发布前请手动确认 $current 高于线上版本）")
+                return@doLast
+            }
+
+            val tags = try {
+                providers.exec {
+                    commandLine(gh.absolutePath, "api", "repos/jiayuxuan123/YunGet/releases", "--jq", ".[].tag_name")
+                }.standardOutput.asText.get().lines().map { it.trim() }.filter { it.isNotBlank() }
+            } catch (e: Exception) {
+                logger.warn("verifyVersionIsNewest: 拉取线上版本失败（${e.message}），跳过校验")
+                return@doLast
+            }
+            if (tags.isEmpty()) {
+                logger.warn("verifyVersionIsNewest: 线上没有 Release，跳过校验")
+                return@doLast
+            }
+
+            // 只比数字段：v2.7.10 -> [2,7,10]
+            fun parts(v: String): List<Int> =
+                Regex("\\d+").findAll(v).map { it.value.toInt() }.take(3).toList()
+
+            fun higher(a: String, b: String): Int {
+                val pa = parts(a); val pb = parts(b)
+                for (i in 0 until maxOf(pa.size, pb.size)) {
+                    val x = pa.getOrNull(i) ?: 0
+                    val y = pb.getOrNull(i) ?: 0
+                    if (x != y) return x - y
+                }
+                return 0
+            }
+
+            val highest = tags.maxWithOrNull { a, b -> higher(a, b) } ?: return@doLast
+            if (higher(current, highest) <= 0) {
+                throw GradleException(
+                    buildString {
+                        appendLine("versionName 没有高于线上最高版本 —— 发出去用户收不到更新！")
+                        appendLine("    本次 : $current")
+                        appendLine("    线上 : $highest")
+                        appendLine("处理：把 versionCode/versionName 提到 $highest 之上。")
+                        appendLine("注意：测试版必须与正式版共用同一套版本号，不能为了显得\"版本大\"就跳号。")
+                    }
+                )
+            }
+            logger.lifecycle("verifyVersionIsNewest OK: $current > $highest")
+        }
+    }
+
 dependencies {
     implementation("androidx.compose.material:material-icons-extended")
     implementation("androidx.lifecycle:lifecycle-viewmodel-ktx:2.8.7")
