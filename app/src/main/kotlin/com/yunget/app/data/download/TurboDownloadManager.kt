@@ -375,8 +375,16 @@ class TurboDownloadManager(
         userAgent = userAgentProvider().takeIf { it.isNotBlank() }
             ?: "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 " +
                 "(KHTML, like Gecko) Chrome/125.0.0.0 Safari/537.36",
-        // HTTP 版本策略：三态，比 forceHttp1 布尔开关细（AUTO 让探测与单流回退走 h2，
-        // 分片并发仍走 h1）。本项优先于 forceHttp1。
+        // HTTP 版本策略（三态）。
+        //
+        // 引擎 0.2.3.1 起用 UNSET 区分"没设置"，只有 UNSET 才会被 forceHttp1 推导。
+        // App 侧用户看到的是明确的三个选项，所以这里**永远传显式值**，
+        // 不再让 forceHttp1 参与 —— 否则"选 AUTO"会被那个布尔开关悄悄改写成
+        // FORCE_HTTP2（这正是用户实际遇到的问题）。
+        //
+        // 0 = AUTO          ：分片并发走 h1，探测与单流回退允许 h2
+        // 1 = FORCE_HTTP1   ：全部强制 h1
+        // 2 = FORCE_HTTP2   ：全部允许 h2
         httpVersionPolicy = when (httpVersionPolicyProvider()) {
             1 -> HttpVersionPolicy.FORCE_HTTP1
             2 -> HttpVersionPolicy.FORCE_HTTP2

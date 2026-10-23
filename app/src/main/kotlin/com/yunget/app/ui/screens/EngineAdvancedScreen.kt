@@ -103,7 +103,6 @@ fun EngineAdvancedScreen(
 
     // 用 Compose 状态包一层：SharedPreferences 本身不参与快照，
     // 直接读 getter 不会触发重组。
-    var forceHttp1 by remember { mutableStateOf(repo.forceHttp1) }
     var dynamicSegmentation by remember { mutableStateOf(repo.dynamicSegmentation) }
     var segmentsPerConnection by remember { mutableStateOf(repo.segmentsPerConnection) }
     var tailAssist by remember { mutableStateOf(repo.tailAssist) }
@@ -191,7 +190,6 @@ fun EngineAdvancedScreen(
                     )
                     Spacer(modifier = Modifier.height(8.dp))
                     OutlinedButton(onClick = {
-                        forceHttp1 = true
                         dynamicSegmentation = true
                         segmentsPerConnection = 4
                         tailAssist = true
@@ -215,7 +213,6 @@ fun EngineAdvancedScreen(
                         userAgent = ""
                         httpVersionPolicy = 0
 
-                        repo.forceHttp1 = true
                         repo.dynamicSegmentation = true
                         repo.segmentsPerConnection = 4
                         repo.tailAssist = true
@@ -247,16 +244,21 @@ fun EngineAdvancedScreen(
             Spacer(modifier = Modifier.height(20.dp))
             SectionLabel("连接与分片")
 
-            // 1. 强制 HTTP/1.1
-            ParamSwitch(
-                title = "强制 HTTP/1.1",
-                description = "开启后每个分片走独立连接。关掉会允许 h2 —— " +
-                    "h2 把所有分片多路复用到同一条 TCP，共享拥塞窗口，" +
-                    "开几十个线程也只有单连接速度。",
-                checked = forceHttp1,
-                onCheckedChange = {
-                    forceHttp1 = it
-                    repo.forceHttp1 = it
+            // 1. HTTP 版本策略（三态）
+            //
+            // 【这里原本还有一个「强制 HTTP/1.1」开关，已合并到本项】
+            // 两个开关表达的是同一件事，而引擎的推导规则是
+            // "策略为 AUTO 时再看 forceHttp1" —— 于是用户把强制关掉、策略选 AUTO，
+            // 实际生效的却是 FORCE_HTTP2，"选了自动却变成强制 h2"。
+            // 选择被另一个开关悄悄改写，这类问题几乎无法从界面上察觉。
+            //
+            // 现在只保留这一个三态选择；forceHttp1 的存储字段保留（旧版本兼容），
+            // 但不再读它 —— 引擎侧也改成了只有 UNSET 才回退到它。
+            HttpPolicySelector(
+                value = httpVersionPolicy,
+                onChange = {
+                    httpVersionPolicy = it
+                    repo.engineHttpVersionPolicy = it
                 }
             )
 
@@ -549,68 +551,6 @@ fun EngineAdvancedScreen(
                 }
             }
 
-            Surface(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(bottom = ListGroupGap),
-                shape = listGroupShape(0, 1),
-                color = MaterialTheme.colorScheme.surfaceContainerLow
-            ) {
-                Column(modifier = Modifier.padding(horizontal = 14.dp, vertical = 12.dp)) {
-                    Text(
-                        text = "HTTP 版本策略",
-                        style = MaterialTheme.typography.titleSmall,
-                        fontWeight = FontWeight.Medium
-                    )
-                    Spacer(modifier = Modifier.height(4.dp))
-                    Text(
-                        text = "比上面的「强制 HTTP/1.1」更细：AUTO 让探测与单流回退可以走 h2，" +
-                            "而分片并发仍走 h1。本项优先于那个布尔开关。",
-                        style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant
-                    )
-                    Spacer(modifier = Modifier.height(10.dp))
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.spacedBy(8.dp)
-                    ) {
-                        listOf("AUTO", "强制 1.1", "允许 2").forEachIndexed { idx, label ->
-                            val selected = httpVersionPolicy == idx
-                            Surface(
-                                modifier = Modifier.weight(1f),
-                                shape = androidx.compose.foundation.shape.RoundedCornerShape(8.dp),
-                                color = if (selected) {
-                                    MaterialTheme.colorScheme.primary
-                                } else {
-                                    MaterialTheme.colorScheme.surfaceContainerHighest
-                                }
-                            ) {
-                                Box(
-                                    modifier = Modifier
-                                        .clickable {
-                                            httpVersionPolicy = idx
-                                            repo.engineHttpVersionPolicy = idx
-                                        }
-                                        .padding(vertical = 8.dp),
-                                    contentAlignment = Alignment.Center
-                                ) {
-                                    Text(
-                                        text = label,
-                                        style = MaterialTheme.typography.labelMedium,
-                                        fontWeight = if (selected) FontWeight.SemiBold else FontWeight.Normal,
-                                        color = if (selected) {
-                                            MaterialTheme.colorScheme.onPrimary
-                                        } else {
-                                            MaterialTheme.colorScheme.onSurfaceVariant
-                                        }
-                                    )
-                                }
-                            }
-                        }
-                    }
-                }
-            }
-
             Spacer(modifier = Modifier.height(20.dp))
             SectionLabel("校验与探测")
 
@@ -712,6 +652,96 @@ fun EngineAdvancedScreen(
                 TextButton(onClick = { showUaDialog = false }) { Text("取消") }
             }
         )
+    }
+}
+
+/**
+ * HTTP 版本策略选择器（三态）。
+ *
+ * 之所以单独做一个组件、而不是复用 [ParamStepper] 或两个开关：
+ *
+ *  - 数值步进器表达不了"离散三选一"；
+ *  - 拆成两个布尔开关（"强制 h1" + "允许 h2"）会重新引入互斥问题 ——
+ *    引擎之前的坑正是这样来的：`httpVersionPolicy` 为 AUTO 时还要看 `forceHttp1`，
+ *    于是"策略选自动 + 强制关掉"实际变成 FORCE_HTTP2，用户以为改了却改错了方向。
+ *
+ * 三选一之后，每一项的语义都是完整的，不依赖任何其它开关。
+ */
+@Composable
+private fun HttpPolicySelector(
+    value: Int,
+    onChange: (Int) -> Unit,
+) {
+    // 0=AUTO / 1=FORCE_HTTP1 / 2=FORCE_HTTP2
+    val options = listOf(
+        0 to "自动",
+        1 to "强制 1.1",
+        2 to "允许 2",
+    )
+    val detail = when (value) {
+        1 -> "全部链路强制 HTTP/1.1。每个分片走独立连接，最不容易被 h2 多路复用抹平并发收益。"
+        2 -> "全部链路允许 HTTP/2。仅当确知目标站点只支持 h2、或单连接反而更快时使用 —— " +
+            "多线程下载通常不会有加速。"
+        else -> "分片并发走 HTTP/1.1（保住多连接收益），探测与整文件单流回退允许协商 h2" +
+            "（兼容只支持 h2 的服务器）。绝大多数情况用这个。"
+    }
+
+    Surface(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(bottom = ListGroupGap),
+        shape = listGroupShape(0, 1),
+        color = MaterialTheme.colorScheme.surfaceContainerLow
+    ) {
+        Column(modifier = Modifier.padding(horizontal = 14.dp, vertical = 12.dp)) {
+            Text(
+                text = "HTTP 版本策略",
+                style = MaterialTheme.typography.titleSmall,
+                fontWeight = FontWeight.Medium
+            )
+            Spacer(modifier = Modifier.height(4.dp))
+            Text(
+                text = detail,
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant
+            )
+            Spacer(modifier = Modifier.height(10.dp))
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(8.dp)
+            ) {
+                options.forEach { (idx, label) ->
+                    val selected = value == idx
+                    Surface(
+                        modifier = Modifier.weight(1f),
+                        shape = androidx.compose.foundation.shape.RoundedCornerShape(8.dp),
+                        color = if (selected) {
+                            MaterialTheme.colorScheme.primary
+                        } else {
+                            MaterialTheme.colorScheme.surfaceContainerHighest
+                        }
+                    ) {
+                        Box(
+                            modifier = Modifier
+                                .clickable { onChange(idx) }
+                                .padding(vertical = 9.dp),
+                            contentAlignment = Alignment.Center
+                        ) {
+                            Text(
+                                text = label,
+                                style = MaterialTheme.typography.labelMedium,
+                                fontWeight = if (selected) FontWeight.SemiBold else FontWeight.Normal,
+                                color = if (selected) {
+                                    MaterialTheme.colorScheme.onPrimary
+                                } else {
+                                    MaterialTheme.colorScheme.onSurfaceVariant
+                                }
+                            )
+                        }
+                    }
+                }
+            }
+        }
     }
 }
 

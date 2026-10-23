@@ -582,10 +582,10 @@ dependencies {
 
     // TurboDL SDK（纯 JVM 多线程下载引擎 + 可选插件框架），从 mavenLocal 解析 dev.turbodl:*:0.2.3.0
     // 0.2.0.8：读缓冲改为按并发摊薄（修 256 连接 = 256MB = 整堆的 OOM，见 2.7.2 说明）
-    implementation("dev.turbodl:turbodl-core:0.2.3.0")
-    implementation("dev.turbodl:turbo-plugin-runtime:0.2.3.0")
-    implementation("dev.turbodl:turbo-plugin-bootstrap:0.2.3.0")
-    implementation("dev.turbodl:turbo-plugin-hls:0.2.3.0")
+    implementation("dev.turbodl:turbodl-core:0.2.3.1")
+    implementation("dev.turbodl:turbo-plugin-runtime:0.2.3.1")
+    implementation("dev.turbodl:turbo-plugin-bootstrap:0.2.3.1")
+    implementation("dev.turbodl:turbo-plugin-hls:0.2.3.1")
 
     // JavaScript 插件加载器：让用户能自己写/导入脚本插件。
     //
@@ -599,7 +599,7 @@ dependencies {
     //     公开 API（interruptEvaluation / memoryLimit / memoryUsage…）与 jvm 版逐名一致，
     //     且 Android 侧走 System.loadLibrary（不再有 createTempFile 问题）。
     // 所以：排掉 jvm 版，换成 android 版 —— turbo-plugin-js 自身一行代码都不用改。
-    implementation("dev.turbodl:turbo-plugin-js:0.2.3.0") {
+    implementation("dev.turbodl:turbo-plugin-js:0.2.3.1") {
         exclude(group = "io.github.dokar3", module = "quickjs-kt-jvm")
     }
     implementation("io.github.dokar3:quickjs-kt-android:1.0.15")

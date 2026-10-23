@@ -54,6 +54,7 @@ class EngineAdvancedConfigTest {
         slowStartInitial = 0,
         userAgent = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 " +
             "(KHTML, like Gecko) Chrome/125.0.0.0 Safari/537.36",
+        // App 侧永远显式传策略；0 映射为 AUTO
         httpVersionPolicy = HttpVersionPolicy.AUTO,
     )
 
@@ -72,7 +73,16 @@ class EngineAdvancedConfigTest {
         assertEquals("probeRetries 默认值漂移", engine.probeRetries, app.probeRetries)
         assertEquals("slowStartInitial 默认值漂移", engine.slowStartInitial, app.slowStartInitial)
         assertEquals("userAgent 默认值漂移", engine.userAgent, app.userAgent)
-        assertEquals("httpVersionPolicy 默认值漂移", engine.httpVersionPolicy, app.httpVersionPolicy)
+        // 【这一项不再比默认值相等】
+        // App 永远传显式策略（AUTO/FORCE_HTTP1/FORCE_HTTP2），而引擎的默认值
+        // 是 UNSET（= "没设置，回落到 forceHttp1"）。两者语义不同：
+        // App 传 AUTO 表示"用户明确选了自动"，不该被 forceHttp1 改写。
+        // 所以这里断言的是**解析结果**，而不是字段字面量。
+        assertEquals(
+            "App 传 AUTO 时应解析为 AUTO（不受 forceHttp1 影响）",
+            HttpVersionPolicy.AUTO,
+            app.effectiveHttpVersionPolicy,
+        )
     }
 
     @Test
