@@ -37,13 +37,10 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.outlined.AddToHomeScreen
 import androidx.compose.material.icons.outlined.BookmarkBorder
 import androidx.compose.material.icons.outlined.Link
-import androidx.compose.material3.AlertDialog
-import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
-import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
@@ -59,6 +56,9 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import com.yunget.app.data.db.BookmarkEntity
 import com.yunget.app.ui.viewmodel.BookmarkViewModel
+import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.Card
+import androidx.compose.material3.TextButton
 
 /**
  * 主页快捷方式区块：展示已「添加到主页」的收藏链接，点击直接解析，长按确认后从主页移除。
@@ -112,6 +112,7 @@ fun HomeShortcutGrid(
             // 空态：引导到收藏页添加，避免这里只剩一片空白
             Card(
                 modifier = Modifier.fillMaxWidth(),
+                shape = CardDefaults.shape,
                 colors = CardDefaults.cardColors(
                     containerColor = MaterialTheme.colorScheme.surfaceContainerLow
                 )
@@ -238,6 +239,7 @@ private fun HomeShortcutTile(
         Box(
             modifier = Modifier
                 .size(48.dp)
+                // 12dp 在 48dp 方块上更接近 iOS 的连续圆角观感。
                 .clip(RoundedCornerShape(16.dp))
                 .background(MaterialTheme.colorScheme.primaryContainer),
             contentAlignment = Alignment.Center

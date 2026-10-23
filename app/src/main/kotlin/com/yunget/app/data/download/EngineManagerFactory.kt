@@ -74,6 +74,20 @@ internal object EngineManagerFactory {
             dohUrlProvider = { settings.dohUrl },
             warmUpProvider = { settings.warmUpConnections },
             slowStartProvider = { settings.slowStart },
+            // 高级引擎旋钮：以前全部硬编码在 TurboDownloadManager.buildConfig() 里，
+            // 界面上没有任何入口。默认值与旧硬编码逐项相同，所以不碰开关的用户行为不变。
+            forceHttp1Provider = { settings.forceHttp1 },
+            dynamicSegmentationProvider = { settings.dynamicSegmentation },
+            segmentsPerConnectionProvider = { settings.segmentsPerConnection },
+            tailAssistProvider = { settings.tailAssist },
+            adaptiveConcurrencyProvider = { settings.adaptiveConcurrency },
+            overlapMergeProvider = { settings.overlapMerge },
+            bufferedSegmentWriteProvider = { settings.bufferedSegmentWrite },
+            backpressureFailuresProvider = { settings.backpressureFailures },
+            maxConnectionsPerHostProvider = { settings.maxConnectionsPerHost },
+            stallTimeoutMsProvider = { settings.stallTimeoutMs },
+            trustWeakValidatorProvider = { settings.trustWeakValidator },
+            skipProbeWhenSizeKnownProvider = { settings.skipProbeWhenSizeKnown },
         )
     }
 

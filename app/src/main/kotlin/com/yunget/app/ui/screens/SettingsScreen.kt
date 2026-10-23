@@ -45,6 +45,7 @@ import androidx.compose.material.icons.outlined.Info
 import androidx.compose.material.icons.outlined.Layers
 import androidx.compose.material.icons.outlined.Notifications
 import androidx.compose.material.icons.outlined.Palette
+import androidx.compose.material.icons.outlined.Style
 import androidx.compose.material.icons.outlined.Power
 import androidx.compose.material.icons.outlined.Refresh
 import androidx.compose.material.icons.outlined.Restore
@@ -55,19 +56,12 @@ import androidx.compose.material.icons.outlined.TrendingUp
 import androidx.compose.material.icons.outlined.Tune
 import androidx.compose.material.icons.outlined.VolunteerActivism
 import androidx.compose.foundation.text.KeyboardOptions
-import androidx.compose.material3.AlertDialog
-import androidx.compose.material3.Button
-import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.OutlinedTextField
-import androidx.compose.material3.RadioButton
-import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
-import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBarScrollBehavior
 import androidx.compose.material3.ripple
 import androidx.compose.runtime.Composable
@@ -95,6 +89,7 @@ import com.yunget.app.data.download.ThreadCountAdvice
 import com.yunget.app.data.network.HttpClients
 import com.yunget.app.data.plugin.PluginRepository
 import com.yunget.app.data.prefs.SettingsRepository
+import com.yunget.app.ui.theme.ThemeController
 import com.yunget.app.data.update.UpdateChecker
 import com.yunget.app.ui.SnackbarController
 import com.yunget.app.util.LogExporter
@@ -102,6 +97,13 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
+import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.Button
+import androidx.compose.material3.Card
+import androidx.compose.material3.OutlinedTextField
+import androidx.compose.material3.RadioButton
+import androidx.compose.material3.Switch
+import androidx.compose.material3.TextButton
 
 /**
  * 「自动 DNS」在设置里的哨兵值。
@@ -179,6 +181,10 @@ fun SettingsScreen(
     var showDevMenu by remember { mutableStateOf(false) }
     // 下载引擎页（两套下载器切换、导入内核、引擎启停与状态）：独立全屏页，返回时同步副标题
     var showDownloadEngine by remember { mutableStateOf(false) }
+    // 引擎高级参数：TurboDL 的真实旋钮（12 项）。
+    // 此前它们只有代码没有入口 —— 值被硬编码在 buildConfig() 里，
+    // 遇到 HTTP/2 塌缩、CDN 反复 503、按连接数封禁都没有自救手段。
+    var showEngineAdvanced by remember { mutableStateOf(false) }
     var engineChoice by remember { mutableStateOf(settingsRepo.downloadEngine) }
     // 插件页（JS 脚本导入/启停/详情）：独立全屏页，入口紧挨着「下载引擎」
     var showPlugins by remember { mutableStateOf(false) }
@@ -441,6 +447,17 @@ fun SettingsScreen(
 
         Spacer(modifier = Modifier.height(8.dp))
 
+        // 引擎高级参数：默认值与旧硬编码完全一致，不动就等于不生效。
+        // 单独一项而不是塞进引擎页：引擎页管"用哪个引擎"，这里管"引擎怎么跑"。
+        SettingsItem(
+            icon = Icons.Outlined.Tune,
+            title = "引擎高级参数",
+            description = "HTTP/1.1 强制、动态分片、预分块数、吞吐自适应、背压与超时等 12 项",
+            onClick = { showEngineAdvanced = true }
+        )
+
+        Spacer(modifier = Modifier.height(8.dp))
+
         // 插件：JS 脚本的导入 / 启停 / 运行状态 / 卸载都在那一页。
         // 副标题直接给「装了几个、几个在跑」—— 不开插件页也能看出「装了但没启用」这种状态。
         SettingsItem(
@@ -557,6 +574,8 @@ fun SettingsScreen(
             description = "主题色、动态色彩与深色模式",
             onClick = onThemeClick
         )
+
+        Spacer(modifier = Modifier.height(8.dp))
 
         Spacer(modifier = Modifier.height(24.dp))
 
@@ -1380,6 +1399,10 @@ fun SettingsScreen(
 
     // 下载引擎页：独立全屏页（两套下载器切换、导入内核、引擎启停与状态）。
     // 返回时重新读一次设置，让上面那一行的副标题立刻反映新选择。
+    if (showEngineAdvanced) {
+        EngineAdvancedScreen(onBack = { showEngineAdvanced = false })
+    }
+
     if (showDownloadEngine) {
         DownloadEngineScreen(
             onBack = {

@@ -6,19 +6,34 @@
 # 不会引起任何版本升级。
 vico = "2.4.4"
 agp = "8.13.0"
-kotlin = "2.1.0"
+kotlin = "2.2.10"
 coreKtx = "1.17.0"
 lifecycleRuntimeKtx = "2.9.2"
 activityCompose = "1.11.0"
 composeBom = "2026.06.01"
 material3Expressive = "1.5.0-alpha18"
 
-room = "2.6.1"
-ksp = "2.1.0-1.0.29"
+room = "2.8.4"
+ksp = "2.2.10-2.0.2"
 material = "1.14.0"   # 官方 Material 主库，自带 com.google.android.material.color.utilities 包
 # Markdown 渲染（GitHub README 的 GFM：表格/代码高亮/图片）。
 # 0.35.0 用 Kotlin 2.1.x 编译，与本项目 Kotlin 2.1.0 兼容；0.39+ 需要 Kotlin 2.3。
 markdownRenderer = "0.35.0"
+
+# iOS（Cupertino）风格组件：分组列表 / 开关 / 导航栏 / 弹层。
+# 选它而不是 compose-hig 的理由：compose-hig 需要 Kotlin 2.4，会连带把 KSP/Room
+# 整条链再抬一档；本库 3.3.1 正是用 Kotlin 2.2.10 编译的，与本次已验证的升级路径一致。
+cupertino = "3.3.1"
+
+# 液态玻璃（背景采样 + 折射）：Kyant0 的 Backdrop，Compose Multiplatform 库。
+# 为什么必须用它而不是自己画：真正的"液态玻璃"要**采样玻璃背后已经画出来的像素**
+# 再做模糊与边缘折射。Compose 的 RenderEffect 只能处理**本节点自己的内容**，
+# 手搓的效果是"半透明色块"（第一版就是这个下场：底栏像被一层雾挡住）。
+#
+# 版本选 1.0.2 而不是最新的 1.0.6：1.0.6 要 Kotlin 2.3.10，
+# 1.0.2 只要 Kotlin 2.2.21 —— 与本项目已验证的 2.2.10 同属 2.2 分支，
+# 元数据版本一致（2.2.0），因此**不需要再抬工具链**就能用。
+backdrop = "1.0.2"
 
 [plugins]
 android-application = { id = "com.android.application", version.ref = "agp" }
@@ -48,3 +63,9 @@ room-runtime = { group = "androidx.room", name = "room-runtime", version.ref = "
 room-ktx = { group = "androidx.room", name = "room-ktx", version.ref = "room" }
 room-compiler = { group = "androidx.room", name = "room-compiler", version.ref = "room" }
 markdown-renderer = { group = "com.mikepenz", name = "multiplatform-markdown-renderer-m3", version.ref = "markdownRenderer" }
+
+# iOS 风格组件（Compose Multiplatform 产物；Android 目标下与 androidx.compose 共存）
+cupertino = { group = "io.github.robinpcrd", name = "cupertino", version.ref = "cupertino" }
+
+# 液态玻璃：背景采样 + 模糊 + 折射（Kyant0/AndroidLiquidGlass 的 Maven 产物）
+backdrop = { group = "io.github.kyant0", name = "backdrop", version.ref = "backdrop" }

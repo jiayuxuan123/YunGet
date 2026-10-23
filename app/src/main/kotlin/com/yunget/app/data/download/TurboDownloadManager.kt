@@ -104,6 +104,25 @@ class TurboDownloadManager(
     private val warmUpProvider: () -> Boolean = { true },
     /** 慢启动开关提供者（默认开） */
     private val slowStartProvider: () -> Boolean = { true },
+    /**
+     * 引擎高级参数（全部可选，默认 null = 保持原有硬编码行为）。
+     *
+     * 这些旋钮以前直接写死在 [buildConfig] 里，界面上没有任何入口。
+     * 用 provider 而不是一次性传值：改设置后 [refreshConfigIfChanged] 能立刻重建配置，
+     * 不需要重启 App。
+     */
+    private val forceHttp1Provider: () -> Boolean = { true },
+    private val dynamicSegmentationProvider: () -> Boolean = { true },
+    private val segmentsPerConnectionProvider: () -> Int = { 4 },
+    private val tailAssistProvider: () -> Boolean = { true },
+    private val adaptiveConcurrencyProvider: () -> Boolean = { true },
+    private val overlapMergeProvider: () -> Boolean = { false },
+    private val bufferedSegmentWriteProvider: () -> Boolean = { false },
+    private val backpressureFailuresProvider: () -> Int = { 0 },
+    private val maxConnectionsPerHostProvider: () -> Int = { 0 },
+    private val stallTimeoutMsProvider: () -> Long = { 45_000L },
+    private val trustWeakValidatorProvider: () -> Boolean = { false },
+    private val skipProbeWhenSizeKnownProvider: () -> Boolean = { true },
 ) : DownloadManager {
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
 
@@ -277,20 +296,19 @@ class TurboDownloadManager(
         maxConcurrentTasks = concurrencyProvider().coerceIn(1, 64),
         globalSpeedLimitBytesPerSec = speedLimitProvider().coerceAtLeast(0L),
         maxRetries = retryCountProvider().coerceIn(0, 50),
-        dynamicSegmentation = true,
-        // 每连接 4 块：保证设定的线程数全部有活干（块数 = 线程数×4），
+        dynamicSegmentation = dynamicSegmentationProvider(),
+        // 每连接几块：保证设定的线程数全部有活干（块数 = 线程数×4），
         // 且多余块供快连接工作窃取，消除慢连接长尾。
-        segmentsPerConnection = 4,
-        // 强制 HTTP/1.1：HTTP/2 会把所有分片多路复用到单条 TCP 连接，
+        segmentsPerConnection = segmentsPerConnectionProvider().coerceIn(1, 16),
+        // 强制 HTTP/1.1（默认开）：HTTP/2 会把所有分片多路复用到单条 TCP 连接，
         // 共享单个拥塞窗口 → 开几十线程也只有单连接速度（GitHub / 多数 CDN 均启用 h2）。
-        forceHttp1 = true,
-        // 关闭背压降并发：网盘 CDN 频繁 502/503，开启后线程只降难升，
-        // 是“下到后面速度暴跌”的主因；改为仅靠分片重试处理暂时错误，不动并发。
-        backpressureConsecutiveFailures = 0,
-        // 不设 per-host 上限：单个下载的所有分片都是同一 host，若在此设小值（如 16）
-        // 会把每个下载直接限死到该值（表现为“设 64 只跑 16、速度暴跌”）。
-        // 迅雷等个别 CDN 的降级问题应由调用方按具体 host 单独处理，不在此全局限。
-        maxConnectionsPerHost = 0,
+        forceHttp1 = forceHttp1Provider(),
+        // 背压降并发（默认 0 = 关闭）：网盘 CDN 频繁 502/503，开启后线程只降难升，
+        // 是"下到后面速度暴跌"的主因；改为仅靠分片重试处理暂时错误，不动并发。
+        backpressureConsecutiveFailures = backpressureFailuresProvider().coerceIn(0, 16),
+        // 默认不设 per-host 上限：单个下载的所有分片都是同一 host，若在此设小值（如 16）
+        // 会把每个下载直接限死到该值（表现为"设 64 只跑 16、速度暴跌"）。
+        maxConnectionsPerHost = maxConnectionsPerHostProvider().coerceIn(0, 256),
         // 分片临时目录放应用专属缓存，避免系统 tmpdir 被清理导致断点丢失。
         workDir = chunkWorkDir(),
         proxy = ProxyMode.System,
@@ -306,6 +324,12 @@ class TurboDownloadManager(
         warmUpConnections = warmUpProvider(),
         slowStart = slowStartProvider(),
         trustAllCerts = ignoreSslProvider(),
+        tailAssist = tailAssistProvider(),
+        adaptiveConcurrency = adaptiveConcurrencyProvider(),
+        overlapMerge = overlapMergeProvider(),
+        bufferedSegmentWrite = bufferedSegmentWriteProvider(),
+        stallTimeoutMs = stallTimeoutMsProvider().coerceIn(0L, 300_000L),
+        skipProbeWhenSizeKnown = skipProbeWhenSizeKnownProvider(),
         // 弱校验器续传策略（TurboDL 0.2.0-rc12 新增，默认 false）。
         // 服务器只回 Content-Length、无 ETag/Last-Modified 时，续传令牌退化为 len=N。
         // 此时「服务器换了同样大小的新文件」检测不到 → 旧分片被复用 → 合并出静默损坏的文件，
@@ -314,7 +338,7 @@ class TurboDownloadManager(
         // 代价：弱校验器来源的下载在**被中断后恢复**时会重下（分片目录已在完成后清理，
         // 因此正常完成的任务不受影响）。若你的来源普遍不提供 ETag/Last-Modified
         // 且更在意省流量，可显式改为 true 并自行承担损坏风险。
-        trustWeakValidator = false,
+        trustWeakValidator = trustWeakValidatorProvider(),
     )
 
     /**
@@ -589,13 +613,18 @@ class TurboDownloadManager(
     }
 
     /** 每次入队/开始前按当前设置热更新引擎配置（限速/并发/线程/忽略SSL 即时生效）。 */
-    private fun refreshConfigIfChanged() {        val cfg = buildConfig()        // 签名覆盖所有会影响下载行为的字段（原先只有 5 个，forceHttp1/segmentsPerConnection 等改了不生效）。
+    private fun refreshConfigIfChanged() {
+        val cfg = buildConfig()
+        // 签名覆盖所有会影响下载行为的字段（原先只有 5 个，forceHttp1/segmentsPerConnection 等改了不生效）。
+        // 新增的高级旋钮也必须进签名，否则"改了没反应"会再犯一次。
         val sig = listOf(
             cfg.maxConnectionsPerTask, cfg.maxConcurrentTasks, cfg.globalSpeedLimitBytesPerSec,
             cfg.maxRetries, cfg.trustAllCerts, cfg.forceHttp1, cfg.segmentsPerConnection,
             cfg.dynamicSegmentation, cfg.backpressureConsecutiveFailures, cfg.maxConnectionsPerHost,
             (cfg.dns as? DnsMode.DoH)?.dohUrl ?: "system",
             cfg.warmUpConnections, cfg.slowStart,
+            cfg.tailAssist, cfg.adaptiveConcurrency, cfg.overlapMerge, cfg.bufferedSegmentWrite,
+            cfg.stallTimeoutMs, cfg.skipProbeWhenSizeKnown, cfg.trustWeakValidator,
         ).joinToString("|")
         if (sig != lastConfigSignature) {
             lastConfigSignature = sig

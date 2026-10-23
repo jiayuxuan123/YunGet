@@ -322,6 +322,12 @@ android {
         //     - 分片请求带 `If-Range`：防止 CDN 中途换文件时新旧字节拼出混杂文件
         //       （那种情况长度校验会通过，损坏会静默落地）。
         //     - 401/403/410 不再触发背压降并发（是授权/时效信号，不是"你太快了"）。
+        // 2.7.10 追加：引擎高级参数有了入口。
+        //  此前 12 个降级开关只有代码、界面里没有任何地方能改（值被硬编码在
+        //  TurboDownloadManager.buildConfig() 里），遇到服务端 HTTP/2 塌缩、
+        //  CDN 反复 502/503、按连接数封禁都只能等发新版。
+        //  入口：设置 → 引擎与插件 → 引擎高级参数。
+        //  默认值与旧硬编码逐项一致，不动这些开关时行为与之前完全相同。
         versionName = "2.7.10"
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
@@ -520,6 +526,13 @@ dependencies {
 
     // GitHub README 的 GFM 渲染（表格/嵌套列表/代码高亮/图片）
     implementation(libs.markdown.renderer)
+
+    // iOS（Cupertino）风格组件：分组列表、iOS 开关/导航栏/弹层。
+    // 只作为「可切换的第 2 套界面」使用，默认界面仍走 Material 3。
+    implementation(libs.cupertino)
+
+    // 液态玻璃：真实背景采样 + 模糊 + 边缘折射（底栏、卡片、按钮共用）
+    implementation(libs.backdrop)
 
     implementation(libs.androidx.core.ktx)
     implementation(libs.androidx.lifecycle.runtime.ktx)

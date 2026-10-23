@@ -108,4 +108,5 @@ object ThemeController {
         contrastLevel = value.coerceIn(0, 2)
         SettingsRepository(context).contrastLevel = contrastLevel
     }
+
 }

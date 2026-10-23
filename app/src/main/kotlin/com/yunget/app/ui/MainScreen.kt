@@ -12,6 +12,7 @@ import androidx.compose.animation.slideOutHorizontally
 import androidx.compose.animation.togetherWith
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Box
+import androidx.compose.ui.unit.dp
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
@@ -20,10 +21,8 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
 import androidx.compose.material.icons.Icons
-import androidx.compose.material3.IconButton
 import androidx.compose.material.icons.outlined.Bookmarks
 import androidx.compose.material3.LargeTopAppBar
-import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.NavigationBar
 import androidx.compose.material3.NavigationBarItem
@@ -32,7 +31,6 @@ import androidx.compose.material3.NavigationRailItem
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.SnackbarHost
 import androidx.compose.material3.Text
-import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.material3.rememberTopAppBarState
 import androidx.compose.runtime.Composable
@@ -122,6 +120,9 @@ import com.yunget.app.ui.screens.DriveScreen
 import com.yunget.app.ui.screens.OnboardingScreen
 import com.yunget.app.ui.screens.ResolveScreen
 import com.yunget.app.ui.screens.LogViewerScreen
+import com.yunget.app.ui.screens.DownloadEngineScreen
+import com.yunget.app.ui.screens.PluginsScreen
+import com.yunget.app.ui.screens.PluginMarketScreen
 import com.yunget.app.ui.screens.SettingsScreen
 import com.yunget.app.ui.screens.SupportScreen
 import com.yunget.app.ui.screens.ThemeScreen
@@ -158,6 +159,9 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import com.yunget.app.data.network.HttpClients
+import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.IconButton
+import androidx.compose.material3.TextButton
 
 /**
  * 主页框架：

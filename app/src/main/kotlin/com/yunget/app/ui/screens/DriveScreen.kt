@@ -28,12 +28,9 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.outlined.MoreVert
-import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
-import androidx.compose.material3.IconButton
-import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
@@ -76,6 +73,9 @@ import com.yunget.app.ui.viewmodel.UCCoudViewModel
 import com.yunget.app.ui.viewmodel.XunleiCloudViewModel
 import com.yunget.app.ui.theme.effectsDefault
 import com.yunget.app.ui.theme.effectsFast
+import androidx.compose.material3.Card
+import androidx.compose.material3.IconButton
+import androidx.compose.material3.LinearProgressIndicator
 
 /**
  * 网盘账号展示模型。
@@ -107,10 +107,13 @@ private data class DriveEntry(
 /** 网盘分组标题（「已登录」/「未登录」）。 */
 @Composable
 private fun DriveGroupLabel(text: String) {
+    // 分组标题用**次级文字色**，不是强调色。
+    // 满屏蓝色的"已登录/未登录"是 Material 的做法；iOS 的分组标题是灰的，
+    // 强调色留给真正的可操作项（比如右侧的「去登录」）。
     Text(
         text = text,
         style = MaterialTheme.typography.labelLarge,
-        color = MaterialTheme.colorScheme.primary,
+        color = MaterialTheme.colorScheme.onSurfaceVariant,
         modifier = Modifier.padding(top = 4.dp, bottom = 0.dp)
     )
 }
@@ -678,21 +681,20 @@ private fun DriveAccountCardContent(
         verticalAlignment = Alignment.CenterVertically
     ) {
         // 品牌头像（暂用首字母，后续可替换为品牌图标）
+        // 头像：中性灰底 + 深色首字母。
+        // 之前已登录用 primaryContainer（淡蓝）配蓝色首字母 —— 一排网盘全是一样的
+        // 蓝圈，既分不出层级也很"模板感"。iOS 的头像是中性色，靠形状而非颜色识别。
         Surface(
             modifier = Modifier.size(48.dp),
             shape = CircleShape,
-            color = if (account.isLoggedIn) {
-                MaterialTheme.colorScheme.primaryContainer
-            } else {
-                MaterialTheme.colorScheme.surfaceContainerHighest
-            }
+            color = MaterialTheme.colorScheme.surfaceContainerHighest
         ) {
             Box(contentAlignment = Alignment.Center) {
                 Text(
                     text = account.avatarText,
                     style = MaterialTheme.typography.titleMedium,
                     fontWeight = FontWeight.SemiBold,
-                    color = MaterialTheme.colorScheme.onPrimaryContainer
+                    color = MaterialTheme.colorScheme.onSurface
                 )
             }
         }

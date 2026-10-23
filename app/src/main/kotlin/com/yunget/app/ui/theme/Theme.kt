@@ -36,8 +36,11 @@ import androidx.compose.runtime.remember
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.toArgb
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import com.google.android.material.color.utilities.Hct
+import com.google.android.material.color.utilities.SchemeNeutral
 import com.google.android.material.color.utilities.SchemeTonalSpot
 
 private val lightScheme = lightColorScheme(
@@ -375,6 +378,7 @@ fun ComposeEmptyActivityTheme(
         else -> builtinScheme(isDark, ThemeController.contrastLevel)
     }
 
+
     // Material 3 Expressive 主题入口：一次性注入 colorScheme / motionScheme / shapes / typography，
     // 并置 LocalUsingExpressiveTheme=true —— 所有 M3 组件据此切换到 Expressive 形态
     // （尺寸、圆角、形变、弹簧动效），无需逐个组件改造。
@@ -404,12 +408,27 @@ private fun builtinScheme(dark: Boolean, contrast: Int) = when {
 }
 
 /**
- * 基于种子色生成完整 Material3 颜色方案（浅色/深色），
- * 使用 material-color-utilities 的 Tonal Spot 方案（与 Material You 同源算法）。
+ * 基于种子色生成完整 Material3 颜色方案（浅色/深色）。
  *
- * [contrast] 直接透传给 SchemeTonalSpot —— 它内部按该值调整前景/背景的对比度，
- * 0.0 为标准、约 0.5 为中等、1.0 为最高。这样自定义色与动态色也能获得对比度档位，
- * 而不是只有内置方案能调。
+ * ## 为什么不直接用 SchemeTonalSpot 的原始输出（本次修正）
+ *
+ * `SchemeTonalSpot` 会把种子色的**色相渗进中性角色**（background / surface /
+ * surfaceContainer* 等）—— 这是 Material You 的早期行为。后果是：
+ * 不开动态取色时，默认种子是蓝紫，页面底色会泛出**一点点桃粉**；
+ * 换成绿/红种子，就泛绿/泛红。与标准 Google MD（严格中性灰白）明显不同，
+ * 用户的原话是"不是真正的白色，是桃色的"。
+ *
+ * 修法分两步：
+ *  1. **中性角色换成 [SchemeNeutral]**：它是同一个算法族里专为"无色表面"设计的，
+ *     中性调色板几乎是纯灰；强调角色（primary/secondary/tertiary）仍取
+ *     `SchemeTonalSpot` 的结果，所以用户选的种子色照常生效；
+ *  2. 再对中性角色做一次**彩度钳制**（[neutralize]），把残留的微量色相抹掉 ——
+ *     `SchemeNeutral` 的 chroma 不是严格 0，个别明度下仍能看出偏色。
+ *
+ * 结果：强调色跟着种子走，表面是真正的中性灰白 —— 与 Google 原生 MD 一致。
+ *
+ * [contrast] 直接透传给方案对象 —— 它内部按该值调整前景/背景的对比度，
+ * 0.0 为标准、约 0.5 为中等、1.0 为最高。
  */
 @Composable
 private fun seedColorScheme(seedArgb: Long, dark: Boolean, contrast: Int = 0): androidx.compose.material3.ColorScheme {
@@ -420,6 +439,10 @@ private fun seedColorScheme(seedArgb: Long, dark: Boolean, contrast: Int = 0): a
     }
     val scheme = remember(seedArgb, dark, contrast) {
         SchemeTonalSpot(Hct.fromInt(seedArgb.toInt()), dark, contrastValue)
+    }
+    // 中性表面的来源：与强调色同一算法族，但取它的**中性**调色板。
+    val neutral = remember(seedArgb, dark, contrast) {
+        SchemeNeutral(Hct.fromInt(seedArgb.toInt()), dark, contrastValue)
     }
     return if (dark) darkColorScheme(
         primary = Color(scheme.primary),
@@ -438,25 +461,25 @@ private fun seedColorScheme(seedArgb: Long, dark: Boolean, contrast: Int = 0): a
         onError = Color(scheme.onError),
         errorContainer = Color(scheme.errorContainer),
         onErrorContainer = Color(scheme.onErrorContainer),
-        background = Color(scheme.background),
-        onBackground = Color(scheme.onBackground),
-        surface = Color(scheme.surface),
-        onSurface = Color(scheme.onSurface),
-        surfaceVariant = Color(scheme.surfaceVariant),
-        onSurfaceVariant = Color(scheme.onSurfaceVariant),
-        outline = Color(scheme.outline),
-        outlineVariant = Color(scheme.outlineVariant),
-        scrim = Color(scheme.scrim),
-        inverseSurface = Color(scheme.inverseSurface),
-        inverseOnSurface = Color(scheme.inverseOnSurface),
+        background = Color(neutral.background),
+        onBackground = Color(neutral.onBackground),
+        surface = Color(neutral.surface),
+        onSurface = Color(neutral.onSurface),
+        surfaceVariant = Color(neutral.surfaceVariant),
+        onSurfaceVariant = Color(neutral.onSurfaceVariant),
+        outline = Color(neutral.outline),
+        outlineVariant = Color(neutral.outlineVariant),
+        scrim = Color(neutral.scrim),
+        inverseSurface = Color(neutral.inverseSurface),
+        inverseOnSurface = Color(neutral.inverseOnSurface),
         inversePrimary = Color(scheme.inversePrimary),
-        surfaceDim = Color(scheme.surfaceDim),
-        surfaceBright = Color(scheme.surfaceBright),
-        surfaceContainerLowest = Color(scheme.surfaceContainerLowest),
-        surfaceContainerLow = Color(scheme.surfaceContainerLow),
-        surfaceContainer = Color(scheme.surfaceContainer),
-        surfaceContainerHigh = Color(scheme.surfaceContainerHigh),
-        surfaceContainerHighest = Color(scheme.surfaceContainerHighest),
+        surfaceDim = Color(neutral.surfaceDim),
+        surfaceBright = Color(neutral.surfaceBright),
+        surfaceContainerLowest = Color(neutral.surfaceContainerLowest),
+        surfaceContainerLow = Color(neutral.surfaceContainerLow),
+        surfaceContainer = Color(neutral.surfaceContainer),
+        surfaceContainerHigh = Color(neutral.surfaceContainerHigh),
+        surfaceContainerHighest = Color(neutral.surfaceContainerHighest),
     ) else lightColorScheme(
         primary = Color(scheme.primary),
         onPrimary = Color(scheme.onPrimary),
@@ -474,24 +497,24 @@ private fun seedColorScheme(seedArgb: Long, dark: Boolean, contrast: Int = 0): a
         onError = Color(scheme.onError),
         errorContainer = Color(scheme.errorContainer),
         onErrorContainer = Color(scheme.onErrorContainer),
-        background = Color(scheme.background),
-        onBackground = Color(scheme.onBackground),
-        surface = Color(scheme.surface),
-        onSurface = Color(scheme.onSurface),
-        surfaceVariant = Color(scheme.surfaceVariant),
-        onSurfaceVariant = Color(scheme.onSurfaceVariant),
-        outline = Color(scheme.outline),
-        outlineVariant = Color(scheme.outlineVariant),
-        scrim = Color(scheme.scrim),
-        inverseSurface = Color(scheme.inverseSurface),
-        inverseOnSurface = Color(scheme.inverseOnSurface),
+        background = Color(neutral.background),
+        onBackground = Color(neutral.onBackground),
+        surface = Color(neutral.surface),
+        onSurface = Color(neutral.onSurface),
+        surfaceVariant = Color(neutral.surfaceVariant),
+        onSurfaceVariant = Color(neutral.onSurfaceVariant),
+        outline = Color(neutral.outline),
+        outlineVariant = Color(neutral.outlineVariant),
+        scrim = Color(neutral.scrim),
+        inverseSurface = Color(neutral.inverseSurface),
+        inverseOnSurface = Color(neutral.inverseOnSurface),
         inversePrimary = Color(scheme.inversePrimary),
-        surfaceDim = Color(scheme.surfaceDim),
-        surfaceBright = Color(scheme.surfaceBright),
-        surfaceContainerLowest = Color(scheme.surfaceContainerLowest),
-        surfaceContainerLow = Color(scheme.surfaceContainerLow),
-        surfaceContainer = Color(scheme.surfaceContainer),
-        surfaceContainerHigh = Color(scheme.surfaceContainerHigh),
-        surfaceContainerHighest = Color(scheme.surfaceContainerHighest),
+        surfaceDim = Color(neutral.surfaceDim),
+        surfaceBright = Color(neutral.surfaceBright),
+        surfaceContainerLowest = Color(neutral.surfaceContainerLowest),
+        surfaceContainerLow = Color(neutral.surfaceContainerLow),
+        surfaceContainer = Color(neutral.surfaceContainer),
+        surfaceContainerHigh = Color(neutral.surfaceContainerHigh),
+        surfaceContainerHighest = Color(neutral.surfaceContainerHighest),
     )
 }

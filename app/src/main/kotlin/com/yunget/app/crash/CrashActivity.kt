@@ -44,7 +44,6 @@ import androidx.compose.material.icons.filled.BugReport
 import androidx.compose.material.icons.outlined.ContentCopy
 import androidx.compose.material.icons.outlined.ExitToApp
 import androidx.compose.material.icons.outlined.Refresh
-import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
@@ -67,6 +66,7 @@ import com.yunget.app.ui.SnackbarController
 import com.yunget.app.ui.items.CustomFabMenu
 import com.yunget.app.ui.items.FabMenuItem
 import com.yunget.app.ui.theme.ComposeEmptyActivityTheme
+import androidx.compose.material3.Card
 
 /**
  * 崩溃界面（运行在独立进程 :crash）：

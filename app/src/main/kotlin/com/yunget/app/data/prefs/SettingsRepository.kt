@@ -237,6 +237,151 @@ class SettingsRepository(context: Context) {
             prefs.edit().putInt("contrast_level", value.coerceIn(0, 2)).apply()
         }
 
+    // ====================================================================
+    // 引擎高级参数（TurboDL 真实支持、但此前在界面上**完全没有入口**）
+    //
+    // 这些值以前被硬编码在 `TurboDownloadManager.buildConfig()` 里：
+    // 改一次就要重新发版，用户遇到特定的服务端行为（HTTP/2 塌缩、CDN 反复 503）
+    // 也没有任何自救手段。现在全部落盘，默认值**保持与旧硬编码完全一致**，
+    // 所以「不碰这些开关」的用户行为不会有任何变化。
+    //
+    // 每一组的注释都写清「什么情况下才该动它」—— 这些是排障旋钮，不是日常选项。
+    // ====================================================================
+
+    /**
+     * 强制 HTTP/1.1（默认开）。
+     *
+     * 关掉会允许 HTTP/2：h2 把所有分片**多路复用到同一条 TCP 连接**上，
+     * 共享一个拥塞窗口 —— 开几十个线程也只有单连接速度。
+     * 只有当你确认目标服务器**没有**启用 h2、或 h2 表现更好时才该关掉。
+     */
+    var forceHttp1: Boolean
+        get() = prefs.getBoolean("force_http1", true)
+        set(value) {
+            prefs.edit().putBoolean("force_http1", value).apply()
+        }
+
+    /**
+     * 动态分片（默认开）：把快完成的分片再切开交给空闲连接，消除慢连接长尾。
+     *
+     * 关掉后每个分片只下一个整块 —— 分片数固定，行为更可预测，适合排查
+     * "为什么并发数上不去"。
+     */
+    var dynamicSegmentation: Boolean
+        get() = prefs.getBoolean("dynamic_segmentation", true)
+        set(value) {
+            prefs.edit().putBoolean("dynamic_segmentation", value).apply()
+        }
+
+    /**
+     * 每连接预分块数（默认 4）。
+     *
+     * 块数 = 连接数 × 本值。块越多，慢连接被窃取的机会越大；但块太小会增加
+     * 建连与合并开销。**别为了"减少请求数"调大它** —— 那会让块数暴涨。
+     */
+    var segmentsPerConnection: Int
+        get() = prefs.getInt("segments_per_connection", 4)
+        set(value) {
+            prefs.edit().putInt("segments_per_connection", value.coerceIn(1, 16)).apply()
+        }
+
+    /**
+     * 收尾托管（默认开）：队列空但仍有分片在跑时，把最大的那个尾部让给空闲连接。
+     *
+     * 只在收尾阶段触发，不影响大块传输 —— 关掉一般只会让最后几秒变慢。
+     */
+    var tailAssist: Boolean
+        get() = prefs.getBoolean("tail_assist", true)
+        set(value) {
+            prefs.edit().putBoolean("tail_assist", value).apply()
+        }
+
+    /**
+     * 吞吐自适应（默认开）：按实测吞吐寻找"够用的最低并发"。
+     *
+     * ⚠️ 已知缺陷（0.2.3.0 起记录）：真实链路上它可能把并发一路降到 1，
+     * 实测有一次 373 MiB 花了 377 秒，而同链路关掉它只要 35 秒。
+     * 遇到"下载越跑越慢、线程数只降不升"，先关掉这一项。
+     */
+    var adaptiveConcurrency: Boolean
+        get() = prefs.getBoolean("adaptive_concurrency", true)
+        set(value) {
+            prefs.edit().putBoolean("adaptive_concurrency", value).apply()
+        }
+
+    /**
+     * 下载中预先合并（默认关）：把完成的分片立刻写进目标文件，让合并 I/O 与
+     * 网络等待重叠。开启会增加磁盘写入量（每个分片写两次）。
+     */
+    var overlapMerge: Boolean
+        get() = prefs.getBoolean("overlap_merge", false)
+        set(value) {
+            prefs.edit().putBoolean("overlap_merge", value).apply()
+        }
+
+    /** 分片缓冲写入（默认关）：减少 write 系统调用；开启会推迟落盘、放大中断损失。 */
+    var bufferedSegmentWrite: Boolean
+        get() = prefs.getBoolean("buffered_segment_write", false)
+        set(value) {
+            prefs.edit().putBoolean("buffered_segment_write", value).apply()
+        }
+
+    /**
+     * 背压连续失败阈值（默认 0 = 关闭）。
+     *
+     * 开启后，连续 N 个分片失败就把并发减半。**默认关闭是因为网盘 CDN 频繁 502/503**，
+     * 开了会让线程只降难升，这正是旧版"下到后面速度暴跌"的主因。
+     * 只有在服务端确实因为并发过高而限流时才该打开。
+     */
+    var backpressureFailures: Int
+        get() = prefs.getInt("backpressure_failures", 0)
+        set(value) {
+            prefs.edit().putInt("backpressure_failures", value.coerceIn(0, 16)).apply()
+        }
+
+    /**
+     * 单主机连接上限（默认 0 = 不限）。
+     *
+     * 单个下载的所有分片都来自同一主机，设小值会把每个下载直接限死到该值
+     * （表现为"设 64 只跑 16"）。仅用于对抗明确按连接数封禁的 CDN。
+     */
+    var maxConnectionsPerHost: Int
+        get() = prefs.getInt("max_connections_per_host", 0)
+        set(value) {
+            prefs.edit().putInt("max_connections_per_host", value.coerceIn(0, 256)).apply()
+        }
+
+    /**
+     * 停滞多久断开该连接（毫秒，默认 45000；0 = 关闭）。
+     *
+     * 服务端接受连接却不发数据时，没有它就要一路等到读超时（默认 60 秒）。
+     */
+    var stallTimeoutMs: Long
+        get() = prefs.getLong("stall_timeout_ms", 45_000L)
+        set(value) {
+            prefs.edit().putLong("stall_timeout_ms", value.coerceIn(0L, 300_000L)).apply()
+        }
+
+    /**
+     * 弱校验器续传（默认关 = 安全）。
+     *
+     * 服务器只回 Content-Length、没有 ETag/Last-Modified 时，续传令牌退化为 `len=N`，
+     * 检测不到"同尺寸的新文件"，旧分片会被复用 → **合并出静默损坏的文件**。
+     * 只有在你确认来源内容不会变、且更在意省流量时才该打开。
+     */
+    var trustWeakValidator: Boolean
+        get() = prefs.getBoolean("trust_weak_validator", false)
+        set(value) {
+            prefs.edit().putBoolean("trust_weak_validator", value).apply()
+        }
+
+    /** 下载前跳过探测（默认开，调用方已知文件大小时）：省一个往返，起步更快。 */
+    var skipProbeWhenSizeKnown: Boolean
+        get() = prefs.getBoolean("skip_probe_when_size_known", true)
+        set(value) {
+            prefs.edit().putBoolean("skip_probe_when_size_known", value).apply()
+        }
+
     companion object {
         const val DEFAULT_DOWNLOAD_THREADS = 16
 
