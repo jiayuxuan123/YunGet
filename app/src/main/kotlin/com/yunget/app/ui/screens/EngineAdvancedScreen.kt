@@ -20,6 +20,8 @@ package com.yunget.app.ui.screens
 
 import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.clickable
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
@@ -114,6 +116,21 @@ fun EngineAdvancedScreen(
     var trustWeakValidator by remember { mutableStateOf(repo.trustWeakValidator) }
     var skipProbeWhenSizeKnown by remember { mutableStateOf(repo.skipProbeWhenSizeKnown) }
 
+    // ---- 第二批：分片粒度 / 超时 / UA / HTTP 策略 ----
+    var blockSizeMb by remember { mutableStateOf((repo.engineBlockSizeBytes / (1024L * 1024L)).toInt()) }
+    var minSegmentKb by remember { mutableStateOf((repo.engineMinSegmentSizeBytes / 1024L).toInt()) }
+    var maxSegmentsPerTask by remember { mutableStateOf(repo.engineMaxSegmentsPerTask) }
+    var maxSplitsPerSegment by remember { mutableStateOf(repo.engineMaxSplitsPerSegment) }
+    var connectTimeoutSec by remember { mutableStateOf((repo.engineConnectTimeoutMs / 1000L).toInt()) }
+    var readTimeoutSec by remember { mutableStateOf((repo.engineReadTimeoutMs / 1000L).toInt()) }
+    var probeTimeoutSec by remember { mutableStateOf((repo.engineProbeTimeoutMs / 1000L).toInt()) }
+    var probeRetries by remember { mutableStateOf(repo.engineProbeRetries) }
+    var slowStartInitial by remember { mutableStateOf(repo.engineSlowStartInitial) }
+    var userAgent by remember { mutableStateOf(repo.engineUserAgent) }
+    var httpVersionPolicy by remember { mutableStateOf(repo.engineHttpVersionPolicy) }
+    var showUaDialog by remember { mutableStateOf(false) }
+    var uaDraft by remember { mutableStateOf("") }
+
     var showAdaptiveWarning by remember { mutableStateOf(false) }
 
     Scaffold(
@@ -186,6 +203,17 @@ fun EngineAdvancedScreen(
                         stallTimeoutSec = 45
                         trustWeakValidator = false
                         skipProbeWhenSizeKnown = true
+                        blockSizeMb = 16
+                        minSegmentKb = 64
+                        maxSegmentsPerTask = 0
+                        maxSplitsPerSegment = 2
+                        connectTimeoutSec = 15
+                        readTimeoutSec = 60
+                        probeTimeoutSec = 6
+                        probeRetries = 1
+                        slowStartInitial = 0
+                        userAgent = ""
+                        httpVersionPolicy = 0
 
                         repo.forceHttp1 = true
                         repo.dynamicSegmentation = true
@@ -199,6 +227,17 @@ fun EngineAdvancedScreen(
                         repo.stallTimeoutMs = 45_000L
                         repo.trustWeakValidator = false
                         repo.skipProbeWhenSizeKnown = true
+                        repo.engineBlockSizeBytes = 16L * 1024 * 1024
+                        repo.engineMinSegmentSizeBytes = 64L * 1024
+                        repo.engineMaxSegmentsPerTask = 0
+                        repo.engineMaxSplitsPerSegment = 2
+                        repo.engineConnectTimeoutMs = 15_000L
+                        repo.engineReadTimeoutMs = 60_000L
+                        repo.engineProbeTimeoutMs = 6_000L
+                        repo.engineProbeRetries = 1
+                        repo.engineSlowStartInitial = 0
+                        repo.engineUserAgent = ""
+                        repo.engineHttpVersionPolicy = 0
                     }) {
                         Text("全部恢复默认")
                     }
@@ -350,6 +389,229 @@ fun EngineAdvancedScreen(
             )
 
             Spacer(modifier = Modifier.height(20.dp))
+            SectionLabel("分片粒度")
+
+            ParamStepper(
+                title = "单块大小上限",
+                description = "每块最多多大（默认 16MB）。限制大文件请求数请调这一项，" +
+                    "而不是调下面的分片总数。调小切得更细、并发利用率更高，但建连与合并开销上升。",
+                value = blockSizeMb,
+                range = 1..64,
+                unit = "MB",
+                onChange = {
+                    blockSizeMb = it
+                    repo.engineBlockSizeBytes = it * 1024L * 1024L
+                }
+            )
+
+            ParamStepper(
+                title = "最小分片大小",
+                description = "低于这个大小的块不再继续切分（默认 64KB）。" +
+                    "调大能减少碎片与合并开销，但会降低负载均衡效果。",
+                value = minSegmentKb,
+                range = 4..1024,
+                step = 4,
+                unit = "KB",
+                onChange = {
+                    minSegmentKb = it
+                    repo.engineMinSegmentSizeBytes = it * 1024L
+                }
+            )
+
+            ParamStepper(
+                title = "单任务分片上限",
+                description = "一个任务最多切成多少片（默认 0 = 不限）。" +
+                    "0 时总数由「单块大小上限」间接约束，一般不需要动这一项。",
+                value = maxSegmentsPerTask,
+                range = 0..2048,
+                step = 32,
+                unit = "片",
+                zeroLabel = "不限",
+                onChange = {
+                    maxSegmentsPerTask = it
+                    repo.engineMaxSegmentsPerTask = it
+                }
+            )
+
+            ParamStepper(
+                title = "单分片再切次数",
+                description = "一个分片最多再被切成几份（默认 2）。配合「动态分片」把慢连接的尾巴" +
+                    "分给空闲连接；设为 0 等于关闭这项优化。",
+                value = maxSplitsPerSegment,
+                range = 0..16,
+                unit = "次",
+                zeroLabel = "不切",
+                onChange = {
+                    maxSplitsPerSegment = it
+                    repo.engineMaxSplitsPerSegment = it
+                }
+            )
+
+            Spacer(modifier = Modifier.height(20.dp))
+            SectionLabel("超时与 UA")
+
+            ParamStepper(
+                title = "连接超时",
+                description = "建立连接最多等多久（默认 15 秒）。调小能更快暴露「这个源连不上」，" +
+                    "但弱网下会误杀还在握手的连接。",
+                value = connectTimeoutSec,
+                range = 1..120,
+                unit = "秒",
+                onChange = {
+                    connectTimeoutSec = it
+                    repo.engineConnectTimeoutMs = it * 1000L
+                }
+            )
+
+            ParamStepper(
+                title = "读超时",
+                description = "连上之后最多等多久数据（默认 60 秒）。它是兜底 —— " +
+                    "日常的「接了不发」由上面的停滞断开阈值先处理。",
+                value = readTimeoutSec,
+                range = 5..600,
+                step = 5,
+                unit = "秒",
+                onChange = {
+                    readTimeoutSec = it
+                    repo.engineReadTimeoutMs = it * 1000L
+                }
+            )
+
+            ParamStepper(
+                title = "首字节探测超时",
+                description = "开始下载前探测文件信息（大小、是否支持分片）最多等多久（默认 6 秒）。" +
+                    "慢速网盘可以调大，代价是点下载后要更久才开始。",
+                value = probeTimeoutSec,
+                range = 1..60,
+                unit = "秒",
+                onChange = {
+                    probeTimeoutSec = it
+                    repo.engineProbeTimeoutMs = it * 1000L
+                }
+            )
+
+            ParamStepper(
+                title = "探测重试次数",
+                description = "探测失败后重试几次（默认 1）。CDN 抖动时多试能提高成功率，" +
+                    "但会拖慢「确实不可用」时的报错。",
+                value = probeRetries,
+                range = 0..5,
+                unit = "次",
+                zeroLabel = "不重试",
+                onChange = {
+                    probeRetries = it
+                    repo.engineProbeRetries = it
+                }
+            )
+
+            ParamStepper(
+                title = "慢启动起始并发",
+                description = "「慢启动」开启时从几条连接开始爬（默认 0 = 由引擎决定，即 1）。" +
+                    "这一项不设，「慢启动」开关只有半截效果 —— 起点仍是引擎默认值。",
+                value = slowStartInitial,
+                range = 0..64,
+                unit = "条",
+                zeroLabel = "引擎决定",
+                onChange = {
+                    slowStartInitial = it
+                    repo.engineSlowStartInitial = it
+                }
+            )
+
+            Surface(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(bottom = ListGroupGap),
+                shape = listGroupShape(0, 1),
+                color = MaterialTheme.colorScheme.surfaceContainerLow
+            ) {
+                Column(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .clickable { uaDraft = userAgent; showUaDialog = true }
+                        .padding(horizontal = 14.dp, vertical = 12.dp)
+                ) {
+                    Text(
+                        text = "自定义 User-Agent",
+                        style = MaterialTheme.typography.titleSmall,
+                        fontWeight = FontWeight.Medium
+                    )
+                    Spacer(modifier = Modifier.height(4.dp))
+                    Text(
+                        text = if (userAgent.isBlank()) {
+                            "当前：引擎默认（桌面 Chrome UA）。被 403 时引擎会自动降级到 curl/aria2 重试"
+                        } else {
+                            "当前：$userAgent"
+                        },
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                }
+            }
+
+            Surface(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(bottom = ListGroupGap),
+                shape = listGroupShape(0, 1),
+                color = MaterialTheme.colorScheme.surfaceContainerLow
+            ) {
+                Column(modifier = Modifier.padding(horizontal = 14.dp, vertical = 12.dp)) {
+                    Text(
+                        text = "HTTP 版本策略",
+                        style = MaterialTheme.typography.titleSmall,
+                        fontWeight = FontWeight.Medium
+                    )
+                    Spacer(modifier = Modifier.height(4.dp))
+                    Text(
+                        text = "比上面的「强制 HTTP/1.1」更细：AUTO 让探测与单流回退可以走 h2，" +
+                            "而分片并发仍走 h1。本项优先于那个布尔开关。",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                    Spacer(modifier = Modifier.height(10.dp))
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.spacedBy(8.dp)
+                    ) {
+                        listOf("AUTO", "强制 1.1", "允许 2").forEachIndexed { idx, label ->
+                            val selected = httpVersionPolicy == idx
+                            Surface(
+                                modifier = Modifier.weight(1f),
+                                shape = androidx.compose.foundation.shape.RoundedCornerShape(8.dp),
+                                color = if (selected) {
+                                    MaterialTheme.colorScheme.primary
+                                } else {
+                                    MaterialTheme.colorScheme.surfaceContainerHighest
+                                }
+                            ) {
+                                Box(
+                                    modifier = Modifier
+                                        .clickable {
+                                            httpVersionPolicy = idx
+                                            repo.engineHttpVersionPolicy = idx
+                                        }
+                                        .padding(vertical = 8.dp),
+                                    contentAlignment = Alignment.Center
+                                ) {
+                                    Text(
+                                        text = label,
+                                        style = MaterialTheme.typography.labelMedium,
+                                        fontWeight = if (selected) FontWeight.SemiBold else FontWeight.Normal,
+                                        color = if (selected) {
+                                            MaterialTheme.colorScheme.onPrimary
+                                        } else {
+                                            MaterialTheme.colorScheme.onSurfaceVariant
+                                        }
+                                    )
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+
+            Spacer(modifier = Modifier.height(20.dp))
             SectionLabel("校验与探测")
 
             // 11. 弱校验器续传
@@ -410,6 +672,44 @@ fun EngineAdvancedScreen(
             },
             confirmButton = {
                 TextButton(onClick = { showAdaptiveWarning = false }) { Text("知道了") }
+            }
+        )
+    }
+
+    // 自定义 User-Agent
+    if (showUaDialog) {
+        AlertDialog(
+            onDismissRequest = { showUaDialog = false },
+            title = { Text("自定义 User-Agent") },
+            text = {
+                Column {
+                    Text(
+                        text = "留空 = 使用引擎默认（桌面 Chrome UA）。" +
+                            "引擎在被 403 时会自动降级到 curl/aria2 的 UA 重试 —— " +
+                            "只有目标站点明确只认某个 UA 时才需要填。",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                    Spacer(modifier = Modifier.height(10.dp))
+                    androidx.compose.material3.OutlinedTextField(
+                        value = uaDraft,
+                        onValueChange = { uaDraft = it },
+                        modifier = Modifier.fillMaxWidth(),
+                        placeholder = { Text("留空使用默认") },
+                        singleLine = false,
+                        maxLines = 4
+                    )
+                }
+            },
+            confirmButton = {
+                TextButton(onClick = {
+                    userAgent = uaDraft.trim()
+                    repo.engineUserAgent = userAgent
+                    showUaDialog = false
+                }) { Text("保存") }
+            },
+            dismissButton = {
+                TextButton(onClick = { showUaDialog = false }) { Text("取消") }
             }
         )
     }

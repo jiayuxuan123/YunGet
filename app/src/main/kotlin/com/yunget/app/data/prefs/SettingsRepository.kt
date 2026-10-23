@@ -382,6 +382,114 @@ class SettingsRepository(context: Context) {
             prefs.edit().putBoolean("skip_probe_when_size_known", value).apply()
         }
 
+    // ====================================================================
+    // 第二批引擎旋钮：分片粒度 / 超时 / UA / HTTP 版本策略
+    //
+    // 这 11 项此前**完全没传**给引擎，所以一直跑的是引擎默认值。
+    // 默认值与原引擎默认逐项一致，因此不碰它们时行为不变。
+    // 每项都对应引擎 TurboConfig 里的 require 约束，范围取的是引擎允许值。
+    // ====================================================================
+
+    /**
+     * 单块大小上限（字节，默认 16MB）。
+     *
+     * 这是**控制大文件请求数**的正确旋钮（不是 maxSegmentsPerTask）。
+     * 调小 = 切得更细、并发利用率更高，但建连与合并开销上升。
+     */
+    var engineBlockSizeBytes: Long
+        get() = prefs.getLong("engine_block_size_bytes", 16L * 1024 * 1024)
+        set(value) {
+            prefs.edit().putLong("engine_block_size_bytes", value.coerceAtLeast(4096L)).apply()
+        }
+
+    /** 最小分片大小（字节，默认 64KB）。低于它的块不再继续切分（引擎要求 ≥4KB）。 */
+    var engineMinSegmentSizeBytes: Long
+        get() = prefs.getLong("engine_min_segment_size_bytes", 64L * 1024)
+        set(value) {
+            prefs.edit().putLong("engine_min_segment_size_bytes", value.coerceAtLeast(4096L)).apply()
+        }
+
+    /** 单任务分片总数上限（默认 0 = 不限）。 */
+    var engineMaxSegmentsPerTask: Int
+        get() = prefs.getInt("engine_max_segments_per_task", 0)
+        set(value) {
+            prefs.edit().putInt("engine_max_segments_per_task", value.coerceAtLeast(0)).apply()
+        }
+
+    /** 单个分片最多再被切几次（默认 2）。配合动态分片消除慢连接长尾。 */
+    var engineMaxSplitsPerSegment: Int
+        get() = prefs.getInt("engine_max_splits_per_segment", 2)
+        set(value) {
+            prefs.edit().putInt("engine_max_splits_per_segment", value.coerceIn(0, 16)).apply()
+        }
+
+    /** 连接超时（毫秒，默认 15000）。 */
+    var engineConnectTimeoutMs: Long
+        get() = prefs.getLong("engine_connect_timeout_ms", 15_000L)
+        set(value) {
+            prefs.edit().putLong("engine_connect_timeout_ms", value.coerceIn(1_000L, 120_000L)).apply()
+        }
+
+    /** 读超时（毫秒，默认 60000）。服务端接了连接却不发数据时，靠它兜底。 */
+    var engineReadTimeoutMs: Long
+        get() = prefs.getLong("engine_read_timeout_ms", 60_000L)
+        set(value) {
+            prefs.edit().putLong("engine_read_timeout_ms", value.coerceIn(5_000L, 600_000L)).apply()
+        }
+
+    /** 首字节探测超时（毫秒，默认 6000，引擎要求 ≥1000）。 */
+    var engineProbeTimeoutMs: Long
+        get() = prefs.getLong("engine_probe_timeout_ms", 6_000L)
+        set(value) {
+            prefs.edit().putLong("engine_probe_timeout_ms", value.coerceIn(1_000L, 60_000L)).apply()
+        }
+
+    /** 探测重试次数（默认 1）。CDN 抖动导致探测失败时多试几次，代价是首字节更慢。 */
+    var engineProbeRetries: Int
+        get() = prefs.getInt("engine_probe_retries", 1)
+        set(value) {
+            prefs.edit().putInt("engine_probe_retries", value.coerceIn(0, 5)).apply()
+        }
+
+    /**
+     * 慢启动的初始并发（默认 0 = 由引擎自行决定，即 1）。
+     *
+     * 【这一项为什么必须暴露】「慢启动」开关只决定"是否逐步爬升"，
+     * 而起点的并发数由本值决定。不设它，开关只有半截效果 ——
+     * 用户以为调了慢启动，实际起点仍是引擎默认。
+     */
+    var engineSlowStartInitial: Int
+        get() = prefs.getInt("engine_slow_start_initial", 0)
+        set(value) {
+            prefs.edit().putInt("engine_slow_start_initial", value.coerceAtLeast(0)).apply()
+        }
+
+    /**
+     * 自定义 User-Agent（空 = 用引擎默认的 Chrome UA）。
+     *
+     * 引擎 0.2.3.0 的 UA 协商以本值为**起点**，被 403 时自动在
+     * curl/aria2 等备选里降级重试。留空即可享受默认策略；
+     * 只有在目标站点明确只认某个 UA 时才需要填。
+     */
+    var engineUserAgent: String
+        get() = prefs.getString("engine_user_agent", "").orEmpty()
+        set(value) {
+            prefs.edit().putString("engine_user_agent", value.trim()).apply()
+        }
+
+    /**
+     * HTTP 版本策略（0=AUTO / 1=强制 HTTP/1.1 / 2=允许 HTTP/2）。
+     *
+     * 与「强制 HTTP/1.1」布尔开关的关系：那个开关是旧接口，只覆盖分片链路；
+     * 本项是引擎的完整三态策略，语义更细（AUTO 会让探测与单流回退走 h2，
+     * 而分片并发仍走 h1）。**本项优先于布尔开关**。
+     */
+    var engineHttpVersionPolicy: Int
+        get() = prefs.getInt("engine_http_version_policy", 0)
+        set(value) {
+            prefs.edit().putInt("engine_http_version_policy", value.coerceIn(0, 2)).apply()
+        }
+
     companion object {
         const val DEFAULT_DOWNLOAD_THREADS = 16
 

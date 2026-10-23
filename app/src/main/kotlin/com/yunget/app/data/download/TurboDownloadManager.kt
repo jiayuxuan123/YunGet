@@ -9,6 +9,7 @@ import com.yunget.app.data.prefs.SettingsRepository
 import dev.turbodl.core.DownloadRequest
 import dev.turbodl.core.DnsMode
 import dev.turbodl.core.ProxyMode
+import dev.turbodl.core.HttpVersionPolicy
 import dev.turbodl.core.TaskState
 import dev.turbodl.core.TurboConfig
 import dev.turbodl.core.TurboDiagnostics
@@ -123,6 +124,20 @@ class TurboDownloadManager(
     private val stallTimeoutMsProvider: () -> Long = { 45_000L },
     private val trustWeakValidatorProvider: () -> Boolean = { false },
     private val skipProbeWhenSizeKnownProvider: () -> Boolean = { true },
+
+    // ---- 第二批：分片粒度 / 超时 / UA / HTTP 策略 ----
+    // 默认值与 TurboConfig 的默认逐项一致，所以不传时行为与之前完全相同。
+    private val blockSizeProvider: () -> Long = { 16L * 1024 * 1024 },
+    private val minSegmentSizeProvider: () -> Long = { 64L * 1024 },
+    private val maxSegmentsPerTaskProvider: () -> Int = { 0 },
+    private val maxSplitsPerSegmentProvider: () -> Int = { 2 },
+    private val connectTimeoutMsProvider: () -> Long = { 15_000L },
+    private val readTimeoutMsProvider: () -> Long = { 60_000L },
+    private val probeTimeoutMsProvider: () -> Long = { 6_000L },
+    private val probeRetriesProvider: () -> Int = { 1 },
+    private val slowStartInitialProvider: () -> Int = { 0 },
+    private val userAgentProvider: () -> String = { "" },
+    private val httpVersionPolicyProvider: () -> Int = { 0 },
 ) : DownloadManager {
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
 
@@ -339,6 +354,34 @@ class TurboDownloadManager(
         // 因此正常完成的任务不受影响）。若你的来源普遍不提供 ETag/Last-Modified
         // 且更在意省流量，可显式改为 true 并自行承担损坏风险。
         trustWeakValidator = trustWeakValidatorProvider(),
+
+        // ---- 第二批：此前完全没传给引擎，一直跑的是引擎默认值 ----
+        // 分片粒度：blockSize 是"单块别太大"的上限，minSegmentSize 是"别切太碎"的下限，
+        // maxSegmentsPerTask=0 表示不限总数（由 blockSize 间接约束）。
+        blockSize = blockSizeProvider().coerceAtLeast(4096L),
+        minSegmentSize = minSegmentSizeProvider().coerceAtLeast(4096L),
+        maxSegmentsPerTask = maxSegmentsPerTaskProvider().coerceAtLeast(0),
+        maxSplitsPerSegment = maxSplitsPerSegmentProvider().coerceIn(0, 16),
+        // 超时：connect 决定"连不上"多快暴露，read 决定"接了不发"多久放弃，
+        // probe 决定首字节探测等多久（引擎要求 >=1000ms）。
+        connectTimeoutMs = connectTimeoutMsProvider().coerceIn(1_000L, 120_000L),
+        readTimeoutMs = readTimeoutMsProvider().coerceIn(5_000L, 600_000L),
+        probeTimeoutMs = probeTimeoutMsProvider().coerceAtLeast(1_000L),
+        probeRetries = probeRetriesProvider().coerceAtLeast(0),
+        // 慢启动的起点并发：0 = 引擎自行决定。不设它，「慢启动」开关只有半截效果。
+        slowStartInitial = slowStartInitialProvider().coerceAtLeast(0),
+        // UA：空串表示沿用引擎默认的桌面 Chrome UA。
+        // 引擎 0.2.3.0 的 UA 协商以此为起点，被 403 时自动降级到 curl/aria2。
+        userAgent = userAgentProvider().takeIf { it.isNotBlank() }
+            ?: "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 " +
+                "(KHTML, like Gecko) Chrome/125.0.0.0 Safari/537.36",
+        // HTTP 版本策略：三态，比 forceHttp1 布尔开关细（AUTO 让探测与单流回退走 h2，
+        // 分片并发仍走 h1）。本项优先于 forceHttp1。
+        httpVersionPolicy = when (httpVersionPolicyProvider()) {
+            1 -> HttpVersionPolicy.FORCE_HTTP1
+            2 -> HttpVersionPolicy.FORCE_HTTP2
+            else -> HttpVersionPolicy.AUTO
+        },
     )
 
     /**
@@ -625,6 +668,10 @@ class TurboDownloadManager(
             cfg.warmUpConnections, cfg.slowStart,
             cfg.tailAssist, cfg.adaptiveConcurrency, cfg.overlapMerge, cfg.bufferedSegmentWrite,
             cfg.stallTimeoutMs, cfg.skipProbeWhenSizeKnown, cfg.trustWeakValidator,
+            // 第二批旋钮：漏进签名就等于"改了没反应"（这个坑已经踩过一次）
+            cfg.blockSize, cfg.minSegmentSize, cfg.maxSegmentsPerTask, cfg.maxSplitsPerSegment,
+            cfg.connectTimeoutMs, cfg.readTimeoutMs, cfg.probeTimeoutMs, cfg.probeRetries,
+            cfg.slowStartInitial, cfg.userAgent, cfg.httpVersionPolicy,
         ).joinToString("|")
         if (sig != lastConfigSignature) {
             lastConfigSignature = sig

@@ -88,6 +88,19 @@ internal object EngineManagerFactory {
             stallTimeoutMsProvider = { settings.stallTimeoutMs },
             trustWeakValidatorProvider = { settings.trustWeakValidator },
             skipProbeWhenSizeKnownProvider = { settings.skipProbeWhenSizeKnown },
+
+            // 第二批旋钮：分片粒度 / 超时 / UA / HTTP 策略
+            blockSizeProvider = { settings.engineBlockSizeBytes },
+            minSegmentSizeProvider = { settings.engineMinSegmentSizeBytes },
+            maxSegmentsPerTaskProvider = { settings.engineMaxSegmentsPerTask },
+            maxSplitsPerSegmentProvider = { settings.engineMaxSplitsPerSegment },
+            connectTimeoutMsProvider = { settings.engineConnectTimeoutMs },
+            readTimeoutMsProvider = { settings.engineReadTimeoutMs },
+            probeTimeoutMsProvider = { settings.engineProbeTimeoutMs },
+            probeRetriesProvider = { settings.engineProbeRetries },
+            slowStartInitialProvider = { settings.engineSlowStartInitial },
+            userAgentProvider = { settings.engineUserAgent },
+            httpVersionPolicyProvider = { settings.engineHttpVersionPolicy },
         )
     }
 
