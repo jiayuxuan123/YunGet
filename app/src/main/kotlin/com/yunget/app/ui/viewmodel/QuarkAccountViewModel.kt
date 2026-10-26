@@ -18,6 +18,9 @@
 
 package com.yunget.app.ui.viewmodel
 
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.setValue
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.ViewModelProvider
 import androidx.lifecycle.viewModelScope
@@ -42,9 +45,30 @@ class QuarkAccountViewModel(
             initialValue = null
         )
 
+    /**
+     * 本次登录是"覆盖当前账号"还是"新增一个账号"。
+     *
+     * 默认覆盖：日常重登（Cookie 过期、换密码）远比"再加一个号"常见，
+     * 默认新增会让用户每次重登都多出一行垃圾账号。
+     *
+     * 登录页在保存前显示这个选择器；登录成功后重置为 false，
+     * 避免用户上一次选了"新增"、这次重登又莫名其妙多一个号。
+     */
+    var addAsNewAccount by mutableStateOf(false)
+        private set
+
+    /** 由登录页的"新增账号"开关调用（不能叫 setAddAsNewAccount：会与属性 setter 撞签名）。 */
+    fun changeLoginMode(addNew: Boolean) {
+        addAsNewAccount = addNew
+    }
+
     /** 保存夸克 Cookie；返回是否保存成功 */
-    suspend fun saveQuarkAccount(cookie: String): Boolean =
-        repository.saveQuarkAccount(cookie)
+    suspend fun saveQuarkAccount(cookie: String): Boolean {
+        val ok = repository.saveQuarkAccount(cookie, addNew = addAsNewAccount)
+        // 保存成功后复位：下一次登录默认回到"覆盖"
+        if (ok) addAsNewAccount = false
+        return ok
+    }
 
     /** 退出登录：清除本地 Cookie */
     fun logout() {
@@ -74,6 +98,19 @@ class QuarkAccountViewModel(
             started = SharingStarted.WhileSubscribed(5_000),
             initialValue = emptyList(),
         )
+
+    /**
+     * 删除指定账号。
+     *
+     * 与 [logout] 的区别：那个是"退出当前登录"（会清 Cookie、重置刷新计时），
+     * 这个是"从多账号列表里移除一个"。删除主账号后必须把剩下的某个升为主账号，
+     * 否则所有"需要单一身份"的操作都会拿不到账号。
+     */
+    fun removeAccount(id: String) {
+        viewModelScope.launch {
+            repository.removeAccount(id)
+        }
+    }
 
     /** 切换主账号。 */
     fun setPrimary(id: String) {

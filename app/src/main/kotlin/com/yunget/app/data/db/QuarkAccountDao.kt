@@ -89,4 +89,16 @@ interface QuarkAccountDao {
 
     @Query("UPDATE quark_account SET isPrimary = 1 WHERE id = :id")
     suspend fun promote(id: String)
+
+    /**
+     * 把"更新时间最新的那个账号"升为主账号。
+     *
+     * 用于「删掉主账号后还剩其它账号」：不选一个上来，该平台就没有主账号了。
+     * 选最新的而不是最旧的 —— 多账号场景下最近登录的通常正是用户在用的那个。
+     */
+    @Query(
+        "UPDATE quark_account SET isPrimary = 1 WHERE id = " +
+            "(SELECT id FROM quark_account ORDER BY updatedAt DESC LIMIT 1)"
+    )
+    suspend fun promoteLatest()
 }

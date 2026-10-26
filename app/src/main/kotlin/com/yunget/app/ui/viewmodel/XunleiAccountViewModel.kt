@@ -162,6 +162,11 @@ class XunleiAccountViewModel(
             initialValue = emptyList(),
         )
 
+    /** 删除指定账号（主账号被删时自动把剩下的最新一个升为主账号）。 */
+    fun removeAccount(id: String) {
+        viewModelScope.launch { repository.removeAccount(id) }
+    }
+
     /** 切换主账号。 */
     fun setPrimary(id: String) {
         viewModelScope.launch { repository.setPrimary(id) }

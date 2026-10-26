@@ -147,6 +147,24 @@ class QuarkAccountRepository(
     /** 切换主账号。 */
     suspend fun setPrimary(id: String) = dao.setPrimary(id)
 
+    /**
+     * 从列表里移除一个账号。
+     *
+     * 删的若是主账号，必须把剩下的某一个升为主账号 —— 否则该平台就没有主账号，
+     * 列目录/转存/上传全部失效。选"更新时间最新的那个"：多账号场景下
+     * 最新登录的通常正是用户当下在用的。
+     */
+    suspend fun removeAccount(id: String) {
+        val wasPrimary = dao.getById(id)?.isPrimary == true
+        dao.deleteById(id)
+        if (!wasPrimary) return
+        if (dao.getAccount() != null) return   // 还有别的主账号，无需处理
+        // 主账号被删且没有其它主账号：把剩下最新的提上来
+        dao.observeAll()
+        dao.demoteAll()
+        dao.promoteLatest()
+    }
+
     /** 退出指定账号。若是主账号且还有其它账号，自动把最新那个升为主账号。 */
     suspend fun logout(id: String) {
         dao.deleteById(id)

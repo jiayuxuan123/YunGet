@@ -40,6 +40,22 @@ class Pan123AccountRepository(
 
     /** 切换主账号（同一事务内先降后升）。 */
     suspend fun setPrimary(id: String) = dao.setPrimary(id)
+    /**
+     * 从列表里移除一个账号。
+     *
+     * 删的若是主账号，必须把剩下的某一个升为主账号 —— 否则该平台就没有主账号，
+     * 列目录/转存/上传全部失效。选"最新登录的那个"：多账号场景下
+     * 最近登录的通常正是用户当下在用的。
+     */
+    suspend fun removeAccount(id: String) {
+        val wasPrimary = dao.getById(id)?.isPrimary == true
+        dao.deleteById(id)
+        if (!wasPrimary) return
+        if (dao.getAccount() != null) return      // 还有别的主账号，无需处理
+        dao.demoteAll()
+        dao.promoteLatest()
+    }
+
 
     /** 账号密码登录（POST user.123pan.cn/api/user/sign_in，无需签名）→ token 落库，返回 true */
     suspend fun login(account: String, password: String): Boolean {

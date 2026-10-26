@@ -608,6 +608,17 @@ fun MainScreen(
         onIncomingLinkConsumed()
     }
     val quarkAccount by viewModel.quarkAccount.collectAsState()
+    val quarkAccounts by viewModel.allAccounts.collectAsState()
+    val ucAccounts by ucViewModel.allAccounts.collectAsState()
+    val xunleiAccounts by xunleiViewModel.allAccounts.collectAsState()
+    val baiduAccounts by baiduViewModel.allAccounts.collectAsState()
+    val c139Accounts by c139ViewModel.allAccounts.collectAsState()
+    val pan123Accounts by pan123ViewModel.allAccounts.collectAsState()
+    val pan115Accounts by pan115ViewModel.allAccounts.collectAsState()
+    val guangyaAccounts by guangyaViewModel.allAccounts.collectAsState()
+    val ilanzouAccounts by ilanzouViewModel.allAccounts.collectAsState()
+    val lanzouAccounts by lanzouViewModel.allAccounts.collectAsState()
+    var showAccountManager by rememberSaveable { mutableStateOf(false) }
     val ucAccount by ucViewModel.ucAccount.collectAsState()
     val xunleiAccount by xunleiViewModel.xunleiAccount.collectAsState()
     val baiduAccount by baiduViewModel.baiduAccount.collectAsState()
@@ -893,6 +904,17 @@ fun MainScreen(
                         onQuarkLogin = { showQuarkLogin = true },
                         onQuarkLogout = { viewModel.logout() },
                         onQuarkUpdateRemark = { r -> quarkAccount?.let { viewModel.updateRemark(it.id, r) } },
+                        quarkAllAccounts = quarkAccounts.map {
+                            com.yunget.app.ui.items.MultiAccountRow(
+                                id = it.id,
+                                remark = it.remark,
+                                nickname = it.nickname,
+                                isPrimary = it.isPrimary,
+                            )
+                        },
+                        onQuarkSelectPrimary = { viewModel.setPrimary(it) },
+                        onQuarkDeleteAccount = { viewModel.removeAccount(it) },
+                        onManageAccounts = { showAccountManager = true },
                         onDownloadStarted = { currentTab = MainTab.Download },
                         onUCLogin = { showUCLogin = true },
                         onUCLogout = { ucViewModel.logout() },
@@ -1033,6 +1055,91 @@ fun MainScreen(
         modifier = Modifier.fillMaxSize()
     ) {
         LogViewerScreen(onBack = { showLogViewer = false })
+    }
+
+    // 账号管理（全平台多账号）
+    AnimatedVisibility(
+        visible = showAccountManager,
+        enter = fadeIn(effectsDefault()) + scaleIn(tween(220), initialScale = 0.96f),
+        exit = fadeOut(effectsFast()) + scaleOut(tween(160), targetScale = 0.96f),
+        modifier = Modifier.fillMaxSize()
+    ) {
+        // 平台 id 与显示名：顺序按"常用程度"排，与网盘页一致。
+        // 每个平台的账号列表映射成统一的 MultiAccountRow —— 各平台实体字段不同，
+        // 但这一页只关心"谁是谁、谁是主账号"，所以在这里收敛。
+        com.yunget.app.ui.screens.AccountManagerScreen(
+            platforms = listOf(
+                com.yunget.app.ui.screens.PlatformAccounts(
+                    "quark", "夸克网盘",
+                    quarkAccounts.map { com.yunget.app.ui.items.MultiAccountRow(it.id, it.remark, it.nickname, it.isPrimary) },
+                ),
+                com.yunget.app.ui.screens.PlatformAccounts(
+                    "uc", "UC 网盘",
+                    ucAccounts.map { com.yunget.app.ui.items.MultiAccountRow(it.id, it.remark, it.nickname, it.isPrimary) },
+                ),
+                com.yunget.app.ui.screens.PlatformAccounts(
+                    "xunlei", "迅雷网盘",
+                    xunleiAccounts.map { com.yunget.app.ui.items.MultiAccountRow(it.id, it.remark, it.nickname, it.isPrimary) },
+                ),
+                com.yunget.app.ui.screens.PlatformAccounts(
+                    "baidu", "百度网盘",
+                    baiduAccounts.map { com.yunget.app.ui.items.MultiAccountRow(it.id, it.remark, it.nickname, it.isPrimary) },
+                ),
+                com.yunget.app.ui.screens.PlatformAccounts(
+                    "c139", "中国移动云盘",
+                    c139Accounts.map { com.yunget.app.ui.items.MultiAccountRow(it.id, it.remark, it.nickname, it.isPrimary) },
+                ),
+                com.yunget.app.ui.screens.PlatformAccounts(
+                    "pan123", "123 云盘",
+                    pan123Accounts.map { com.yunget.app.ui.items.MultiAccountRow(it.id, it.remark, it.nickname, it.isPrimary) },
+                ),
+                com.yunget.app.ui.screens.PlatformAccounts(
+                    "pan115", "115 网盘",
+                    pan115Accounts.map { com.yunget.app.ui.items.MultiAccountRow(it.id, it.remark, it.nickname, it.isPrimary) },
+                ),
+                com.yunget.app.ui.screens.PlatformAccounts(
+                    "guangya", "光鸭云盘",
+                    guangyaAccounts.map { com.yunget.app.ui.items.MultiAccountRow(it.id, it.remark, it.nickname, it.isPrimary) },
+                ),
+                com.yunget.app.ui.screens.PlatformAccounts(
+                    "ilanzou", "蓝奏云优享版",
+                    ilanzouAccounts.map { com.yunget.app.ui.items.MultiAccountRow(it.id, it.remark, it.nickname, it.isPrimary) },
+                ),
+                com.yunget.app.ui.screens.PlatformAccounts(
+                    "lanzou", "蓝奏云",
+                    lanzouAccounts.map { com.yunget.app.ui.items.MultiAccountRow(it.id, it.remark, it.nickname, it.isPrimary) },
+                ),
+            ),
+            onBack = { showAccountManager = false },
+            onSelectPrimary = { platform, id ->
+                when (platform) {
+                    "quark" -> viewModel.setPrimary(id)
+                    "uc" -> ucViewModel.setPrimary(id)
+                    "xunlei" -> xunleiViewModel.setPrimary(id)
+                    "baidu" -> baiduViewModel.setPrimary(id)
+                    "c139" -> c139ViewModel.setPrimary(id)
+                    "pan123" -> pan123ViewModel.setPrimary(id)
+                    "pan115" -> pan115ViewModel.setPrimary(id)
+                    "guangya" -> guangyaViewModel.setPrimary(id)
+                    "ilanzou" -> ilanzouViewModel.setPrimary(id)
+                    "lanzou" -> lanzouViewModel.setPrimary(id)
+                }
+            },
+            onDeleteAccount = { platform, id ->
+                when (platform) {
+                    "quark" -> viewModel.removeAccount(id)
+                    "uc" -> ucViewModel.removeAccount(id)
+                    "xunlei" -> xunleiViewModel.removeAccount(id)
+                    "baidu" -> baiduViewModel.removeAccount(id)
+                    "c139" -> c139ViewModel.removeAccount(id)
+                    "pan123" -> pan123ViewModel.removeAccount(id)
+                    "pan115" -> pan115ViewModel.removeAccount(id)
+                    "guangya" -> guangyaViewModel.removeAccount(id)
+                    "ilanzou" -> ilanzouViewModel.removeAccount(id)
+                    "lanzou" -> lanzouViewModel.removeAccount(id)
+                }
+            },
+        )
     }
 
     // 公告与社区

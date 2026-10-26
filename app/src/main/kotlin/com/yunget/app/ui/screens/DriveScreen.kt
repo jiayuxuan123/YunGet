@@ -80,6 +80,9 @@ import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.foundation.Image
+import androidx.compose.foundation.clickable
+import androidx.compose.material.icons.outlined.ManageAccounts
+import androidx.compose.material.icons.outlined.ChevronRight
 
 /**
  * 网盘账号展示模型。
@@ -180,6 +183,12 @@ fun DriveScreen(
     onQuarkLogout: () -> Unit,
     /** 修改夸克账号备注（空串 = 清除）。 */
     onQuarkUpdateRemark: ((String) -> Unit)? = null,
+    /** 夸克的全部账号（多账号列表）。 */
+    quarkAllAccounts: List<com.yunget.app.ui.items.MultiAccountRow> = emptyList(),
+    onQuarkSelectPrimary: ((String) -> Unit)? = null,
+    onQuarkDeleteAccount: ((String) -> Unit)? = null,
+    /** 打开「账号管理」页（全平台多账号）。 */
+    onManageAccounts: (() -> Unit)? = null,
     /** 夸克云盘下载入队后切换到「下载」Tab */
     onDownloadStarted: () -> Unit = {},
     onUCLogin: () -> Unit,
@@ -437,6 +446,59 @@ fun DriveScreen(
                 // 每次都要从头往下找。分完组，"我有哪些盘能用"和"还能加哪些盘"一眼分得开。
                 // 一个都没登录时整屏都是未登录，此时标题写「全部网盘」而不是「未登录」——
                 // 满屏"未登录"读起来像出了错。
+                // 账号管理入口：只在确实存在账号时显示。
+                // 没有任何账号时这一行是干扰 —— 用户该做的是先登录。
+                if (onManageAccounts != null &&
+                    listOfNotNull(
+                        quarkAccount, ucAccount, xunleiAccount, baiduAccount, c139Account,
+                        pan123Account, pan115Account, guangyaAccount, ilanzouAccount, lanzouAccount,
+                    ).isNotEmpty()
+                ) {
+                    item(key = "manage_accounts") {
+                        Card(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .clickable(onClick = onManageAccounts),
+                            shape = MaterialTheme.shapes.large,
+                            colors = CardDefaults.cardColors(
+                                containerColor = MaterialTheme.colorScheme.secondaryContainer,
+                            ),
+                        ) {
+                            Row(
+                                modifier = Modifier.fillMaxWidth().padding(14.dp),
+                                verticalAlignment = Alignment.CenterVertically,
+                            ) {
+                                Icon(
+                                    imageVector = Icons.Outlined.ManageAccounts,
+                                    contentDescription = null,
+                                    modifier = Modifier.size(20.dp),
+                                    tint = MaterialTheme.colorScheme.onSecondaryContainer,
+                                )
+                                Spacer(Modifier.width(10.dp))
+                                Column(modifier = Modifier.weight(1f)) {
+                                    Text(
+                                        text = "账号管理",
+                                        style = MaterialTheme.typography.titleSmall,
+                                        fontWeight = FontWeight.Medium,
+                                        color = MaterialTheme.colorScheme.onSecondaryContainer,
+                                    )
+                                    Text(
+                                        text = "查看各平台的全部账号，切换主账号或删除",
+                                        style = MaterialTheme.typography.labelSmall,
+                                        color = MaterialTheme.colorScheme.onSecondaryContainer,
+                                    )
+                                }
+                                Icon(
+                                    imageVector = Icons.Outlined.ChevronRight,
+                                    contentDescription = null,
+                                    modifier = Modifier.size(18.dp),
+                                    tint = MaterialTheme.colorScheme.onSecondaryContainer,
+                                )
+                            }
+                        }
+                    }
+                }
+
                 val entries = listOf(
                     DriveEntry(quark, quarkQuota, { showCloud = true }, { showQuarkSheet = true }, onQuarkLogin),
                     DriveEntry(uc, ucQuota, { showUCCloud = true }, { showUCSheet = true }, onUCLogin),
@@ -535,6 +597,9 @@ fun DriveScreen(
             },
             onDismiss = { showQuarkSheet = false },
             onUpdateRemark = onQuarkUpdateRemark,
+            allAccounts = quarkAllAccounts,
+            onSelectPrimary = onQuarkSelectPrimary,
+            onDeleteAccount = onQuarkDeleteAccount,
         )
     }
 

@@ -90,6 +90,10 @@ class SecureAccountDaosTest {
         override suspend fun promote(id: String) {
             if (stored?.id == id) stored = stored?.copy(isPrimary = true)
         }
+
+        override suspend fun promoteLatest() {
+            stored = stored?.copy(isPrimary = true)
+        }
     }
 
     private val cipher = FakeCipher()

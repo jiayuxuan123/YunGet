@@ -51,6 +51,10 @@ import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBar
+import androidx.compose.material3.Surface
+import androidx.compose.material3.Switch
+import androidx.compose.ui.Alignment
+import androidx.compose.foundation.layout.Row
 
 /**
  * 夸克网盘登录页：
@@ -183,6 +187,49 @@ fun QuarkLoginScreen(
             )
             if (isLoading) {
                 LinearProgressIndicator(modifier = Modifier.fillMaxWidth())
+            }
+
+            // "新增账号"开关：只在**已有账号**时出现。
+            //
+            // 只有一个账号时问"覆盖还是新增"没有意义（正确答案永远是覆盖），
+            // 多一个开关只会让人犹豫。真正需要它的是"我想再加一个号"的场景。
+            var existingCount by remember { mutableStateOf(0) }
+            LaunchedEffect(Unit) { existingCount = viewModel.allAccounts.value.size }
+            if (existingCount > 0) {
+                Surface(
+                    modifier = Modifier
+                        .align(Alignment.BottomCenter)
+                        .fillMaxWidth(),
+                    color = MaterialTheme.colorScheme.surfaceContainerHigh,
+                    shadowElevation = 6.dp,
+                ) {
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(horizontal = 16.dp, vertical = 10.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                    ) {
+                        Column(modifier = Modifier.weight(1f)) {
+                            Text(
+                                text = "保存为新增账号",
+                                style = MaterialTheme.typography.bodyMedium,
+                            )
+                            Text(
+                                text = if (viewModel.addAsNewAccount) {
+                                    "本次登录会新增一个账号，不改变当前主账号"
+                                } else {
+                                    "本次登录会覆盖当前主账号的凭证"
+                                },
+                                style = MaterialTheme.typography.labelSmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            )
+                        }
+                        Switch(
+                            checked = viewModel.addAsNewAccount,
+                            onCheckedChange = { viewModel.changeLoginMode(it) },
+                        )
+                    }
+                }
             }
         }
     }

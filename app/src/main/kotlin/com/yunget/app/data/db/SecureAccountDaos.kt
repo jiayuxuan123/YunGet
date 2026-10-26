@@ -63,6 +63,7 @@ internal object SecureAccountDaos {
         override suspend fun setPrimary(id: String) = raw.setPrimary(id)
         override suspend fun demoteAll() = raw.demoteAll()
         override suspend fun promote(id: String) = raw.promote(id)
+        override suspend fun promoteLatest() = raw.promoteLatest()
         // 备注不参与加解密：它不是凭证，只是用户起的名字
         override suspend fun updateRemark(id: String, remark: String) = raw.updateRemark(id, remark)
     }
@@ -89,6 +90,7 @@ internal object SecureAccountDaos {
         override suspend fun setPrimary(id: String) = raw.setPrimary(id)
         override suspend fun demoteAll() = raw.demoteAll()
         override suspend fun promote(id: String) = raw.promote(id)
+        override suspend fun promoteLatest() = raw.promoteLatest()
         // 备注不参与加解密：它不是凭证，只是用户起的名字
         override suspend fun updateRemark(id: String, remark: String) = raw.updateRemark(id, remark)
     }
@@ -115,6 +117,7 @@ internal object SecureAccountDaos {
         override suspend fun setPrimary(id: String) = raw.setPrimary(id)
         override suspend fun demoteAll() = raw.demoteAll()
         override suspend fun promote(id: String) = raw.promote(id)
+        override suspend fun promoteLatest() = raw.promoteLatest()
         // 备注不参与加解密：它不是凭证，只是用户起的名字
         override suspend fun updateRemark(id: String, remark: String) = raw.updateRemark(id, remark)
     }
@@ -141,6 +144,7 @@ internal object SecureAccountDaos {
         override suspend fun setPrimary(id: String) = raw.setPrimary(id)
         override suspend fun demoteAll() = raw.demoteAll()
         override suspend fun promote(id: String) = raw.promote(id)
+        override suspend fun promoteLatest() = raw.promoteLatest()
         // 备注不参与加解密：它不是凭证，只是用户起的名字
         override suspend fun updateRemark(id: String, remark: String) = raw.updateRemark(id, remark)
     }
@@ -167,6 +171,7 @@ internal object SecureAccountDaos {
         override suspend fun setPrimary(id: String) = raw.setPrimary(id)
         override suspend fun demoteAll() = raw.demoteAll()
         override suspend fun promote(id: String) = raw.promote(id)
+        override suspend fun promoteLatest() = raw.promoteLatest()
         // 备注不参与加解密：它不是凭证，只是用户起的名字
         override suspend fun updateRemark(id: String, remark: String) = raw.updateRemark(id, remark)
     }
@@ -193,6 +198,7 @@ internal object SecureAccountDaos {
         override suspend fun setPrimary(id: String) = raw.setPrimary(id)
         override suspend fun demoteAll() = raw.demoteAll()
         override suspend fun promote(id: String) = raw.promote(id)
+        override suspend fun promoteLatest() = raw.promoteLatest()
         // 备注不参与加解密：它不是凭证，只是用户起的名字
         override suspend fun updateRemark(id: String, remark: String) = raw.updateRemark(id, remark)
     }
@@ -219,6 +225,7 @@ internal object SecureAccountDaos {
         override suspend fun setPrimary(id: String) = raw.setPrimary(id)
         override suspend fun demoteAll() = raw.demoteAll()
         override suspend fun promote(id: String) = raw.promote(id)
+        override suspend fun promoteLatest() = raw.promoteLatest()
         // 备注不参与加解密：它不是凭证，只是用户起的名字
         override suspend fun updateRemark(id: String, remark: String) = raw.updateRemark(id, remark)
     }
@@ -245,6 +252,7 @@ internal object SecureAccountDaos {
         override suspend fun setPrimary(id: String) = raw.setPrimary(id)
         override suspend fun demoteAll() = raw.demoteAll()
         override suspend fun promote(id: String) = raw.promote(id)
+        override suspend fun promoteLatest() = raw.promoteLatest()
         // 备注不参与加解密：它不是凭证，只是用户起的名字
         override suspend fun updateRemark(id: String, remark: String) = raw.updateRemark(id, remark)
     }
@@ -271,6 +279,7 @@ internal object SecureAccountDaos {
         override suspend fun setPrimary(id: String) = raw.setPrimary(id)
         override suspend fun demoteAll() = raw.demoteAll()
         override suspend fun promote(id: String) = raw.promote(id)
+        override suspend fun promoteLatest() = raw.promoteLatest()
         // 备注不参与加解密：它不是凭证，只是用户起的名字
         override suspend fun updateRemark(id: String, remark: String) = raw.updateRemark(id, remark)
     }
@@ -297,6 +306,7 @@ internal object SecureAccountDaos {
         override suspend fun setPrimary(id: String) = raw.setPrimary(id)
         override suspend fun demoteAll() = raw.demoteAll()
         override suspend fun promote(id: String) = raw.promote(id)
+        override suspend fun promoteLatest() = raw.promoteLatest()
         // 备注不参与加解密：它不是凭证，只是用户起的名字
         override suspend fun updateRemark(id: String, remark: String) = raw.updateRemark(id, remark)
     }

@@ -91,6 +91,12 @@ fun QuarkAccountSheet(
     onDismiss: () -> Unit,
     /** 修改备注。null = 不显示该入口（例如旧调用点）。 */
     onUpdateRemark: ((String) -> Unit)? = null,
+    /** 该平台的全部账号（多账号列表）。空 = 只有一个账号，不显示列表。 */
+    allAccounts: List<com.yunget.app.ui.items.MultiAccountRow> = emptyList(),
+    /** 切换主账号。 */
+    onSelectPrimary: ((String) -> Unit)? = null,
+    /** 删除某个非主账号。 */
+    onDeleteAccount: ((String) -> Unit)? = null,
 ) {
     val context = LocalContext.current
     var showFullCookie by rememberSaveable { mutableStateOf(false) }
@@ -267,6 +273,18 @@ fun QuarkAccountSheet(
                         }
                     }
                 }
+            }
+
+            // 多账号列表：只有确实存在多个账号时才显示 ——
+            // 只有一个账号时这整块是多余的（"1 个账号"没有任何信息量）。
+            if (allAccounts.size > 1 && onSelectPrimary != null) {
+                Spacer(modifier = Modifier.height(20.dp))
+                com.yunget.app.ui.items.MultiAccountList(
+                    platformId = "quark",
+                    accounts = allAccounts,
+                    onSelectPrimary = onSelectPrimary,
+                    onDelete = { id -> onDeleteAccount?.invoke(id) },
+                )
             }
 
             Spacer(modifier = Modifier.height(24.dp))
