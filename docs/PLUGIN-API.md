@@ -478,6 +478,62 @@ host.clearInterval(repeating);    // 和 clearTimeout 是同一个函数
 
 ---
 
+## `supportEntries`（支持开发页的条目）
+
+manifest 里可以声明一个 `supportEntries` 数组，应用会把这些条目显示在「设置 → 支持开发」页。
+
+```json
+{
+  "supportEntries": [
+    {
+      "title": "微信赞赏码",
+      "note": "扫码即可，多少随意",
+      "kind": "image",
+      "payload": "support/wechat.png"
+    }
+  ]
+}
+```
+
+字段：
+
+| 字段 | 必填 | 说明 |
+|---|---|---|
+| `title` | 是 | 条目标题。空标题的条目会被丢弃。 |
+| `kind` | 是 | `text` / `image` / `link` / `copy` 之一。 |
+| `payload` | 是 | 内容。各 `kind` 的含义见下。 |
+| `note` | 否 | 标题下方的一行说明。 |
+
+### `kind: image` 的三条合法来源
+
+按顺序识别，命中即用：
+
+1. **相对路径**（推荐）：如 `support/wechat.png`，相对于应用的私有目录 `filesDir`。
+   插件脚本拿不到 `filesDir` 的绝对路径，所以这是本地图的正规写法。
+   含冒号、以 `/` 开头、含 `..`、含反斜杠的都不当作相对路径。
+
+2. **私有目录内的绝对路径**：如 `/data/user/0/<pkg>/files/support/wechat.png`。
+   必须真的落在 `filesDir` 之内，`filesDir` 以外的路径一律丢弃。
+
+3. **https 图片 URL**：本地确实没有图时的兜底。会走与 README 正文图片同一套
+   加载器（磁盘缓存 + 降采样），离线时显示占位而不是裂图。
+
+`file://`、`javascript:`、`intent://` 等其它 scheme **一律拒绝**。
+
+### 本地图片放哪
+
+插件把图片写到 `filesDir` 下的任意位置即可，例如 `filesDir/support/wechat.png`，
+然后在 manifest 里写 `support/wechat.png`。
+
+> 私有目录会随应用卸载清空。卸载重装插件后需要重新放图，否则该条目会显示
+> 「图片不在了」。
+
+### `kind: text` / `link` / `copy`
+
+- `text`：一段纯文本，直接显示。
+- `link`：一个 http/https 地址，显示为可点击。
+- `copy`：一段可复制的文本（例如支付宝账号），点击复制到剪贴板。
+
 ## 上限表
 
 全部来自 `JsPluginConfig` 的默认值（云取用的就是这一档）。

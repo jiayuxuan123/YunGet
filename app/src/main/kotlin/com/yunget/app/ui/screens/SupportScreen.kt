@@ -67,6 +67,16 @@ import java.io.File
 import androidx.compose.material3.Card
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.TopAppBar
+import androidx.compose.foundation.layout.heightIn
+import androidx.compose.foundation.layout.aspectRatio
+import androidx.compose.foundation.layout.width
+import androidx.compose.material3.CircularProgressIndicator
+import androidx.compose.material3.Surface
+import androidx.compose.material.icons.outlined.ImageNotSupported
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.material.icons.outlined.Info
 
 /**
  * 支持页（P7）—— **内容由插件提供，宿主只提供骨架**。
@@ -186,56 +196,112 @@ fun SupportScreen(
  */
 @Composable
 private fun BuiltinSupport() {
-    Column(modifier = Modifier.fillMaxWidth()) {
+    Column(
+        modifier = Modifier.fillMaxWidth(),
+        verticalArrangement = Arrangement.spacedBy(16.dp),
+    ) {
+        // ---------- 顶部说明 ----------
+        // 语气按"说清事实"来：不写"绝对安全""官方认证"这类空话，
+        // 也不写"献出一点爱"这种施压式文案。
+        Column(modifier = Modifier.fillMaxWidth()) {
+            Text(
+                text = "云取一直免费，也没有广告和付费墙",
+                style = MaterialTheme.typography.titleMedium,
+                fontWeight = FontWeight.SemiBold,
+            )
+            Spacer(Modifier.height(6.dp))
+            Text(
+                text = "日常的维护、适配新系统、跟进网盘接口变动，都要花时间。" +
+                    "如果它帮到了你，可以用下面的方式支持一下。",
+                style = MaterialTheme.typography.bodyMedium,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+        }
+
+        // ---------- 赞赏码卡片 ----------
         Card(
             modifier = Modifier.fillMaxWidth(),
-            shape = MaterialTheme.shapes.large,
+            shape = MaterialTheme.shapes.extraLarge,
             colors = CardDefaults.cardColors(
                 containerColor = MaterialTheme.colorScheme.surfaceContainerLow
             ),
         ) {
             Column(
-                modifier = Modifier.fillMaxWidth().padding(20.dp),
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = 20.dp, vertical = 24.dp),
                 horizontalAlignment = Alignment.CenterHorizontally,
             ) {
+                // 二维码放在白底里：深色主题下二维码直接压在深色卡片上会扫不出来，
+                // 微信要求码本身是高对比的黑白。这里固定白底、固定内边距，
+                // 与系统主题解耦 —— 是「码的显示规范」，不是「页面的配色」。
+                Surface(
+                    shape = RoundedCornerShape(16.dp),
+                    color = Color.White,
+                ) {
+                    Image(
+                        painter = painterResource(R.drawable.weixin),
+                        contentDescription = "微信赞赏码",
+                        modifier = Modifier
+                            .padding(12.dp)
+                            .size(220.dp),
+                        contentScale = ContentScale.Fit,
+                    )
+                }
+
+                Spacer(Modifier.height(16.dp))
                 Text(
-                    text = "微信扫码赞赏（本二次开发版）",
-                    style = MaterialTheme.typography.titleMedium,
+                    text = "微信扫码赞赏",
+                    style = MaterialTheme.typography.titleSmall,
                     fontWeight = FontWeight.Medium,
                 )
                 Spacer(Modifier.height(4.dp))
                 Text(
-                    text = "你的支持，是持续维护与更新的动力",
+                    text = "长按图片可保存，或在微信「扫一扫」里从相册识别",
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
-                )
-                Spacer(Modifier.height(14.dp))
-                Image(
-                    painter = painterResource(R.drawable.weixin),
-                    contentDescription = "微信赞赏码",
-                    modifier = Modifier.fillMaxWidth(),
-                    contentScale = ContentScale.Fit,
-                )
-                Spacer(Modifier.height(14.dp))
-                Text(
-                    text = "截图后在微信「扫一扫」里从相册识别即可赞赏",
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    textAlign = TextAlign.Center,
                 )
             }
         }
-        Spacer(Modifier.height(8.dp))
-        Text(
-            text = "此赞赏码仅用于支持本二次开发（多线程升级）版本的维护。若想支持上游原项目作者，" +
-                "请移步原仓库 CYQawa/YunX 的捐赠渠道，两者互不相关。" +
-                "装了提供支持信息的插件后，这一页会改为显示插件提供的内容。",
-            style = MaterialTheme.typography.labelSmall,
-            color = MaterialTheme.colorScheme.onSurfaceVariant,
-        )
+
+        // ---------- 上游说明 ----------
+        // 这一段必须留着：用户很容易以为赞赏是给上游项目的。
+        Surface(
+            modifier = Modifier.fillMaxWidth(),
+            shape = MaterialTheme.shapes.medium,
+            color = MaterialTheme.colorScheme.surfaceContainerHigh,
+        ) {
+            Row(
+                modifier = Modifier.padding(14.dp),
+                verticalAlignment = Alignment.Top,
+            ) {
+                Icon(
+                    imageVector = Icons.Outlined.Info,
+                    contentDescription = null,
+                    modifier = Modifier.size(17.dp),
+                    tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+                Spacer(Modifier.width(10.dp))
+                Column {
+                    Text(
+                        text = "这个赞赏码用于支持本二次开发版本（多线程下载改造）的维护。",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                    Spacer(Modifier.height(4.dp))
+                    Text(
+                        text = "如果想支持上游原项目，请前往 CYQawa/YunX 仓库的捐赠渠道，两者互不相关。",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                }
+            }
+        }
     }
 }
 
-/** 一条支持条目。按 [SupportEntry.kind] 决定渲染方式。 */
+/** 一条支持条目。按 [SupportEntry.kind] 决定渲染方式。 *//** 一条支持条目。按 [SupportEntry.kind] 决定渲染方式。 */
 @Composable
 private fun SupportEntryCard(item: SupportEntries.SanitizedEntry) {
     val context = LocalContext.current
@@ -295,7 +361,7 @@ private fun SupportEntryCard(item: SupportEntries.SanitizedEntry) {
                         placeholderRatio = 1f,
                     )
                 } else {
-                    SupportImage(entry.payload)
+                    SupportImage(entry.payload, entry.title)
                 }
 
                 SupportEntry.Kind.LINK -> Row(
@@ -349,46 +415,130 @@ private fun SupportEntryCard(item: SupportEntries.SanitizedEntry) {
 }
 
 /**
- * 显示插件提供的一张图片（如收款码）。
+ * 显示插件提供的一张本地图片（如收款码）。
  *
- * 路径在净化阶段已经确认落在应用私有目录内；这里再判一次存在性 ——
- * 文件可能被清理掉，那时显示一句实话而不是一个破图。
+ * ## 为什么要自己解码而不是直接 `Image(File)`
+ *
+ * 收款码原图常见 1080×1080 甚至 2000+，而显示区只有两百多 dp。
+ * 直接整张解码在低端机上会吃掉十几 MB —— 和之前 OOM 事故同一类问题。
+ * 这里先读边界，再按目标尺寸做降采样，解码后的位图只有几十 KB。
+ *
+ * ## 为什么失败时给一行字而不是灰色占位
+ *
+ * 插件把图片放在私有目录，那条路径可能因为清理/重装而失效。
+ * 那时显示"图片不在了"是**事实**；显示一个破图或空白，用户只会以为应用坏了。
  */
 @Composable
-private fun SupportImage(path: String) {
-    val bitmap by produceState(initialValue = null as android.graphics.Bitmap?) {
+private fun SupportImage(path: String, contentDescription: String?) {
+    // 目标显示尺寸：卡片内宽减去内边距，上限 260dp。
+    // 收款码再大也没意义 —— 微信扫一扫能识别的码在 260dp 下绰绰有余。
+    val targetPx = with(androidx.compose.ui.platform.LocalDensity.current) {
+        (260.dp).roundToPx()
+    }
+
+    val state by produceState<SupportImageState>(SupportImageState.Loading) {
         value = withContext(Dispatchers.IO) {
             runCatching {
                 val f = File(path)
-                if (!f.isFile) null else android.graphics.BitmapFactory.decodeFile(path)
-            }.getOrNull()
+                if (!f.isFile || f.length() == 0L) return@runCatching SupportImageState.Missing
+
+                // 第一趟：只读尺寸，不解码像素
+                val bounds = android.graphics.BitmapFactory.Options().apply {
+                    inJustDecodeBounds = true
+                }
+                android.graphics.BitmapFactory.decodeFile(path, bounds)
+                if (bounds.outWidth <= 0 || bounds.outHeight <= 0) {
+                    return@runCatching SupportImageState.Missing
+                }
+
+                // 第二趟：按 2 的幂降采样，直到接近目标尺寸（inSampleSize 只能是 2 的幂）
+                var sample = 1
+                val longest = maxOf(bounds.outWidth, bounds.outHeight)
+                while (longest / (sample * 2) >= targetPx) sample *= 2
+
+                val bitmap = android.graphics.BitmapFactory.decodeFile(
+                    path,
+                    android.graphics.BitmapFactory.Options().apply { inSampleSize = sample },
+                )
+                if (bitmap == null) {
+                    SupportImageState.Missing
+                } else {
+                    SupportImageState.Loaded(bitmap, bounds.outWidth, bounds.outHeight)
+                }
+            }.getOrElse { SupportImageState.Missing }
         }
     }
 
-    val bmp = bitmap
-    if (bmp == null) {
-        Text(
-            text = "图片不在了（可能已被清理）",
-            style = MaterialTheme.typography.bodySmall,
-            color = MaterialTheme.colorScheme.onSurfaceVariant,
-        )
-    } else {
-        Box(
+    when (val st = state) {
+        SupportImageState.Loading -> Box(
             modifier = Modifier
                 .fillMaxWidth()
-                .background(MaterialTheme.colorScheme.surface, RoundedCornerShape(12.dp)),
+                .height(160.dp),
             contentAlignment = Alignment.Center,
         ) {
+            CircularProgressIndicator(
+                modifier = Modifier.size(22.dp),
+                strokeWidth = 2.dp,
+            )
+        }
+
+        SupportImageState.Missing -> Surface(
+            modifier = Modifier.fillMaxWidth(),
+            shape = RoundedCornerShape(12.dp),
+            color = MaterialTheme.colorScheme.surfaceContainerHighest,
+        ) {
+            Row(
+                modifier = Modifier.padding(horizontal = 14.dp, vertical = 16.dp),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                Icon(
+                    imageVector = Icons.Outlined.ImageNotSupported,
+                    contentDescription = null,
+                    modifier = Modifier.size(18.dp),
+                    tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+                Spacer(Modifier.width(8.dp))
+                Text(
+                    text = "图片不在了（可能已被清理，重新安装插件可恢复）",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+            }
+        }
+
+        is SupportImageState.Loaded -> {
+            val ratio = if (st.width > 0 && st.height > 0) {
+                st.width.toFloat() / st.height.toFloat()
+            } else {
+                1f
+            }
             Image(
-                bitmap = bmp.asImageBitmap(),
-                contentDescription = null,
-                modifier = Modifier.size(220.dp),
+                bitmap = st.bitmap.asImageBitmap(),
+                contentDescription = contentDescription,
+                modifier = Modifier
+                    .fillMaxWidth()
+                    // 按原始比例算出高度，避免正方形码被拉伸；高度上限 320dp。
+                    .heightIn(max = 320.dp)
+                    .aspectRatio(ratio.coerceIn(0.5f, 2f))
+                    .clip(RoundedCornerShape(12.dp)),
+                contentScale = ContentScale.Fit,
             )
         }
     }
 }
 
-/** 复制到剪贴板并给出反馈。 */
+/** 本地图片的加载状态。单独定义而非用 null 表示，是为了区分"还在读"与"读不到"。 */
+private sealed interface SupportImageState {
+    data object Loading : SupportImageState
+    data object Missing : SupportImageState
+    data class Loaded(
+        val bitmap: android.graphics.Bitmap,
+        val width: Int,
+        val height: Int,
+    ) : SupportImageState
+}
+
+/** 复制到剪贴板并给出反馈。 *//** 复制到剪贴板并给出反馈。 */
 private fun copyToClipboard(context: android.content.Context, text: String) {
     runCatching {
         val cm = context.getSystemService(android.content.ClipboardManager::class.java)

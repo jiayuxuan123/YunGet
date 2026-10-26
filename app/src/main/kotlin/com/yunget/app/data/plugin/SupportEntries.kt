@@ -95,16 +95,43 @@ object SupportEntries {
             }
 
             SupportEntry.Kind.IMAGE -> {
-                // 两条合法来源：
-                //  1. 应用私有目录内的文件（本地已存在的图）；
-                //  2. https 图片 URL —— manifest 是纯文本、带不了二进制，远程 URL 是
-                //     插件提供一张收款码的**唯一**途径。宿主用公共图片加载器（带缓存与
-                //     降采样）取图，与 README 正文图片同一套通道；scheme 在 [isHttpUrl]
-                //     把关（file://、intent:// 之类依旧进不来）。
-                if (isInsidePrivateRoot(payload, privateRoot) || isHttpUrl(payload)) {
-                    entry.copy(title = title, note = note, payload = payload)
-                } else {
+                // 三种合法来源，优先级从上到下：
+                //
+                //  1. **相对路径**（推荐给插件用）：如 `support/wechat.png`。
+                //     宿主拼到 filesDir 下再按绝对路径处理。
+                //     为什么加这一种：插件脚本拿不到 filesDir 的绝对路径
+                //     （那本来也不该暴露给第三方代码），没有它插件只能写 https URL，
+                //     而收款码走网络既慢又会在离线时裂图。
+                //
+                //  2. **私有目录内的绝对路径**：宿主内部或高级插件直接给全路径。
+                //     必须落在 filesDir 内，防止构造 `../../` 读到别处。
+                //
+                //  3. **https URL**：插件确实拿不到本地文件时（例如码图托管在远端）的兜底。
+                val resolved: String? = when {
+                    isHttpUrl(payload) -> payload
+
+                    // 相对路径：不含 scheme、不以分隔符开头、不含向上跳
+                    payload.isNotBlank() &&
+                        // 【必须检查冒号】只判 "://" 不够：`file:///etc/passwd` 不含它，
+                        // 会被拼成 `$root/file:/etc/passwd` 然后通过前缀检查——越权读取被"合法化"。
+                        // 任何含冒号的串都不当相对路径（Windows 盘符同理）。
+                        !payload.contains(':') &&
+                        !payload.startsWith("/") &&
+                        !payload.contains('\\') &&
+                        payload.split('/').none { it == ".." } -> {
+                        val abs = "$privateRoot/${payload.trimStart('/')}"
+                        if (isInsidePrivateRoot(abs, privateRoot)) abs else null
+                    }
+
+                    isInsidePrivateRoot(payload, privateRoot) -> payload
+
+                    else -> null
+                }
+                if (resolved == null) {
                     null
+                } else {
+                    // 相对路径已经换成绝对路径 —— 下游（UI 的存在性判断）只认绝对路径
+                    entry.copy(title = title, note = note, payload = resolved)
                 }
             }
 

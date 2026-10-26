@@ -114,6 +114,59 @@ class SupportEntriesTest {
     }
 
     @Test
+    fun `相对路径的本地图片被解析为私有目录下的绝对路径`() {
+        // 插件脚本拿不到 filesDir 的绝对路径（也不该暴露给第三方代码），
+        // 所以支持写相对路径；宿主负责拼成绝对路径交给 UI。
+        val r = SupportEntries.sanitize(
+            "p",
+            listOf(
+                SupportEntry(
+                    "微信赞赏码",
+                    kind = SupportEntry.Kind.IMAGE,
+                    payload = "support/wechat.png",
+                ),
+            ),
+            root,
+        )
+        assertEquals(1, r.entries.size)
+        assertEquals("$root/support/wechat.png", r.entries.first().payload)
+    }
+
+    @Test
+    fun `相对路径的向上跳被拒绝`() {
+        val r = SupportEntries.sanitize(
+            "p",
+            listOf(
+                SupportEntry(
+                    "想跑出去",
+                    kind = SupportEntry.Kind.IMAGE,
+                    payload = "../databases/secret.db",
+                ),
+            ),
+            root,
+        )
+        assertTrue("含 .. 的相对路径必须被丢", r.isEmpty)
+    }
+
+    @Test
+    fun `绝对路径前缀相同的兄弟目录被拒绝`() {
+        // root 是 .../files；.../files-secret 不是它的子目录。
+        // 前缀比较若不带分隔符就会放过去 —— 这条用例钉住那个边界。
+        val r = SupportEntries.sanitize(
+            "p",
+            listOf(
+                SupportEntry(
+                    "越界",
+                    kind = SupportEntry.Kind.IMAGE,
+                    payload = "$root-secret/a.png",
+                ),
+            ),
+            root,
+        )
+        assertTrue(r.isEmpty)
+    }
+
+    @Test
     fun `非 http 的图片地址被丢弃`() {
         // file:// 的图片等于让宿主去读本地文件 —— 原有的越权担忧对它完全成立，
         // 放开 URL 只放行 http/https，绝不能把本地 scheme 一起放进来。
