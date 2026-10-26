@@ -101,6 +101,25 @@ class ChunkDownloader(
         activeCalls.remove(taskId)?.forEach { call -> runCatching { call.cancel() } }
     }
 
+    /**
+     * 分片 key → 该分片当前那条请求（key 形如 `"<taskId>:<chunkKey>"`）。
+     *
+     * 【为什么需要按分片单独掐断】慢连接抢占与手动「重连」原先只置一个标志位，
+     * 而标志位是**在读循环里**检查的。连接被 CDN 挂住时 `input.read()` 会一直阻塞
+     * 到读超时（默认 60 秒），循环根本没机会跑 —— 标志位形同虚设，
+     * 用户看到的就是"标了慢却一直不换连接"和"点了重连没反应"。
+     *
+     * 真正生效的前提是**主动 cancel 这条调用**，让阻塞的 read 立刻抛 IOException。
+     */
+    private val activeChunkCalls = ConcurrentHashMap<String, Call>()
+
+    /** 掐断某个在飞分片的连接（手动「重连」与看门狗抢占都走这里）。 */
+    fun cancelChunkCall(taskId: Long, chunkKey: String) {
+        activeChunkCalls.remove("$taskId:$chunkKey")?.let { call ->
+            runCatching { call.cancel() }
+        }
+    }
+
     // ---------- 总大小探测 ----------
 
     suspend fun getTotalSize(url: String, headers: Map<String, String>): Long? = withContext(Dispatchers.IO) {
@@ -153,6 +172,12 @@ class ChunkDownloader(
         end: Long,
         partFile: File,
         headers: Map<String, String>,
+        /**
+         * 调用方给这片起的名字（如 `m12` / `seg@1234`）：用于把这条请求登记进
+         * [activeChunkCalls]，供「重连」或慢连接抢占**主动掐断**。
+         * 空串表示不登记（老调用点不传也能编译）。
+         */
+        chunkKey: String = "",
         onBytes: suspend (Long) -> Unit
     ): ChunkResult = withContext(Dispatchers.IO) {
         val attempts = CHUNK_RETRIES + RANGE_RETRIES
@@ -166,7 +191,7 @@ class ChunkDownloader(
             if (!unknownTotal && existing >= expected) return@withContext ChunkResult.OK
 
             val res = try {
-                doChunkAttempt(taskId, url, from, end, unknownTotal, partFile, headers, existing, onBytes)
+                doChunkAttempt(taskId, url, from, end, unknownTotal, partFile, headers, existing, chunkKey, onBytes)
             } catch (e: CancellationException) {
                 throw e
             } catch (e: IOException) {
@@ -201,6 +226,7 @@ class ChunkDownloader(
         partFile: File,
         headers: Map<String, String>,
         existing: Long,
+        chunkKey: String,
         onBytes: suspend (Long) -> Unit
     ): ChunkResult {
         val request = Request.Builder()
@@ -211,6 +237,10 @@ class ChunkDownloader(
 
         val call = client.newCall(request)
         activeCalls.getOrPut(taskId) { ConcurrentHashMap.newKeySet() }.add(call)
+        // 同时按「任务 + 分片名」登记一份：这样上层能精确掐断**某一片**，
+        // 而不是把整个任务的所有连接一起取消（那会连带打断其它正在传输的分片）。
+        val slot = if (chunkKey.isNotEmpty()) "$taskId:$chunkKey" else null
+        if (slot != null) activeChunkCalls[slot] = call
         val cancelHandle = coroutineContext[Job]?.invokeOnCompletion { call.cancel() }
         try {
             return call.execute().use { response ->
@@ -270,6 +300,8 @@ class ChunkDownloader(
             }
         } finally {
             activeCalls[taskId]?.remove(call)
+            // 分片级登记也要清：否则每次重试都留一条永不回收的条目
+            if (slot != null) activeChunkCalls.remove(slot, call)
             cancelHandle?.dispose()
         }
     }

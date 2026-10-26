@@ -76,6 +76,10 @@ import com.yunget.app.ui.theme.effectsFast
 import androidx.compose.material3.Card
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.LinearProgressIndicator
+import androidx.compose.ui.res.painterResource
+import androidx.compose.ui.draw.alpha
+import androidx.compose.ui.layout.ContentScale
+import androidx.compose.foundation.Image
 
 /**
  * 网盘账号展示模型。
@@ -680,22 +684,41 @@ private fun DriveAccountCardContent(
             .padding(16.dp),
         verticalAlignment = Alignment.CenterVertically
     ) {
-        // 品牌头像（暂用首字母，后续可替换为品牌图标）
-        // 头像：中性灰底 + 深色首字母。
-        // 之前已登录用 primaryContainer（淡蓝）配蓝色首字母 —— 一排网盘全是一样的
-        // 蓝圈，既分不出层级也很"模板感"。iOS 的头像是中性色，靠形状而非颜色识别。
-        Surface(
-            modifier = Modifier.size(48.dp),
-            shape = CircleShape,
-            color = MaterialTheme.colorScheme.surfaceContainerHighest
-        ) {
-            Box(contentAlignment = Alignment.Center) {
-                Text(
-                    text = account.avatarText,
-                    style = MaterialTheme.typography.titleMedium,
-                    fontWeight = FontWeight.SemiBold,
-                    color = MaterialTheme.colorScheme.onSurface
-                )
+        // 品牌图标（真实 logo），取不到时回落到文字首字母。
+        //
+        // 【为什么不一律用首字母】"夸"/"蓝"/"度"这类单字在列表里几乎认不出是哪个网盘，
+        // 而正版 logo 一眼就能分辨 —— 这是用户最直接的识别依据，比配色重要。
+        //
+        // 【不裁圆、不加底色】这批图标有两种：自带底色的圆角方块、透明背景的图形。
+        // 统一裁圆会把前者的四角切掉；加统一底色会给后者糊一圈假色。
+        // 所以直接按原样画，只用 size 控制尺寸。
+        //
+        // 未登录状态用 45% 透明度表示 —— 而不是换成别的图形：
+        // 位置和形状保持稳定，用户扫一眼就知道"这个没登录"。
+        val logoRes = com.yunget.app.ui.items.platformLogoRes(account.id)
+        if (logoRes != null) {
+            Image(
+                painter = painterResource(logoRes),
+                contentDescription = account.name,
+                modifier = Modifier
+                    .size(44.dp)
+                    .alpha(if (account.isLoggedIn) 1f else 0.45f),
+                contentScale = ContentScale.Fit,
+            )
+        } else {
+            Surface(
+                modifier = Modifier.size(44.dp),
+                shape = CircleShape,
+                color = MaterialTheme.colorScheme.surfaceContainerHighest
+            ) {
+                Box(contentAlignment = Alignment.Center) {
+                    Text(
+                        text = account.avatarText,
+                        style = MaterialTheme.typography.titleMedium,
+                        fontWeight = FontWeight.SemiBold,
+                        color = MaterialTheme.colorScheme.onSurface
+                    )
+                }
             }
         }
 
