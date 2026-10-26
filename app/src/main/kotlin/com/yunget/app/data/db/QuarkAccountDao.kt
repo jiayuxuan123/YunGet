@@ -38,4 +38,9 @@ interface QuarkAccountDao {
 
     @Query("DELETE FROM quark_account WHERE id = 'quark'")
     suspend fun clear()
+
+    /** 更新备注。空串 = 清掉备注、界面回退显示昵称。 */
+    @Query("UPDATE quark_account SET remark = :remark WHERE id = 'quark'")
+    suspend fun updateRemark(remark: String)
+
 }

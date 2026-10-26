@@ -61,6 +61,10 @@ class SecureAccountDaosTest {
             flow.value = null
             clearCount++
         }
+
+        override suspend fun updateRemark(remark: String) {
+            stored = stored?.copy(remark = remark)
+        }
     }
 
     private val cipher = FakeCipher()

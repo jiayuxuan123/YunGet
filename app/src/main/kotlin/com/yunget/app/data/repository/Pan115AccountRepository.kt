@@ -43,6 +43,14 @@ class Pan115AccountRepository(
     suspend fun getAccount(): Pan115AccountEntity? = dao.getAccount()
 
     /**
+     * 修改账号备注（空串 = 清除）。
+     *
+     * 备注是多账号的基础字段：平台昵称常常是一串数字或与账号无关的网名，
+     * 同一平台有多个账号时完全分不出谁是谁。
+     */
+    suspend fun updateRemark(remark: String) = dao.updateRemark(remark)
+
+    /**
      * 保存网页登录 Cookie：先用 `/user/info` 确认登录态有效并取昵称（脱敏手机号），成功才落库。
      * @param cookie WebView 登录 115.com 后 CookieManager 取到的完整 Cookie
      */

@@ -11,7 +11,7 @@ import com.yunget.app.data.security.CredentialCipher
 
 @Database(
     entities = [QuarkAccountEntity::class, DownloadTaskEntity::class, UCAccountEntity::class, XunleiAccountEntity::class, BaiduAccountEntity::class, C139AccountEntity::class, Pan123AccountEntity::class, BookmarkEntity::class, Pan115AccountEntity::class, GuangYaAccountEntity::class, ILanzouAccountEntity::class, LanzouAccountEntity::class, PluginInstalledEntity::class, PluginSourceEntity::class],
-    version = 22,
+    version = 23,
     exportSchema = false
 )
 abstract class AppDatabase : RoomDatabase() {
@@ -107,6 +107,7 @@ abstract class AppDatabase : RoomDatabase() {
                         MIGRATION_19_20,
                         MIGRATION_20_21,
                         MIGRATION_21_22,
+                        MIGRATION_22_23,
                     )
                     // 早期开发版（1-8）无可靠 schema；从 v9 起必须保留凭证和下载任务
                     .fallbackToDestructiveMigrationFrom(1, 2, 3, 4, 5, 6, 7, 8)
@@ -287,6 +288,88 @@ abstract class AppDatabase : RoomDatabase() {
          * 空串 = 存量数据，按 L1 读（`PluginLevel.DEFAULT`）。选空串而不是回填 'js'，
          * 是为了让"这行是升级前写的"与"这行写了 js"在数据上仍可区分。
          */
+        /**
+         * v23：账号表加 `remark` / `isPrimary`。
+         *
+         * ## 为什么要加
+         *
+         * 现在每个平台只有一行账号，用户没法给账号起个"认得出"的名字 ——
+         * 换了小号或借用别人的号之后，界面上的昵称是平台给的，往往看不出区别。
+         *
+         * ## 为什么现在加、而不是等真正做多账号时再加
+         *
+         * 这两个字段是多账号的基础，而加列的迁移**每加一次就要保证一次老数据的正确性**。
+         * 先加空列（默认值对现有单账号完全正确：remark 空、isPrimary 为 true），
+         * 之后接入多账号时只需改代码，不必再动数据库。
+         *
+         * `isPrimary` 默认 1：现有每一行就是该平台唯一的账号，理应是主账号。
+         * 若默认 0，升级后所有平台的"需要单一身份的操作"都会找不到主账号。
+         */
+        private val MIGRATION_22_23 = object : Migration(22, 23) {
+            override fun migrate(db: SupportSQLiteDatabase) {
+                if (!db.hasColumn("quark_account", "remark")) {
+                    db.execSQL("ALTER TABLE `quark_account` ADD COLUMN `remark` TEXT NOT NULL DEFAULT ''")
+                }
+                if (!db.hasColumn("quark_account", "isPrimary")) {
+                    db.execSQL("ALTER TABLE `quark_account` ADD COLUMN `isPrimary` INTEGER NOT NULL DEFAULT 1")
+                }
+                if (!db.hasColumn("uc_account", "remark")) {
+                    db.execSQL("ALTER TABLE `uc_account` ADD COLUMN `remark` TEXT NOT NULL DEFAULT ''")
+                }
+                if (!db.hasColumn("uc_account", "isPrimary")) {
+                    db.execSQL("ALTER TABLE `uc_account` ADD COLUMN `isPrimary` INTEGER NOT NULL DEFAULT 1")
+                }
+                if (!db.hasColumn("xunlei_account", "remark")) {
+                    db.execSQL("ALTER TABLE `xunlei_account` ADD COLUMN `remark` TEXT NOT NULL DEFAULT ''")
+                }
+                if (!db.hasColumn("xunlei_account", "isPrimary")) {
+                    db.execSQL("ALTER TABLE `xunlei_account` ADD COLUMN `isPrimary` INTEGER NOT NULL DEFAULT 1")
+                }
+                if (!db.hasColumn("baidu_account", "remark")) {
+                    db.execSQL("ALTER TABLE `baidu_account` ADD COLUMN `remark` TEXT NOT NULL DEFAULT ''")
+                }
+                if (!db.hasColumn("baidu_account", "isPrimary")) {
+                    db.execSQL("ALTER TABLE `baidu_account` ADD COLUMN `isPrimary` INTEGER NOT NULL DEFAULT 1")
+                }
+                if (!db.hasColumn("c139_account", "remark")) {
+                    db.execSQL("ALTER TABLE `c139_account` ADD COLUMN `remark` TEXT NOT NULL DEFAULT ''")
+                }
+                if (!db.hasColumn("c139_account", "isPrimary")) {
+                    db.execSQL("ALTER TABLE `c139_account` ADD COLUMN `isPrimary` INTEGER NOT NULL DEFAULT 1")
+                }
+                if (!db.hasColumn("pan123_account", "remark")) {
+                    db.execSQL("ALTER TABLE `pan123_account` ADD COLUMN `remark` TEXT NOT NULL DEFAULT ''")
+                }
+                if (!db.hasColumn("pan123_account", "isPrimary")) {
+                    db.execSQL("ALTER TABLE `pan123_account` ADD COLUMN `isPrimary` INTEGER NOT NULL DEFAULT 1")
+                }
+                if (!db.hasColumn("pan115_account", "remark")) {
+                    db.execSQL("ALTER TABLE `pan115_account` ADD COLUMN `remark` TEXT NOT NULL DEFAULT ''")
+                }
+                if (!db.hasColumn("pan115_account", "isPrimary")) {
+                    db.execSQL("ALTER TABLE `pan115_account` ADD COLUMN `isPrimary` INTEGER NOT NULL DEFAULT 1")
+                }
+                if (!db.hasColumn("guangya_account", "remark")) {
+                    db.execSQL("ALTER TABLE `guangya_account` ADD COLUMN `remark` TEXT NOT NULL DEFAULT ''")
+                }
+                if (!db.hasColumn("guangya_account", "isPrimary")) {
+                    db.execSQL("ALTER TABLE `guangya_account` ADD COLUMN `isPrimary` INTEGER NOT NULL DEFAULT 1")
+                }
+                if (!db.hasColumn("ilanzou_account", "remark")) {
+                    db.execSQL("ALTER TABLE `ilanzou_account` ADD COLUMN `remark` TEXT NOT NULL DEFAULT ''")
+                }
+                if (!db.hasColumn("ilanzou_account", "isPrimary")) {
+                    db.execSQL("ALTER TABLE `ilanzou_account` ADD COLUMN `isPrimary` INTEGER NOT NULL DEFAULT 1")
+                }
+                if (!db.hasColumn("lanzou_account", "remark")) {
+                    db.execSQL("ALTER TABLE `lanzou_account` ADD COLUMN `remark` TEXT NOT NULL DEFAULT ''")
+                }
+                if (!db.hasColumn("lanzou_account", "isPrimary")) {
+                    db.execSQL("ALTER TABLE `lanzou_account` ADD COLUMN `isPrimary` INTEGER NOT NULL DEFAULT 1")
+                }
+            }
+        }
+
         private val MIGRATION_21_22 = object : Migration(21, 22) {
             override fun migrate(db: SupportSQLiteDatabase) {
                 if (!db.hasColumn("plugin_installed", "level")) {

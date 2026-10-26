@@ -51,6 +51,12 @@ class BaiduAccountViewModel(
         viewModelScope.launch { repository.logoutBaidu() }
     }
 
+
+    /** 修改本平台账号的备注（空串 = 清除）。 */
+    fun updateRemark(remark: String) {
+        viewModelScope.launch { repository.updateRemark(remark) }
+    }
+
     class Factory(
         private val repository: BaiduAccountRepository
     ) : ViewModelProvider.Factory {
@@ -60,4 +66,5 @@ class BaiduAccountViewModel(
             return BaiduAccountViewModel(repository) as T
         }
     }
+
 }

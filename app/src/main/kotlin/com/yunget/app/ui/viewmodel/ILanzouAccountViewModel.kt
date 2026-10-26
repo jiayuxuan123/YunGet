@@ -59,6 +59,12 @@ class ILanzouAccountViewModel(
         viewModelScope.launch { repository.logout() }
     }
 
+
+    /** 修改本平台账号的备注（空串 = 清除）。 */
+    fun updateRemark(remark: String) {
+        viewModelScope.launch { repository.updateRemark(remark) }
+    }
+
     class Factory(
         private val repository: ILanzouAccountRepository
     ) : ViewModelProvider.Factory {
@@ -68,4 +74,5 @@ class ILanzouAccountViewModel(
             return ILanzouAccountViewModel(repository) as T
         }
     }
+
 }

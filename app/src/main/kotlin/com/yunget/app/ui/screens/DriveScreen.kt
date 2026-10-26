@@ -85,6 +85,15 @@ import androidx.compose.foundation.Image
  * 网盘账号展示模型。
  * TODO: 迅雷 / UC 后续接入 cookie 登录后，isLoggedIn 由真实登录态驱动。
  */
+/**
+ * 账号副标题：**备注优先**，没有备注才用平台昵称。
+ *
+ * 平台昵称往往是一串数字或与账号无关的网名，同一个人有多个账号时完全分不出谁是谁。
+ * 备注是用户自己起的名字，优先显示它才有意义。
+ */
+private fun displayName(remark: String?, nickname: String?): String? =
+    remark?.takeIf { it.isNotBlank() } ?: nickname?.takeIf { it.isNotBlank() }
+
 private data class DriveAccount(
     val id: String,
     val name: String,
@@ -169,6 +178,8 @@ fun DriveScreen(
     driveQuotaViewModel: DriveQuotaViewModel,
     onQuarkLogin: () -> Unit,
     onQuarkLogout: () -> Unit,
+    /** 修改夸克账号备注（空串 = 清除）。 */
+    onQuarkUpdateRemark: ((String) -> Unit)? = null,
     /** 夸克云盘下载入队后切换到「下载」Tab */
     onDownloadStarted: () -> Unit = {},
     onUCLogin: () -> Unit,
@@ -230,70 +241,72 @@ fun DriveScreen(
     val quark = DriveAccount(
         id = "quark",
         name = "夸克网盘",
-        description = quarkAccount?.nickname ?: "点击登录，支持解析下载",
+        description = displayName(quarkAccount?.remark, quarkAccount?.nickname) ?: "点击登录，支持解析下载",
         avatarText = "夸",
         isLoggedIn = quarkAccount != null
     )
     val uc = DriveAccount(
         id = "uc",
         name = "UC网盘",
-        description = ucAccount?.nickname ?: "点击登录，支持解析下载",
+        description = displayName(ucAccount?.remark, ucAccount?.nickname) ?: "点击登录，支持解析下载",
         avatarText = "UC",
         isLoggedIn = ucAccount != null
     )
     val xunlei = DriveAccount(
         id = "xunlei",
         name = "迅雷网盘",
-        description = xunleiAccount?.nickname ?: "点击登录，支持解析下载",
+        description = displayName(xunleiAccount?.remark, xunleiAccount?.nickname) ?: "点击登录，支持解析下载",
         avatarText = "迅",
         isLoggedIn = xunleiAccount != null
     )
     val baidu = DriveAccount(
         id = "baidu",
         name = "百度网盘",
-        description = baiduAccount?.nickname ?: "点击登录，支持解析下载",
+        description = displayName(baiduAccount?.remark, baiduAccount?.nickname) ?: "点击登录，支持解析下载",
         avatarText = "度",
         isLoggedIn = baiduAccount != null
     )
     val c139 = DriveAccount(
         id = "c139",
         name = "139网盘",
-        description = c139Account?.nickname ?: "点击登录，支持解析下载",
+        description = displayName(c139Account?.remark, c139Account?.nickname) ?: "点击登录，支持解析下载",
         avatarText = "139",
         isLoggedIn = c139Account != null
     )
     val pan123 = DriveAccount(
         id = "pan123",
         name = "123云盘",
-        description = pan123Account?.nickname ?: "点击登录，支持解析下载",
+        description = displayName(pan123Account?.remark, pan123Account?.nickname) ?: "点击登录，支持解析下载",
         avatarText = "123",
         isLoggedIn = pan123Account != null
     )
     val pan115 = DriveAccount(
         id = "pan115",
         name = "115网盘",
-        description = pan115Account?.nickname ?: "点击登录，支持解析下载",
+        description = displayName(pan115Account?.remark, pan115Account?.nickname) ?: "点击登录，支持解析下载",
         avatarText = "115",
         isLoggedIn = pan115Account != null
     )
     val guangya = DriveAccount(
         id = "guangya",
         name = "光鸭云盘",
-        description = guangyaAccount?.nickname ?: "点击登录，支持解析下载",
+        description = displayName(guangyaAccount?.remark, guangyaAccount?.nickname) ?: "点击登录，支持解析下载",
         avatarText = "光",
         isLoggedIn = guangyaAccount != null
     )
     val ilanzou = DriveAccount(
         id = "ilanzou",
         name = "蓝奏云优享版",
-        description = ilanzouAccount?.nickname?.let { maskAccount(it) } ?: "点击登录，支持解析下载",
+        description = displayName(ilanzouAccount?.remark, ilanzouAccount?.nickname)?.let { maskAccount(it) }
+            ?: "点击登录，支持解析下载",
         avatarText = "蓝优",
         isLoggedIn = ilanzouAccount != null
     )
     val lanzou = DriveAccount(
         id = "lanzou",
         name = "蓝奏云",
-        description = lanzouAccount?.nickname?.let { maskAccount(it) } ?: "点击登录，支持解析下载",
+        description = displayName(lanzouAccount?.remark, lanzouAccount?.nickname)?.let { maskAccount(it) }
+            ?: "点击登录，支持解析下载",
         avatarText = "蓝",
         isLoggedIn = lanzouAccount != null
     )
@@ -520,7 +533,8 @@ fun DriveScreen(
                 onQuarkLogout()
                 showQuarkSheet = false
             },
-            onDismiss = { showQuarkSheet = false }
+            onDismiss = { showQuarkSheet = false },
+            onUpdateRemark = onQuarkUpdateRemark,
         )
     }
 

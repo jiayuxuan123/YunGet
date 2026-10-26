@@ -892,6 +892,7 @@ fun MainScreen(
                         driveQuotaViewModel = driveQuotaViewModel,
                         onQuarkLogin = { showQuarkLogin = true },
                         onQuarkLogout = { viewModel.logout() },
+                        onQuarkUpdateRemark = { viewModel.updateRemark(it) },
                         onDownloadStarted = { currentTab = MainTab.Download },
                         onUCLogin = { showUCLogin = true },
                         onUCLogout = { ucViewModel.logout() },

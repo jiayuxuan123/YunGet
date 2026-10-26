@@ -77,6 +77,8 @@ import androidx.compose.material3.Button
 import androidx.compose.material3.Card
 import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.TextButton
+import androidx.compose.material3.OutlinedButton
+import androidx.compose.material.icons.outlined.Edit
 
 /**
  * 已登录夸克账号的底部弹窗：展示用户信息、登录时间、Cookie（可展开/复制），并提供退出登录。
@@ -86,12 +88,29 @@ import androidx.compose.material3.TextButton
 fun QuarkAccountSheet(
     account: QuarkAccountEntity,
     onLogout: () -> Unit,
-    onDismiss: () -> Unit
+    onDismiss: () -> Unit,
+    /** 修改备注。null = 不显示该入口（例如旧调用点）。 */
+    onUpdateRemark: ((String) -> Unit)? = null,
 ) {
     val context = LocalContext.current
     var showFullCookie by rememberSaveable { mutableStateOf(false) }
+    var showRemarkDialog by remember { mutableStateOf(false) }
     // 退出登录二次确认
     var showLogoutConfirm by remember { mutableStateOf(false) }
+
+    // 备注编辑
+    if (showRemarkDialog && onUpdateRemark != null) {
+        RemarkDialog(
+            current = account.remark,
+            onConfirm = { r ->
+                onUpdateRemark(r)
+                showRemarkDialog = false
+            },
+            onDismiss = { showRemarkDialog = false },
+        )
+    }
+
+    // 退出登录二次确认
 
     val cookiePreviewLimit = 200
     val cookieTruncated = account.cookie.length > cookiePreviewLimit
@@ -251,6 +270,25 @@ fun QuarkAccountSheet(
             }
 
             Spacer(modifier = Modifier.height(24.dp))
+
+            // 修改备注：放在退出登录**之前**，因为它不是破坏性操作。
+            // 用户打开账号弹窗的动机常常是"给这个号起个名字"，
+            // 而退出是低频且危险的动作，不该排在前面。
+            if (onUpdateRemark != null) {
+                OutlinedButton(
+                    onClick = { showRemarkDialog = true },
+                    modifier = Modifier.fillMaxWidth().height(48.dp),
+                ) {
+                    Icon(
+                        imageVector = Icons.Outlined.Edit,
+                        contentDescription = null,
+                        modifier = Modifier.size(18.dp)
+                    )
+                    Spacer(modifier = Modifier.width(8.dp))
+                    Text(if (account.remark.isBlank()) "添加备注" else "修改备注")
+                }
+                Spacer(modifier = Modifier.height(10.dp))
+            }
 
             // 退出登录
             Button(

@@ -38,6 +38,14 @@ class LanzouAccountRepository(
     suspend fun getAccount(): LanzouAccountEntity? = dao.getAccount()
 
     /**
+     * 修改账号备注（空串 = 清除）。
+     *
+     * 备注是多账号的基础字段：平台昵称常常是一串数字或与账号无关的网名，
+     * 同一平台有多个账号时完全分不出谁是谁。
+     */
+    suspend fun updateRemark(remark: String) = dao.updateRemark(remark)
+
+    /**
      * 原生账号密码登录：调用官网登录接口（accounts.woozooo.com，含人机校验）换取 Cookie，
      * 再用 B1 校验 uid/vei，成功则落库。
      */

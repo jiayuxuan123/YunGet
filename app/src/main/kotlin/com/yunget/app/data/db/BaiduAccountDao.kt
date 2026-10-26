@@ -38,4 +38,9 @@ interface BaiduAccountDao {
 
     @Query("DELETE FROM baidu_account WHERE id = 'baidu'")
     suspend fun clear()
+
+    /** 更新备注。空串 = 清掉备注、界面回退显示昵称。 */
+    @Query("UPDATE baidu_account SET remark = :remark WHERE id = 'baidu'")
+    suspend fun updateRemark(remark: String)
+
 }

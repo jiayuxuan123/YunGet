@@ -36,6 +36,14 @@ class XunleiAccountRepository(
 
     suspend fun getAccount(): XunleiAccountEntity? = dao.getAccount()
 
+    /**
+     * 修改账号备注（空串 = 清除）。
+     *
+     * 备注是多账号的基础字段：平台昵称常常是一串数字或与账号无关的网名，
+     * 同一平台有多个账号时完全分不出谁是谁。
+     */
+    suspend fun updateRemark(remark: String) = dao.updateRemark(remark)
+
     /** 账号密码登录；返回登录步骤（needSms=true 表示需短信验证，携带 smsCreditKey/smsToken） */
     suspend fun loginWithPassword(
         username: String,

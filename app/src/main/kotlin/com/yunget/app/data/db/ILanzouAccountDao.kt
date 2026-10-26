@@ -39,4 +39,9 @@ interface ILanzouAccountDao {
 
     @Query("DELETE FROM ilanzou_account WHERE id = 'ilanzou'")
     suspend fun clear()
+
+    /** 更新备注。空串 = 清掉备注、界面回退显示昵称。 */
+    @Query("UPDATE ilanzou_account SET remark = :remark WHERE id = 'ilanzou'")
+    suspend fun updateRemark(remark: String)
+
 }

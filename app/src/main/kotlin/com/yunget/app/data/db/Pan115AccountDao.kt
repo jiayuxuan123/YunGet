@@ -39,4 +39,9 @@ interface Pan115AccountDao {
 
     @Query("DELETE FROM pan115_account WHERE id = 'pan115'")
     suspend fun clear()
+
+    /** 更新备注。空串 = 清掉备注、界面回退显示昵称。 */
+    @Query("UPDATE pan115_account SET remark = :remark WHERE id = 'pan115'")
+    suspend fun updateRemark(remark: String)
+
 }

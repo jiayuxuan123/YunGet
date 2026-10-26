@@ -51,6 +51,12 @@ class C139AccountViewModel(
         viewModelScope.launch { repository.logoutC139() }
     }
 
+
+    /** 修改本平台账号的备注（空串 = 清除）。 */
+    fun updateRemark(remark: String) {
+        viewModelScope.launch { repository.updateRemark(remark) }
+    }
+
     class Factory(
         private val repository: C139AccountRepository
     ) : ViewModelProvider.Factory {
@@ -60,4 +66,5 @@ class C139AccountViewModel(
             return C139AccountViewModel(repository) as T
         }
     }
+
 }

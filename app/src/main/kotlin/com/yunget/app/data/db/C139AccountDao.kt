@@ -38,4 +38,9 @@ interface C139AccountDao {
 
     @Query("DELETE FROM c139_account WHERE id = 'c139'")
     suspend fun clear()
+
+    /** 更新备注。空串 = 清掉备注、界面回退显示昵称。 */
+    @Query("UPDATE c139_account SET remark = :remark WHERE id = 'c139'")
+    suspend fun updateRemark(remark: String)
+
 }

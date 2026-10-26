@@ -38,8 +38,13 @@ class C139AccountRepository(
 
     suspend fun getAccount(): C139AccountEntity? = dao.getAccount()
 
+    /** 修改账号备注（空串 = 清除）。备注不是凭证，不参与加解密。 */
+    suspend fun updateRemark(remark: String) = dao.updateRemark(remark)
+
     /** 退出登录：清理 WebView Cookie + 清除本地记录 */
     suspend fun logoutC139() {
+
+
         withContext(Dispatchers.IO) {
             runCatching {
                 CookieManager.getInstance().removeAllCookies(null)

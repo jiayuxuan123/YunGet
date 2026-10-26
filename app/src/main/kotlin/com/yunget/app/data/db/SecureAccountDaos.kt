@@ -52,6 +52,8 @@ internal object SecureAccountDaos {
             raw.getAccount()?.let { decryptQuark(raw, cipher, it) }
         }
         override suspend fun clear() = raw.clear()
+        // 备注不参与加解密：它不是凭证，只是用户起的名字
+        override suspend fun updateRemark(remark: String) = raw.updateRemark(remark)
     }
 
     fun uc(raw: UCAccountDao, cipher: CredentialCipher): UCAccountDao = object : UCAccountDao {
@@ -65,6 +67,8 @@ internal object SecureAccountDaos {
             raw.getAccount()?.let { decryptUc(raw, cipher, it) }
         }
         override suspend fun clear() = raw.clear()
+        // 备注不参与加解密：它不是凭证，只是用户起的名字
+        override suspend fun updateRemark(remark: String) = raw.updateRemark(remark)
     }
 
     fun baidu(raw: BaiduAccountDao, cipher: CredentialCipher): BaiduAccountDao = object : BaiduAccountDao {
@@ -78,6 +82,8 @@ internal object SecureAccountDaos {
             raw.getAccount()?.let { decryptBaidu(raw, cipher, it) }
         }
         override suspend fun clear() = raw.clear()
+        // 备注不参与加解密：它不是凭证，只是用户起的名字
+        override suspend fun updateRemark(remark: String) = raw.updateRemark(remark)
     }
 
     fun c139(raw: C139AccountDao, cipher: CredentialCipher): C139AccountDao = object : C139AccountDao {
@@ -91,6 +97,8 @@ internal object SecureAccountDaos {
             raw.getAccount()?.let { decryptC139(raw, cipher, it) }
         }
         override suspend fun clear() = raw.clear()
+        // 备注不参与加解密：它不是凭证，只是用户起的名字
+        override suspend fun updateRemark(remark: String) = raw.updateRemark(remark)
     }
 
     fun pan123(raw: Pan123AccountDao, cipher: CredentialCipher): Pan123AccountDao = object : Pan123AccountDao {
@@ -104,6 +112,8 @@ internal object SecureAccountDaos {
             raw.getAccount()?.let { decryptPan123(raw, cipher, it) }
         }
         override suspend fun clear() = raw.clear()
+        // 备注不参与加解密：它不是凭证，只是用户起的名字
+        override suspend fun updateRemark(remark: String) = raw.updateRemark(remark)
     }
 
     fun xunlei(raw: XunleiAccountDao, cipher: CredentialCipher): XunleiAccountDao = object : XunleiAccountDao {
@@ -117,6 +127,8 @@ internal object SecureAccountDaos {
             raw.getAccount()?.let { decryptXunlei(raw, cipher, it) }
         }
         override suspend fun clear() = raw.clear()
+        // 备注不参与加解密：它不是凭证，只是用户起的名字
+        override suspend fun updateRemark(remark: String) = raw.updateRemark(remark)
     }
 
     fun pan115(raw: Pan115AccountDao, cipher: CredentialCipher): Pan115AccountDao = object : Pan115AccountDao {
@@ -130,6 +142,8 @@ internal object SecureAccountDaos {
             raw.getAccount()?.let { decryptPan115(raw, cipher, it) }
         }
         override suspend fun clear() = raw.clear()
+        // 备注不参与加解密：它不是凭证，只是用户起的名字
+        override suspend fun updateRemark(remark: String) = raw.updateRemark(remark)
     }
 
     fun guangYa(raw: GuangYaAccountDao, cipher: CredentialCipher): GuangYaAccountDao = object : GuangYaAccountDao {
@@ -143,6 +157,8 @@ internal object SecureAccountDaos {
             raw.getAccount()?.let { decryptGuangYa(raw, cipher, it) }
         }
         override suspend fun clear() = raw.clear()
+        // 备注不参与加解密：它不是凭证，只是用户起的名字
+        override suspend fun updateRemark(remark: String) = raw.updateRemark(remark)
     }
 
     fun iLanzou(raw: ILanzouAccountDao, cipher: CredentialCipher): ILanzouAccountDao = object : ILanzouAccountDao {
@@ -156,6 +172,8 @@ internal object SecureAccountDaos {
             raw.getAccount()?.let { decryptILanzou(raw, cipher, it) }
         }
         override suspend fun clear() = raw.clear()
+        // 备注不参与加解密：它不是凭证，只是用户起的名字
+        override suspend fun updateRemark(remark: String) = raw.updateRemark(remark)
     }
 
     fun lanzou(raw: LanzouAccountDao, cipher: CredentialCipher): LanzouAccountDao = object : LanzouAccountDao {
@@ -169,6 +187,8 @@ internal object SecureAccountDaos {
             raw.getAccount()?.let { decryptLanzou(raw, cipher, it) }
         }
         override suspend fun clear() = raw.clear()
+        // 备注不参与加解密：它不是凭证，只是用户起的名字
+        override suspend fun updateRemark(remark: String) = raw.updateRemark(remark)
     }
 
     private suspend fun decryptQuark(raw: QuarkAccountDao, cipher: CredentialCipher, stored: QuarkAccountEntity): QuarkAccountEntity? =

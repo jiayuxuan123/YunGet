@@ -39,5 +39,19 @@ data class ILanzouAccountEntity(
     val password: String = "",
     val userId: String = "",
     val nickname: String = "",
+    /**
+     * 用户自定义备注（可空）。用于区分同一个平台下的多个账号，
+     * 或在只登录一个账号时给一个"能认出来"的名字。
+     */
+    val remark: String = "",
+    
+    /**
+     * 是否该平台的主账号。
+     *
+     * 需要**单一身份**的操作（列目录、转存、上传、创建分享）走主账号；
+     * 同平台应当只有一行为 true。目前每个平台只有一行账号，
+     * 但字段先立起来，后续接入多账号时不必再迁移一次。
+     */
+    val isPrimary: Boolean = true,
     val updatedAt: Long = System.currentTimeMillis()
 )

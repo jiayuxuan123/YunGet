@@ -38,4 +38,9 @@ interface UCAccountDao {
 
     @Query("DELETE FROM uc_account WHERE id = 'uc'")
     suspend fun clear()
+
+    /** 更新备注。空串 = 清掉备注、界面回退显示昵称。 */
+    @Query("UPDATE uc_account SET remark = :remark WHERE id = 'uc'")
+    suspend fun updateRemark(remark: String)
+
 }

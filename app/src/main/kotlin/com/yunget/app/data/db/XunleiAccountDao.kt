@@ -38,4 +38,9 @@ interface XunleiAccountDao {
 
     @Query("DELETE FROM xunlei_account WHERE id = 'xunlei'")
     suspend fun clear()
+
+    /** 更新备注。空串 = 清掉备注、界面回退显示昵称。 */
+    @Query("UPDATE xunlei_account SET remark = :remark WHERE id = 'xunlei'")
+    suspend fun updateRemark(remark: String)
+
 }

@@ -63,6 +63,9 @@ class UCAccountRepository(
 
     suspend fun getAccount(): UCAccountEntity? = dao.getAccount()
 
+    /** 修改账号备注（空串 = 清除）。备注不是凭证，不参与加解密。 */
+    suspend fun updateRemark(remark: String) = dao.updateRemark(remark)
+
     /**
      * 返回「保证 __puus 未过期」的 Cookie（取链/下载前调用）：
      * - 距上次刷新超过 PUUS_REFRESH_INTERVAL_MS 时，先 refreshSession 再落库；
@@ -83,6 +86,8 @@ class UCAccountRepository(
     }
 
     suspend fun logoutUC() {
+
+
         withContext(Dispatchers.IO) {
             runCatching {
                 CookieManager.getInstance().removeAllCookies(null)

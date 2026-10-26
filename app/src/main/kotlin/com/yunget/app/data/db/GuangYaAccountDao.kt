@@ -39,4 +39,9 @@ interface GuangYaAccountDao {
 
     @Query("DELETE FROM guangya_account WHERE id = 'guangya'")
     suspend fun clear()
+
+    /** 更新备注。空串 = 清掉备注、界面回退显示昵称。 */
+    @Query("UPDATE guangya_account SET remark = :remark WHERE id = 'guangya'")
+    suspend fun updateRemark(remark: String)
+
 }
