@@ -12,6 +12,8 @@ lifecycleRuntimeKtx = "2.9.2"
 activityCompose = "1.11.0"
 composeBom = "2026.06.01"
 material3Expressive = "1.5.0-alpha18"
+# 登录/解析用的 headless WebView：关闭 X-Requested-With，并在支持的设备上同步 client hints
+webkit = "1.17.1"
 
 room = "2.8.4"
 ksp = "2.2.10-2.0.2"
@@ -56,7 +58,8 @@ androidx-compose-bom = { group = "androidx.compose", name = "compose-bom", versi
 androidx-ui = { group = "androidx.compose.ui", name = "ui" }
 androidx-ui-graphics = { group = "androidx.compose.ui", name = "ui-graphics" }
 androidx-ui-tooling-preview = { group = "androidx.compose.ui", name = "ui-tooling-preview" }
-androidx-material3 = { group = "androidx.compose.material3", name = "material3", version.ref = "material3Expressive" }   # Material 3 Expressive 需要此 alpha，与 compose-bom 的稳定版并存
+androidx-material3 = { group = "androidx.compose.material3", name = "material3", version.ref = "material3Expressive" }
+androidx-webkit = { group = "androidx.webkit", name = "webkit", version.ref = "webkit" }   # Material 3 Expressive 需要此 alpha，与 compose-bom 的稳定版并存
 androidx-ui-tooling = { group = "androidx.compose.ui", name = "ui-tooling" }
 androidx-ui-test-manifest = { group = "androidx.compose.ui", name = "ui-test-manifest" }
 room-runtime = { group = "androidx.room", name = "room-runtime", version.ref = "room" }

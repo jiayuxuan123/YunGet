@@ -83,6 +83,7 @@ import com.yunget.app.ui.viewmodel.ResolveUiState
 import com.yunget.app.ui.viewmodel.ResolveViewModel
 import com.yunget.app.ui.viewmodel.UCCoudViewModel
 import com.yunget.app.ui.viewmodel.XunleiCloudViewModel
+import com.yunget.app.ui.resolve.VideoResultSection
 
 /**
  * 解析页：输入分享链接与提取码 → 解析 → 展示分享详情 → 获取下载直链。
@@ -229,6 +230,13 @@ fun ResolveScreen(
                     onBack = { viewModel.navigateBack() }
                 )
                 is ResolveUiState.Loading -> LoadingContent()
+                is ResolveUiState.Video -> VideoResultSection(
+                    result = s.result,
+                    modifier = Modifier.fillMaxSize(),
+                    onDownload = { media -> viewModel.downloadVideoMedia(media) },
+                    onDownloadAll = { medias -> viewModel.downloadVideoMedia(medias) },
+                )
+
                 else -> ResolveInputContent(
                     viewModel = viewModel,
                     scrollBehavior = scrollBehavior,

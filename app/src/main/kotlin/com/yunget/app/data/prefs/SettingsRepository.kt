@@ -375,6 +375,16 @@ class SettingsRepository(context: Context) {
             prefs.edit().putBoolean("trust_weak_validator", value).apply()
         }
 
+    /**
+     * 诊断模式：开启后 DiagnosticLog 会把网络/数据库/WebView 的结构化事件
+     * 写进 filesDir/diag/ 下的滚动日志。默认关 —— 它会持续写盘。
+     */
+    var diagnosticMode: Boolean
+        get() = prefs.getBoolean("diagnostic_mode", false)
+        set(value) {
+            prefs.edit().putBoolean("diagnostic_mode", value).apply()
+        }
+
     /** 下载前跳过探测（默认开，调用方已知文件大小时）：省一个往返，起步更快。 */
     var skipProbeWhenSizeKnown: Boolean
         get() = prefs.getBoolean("skip_probe_when_size_known", true)

@@ -47,11 +47,23 @@ import com.yunget.app.data.repository.XunleiAccountRepository
 import com.yunget.app.data.repository.XunleiResolveRepository
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
+import com.yunget.app.data.network.video.VideoLinkParser
+import com.yunget.app.data.network.video.userMessage
 
 sealed interface ResolveUiState {
     data object Idle : ResolveUiState
     data object Loading : ResolveUiState
     data class Detail(val session: ShareSession, val files: List<ShareFile>) : ResolveUiState
+
+    /**
+     * 视频平台作品（抖音/微博/小红书/B站/快手/AcFun/Pixiv）。
+     *
+     * 与网盘的 [Detail] 分开而不是复用一个"文件列表"，因为两者的上层动作不同：
+     * 网盘要进目录、要带 pwd；视频是一次性给出若干媒体（含图集、分轨音频、动图），
+     * 每条自带请求头，直接进下载队列即可。
+     */
+    data class Video(val result: com.yunget.app.data.network.video.VideoParseResult) : ResolveUiState
+
     data class Error(val message: String) : ResolveUiState
 }
 
@@ -644,7 +656,16 @@ class ResolveViewModel(
             // 是就交给下载器，不是才报"无法识别"。识别失败**不是错误**，只是这里没有网盘可解析。
             val parsed = ShareLinkParser.parse(link)
             if (parsed == null) {
-                // 非网盘分享链接：若是普通 http(s) 直链，交 TurboDL 多线程下载器正常下载。
+                // 非网盘分享链接，按两条路走：
+                //  1. 是视频平台（抖音/微博/小红书…）→ 交给视频解析器；
+                //  2. 是普通 http(s) 直链 → 交 TurboDL 多线程下载器。
+                // 顺序不能反：视频平台的分享文案里也含 http 链接，
+                // 先认直链会把"解析这个视频"变成"下载这个网页"。
+                val videoLink = VideoLinkParser.parse(link)
+                if (videoLink != null) {
+                    resolveVideo(videoLink)
+                    return@launch
+                }
                 val direct = extractDirectUrl(link)
                 if (direct != null) {
                     uiState = ResolveUiState.Idle
@@ -676,6 +697,29 @@ class ResolveViewModel(
     }
 
     /**
+     * 视频平台解析。
+     *
+     * 与网盘解析的差别：视频平台多数**无需登录**，所以不检查凭证；
+     * 个别平台（B站高清、Pixiv 某些作品）需要 Cookie，解析器自己会抛
+     * [com.yunget.app.data.network.video.VideoParseException] 并在 message 里说明。
+     */
+    private suspend fun resolveVideo(link: com.yunget.app.data.network.video.DetectedVideoLink) {
+        val parser = com.yunget.app.data.network.video.VideoParsers.of(link.platform)
+        if (parser == null) {
+            uiState = ResolveUiState.Error("暂不支持 ${link.platform.displayName}")
+            return
+        }
+        try {
+            val result = parser.parse(link, cookie = "")
+            uiState = ResolveUiState.Video(result)
+        } catch (e: com.yunget.app.data.network.video.VideoParseException) {
+            uiState = ResolveUiState.Error(e.userMessage())
+        } catch (e: Throwable) {
+            uiState = ResolveUiState.Error(e.message ?: "解析失败")
+        }
+    }
+
+    /**
      * 从整段文案中提取一个可下载的普通 http(s) 直链。
      * 仅在 [ShareLinkParser] 未识别出任何网盘分享时调用。
      */
@@ -701,6 +745,43 @@ class ResolveViewModel(
      * 普通直链下载：不做任何网盘解析，直接交下载器多线程下载。
      * 只带一个通用 UA（部分站点缺 UA 会 403）；不注入任何网盘 Cookie。
      */
+    /**
+     * 把视频平台的媒体加入下载队列。
+     *
+     * ## 为什么必须带上媒体自带的请求头
+     *
+     * 各平台的直链都校验 `Referer` / `User-Agent` / `Cookie`：抖音要用分享页当 Referer，
+     * 微博要带自己的 UA，缺了直接 403。这些头是**解析那一刻**才知道的，
+     * 所以跟着 [VideoMedia] 一起传下来，不能在这里再拼一套默认值。
+     *
+     * ## 分轨（DASH）
+     *
+     * B 站高清是音视频分离的两路流（`url` + `audioUrl`）。这里**先只入队视频轨** ——
+     * 合轨需要额外的 mux 步骤，属于后续能力；不给用户一个"下完没声音"的文件。
+     * 界面上已在标签里写明「含音轨」，用户能看到差异。
+     */
+    fun downloadVideoMedia(medias: List<com.yunget.app.data.network.video.VideoMedia>) {
+        viewModelScope.launch {
+            var ok = 0
+            for (m in medias) {
+                val name = m.fileName.ifBlank { fileNameFromUrl(m.url) }
+                val r = runCatching {
+                    downloadManager.enqueue(
+                        url = m.url,
+                        fileName = name,
+                        headers = m.headers,
+                    )
+                }
+                if (r.isSuccess) ok++
+            }
+            downloadError = if (ok > 0) "已加入下载：$ok 项" else "加入下载失败"
+            downloadStarted = ok > 0
+        }
+    }
+
+    fun downloadVideoMedia(media: com.yunget.app.data.network.video.VideoMedia) =
+        downloadVideoMedia(listOf(media))
+
     private suspend fun enqueueDirectDownload(url: String) {
         val name = fileNameFromUrl(url)
         downloadManager.enqueue(

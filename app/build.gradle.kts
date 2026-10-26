@@ -24,7 +24,10 @@ android {
 
     defaultConfig {
         applicationId = "com.yunget.app"
-        minSdk = 23
+        // 24（Android 7.0）：androidx.webkit 1.13+ 的最低要求，
+        // 而 headless WebView 的视频解析要用它的 client-hints 同步能力。
+        // Android 7.0 发布于 2016 年，覆盖率早已 >99%。
+        minSdk = 24
         targetSdk = 34
         versionCode = 60
         // 2.7.10 内容：**原生（L2）插件在手机端暂时禁用**
@@ -590,6 +593,8 @@ dependencies {
     implementation("androidx.lifecycle:lifecycle-viewmodel-ktx:2.8.7")
     implementation("androidx.lifecycle:lifecycle-viewmodel-compose:2.8.7")
     implementation("com.squareup.okhttp3:okhttp:4.12.0")
+    // headless WebView 解析（视频平台）：关闭 X-Requested-With 并同步 client hints
+    implementation(libs.androidx.webkit)
 
     // TurboDL SDK（纯 JVM 多线程下载引擎 + 可选插件框架），从 mavenLocal 解析 dev.turbodl:*:0.2.3.0
     // 0.2.0.8：读缓冲改为按并发摊薄（修 256 连接 = 256MB = 整堆的 OOM，见 2.7.2 说明）
