@@ -296,6 +296,58 @@ object DiagnosticLog {
         out
     }.onFailure { Log.w(TAG, "打包诊断日志失败：${it.message}", it) }.getOrNull()
 
+    /**
+     * 供「导出日志」读取：把所有模块的 .log 拼成一份文本。
+     *
+     * 与 [zipAll] 的区别：那个是打包成 zip 给用户取走，这个是**并进导出文件**，
+     * 用户在应用内点「导出日志」就能一起拿到，不需要再单独去取 zip。
+     *
+     * 顺序按文件名排（`network.log` / `webview.log` / …），每段前加分隔标题。
+     * 单次最多读 [MAX_EXPORT_BYTES]，避免把整份日志撑到几十 MB。
+     */
+    fun readForExport(context: android.content.Context): String? {
+        return try {
+            val target = dirOf(context)
+            val files = target.listFiles()
+                ?.filter { it.isFile && it.name.endsWith(".log") }
+                ?.sortedBy { it.name }
+                .orEmpty()
+            if (files.isEmpty()) return null
+
+            val sb = StringBuilder()
+            var budget = MAX_EXPORT_BYTES
+            for (f in files) {
+                if (budget <= 0) {
+                    sb.appendLine()
+                    sb.appendLine("（已达导出上限 ${MAX_EXPORT_BYTES / 1024}KB，后续模块省略）")
+                    break
+                }
+                val len = f.length().coerceAtMost(budget.toLong()).toInt()
+                sb.appendLine()
+                sb.appendLine("----- ${f.name} (${len} bytes) -----")
+                try {
+                    // 从末尾读：最近的记录最有用，也能避开超长历史文件
+                    java.io.RandomAccessFile(f, "r").use { raf ->
+                        val startPos = (f.length() - len).coerceAtLeast(0L)
+                        raf.seek(startPos)
+                        val buf = ByteArray(len)
+                        raf.readFully(buf)
+                        sb.append(String(buf, Charsets.UTF_8))
+                    }
+                } catch (e: Throwable) {
+                    sb.appendLine("（读取失败：${e.message}）")
+                }
+                budget -= len
+            }
+            sb.toString()
+        } catch (e: Throwable) {
+            null
+        }
+    }
+
+    /** 单次导出读取的上限：10MB，与滚动总量上限一致。 */
+    private const val MAX_EXPORT_BYTES = 10 * 1024 * 1024
+
     // ---------- 内部实现 ----------
 
     private fun resolveDir(context: Context): File {

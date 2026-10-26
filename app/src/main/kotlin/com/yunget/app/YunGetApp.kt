@@ -30,6 +30,13 @@ class YunGetApp : Application() {
     override fun onCreate() {
         super.onCreate()
         Thread.setDefaultUncaughtExceptionHandler(CrashHandler(this))
+        // 网络日志拦截器需要上下文（读「诊断模式」开关）。
+        // 放在最前面：之后任何一次 apiClient() 都会带上它。
+        com.yunget.app.data.network.HttpClients.appContext = this.applicationContext
+        // 结构化诊断日志的落盘装配（滚动文件 + 后台写线程）。
+        // 默认关闭，由设置里的「诊断模式」打开 —— 开启后所有出站请求、
+        // WebView 事件、数据库操作都会留痕。
+        com.yunget.app.util.DiagnosticLog.install(this.applicationContext)
         // 迅雷动态设备指纹：首次启动生成并持久化（开源分发后每台设备独立指纹）
         com.yunget.app.data.network.XunleiDeviceFingerprint.init(this)
         // 本机密钥失效自愈：必须在**任何**凭证读写之前装配。改锁屏密码/指纹会让 Android Keystore

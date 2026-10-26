@@ -30,6 +30,19 @@ object HttpClients {
             rebuildAll()
         }
 
+    /**
+     * 应用上下文：网络日志拦截器要用它读「诊断模式」开关。
+     *
+     * 由 Application 注入一次；为 null 时拦截器退化为"只记失败、不记成功"，
+     * 不影响任何功能。
+     */
+    @Volatile
+    var appContext: android.content.Context? = null
+        set(value) {
+            field = value
+            rebuildAll()
+        }
+
     private val lock = Any()
 
     @Volatile
@@ -118,6 +131,7 @@ object HttpClients {
             .readTimeout(60, TimeUnit.SECONDS)
             .writeTimeout(30, TimeUnit.SECONDS)
             .retryOnConnectionFailure(true)
+        appContext?.let { builder.addInterceptor(NetworkLogInterceptor(it)) }
         if (ignoreSsl) applyIgnoreSsl(builder)
         return builder.build()
     }
@@ -141,6 +155,8 @@ object HttpClients {
             .readTimeout(60, TimeUnit.SECONDS)
             .writeTimeout(30, TimeUnit.SECONDS)
             .retryOnConnectionFailure(true)
+        // 下载客户端也挂：分片请求的 403/416 是最需要留痕的失败
+        appContext?.let { builder.addInterceptor(NetworkLogInterceptor(it)) }
         if (ignoreSsl) applyIgnoreSsl(builder)
         return builder.build()
     }

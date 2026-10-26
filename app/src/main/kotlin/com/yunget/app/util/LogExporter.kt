@@ -127,6 +127,26 @@ object LogExporter {
                 writer.write(diag)
             }
 
+            // ---------- 结构化诊断（DiagnosticLog，诊断模式开启时才有） ----------
+            //
+            // 与上面 DiagLog 的"分类日志"是两套：
+            //  - DiagLog：面向用户的简短中文描述，按子系统分段；
+            //  - DiagnosticLog：上游移植过来的结构化事件（module/event/字段），
+            //    网络请求、WebView、数据库操作都会记进来。
+            //
+            // 两套都要带上 —— 用户导出日志时不该因为"某一套没同步"而缺半边信息。
+            writer.write("\n")
+            writer.write("========== 结构化诊断（DiagnosticLog）==========\n")
+            val structured = runCatching {
+                com.yunget.app.util.DiagnosticLog.readForExport(context)
+            }.getOrNull()
+            if (structured.isNullOrBlank()) {
+                writer.write("（未启用诊断模式，或还没有记录）\n")
+                writer.write("（开启方式：设置 → 关于云取 → 长按进入开发菜单 → 诊断模式）\n")
+            } else {
+                writer.write(structured)
+            }
+
             // ---------- 运行日志：当前应用进程（logcat 按 pid 过滤，只保留本应用） ----------
             // 注意：这一段**放在落盘日志之后**。实测在 OnePlus/ColorOS/Android 16 上，
             // logcat 的环形缓冲只保留数秒，用户按提示操作时这里往往一行本应用日志都没有
