@@ -55,6 +55,7 @@ import androidx.compose.material.icons.outlined.SystemUpdate
 import androidx.compose.material.icons.outlined.TrendingUp
 import androidx.compose.material.icons.outlined.Tune
 import androidx.compose.material.icons.outlined.VolunteerActivism
+import androidx.compose.material.icons.outlined.Campaign
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.ExperimentalMaterial3Api
@@ -155,6 +156,8 @@ fun SettingsScreen(
     activeConnectionsProvider: () -> Int? = { null },
     /** 打开实时日志页（日志系统升级）。 */
     onLogViewClick: () -> Unit = {},
+    /** 打开公告与社区页（仓库里的 announcements.json + 讨论区入口）。 */
+    onAnnouncementClick: () -> Unit = {},
     modifier: Modifier = Modifier
 ) {
     var showThreadsDialog by remember { mutableStateOf(false) }
@@ -604,6 +607,16 @@ fun SettingsScreen(
         // 入口拆成两个（日志系统升级）：实时查看与导出是两件不同的事 ——
         // 前者回答"刚才那步有没有报错"，后者用于把证据交给别人。
         // 旧版只有导出，为了看一眼错误也得走完整流程。
+        // 公告与社区：放在"通用"组最前 —— 用户遇到问题时第一个该看的是
+        // "是不是已知问题、有没有人讨论过"，而不是先去看日志。
+        SettingsItem(
+            icon = Icons.Outlined.Campaign,
+            title = "公告与社区",
+            description = "维护公告、已知问题说明，以及交流反馈入口",
+            onClick = onAnnouncementClick
+        )
+        Spacer(modifier = Modifier.height(8.dp))
+
         SettingsItem(
             icon = Icons.Outlined.ReceiptLong,
             title = "实时日志",

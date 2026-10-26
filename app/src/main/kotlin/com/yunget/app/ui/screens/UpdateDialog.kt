@@ -225,7 +225,7 @@ fun UpdateDialog(
  * 文字统一 16sp / 24sp 行高 —— 这是本次修复的核心（旧版 12sp）。
  */
 @Composable
-private fun ReleaseBody(body: String) {
+fun ReleaseBody(body: String) {
     val lines = body.replace("\r\n", "\n").split("\n")
     Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
         lines.forEach { raw ->

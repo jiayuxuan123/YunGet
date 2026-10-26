@@ -619,6 +619,7 @@ fun MainScreen(
     val lanzouAccount by lanzouViewModel.lanzouAccount.collectAsState()
 
     // 首次下载引导：锁屏保持下载默认开启，但新用户未加入「忽略电池优化」白名单 →引导一次
+    var showAnnouncement by rememberSaveable { mutableStateOf(false) }
     var showBatteryGuide by remember { mutableStateOf(false) }
     var batteryGuideShown by remember { mutableStateOf(false) }
 
@@ -920,6 +921,7 @@ fun MainScreen(
                         onAboutClick = { showAbout = true },
                         onSupportClick = { showSupport = true },
                         onLogViewClick = { showLogViewer = true },
+                        onAnnouncementClick = { showAnnouncement = true },
                         backupManager = backupManager,
                         onConnectionDiagnose = { urlOverride -> downloadManager.diagnoseConnections(urlOverride = urlOverride) },
                         onConcurrentDiagnose = { downloadManager.diagnoseConcurrentTasks() },
@@ -1030,6 +1032,35 @@ fun MainScreen(
         modifier = Modifier.fillMaxSize()
     ) {
         LogViewerScreen(onBack = { showLogViewer = false })
+    }
+
+    // 公告与社区
+    AnimatedVisibility(
+        visible = showAnnouncement,
+        enter = fadeIn(effectsDefault()) + scaleIn(tween(220), initialScale = 0.96f),
+        exit = fadeOut(effectsFast()) + scaleOut(tween(160), targetScale = 0.96f),
+        modifier = Modifier.fillMaxSize()
+    ) {
+        com.yunget.app.ui.screens.AnnouncementScreen(
+            onBack = { showAnnouncement = false },
+            onOpenCommunity = {
+                // 用系统浏览器打开讨论区，而不是内置 WebView：
+                // 用户很可能已经在那里登录了 GitHub，内置 WebView 会是未登录态，
+                // 想发言还得重新登一次。
+                runCatching {
+                    context.startActivity(
+                        android.content.Intent(
+                            android.content.Intent.ACTION_VIEW,
+                            android.net.Uri.parse(
+                                "https://github.com/jiayuxuan123/YunGet/discussions",
+                            ),
+                        ),
+                    )
+                }.onFailure {
+                    com.yunget.app.ui.SnackbarController.show("没有可用的浏览器")
+                }
+            },
+        )
     }
 
     AnimatedVisibility(
