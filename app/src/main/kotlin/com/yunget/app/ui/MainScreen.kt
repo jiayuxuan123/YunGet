@@ -172,7 +172,16 @@ import androidx.compose.material3.TextButton
  */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun MainScreen() {
+fun MainScreen(
+    /**
+     * 从深链接 / 系统分享 / 选中文本解析传进来的待解析内容。
+     *
+     * 由 MainActivity 持有并在 onCreate/onNewIntent 时赋值；这里只在**值变化时**消费一次，
+     * 消费完立即回调置 null —— 否则每次重组都会重新解析，用户会被反复弹回解析页。
+     */
+    incomingLink: String? = null,
+    onIncomingLinkConsumed: () -> Unit = {},
+) {
     var currentTab by rememberSaveable { mutableStateOf(MainTab.Resolve) }
     var showQuarkLogin by rememberSaveable { mutableStateOf(false) }
     var showUCLogin by rememberSaveable { mutableStateOf(false) }
@@ -570,6 +579,34 @@ fun MainScreen() {
     val downloadViewModel: DownloadViewModel = viewModel(
         factory = DownloadViewModel.Factory(downloadManager)
     )
+
+    /**
+     * 消费深链接 / 系统分享 / 选中文本解析。
+     *
+     * 三条去向：
+     *  - 磁力链接 → 下载页（只有下载引擎能处理，解析链路会判为"无法识别"）；
+     *  - 其它文本 → 解析页，交给 startResolve 自己判断是网盘、视频平台还是直链。
+     *
+     * key 用 [incomingLink] 本身：同一个链接再次分享时值不变，但那时用户
+     * 已经消费过（回调置 null），所以这里不会漏掉"又分享了一次同样的链接"。
+     */
+    LaunchedEffect(incomingLink) {
+        val text = incomingLink?.trim()
+        if (text.isNullOrBlank()) return@LaunchedEffect
+        if (com.yunget.app.data.download.MagnetLink.isMagnet(text)) {
+            // 磁力只有 Gopeed 引擎能下（内置 TurboDL 不解析 BT）。
+            // 不在解析页报"无法识别"——那样用户只会觉得链接坏了。
+            // 切到下载页并说明当前引擎不支持，用户可以去引擎页换 Gopeed。
+            currentTab = MainTab.Download
+            com.yunget.app.ui.SnackbarController.show(
+                "磁力链接需要 Gopeed 引擎，请在「下载引擎」里切换后再添加",
+            )
+        } else {
+            currentTab = MainTab.Resolve
+            resolveViewModel.startResolve(text, null)
+        }
+        onIncomingLinkConsumed()
+    }
     val quarkAccount by viewModel.quarkAccount.collectAsState()
     val ucAccount by ucViewModel.ucAccount.collectAsState()
     val xunleiAccount by xunleiViewModel.xunleiAccount.collectAsState()

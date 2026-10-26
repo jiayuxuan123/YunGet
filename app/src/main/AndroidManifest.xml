@@ -38,9 +38,13 @@
         android:theme="@style/Theme.ComposeEmptyActivity">
 
         <!-- 默认桌面图标 = 新绘制的多线程下载图标（icon_dl，本二次开发版默认标识） -->
+        <!-- launchMode=singleTask：从浏览器点网盘链接时把 intent 交给**已有实例**
+             （走 onNewIntent），而不是再开一个。没有它，用户每点一个链接都会
+             多一个任务栈里的实例，返回键要按很多次才能退出去。 -->
         <activity
             android:name=".MainActivity"
             android:exported="true"
+            android:launchMode="singleTask"
             android:theme="@style/Theme.ComposeEmptyActivity">
             <intent-filter>
                 <action android:name="android.intent.action.MAIN" />
@@ -101,6 +105,196 @@
                 android:name="android.support.FILE_PROVIDER_PATHS"
                 android:resource="@xml/file_paths" />
         </provider>
+
+        <!-- ==================== 链接唤起（深链接） ====================
+             从浏览器/其它应用点云盘分享链接时，直接进入本应用的解析页。
+
+             每个网盘一个 activity-alias（而不是一个 alias 挂多个 host）：
+             这样系统「设置 → 默认打开」里能逐项开关，用户想只用某个网盘时不至于
+             被整体接管。alias 名带 .link. 前缀，便于与图标变体区分。
+
+             目标统一是 .MainActivity：MainActivity 在 onCreate/onNewIntent 里
+             通过 DeepLinks.textFrom 取出链接并交给解析链路。 -->
+
+        <!-- 夸克网盘 -->
+        <activity-alias
+            android:name=".link.QuarkLink"
+            android:exported="true"
+            android:label="@string/app_name"
+            android:targetActivity=".MainActivity">
+            <intent-filter>
+                <action android:name="android.intent.action.VIEW" />
+                <category android:name="android.intent.category.DEFAULT" />
+                <category android:name="android.intent.category.BROWSABLE" />
+                <data android:scheme="https" android:host="pan.quark.cn" android:pathPrefix="/s/" />
+            </intent-filter>
+        </activity-alias>
+
+        <!-- UC 网盘 -->
+        <activity-alias
+            android:name=".link.UcLink"
+            android:exported="true"
+            android:label="@string/app_name"
+            android:targetActivity=".MainActivity">
+            <intent-filter>
+                <action android:name="android.intent.action.VIEW" />
+                <category android:name="android.intent.category.DEFAULT" />
+                <category android:name="android.intent.category.BROWSABLE" />
+                <data android:scheme="https" android:host="drive.uc.cn" android:pathPrefix="/s/" />
+            </intent-filter>
+        </activity-alias>
+
+        <!-- 迅雷网盘 -->
+        <activity-alias
+            android:name=".link.XunleiLink"
+            android:exported="true"
+            android:label="@string/app_name"
+            android:targetActivity=".MainActivity">
+            <intent-filter>
+                <action android:name="android.intent.action.VIEW" />
+                <category android:name="android.intent.category.DEFAULT" />
+                <category android:name="android.intent.category.BROWSABLE" />
+                <data android:scheme="https" android:host="pan.xunlei.com" android:pathPrefix="/s/" />
+            </intent-filter>
+        </activity-alias>
+
+        <!-- 百度网盘 -->
+        <activity-alias
+            android:name=".link.BaiduLink"
+            android:exported="true"
+            android:label="@string/app_name"
+            android:targetActivity=".MainActivity">
+            <intent-filter>
+                <action android:name="android.intent.action.VIEW" />
+                <category android:name="android.intent.category.DEFAULT" />
+                <category android:name="android.intent.category.BROWSABLE" />
+                <data android:scheme="https" android:host="pan.baidu.com" android:pathPrefix="/s/" />
+            </intent-filter>
+        </activity-alias>
+
+        <!-- 中国移动云盘 -->
+        <activity-alias
+            android:name=".link.C139Link"
+            android:exported="true"
+            android:label="@string/app_name"
+            android:targetActivity=".MainActivity">
+            <intent-filter>
+                <action android:name="android.intent.action.VIEW" />
+                <category android:name="android.intent.category.DEFAULT" />
+                <category android:name="android.intent.category.BROWSABLE" />
+                <data android:scheme="https" android:host="yun.139.com" android:pathPrefix="/shareweb/" />
+            </intent-filter>
+        </activity-alias>
+
+        <!-- 123 云盘 -->
+        <activity-alias
+            android:name=".link.Pan123Link"
+            android:exported="true"
+            android:label="@string/app_name"
+            android:targetActivity=".MainActivity">
+            <intent-filter>
+                <action android:name="android.intent.action.VIEW" />
+                <category android:name="android.intent.category.DEFAULT" />
+                <category android:name="android.intent.category.BROWSABLE" />
+                <data android:scheme="https" android:host="www.123pan.com" android:pathPrefix="/s/" />
+                <data android:scheme="https" android:host="www.123865.com" android:pathPrefix="/s/" />
+                <data android:scheme="https" android:host="www.123pan.cn" android:pathPrefix="/s/" />
+                <data android:scheme="https" android:host="share.123pan.cn" android:pathPrefix="/123pan/" />
+                <data android:scheme="https" android:host="*.share.123pan.cn" android:pathPrefix="/123pan/" />
+            </intent-filter>
+        </activity-alias>
+
+        <!-- 115 网盘 -->
+        <activity-alias
+            android:name=".link.Pan115Link"
+            android:exported="true"
+            android:label="@string/app_name"
+            android:targetActivity=".MainActivity">
+            <intent-filter>
+                <action android:name="android.intent.action.VIEW" />
+                <category android:name="android.intent.category.DEFAULT" />
+                <category android:name="android.intent.category.BROWSABLE" />
+                <data android:scheme="https" android:host="115.com" android:pathPrefix="/s/" />
+                <data android:scheme="https" android:host="115cdn.com" android:pathPrefix="/s/" />
+                <data android:scheme="https" android:host="115rc.com" android:pathPrefix="/s/" />
+                <data android:scheme="https" android:host="115.com" android:pathPrefix="/sw" />
+            </intent-filter>
+        </activity-alias>
+
+        <!-- 光鸭云盘 -->
+        <activity-alias
+            android:name=".link.GuangYaLouLink"
+            android:exported="true"
+            android:label="@string/app_name"
+            android:targetActivity=".MainActivity">
+            <intent-filter>
+                <action android:name="android.intent.action.VIEW" />
+                <category android:name="android.intent.category.DEFAULT" />
+                <category android:name="android.intent.category.BROWSABLE" />
+                <data android:scheme="https" android:host="guangya.com" android:pathPrefix="/s/" />
+            </intent-filter>
+        </activity-alias>
+
+        <!-- 蓝奏云 -->
+        <activity-alias
+            android:name=".link.LanzouLink"
+            android:exported="true"
+            android:label="@string/app_name"
+            android:targetActivity=".MainActivity">
+            <intent-filter>
+                <action android:name="android.intent.action.VIEW" />
+                <category android:name="android.intent.category.DEFAULT" />
+                <category android:name="android.intent.category.BROWSABLE" />
+                <data android:scheme="https" android:host="lanzou.com" android:pathPrefix="/" />
+            </intent-filter>
+        </activity-alias>
+
+        <!-- 蓝奏云优享版 -->
+        <activity-alias
+            android:name=".link.ILanzouLink"
+            android:exported="true"
+            android:label="@string/app_name"
+            android:targetActivity=".MainActivity">
+            <intent-filter>
+                <action android:name="android.intent.action.VIEW" />
+                <category android:name="android.intent.category.DEFAULT" />
+                <category android:name="android.intent.category.BROWSABLE" />
+                <data android:scheme="https" android:host="ilanzou.com" android:pathPrefix="/" />
+            </intent-filter>
+        </activity-alias>
+
+        <!-- 云取 解析 -->
+        <activity-alias
+            android:name=".link.ResolveLink"
+            android:exported="true"
+            android:label="@string/app_name"
+            android:targetActivity=".MainActivity">
+            <intent-filter>
+                <action android:name="android.intent.action.VIEW" />
+                <category android:name="android.intent.category.DEFAULT" />
+                <category android:name="android.intent.category.BROWSABLE" />
+                <data android:scheme="yung" android:host="resolve" />
+            </intent-filter>
+        </activity-alias>
+
+        <!-- 系统「分享」与「选中文本 → 云取」：把文本交给解析页。
+             单独一个 alias，不带 host 过滤（任何文本都可能含链接/口令）。 -->
+        <activity-alias
+            android:name=".link.ShareText"
+            android:exported="true"
+            android:label="@string/app_name"
+            android:targetActivity=".MainActivity">
+            <intent-filter>
+                <action android:name="android.intent.action.SEND" />
+                <category android:name="android.intent.category.DEFAULT" />
+                <data android:mimeType="text/plain" />
+            </intent-filter>
+            <intent-filter>
+                <action android:name="android.intent.action.PROCESS_TEXT" />
+                <category android:name="android.intent.category.DEFAULT" />
+                <data android:mimeType="text/plain" />
+            </intent-filter>
+        </activity-alias>
 
     </application>
 
