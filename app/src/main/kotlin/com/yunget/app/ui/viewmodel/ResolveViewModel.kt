@@ -73,6 +73,52 @@ private const val DIRECT_DOWNLOAD_UA =
         "(KHTML, like Gecko) Chrome/126.0.0.0 Safari/537.36"
 
 /**
+ * 引擎插件解析结果 → 界面用的 [com.yunget.app.data.network.video.VideoParseResult]。
+ *
+ * ## 为什么要有这一步转换
+ *
+ * 两个类型表达的是同一件事，但**来源不同**：
+ *  - [com.yunget.app.data.download.PluginParseResult] 是"引擎插件说了什么"
+ *    （平台标识是字符串、媒体类型是插件的枚举）；
+ *  - `VideoParseResult` 是"结果页要什么"（平台是内置枚举、媒体类型是另一套枚举）。
+ *
+ * 结果页与下载队列都只认后者，所以这里做一次显式映射。
+ * 平台枚举认不出来就落到 `OTHER`（"插件解析"）—— 借用某个内置平台会让它的
+ * 图标与名称为说谎。
+ */
+private fun com.yunget.app.data.download.PluginParseResult.toVideoParseResult():
+    com.yunget.app.data.network.video.VideoParseResult {
+    val mediaKind = { kind: com.yunget.app.data.download.PluginMediaKind ->
+        when (kind) {
+            com.yunget.app.data.download.PluginMediaKind.VIDEO ->
+                com.yunget.app.data.network.video.VideoMediaKind.VIDEO
+            com.yunget.app.data.download.PluginMediaKind.AUDIO ->
+                com.yunget.app.data.network.video.VideoMediaKind.AUDIO
+            com.yunget.app.data.download.PluginMediaKind.IMAGE ->
+                com.yunget.app.data.network.video.VideoMediaKind.IMAGE
+        }
+    }
+    return com.yunget.app.data.network.video.VideoParseResult(
+        platform = com.yunget.app.data.network.video.VideoPlatform.fromName(platform.uppercase())
+            ?: com.yunget.app.data.network.video.VideoPlatform.OTHER,
+        title = title,
+        author = author,
+        cover = cover,
+        text = text,
+        url = pageUrl,
+        medias = medias.map { m ->
+            com.yunget.app.data.network.video.VideoMedia(
+                url = m.url,
+                kind = mediaKind(m.kind),
+                fileName = m.fileName,
+                headers = m.headers,
+                quality = m.quality,
+            )
+        },
+    )
+}
+
+/**
  * 解析页 ViewModel：分享解析状态机 + 目录导航 + 下载直链。
  * 支持夸克 / UC / 迅雷 / 百度 / 139 / 123 / 115 / 光鸭云盘 / 蓝奏云优享版 / 蓝奏云，
  * 按链接自动路由到对应平台仓库与凭证。
@@ -652,27 +698,18 @@ class ResolveViewModel(
     fun startResolve(link: String, pwd: String?) {
         viewModelScope.launch {
             uiState = ResolveUiState.Loading
-            // 链接识别不出网盘平台时（parsed == null）看看是不是普通 http(s) 直链：
-            // 是就交给下载器，不是才报"无法识别"。识别失败**不是错误**，只是这里没有网盘可解析。
+            // 链接识别不出网盘平台时（parsed == null）看还有没有别的路可走：
+            //  1. 引擎插件解析器（微博/小红书/Pixiv，由 turbo-plugin-parser 提供）
+            //  2. 内置视频平台（抖音/快手/B站/AcFun）—— 这些有平台特有的签名或 WebView 交互
+            //  3. 普通 http(s) 直链 → 交 TurboDL 多线程下载器
+            // 顺序不能反：视频平台的分享文案里也含 http 链接，
+            // 先认直链会把"解析这个视频"变成"下载这个网页"。
+            //
+            // 插件排在最前：用户装的插件理应能覆盖内置行为（装插件通常就是因为内置不好用了）；
+            // 插件不认领时照常回退，装了插件不会丢任何能力。
             val parsed = ShareLinkParser.parse(link)
             if (parsed == null) {
-                // 非网盘分享链接，按两条路走：
-                //  1. 是视频平台（抖音/微博/小红书…）→ 交给视频解析器；
-                //  2. 是普通 http(s) 直链 → 交 TurboDL 多线程下载器。
-                // 顺序不能反：视频平台的分享文案里也含 http 链接，
-                // 先认直链会把"解析这个视频"变成"下载这个网页"。
-                val videoLink = VideoLinkParser.parse(link)
-                if (videoLink != null) {
-                    resolveVideo(videoLink)
-                    return@launch
-                }
-                val direct = extractDirectUrl(link)
-                if (direct != null) {
-                    uiState = ResolveUiState.Idle
-                    enqueueDirectDownload(direct)
-                    return@launch
-                }
-                uiState = ResolveUiState.Error("无法识别分享链接")
+                resolveNonPanLink(link)
                 return@launch
             }
             currentPlatform = parsed.platform
@@ -694,6 +731,44 @@ class ResolveViewModel(
                     uiState = ResolveUiState.Error(e.message ?: "解析失败")
                 }
         }
+    }
+
+    /**
+     * 不是网盘分享时的三条路。
+     *
+     * 顺序（为什么不能换）：
+     *  1. **引擎插件解析器** —— 微博/小红书/Pixiv，由 `turbo-plugin-parser` 提供；
+     *  2. **内置视频平台** —— 抖音/快手/B站/AcFun，各自有签名算法或 WebView 交互；
+     *  3. **普通 http(s) 直链** —— 交给下载器。
+     *
+     * 视频平台的分享文案里也含 http 链接，先认直链会把"解析这个视频"
+     * 变成"下载这个网页"，用户拿到的是一张 HTML。
+     *
+     * 插件排在最前是因为用户装插件通常就意味着"内置那个已经不好用了"；
+     * 插件不认领（返回 null）时照常回退，装了插件不会丢任何能力。
+     */
+    private suspend fun resolveNonPanLink(link: String) {
+        val byPlugin = runCatching { downloadManager.parseByPlugins(link) }
+            .onFailure { android.util.Log.w("YunGet", "插件解析失败（回退内置）：${it.message}") }
+            .getOrNull()
+        if (byPlugin != null && byPlugin.medias.isNotEmpty()) {
+            uiState = ResolveUiState.Video(byPlugin.toVideoParseResult())
+            return
+        }
+
+        val videoLink = VideoLinkParser.parse(link)
+        if (videoLink != null) {
+            resolveVideo(videoLink)
+            return
+        }
+
+        val direct = extractDirectUrl(link)
+        if (direct != null) {
+            uiState = ResolveUiState.Idle
+            enqueueDirectDownload(direct)
+            return
+        }
+        uiState = ResolveUiState.Error("无法识别分享链接")
     }
 
     /**

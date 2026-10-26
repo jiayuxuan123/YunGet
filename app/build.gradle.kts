@@ -29,7 +29,7 @@ android {
         // Android 7.0 发布于 2016 年，覆盖率早已 >99%。
         minSdk = 24
         targetSdk = 34
-        versionCode = 60
+        versionCode = 61
         // 2.7.10 内容：**原生（L2）插件在手机端暂时禁用**
         //  ① 移除整条 dex 加载链：AndroidNativePluginLoader、YunHostBridge、l2-providers 模块；
         //  ② 移除网盘 CloudProvider 抽象（CloudProvider.kt / Resolver / ShareRepository）
@@ -358,7 +358,11 @@ android {
         //     （全链路 h2，多线程可能完全没加速）——界面说的和实际做的相反。
         //     引擎新增 UNSET 哨兵，只有它才回退到旧字段；界面也合并成一个三选一。
         //  ③ 慢启动起始并发超过总 worker 数时"起步就超发"，现在夹到 worker 数。
-        versionName = "2.7.12"
+        // 2.7.13（引擎 0.2.4.0）：
+        //  视频平台解析（微博/小红书/Pixiv）改为**引擎级原生插件** turbo-plugin-parser，
+        //  与 HLS 插件同一套机制：只往 LINK_PARSER 注册解析器、往 PROTOCOL_HANDLER
+        //  每平台声明一条，引擎内核对这三个平台一无所知。平台改版只需换这个插件。
+        versionName = "2.7.13"
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
     }
@@ -598,10 +602,14 @@ dependencies {
 
     // TurboDL SDK（纯 JVM 多线程下载引擎 + 可选插件框架），从 mavenLocal 解析 dev.turbodl:*:0.2.3.0
     // 0.2.0.8：读缓冲改为按并发摊薄（修 256 连接 = 256MB = 整堆的 OOM，见 2.7.2 说明）
-    implementation("dev.turbodl:turbodl-core:0.2.3.1")
-    implementation("dev.turbodl:turbo-plugin-runtime:0.2.3.1")
-    implementation("dev.turbodl:turbo-plugin-bootstrap:0.2.3.1")
-    implementation("dev.turbodl:turbo-plugin-hls:0.2.3.1")
+    implementation("dev.turbodl:turbodl-core:0.2.4.0")
+    implementation("dev.turbodl:turbo-plugin-runtime:0.2.4.0")
+    implementation("dev.turbodl:turbo-plugin-bootstrap:0.2.4.0")
+    implementation("dev.turbodl:turbo-plugin-hls:0.2.4.0")
+    // 视频平台链接解析（微博/小红书/Pixiv）—— 引擎级原生插件，与 HLS 同一套机制。
+    // 它自己往 LINK_PARSER 注册解析器、往 PROTOCOL_HANDLER 每平台声明一条；
+    // 宿主只负责把它装进 PluginHost（见 TurboBootstrap.extraPlugins）。
+    implementation("dev.turbodl:turbo-plugin-parser:0.2.4.0")
 
     // JavaScript 插件加载器：让用户能自己写/导入脚本插件。
     //
@@ -615,7 +623,7 @@ dependencies {
     //     公开 API（interruptEvaluation / memoryLimit / memoryUsage…）与 jvm 版逐名一致，
     //     且 Android 侧走 System.loadLibrary（不再有 createTempFile 问题）。
     // 所以：排掉 jvm 版，换成 android 版 —— turbo-plugin-js 自身一行代码都不用改。
-    implementation("dev.turbodl:turbo-plugin-js:0.2.3.1") {
+    implementation("dev.turbodl:turbo-plugin-js:0.2.4.0") {
         exclude(group = "io.github.dokar3", module = "quickjs-kt-jvm")
     }
     implementation("io.github.dokar3:quickjs-kt-android:1.0.15")

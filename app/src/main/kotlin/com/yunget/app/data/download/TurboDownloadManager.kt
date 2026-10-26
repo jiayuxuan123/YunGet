@@ -16,6 +16,8 @@ import dev.turbodl.core.TurboDiagnostics
 import dev.turbodl.core.TurboEvent
 import dev.turbodl.plugin.bootstrap.TurboBootstrap
 import dev.turbodl.plugin.hls.HlsPlugin
+import dev.turbodl.plugin.parser.PlatformParserPlugin
+import dev.turbodl.plugin.runtime.ext.ExtensionPoints
 import org.json.JSONObject
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -141,10 +143,20 @@ class TurboDownloadManager(
 ) : DownloadManager {
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
 
-    /** TurboDL 引导：装配 PluginHost + TurboClient + 基础插件；额外装 HLS 插件。 */
+    /**
+     * TurboDL 引导：装配 PluginHost + TurboClient + 基础插件。
+     *
+     * 额外装两个**引擎级原生插件**（都是可选模块，core 不认识它们）：
+     *  - [HlsPlugin]：把 `.m3u8` 路由到 HLS 分片装配后端；
+     *  - [PlatformParserPlugin]：注册微博/小红书/Pixiv 的链接解析器。
+     *
+     * 后者是本版本新加的：三个平台原先各自有一份宿主内置的 Kotlin 解析器，
+     * 平台一改版就要发新版 App。改成插件后，引擎内核不认识任何平台，
+     * 失效的解析器跟着引擎一起升级，不再绑 App 发版节奏。
+     */
     private val bootstrap: TurboBootstrap = TurboBootstrap.create(
         config = buildConfig(),
-        extraPlugins = listOf(HlsPlugin()),
+        extraPlugins = listOf(HlsPlugin(), PlatformParserPlugin()),
     )
     private val client get() = bootstrap.client
 
@@ -286,6 +298,17 @@ class TurboDownloadManager(
          * 压到人眼无感的水平（约 1.25 次/秒，与下载速度无关）。
          */
         private const val DB_WRITE_INTERVAL_MS = 800L
+
+        /**
+         * 判"这是视频"用的扩展名。
+         *
+         * 插件按约定应该在 `tags.kind` 里声明媒体类型，但**没写**时这里要有个判据 ——
+         * 猜成视频的代价（走预览合轨那条重路径）比猜成图片大，所以列表刻意保守：
+         * 只认确定是视频容器的后缀，其余一律当图片。
+         */
+        private val VIDEO_EXTENSIONS = listOf(
+            ".mp4", ".mkv", ".webm", ".mov", ".flv", ".ts", ".m4v", ".m3u8", ".avi",
+        )
     }
 
     /** 启动阶段诊断：Metadata(探测完成)时刻，用于在首个 Progress 时算出「首字节耗时」。任务结束即清。 */
@@ -699,6 +722,96 @@ class TurboDownloadManager(
      *
      * 幂等：重复调用安全（内部各步都做了容错；[TurboBootstrap.shutdown] 自身可重复进入）。
      */
+    /**
+     * 用**插件注册的链接解析器**解析一条分享链接。
+     *
+     * ## 为什么走引擎扩展点
+     *
+     * 微博/小红书/Pixiv 的解析是 `turbo-plugin-parser`（引擎级原生插件）在做，
+     * 与 HLS 后端同一套机制 —— 宿主不实现任何平台逻辑，只把链接交给
+     * [ExtensionPoints.LINK_PARSER] 上的注册者，再把结果摆到界面上。
+     * 平台改版时换插件即可，不必发新版 App。
+     *
+     * ## 与内置解析器的关系
+     *
+     * 内置的 `VideoParsers`（抖音/快手/B站/AcFun）仍然保留：它们各自有平台特有的
+     * 签名算法与 WebView 交互，短期内不适合外置。插件解析器覆盖的是
+     * "纯 HTTP、无加密"的那一批（微博/小红书/Pixiv）。
+     *
+     * 调用方的顺序约定：**先问插件**（用户装的插件应当能覆盖内置行为），
+     * 插件不认领（返回 null）时回退到内置解析器。
+     */
+    override suspend fun parseByPlugins(raw: String): PluginParseResult? = withContext(Dispatchers.IO) {
+        val trimmed = raw.trim()
+        if (trimmed.isEmpty()) return@withContext null
+
+        val parsers = runCatching {
+            bootstrap.host.extensions.registrations(ExtensionPoints.LINK_PARSER)
+        }.getOrNull().orEmpty()
+        if (parsers.isEmpty()) return@withContext null
+
+        for (registration in parsers) {
+            val parser = registration.instance
+            // 单个插件出错不能影响其它插件，更不能影响内置解析
+            val requests = runCatching { parser.parse(trimmed) }.getOrElse { e ->
+                DiagLog.w(
+                    context, DiagLog.Category.PLUGIN,
+                    "链接解析插件 ${registration.ownerPluginId} 出错，已跳过：${e.message}",
+                )
+                continue
+            }
+            if (requests.isNullOrEmpty()) continue
+
+            DiagLog.i(
+                context, DiagLog.Category.PLUGIN,
+                "链接由插件 ${registration.ownerPluginId} 解析：${requests.size} 项媒体",
+            )
+            return@withContext toResult(requests)
+        }
+        null
+    }
+
+    /**
+     * `DownloadRequest` → 界面用的 [PluginParseResult]。
+     *
+     * 引擎的请求自带 `tags`（插件按约定写入 `platform`/`title`/`author`/`cover`/`text`/
+     * `pageUrl`/`quality`/`kind`），这里把它摊平成界面直接可用的形状。
+     * 字段缺失一律留空，**不猜**。
+     */
+    private fun toResult(requests: List<dev.turbodl.core.DownloadRequest>): PluginParseResult {
+        // 约定：第一条的 tags 是整批作品的元信息（见 turbo-plugin-parser 的说明）
+        val meta = requests.first().tags
+        val medias = requests.map { request ->
+            val fileName = request.destination.name
+            PluginMedia(
+                url = request.url,
+                fileName = fileName,
+                headers = request.headers,
+                quality = request.tags["quality"].orEmpty(),
+                kind = when (request.tags["kind"]?.lowercase()) {
+                    "video" -> PluginMediaKind.VIDEO
+                    "audio" -> PluginMediaKind.AUDIO
+                    "image" -> PluginMediaKind.IMAGE
+                    // 没写就按后缀推：视频后缀是硬事实，推不出来时当图片
+                    else -> if (VIDEO_EXTENSIONS.any { fileName.endsWith(it, ignoreCase = true) }) {
+                        PluginMediaKind.VIDEO
+                    } else {
+                        PluginMediaKind.IMAGE
+                    }
+                },
+            )
+        }
+        return PluginParseResult(
+            platform = meta["platform"].orEmpty(),
+            title = meta["title"].orEmpty(),
+            author = meta["author"].orEmpty(),
+            cover = meta["cover"].orEmpty(),
+            text = meta["text"].orEmpty(),
+            pageUrl = meta["pageUrl"].orEmpty(),
+            medias = medias,
+        )
+    }
+
     override fun shutdown() {
         if (!shutdownFlag.compareAndSet(false, true)) return
         runCatching { scope.cancel() }

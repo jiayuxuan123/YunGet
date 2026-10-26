@@ -110,7 +110,20 @@ enum class VideoPlatform(
         // ★ 不给网页登录页（见 manualCookieOnly 的说明）：它的风控不允许在 App 内置网页里登录，
         //   登录入口改成「手动填写 Cookie」页。解析仍然照常：匿名能拿到一部分公开作品。
         manualCookieOnly = true
-    );
+    ),
+
+    /**
+     * 由**引擎插件**解析出来的内容，不属于上面任何一个内置平台。
+     *
+     * 存在理由：`VideoParseResult.platform` 是非空字段，而插件的覆盖面是开放的
+     * （`turbo-plugin-parser` 解析微博/小红书/Pixiv，用户还可以装别的解析插件）。
+     * 让插件结果借用某个内置平台，会让那个平台的图标与名称为说谎；
+     * 给一个明确表示「来源是插件」的值更诚实。
+     *
+     * 它**不参与**账号页展示 —— 那个列表来自 [VideoParsers.all]，
+     * 内置解析器里没有这一项，也没有登录入口。
+     */
+    OTHER("插件解析");
 
     /** 是否需要登录态：有网页登录页，或没有网页登录页但支持手动填 Cookie */
     val needsLogin: Boolean get() = loginUrl.isNotBlank() || manualCookieOnly
