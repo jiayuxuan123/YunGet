@@ -48,7 +48,13 @@ class Pan115AccountRepository(
      * 备注是多账号的基础字段：平台昵称常常是一串数字或与账号无关的网名，
      * 同一平台有多个账号时完全分不出谁是谁。
      */
-    suspend fun updateRemark(remark: String) = dao.updateRemark(remark)
+    suspend fun updateRemark(id: String, remark: String) = dao.updateRemark(id, remark)
+
+    /** 观察全部账号（多账号列表）。主账号排最前。 */
+    fun observeAll() = dao.observeAll()
+
+    /** 切换主账号（同一事务内先降后升）。 */
+    suspend fun setPrimary(id: String) = dao.setPrimary(id)
 
     /**
      * 保存网页登录 Cookie：先用 `/user/info` 确认登录态有效并取昵称（脱敏手机号），成功才落库。

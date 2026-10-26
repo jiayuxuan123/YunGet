@@ -39,8 +39,14 @@ class BaiduAccountRepository(
 
     suspend fun getAccount(): BaiduAccountEntity? = dao.getAccount()
 
+    /** 观察全部账号（多账号列表）。主账号排最前。 */
+    fun observeAll() = dao.observeAll()
+
+    /** 切换主账号（同一事务内先降后升）。 */
+    suspend fun setPrimary(id: String) = dao.setPrimary(id)
+
     /** 修改账号备注（空串 = 清除）。备注不是凭证，不参与加解密。 */
-    suspend fun updateRemark(remark: String) = dao.updateRemark(remark)
+    suspend fun updateRemark(id: String, remark: String) = dao.updateRemark(id, remark)
 
     /** 退出登录：清理 WebView Cookie + 清除本地记录 */
     suspend fun logoutBaidu() {

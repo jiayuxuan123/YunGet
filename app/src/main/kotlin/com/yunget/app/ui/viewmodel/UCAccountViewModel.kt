@@ -51,8 +51,8 @@ class UCAccountViewModel(
 
 
     /** 修改本平台账号的备注（空串 = 清除）。 */
-    fun updateRemark(remark: String) {
-        viewModelScope.launch { repository.updateRemark(remark) }
+    fun updateRemark(id: String, remark: String) {
+        viewModelScope.launch { repository.updateRemark(id, remark) }
     }
 
     class Factory(
@@ -63,6 +63,19 @@ class UCAccountViewModel(
             require(modelClass.isAssignableFrom(UCAccountViewModel::class.java))
             return UCAccountViewModel(repository) as T
         }
+    }
+
+    /** 全部账号（多账号列表）。主账号排最前。 */
+    val allAccounts: StateFlow<List<UCAccountEntity>> = repository.observeAll()
+        .stateIn(
+            scope = viewModelScope,
+            started = SharingStarted.WhileSubscribed(5_000),
+            initialValue = emptyList(),
+        )
+
+    /** 切换主账号。 */
+    fun setPrimary(id: String) {
+        viewModelScope.launch { repository.setPrimary(id) }
     }
 
 }

@@ -52,8 +52,19 @@ internal object SecureAccountDaos {
             raw.getAccount()?.let { decryptQuark(raw, cipher, it) }
         }
         override suspend fun clear() = raw.clear()
+        override fun observeAll(): Flow<List<QuarkAccountEntity>> = raw.observeAll().map { list ->
+            list.mapNotNull { decryptQuark(raw, cipher, it) }
+        }.catch { emit(emptyList()) }
+        override suspend fun getById(id: String): QuarkAccountEntity? = decryptGuarded(raw::clear) {
+            raw.getById(id)?.let { decryptQuark(raw, cipher, it) }
+        }
+        override suspend fun count(): Int = raw.count()
+        override suspend fun deleteById(id: String) = raw.deleteById(id)
+        override suspend fun setPrimary(id: String) = raw.setPrimary(id)
+        override suspend fun demoteAll() = raw.demoteAll()
+        override suspend fun promote(id: String) = raw.promote(id)
         // 备注不参与加解密：它不是凭证，只是用户起的名字
-        override suspend fun updateRemark(remark: String) = raw.updateRemark(remark)
+        override suspend fun updateRemark(id: String, remark: String) = raw.updateRemark(id, remark)
     }
 
     fun uc(raw: UCAccountDao, cipher: CredentialCipher): UCAccountDao = object : UCAccountDao {
@@ -67,8 +78,19 @@ internal object SecureAccountDaos {
             raw.getAccount()?.let { decryptUc(raw, cipher, it) }
         }
         override suspend fun clear() = raw.clear()
+        override fun observeAll(): Flow<List<UCAccountEntity>> = raw.observeAll().map { list ->
+            list.mapNotNull { decryptUc(raw, cipher, it) }
+        }.catch { emit(emptyList()) }
+        override suspend fun getById(id: String): UCAccountEntity? = decryptGuarded(raw::clear) {
+            raw.getById(id)?.let { decryptUc(raw, cipher, it) }
+        }
+        override suspend fun count(): Int = raw.count()
+        override suspend fun deleteById(id: String) = raw.deleteById(id)
+        override suspend fun setPrimary(id: String) = raw.setPrimary(id)
+        override suspend fun demoteAll() = raw.demoteAll()
+        override suspend fun promote(id: String) = raw.promote(id)
         // 备注不参与加解密：它不是凭证，只是用户起的名字
-        override suspend fun updateRemark(remark: String) = raw.updateRemark(remark)
+        override suspend fun updateRemark(id: String, remark: String) = raw.updateRemark(id, remark)
     }
 
     fun baidu(raw: BaiduAccountDao, cipher: CredentialCipher): BaiduAccountDao = object : BaiduAccountDao {
@@ -82,8 +104,19 @@ internal object SecureAccountDaos {
             raw.getAccount()?.let { decryptBaidu(raw, cipher, it) }
         }
         override suspend fun clear() = raw.clear()
+        override fun observeAll(): Flow<List<BaiduAccountEntity>> = raw.observeAll().map { list ->
+            list.mapNotNull { decryptBaidu(raw, cipher, it) }
+        }.catch { emit(emptyList()) }
+        override suspend fun getById(id: String): BaiduAccountEntity? = decryptGuarded(raw::clear) {
+            raw.getById(id)?.let { decryptBaidu(raw, cipher, it) }
+        }
+        override suspend fun count(): Int = raw.count()
+        override suspend fun deleteById(id: String) = raw.deleteById(id)
+        override suspend fun setPrimary(id: String) = raw.setPrimary(id)
+        override suspend fun demoteAll() = raw.demoteAll()
+        override suspend fun promote(id: String) = raw.promote(id)
         // 备注不参与加解密：它不是凭证，只是用户起的名字
-        override suspend fun updateRemark(remark: String) = raw.updateRemark(remark)
+        override suspend fun updateRemark(id: String, remark: String) = raw.updateRemark(id, remark)
     }
 
     fun c139(raw: C139AccountDao, cipher: CredentialCipher): C139AccountDao = object : C139AccountDao {
@@ -97,8 +130,19 @@ internal object SecureAccountDaos {
             raw.getAccount()?.let { decryptC139(raw, cipher, it) }
         }
         override suspend fun clear() = raw.clear()
+        override fun observeAll(): Flow<List<C139AccountEntity>> = raw.observeAll().map { list ->
+            list.mapNotNull { decryptC139(raw, cipher, it) }
+        }.catch { emit(emptyList()) }
+        override suspend fun getById(id: String): C139AccountEntity? = decryptGuarded(raw::clear) {
+            raw.getById(id)?.let { decryptC139(raw, cipher, it) }
+        }
+        override suspend fun count(): Int = raw.count()
+        override suspend fun deleteById(id: String) = raw.deleteById(id)
+        override suspend fun setPrimary(id: String) = raw.setPrimary(id)
+        override suspend fun demoteAll() = raw.demoteAll()
+        override suspend fun promote(id: String) = raw.promote(id)
         // 备注不参与加解密：它不是凭证，只是用户起的名字
-        override suspend fun updateRemark(remark: String) = raw.updateRemark(remark)
+        override suspend fun updateRemark(id: String, remark: String) = raw.updateRemark(id, remark)
     }
 
     fun pan123(raw: Pan123AccountDao, cipher: CredentialCipher): Pan123AccountDao = object : Pan123AccountDao {
@@ -112,8 +156,19 @@ internal object SecureAccountDaos {
             raw.getAccount()?.let { decryptPan123(raw, cipher, it) }
         }
         override suspend fun clear() = raw.clear()
+        override fun observeAll(): Flow<List<Pan123AccountEntity>> = raw.observeAll().map { list ->
+            list.mapNotNull { decryptPan123(raw, cipher, it) }
+        }.catch { emit(emptyList()) }
+        override suspend fun getById(id: String): Pan123AccountEntity? = decryptGuarded(raw::clear) {
+            raw.getById(id)?.let { decryptPan123(raw, cipher, it) }
+        }
+        override suspend fun count(): Int = raw.count()
+        override suspend fun deleteById(id: String) = raw.deleteById(id)
+        override suspend fun setPrimary(id: String) = raw.setPrimary(id)
+        override suspend fun demoteAll() = raw.demoteAll()
+        override suspend fun promote(id: String) = raw.promote(id)
         // 备注不参与加解密：它不是凭证，只是用户起的名字
-        override suspend fun updateRemark(remark: String) = raw.updateRemark(remark)
+        override suspend fun updateRemark(id: String, remark: String) = raw.updateRemark(id, remark)
     }
 
     fun xunlei(raw: XunleiAccountDao, cipher: CredentialCipher): XunleiAccountDao = object : XunleiAccountDao {
@@ -127,8 +182,19 @@ internal object SecureAccountDaos {
             raw.getAccount()?.let { decryptXunlei(raw, cipher, it) }
         }
         override suspend fun clear() = raw.clear()
+        override fun observeAll(): Flow<List<XunleiAccountEntity>> = raw.observeAll().map { list ->
+            list.mapNotNull { decryptXunlei(raw, cipher, it) }
+        }.catch { emit(emptyList()) }
+        override suspend fun getById(id: String): XunleiAccountEntity? = decryptGuarded(raw::clear) {
+            raw.getById(id)?.let { decryptXunlei(raw, cipher, it) }
+        }
+        override suspend fun count(): Int = raw.count()
+        override suspend fun deleteById(id: String) = raw.deleteById(id)
+        override suspend fun setPrimary(id: String) = raw.setPrimary(id)
+        override suspend fun demoteAll() = raw.demoteAll()
+        override suspend fun promote(id: String) = raw.promote(id)
         // 备注不参与加解密：它不是凭证，只是用户起的名字
-        override suspend fun updateRemark(remark: String) = raw.updateRemark(remark)
+        override suspend fun updateRemark(id: String, remark: String) = raw.updateRemark(id, remark)
     }
 
     fun pan115(raw: Pan115AccountDao, cipher: CredentialCipher): Pan115AccountDao = object : Pan115AccountDao {
@@ -142,8 +208,19 @@ internal object SecureAccountDaos {
             raw.getAccount()?.let { decryptPan115(raw, cipher, it) }
         }
         override suspend fun clear() = raw.clear()
+        override fun observeAll(): Flow<List<Pan115AccountEntity>> = raw.observeAll().map { list ->
+            list.mapNotNull { decryptPan115(raw, cipher, it) }
+        }.catch { emit(emptyList()) }
+        override suspend fun getById(id: String): Pan115AccountEntity? = decryptGuarded(raw::clear) {
+            raw.getById(id)?.let { decryptPan115(raw, cipher, it) }
+        }
+        override suspend fun count(): Int = raw.count()
+        override suspend fun deleteById(id: String) = raw.deleteById(id)
+        override suspend fun setPrimary(id: String) = raw.setPrimary(id)
+        override suspend fun demoteAll() = raw.demoteAll()
+        override suspend fun promote(id: String) = raw.promote(id)
         // 备注不参与加解密：它不是凭证，只是用户起的名字
-        override suspend fun updateRemark(remark: String) = raw.updateRemark(remark)
+        override suspend fun updateRemark(id: String, remark: String) = raw.updateRemark(id, remark)
     }
 
     fun guangYa(raw: GuangYaAccountDao, cipher: CredentialCipher): GuangYaAccountDao = object : GuangYaAccountDao {
@@ -157,8 +234,19 @@ internal object SecureAccountDaos {
             raw.getAccount()?.let { decryptGuangYa(raw, cipher, it) }
         }
         override suspend fun clear() = raw.clear()
+        override fun observeAll(): Flow<List<GuangYaAccountEntity>> = raw.observeAll().map { list ->
+            list.mapNotNull { decryptGuangYa(raw, cipher, it) }
+        }.catch { emit(emptyList()) }
+        override suspend fun getById(id: String): GuangYaAccountEntity? = decryptGuarded(raw::clear) {
+            raw.getById(id)?.let { decryptGuangYa(raw, cipher, it) }
+        }
+        override suspend fun count(): Int = raw.count()
+        override suspend fun deleteById(id: String) = raw.deleteById(id)
+        override suspend fun setPrimary(id: String) = raw.setPrimary(id)
+        override suspend fun demoteAll() = raw.demoteAll()
+        override suspend fun promote(id: String) = raw.promote(id)
         // 备注不参与加解密：它不是凭证，只是用户起的名字
-        override suspend fun updateRemark(remark: String) = raw.updateRemark(remark)
+        override suspend fun updateRemark(id: String, remark: String) = raw.updateRemark(id, remark)
     }
 
     fun iLanzou(raw: ILanzouAccountDao, cipher: CredentialCipher): ILanzouAccountDao = object : ILanzouAccountDao {
@@ -172,8 +260,19 @@ internal object SecureAccountDaos {
             raw.getAccount()?.let { decryptILanzou(raw, cipher, it) }
         }
         override suspend fun clear() = raw.clear()
+        override fun observeAll(): Flow<List<ILanzouAccountEntity>> = raw.observeAll().map { list ->
+            list.mapNotNull { decryptILanzou(raw, cipher, it) }
+        }.catch { emit(emptyList()) }
+        override suspend fun getById(id: String): ILanzouAccountEntity? = decryptGuarded(raw::clear) {
+            raw.getById(id)?.let { decryptILanzou(raw, cipher, it) }
+        }
+        override suspend fun count(): Int = raw.count()
+        override suspend fun deleteById(id: String) = raw.deleteById(id)
+        override suspend fun setPrimary(id: String) = raw.setPrimary(id)
+        override suspend fun demoteAll() = raw.demoteAll()
+        override suspend fun promote(id: String) = raw.promote(id)
         // 备注不参与加解密：它不是凭证，只是用户起的名字
-        override suspend fun updateRemark(remark: String) = raw.updateRemark(remark)
+        override suspend fun updateRemark(id: String, remark: String) = raw.updateRemark(id, remark)
     }
 
     fun lanzou(raw: LanzouAccountDao, cipher: CredentialCipher): LanzouAccountDao = object : LanzouAccountDao {
@@ -187,8 +286,19 @@ internal object SecureAccountDaos {
             raw.getAccount()?.let { decryptLanzou(raw, cipher, it) }
         }
         override suspend fun clear() = raw.clear()
+        override fun observeAll(): Flow<List<LanzouAccountEntity>> = raw.observeAll().map { list ->
+            list.mapNotNull { decryptLanzou(raw, cipher, it) }
+        }.catch { emit(emptyList()) }
+        override suspend fun getById(id: String): LanzouAccountEntity? = decryptGuarded(raw::clear) {
+            raw.getById(id)?.let { decryptLanzou(raw, cipher, it) }
+        }
+        override suspend fun count(): Int = raw.count()
+        override suspend fun deleteById(id: String) = raw.deleteById(id)
+        override suspend fun setPrimary(id: String) = raw.setPrimary(id)
+        override suspend fun demoteAll() = raw.demoteAll()
+        override suspend fun promote(id: String) = raw.promote(id)
         // 备注不参与加解密：它不是凭证，只是用户起的名字
-        override suspend fun updateRemark(remark: String) = raw.updateRemark(remark)
+        override suspend fun updateRemark(id: String, remark: String) = raw.updateRemark(id, remark)
     }
 
     private suspend fun decryptQuark(raw: QuarkAccountDao, cipher: CredentialCipher, stored: QuarkAccountEntity): QuarkAccountEntity? =

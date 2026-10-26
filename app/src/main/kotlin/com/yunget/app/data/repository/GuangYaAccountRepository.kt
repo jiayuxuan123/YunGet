@@ -63,7 +63,13 @@ class GuangYaAccountRepository(
      * 备注是多账号的基础字段：平台昵称常常是一串数字或与账号无关的网名，
      * 同一平台有多个账号时完全分不出谁是谁。
      */
-    suspend fun updateRemark(remark: String) = dao.updateRemark(remark)
+    suspend fun updateRemark(id: String, remark: String) = dao.updateRemark(id, remark)
+
+    /** 观察全部账号（多账号列表）。主账号排最前。 */
+    fun observeAll() = dao.observeAll()
+
+    /** 切换主账号（同一事务内先降后升）。 */
+    suspend fun setPrimary(id: String) = dao.setPrimary(id)
 
     /** 账号密码登录并落库；返回最终写入的实体。 */
     suspend fun login(account: String, password: String): Result<GuangYaAccountEntity> = runCatching {

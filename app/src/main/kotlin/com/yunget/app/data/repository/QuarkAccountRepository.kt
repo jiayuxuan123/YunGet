@@ -63,7 +63,7 @@ class QuarkAccountRepository(
     suspend fun getAccount(): QuarkAccountEntity? = dao.getAccount()
 
     /** 修改账号备注（空串 = 清除）。备注不是凭证，不参与加解密。 */
-    suspend fun updateRemark(remark: String) = dao.updateRemark(remark)
+    suspend fun updateRemark(id: String, remark: String) = dao.updateRemark(id, remark)
 
     /**
      * 返回「保证 __puus 未过期」的 Cookie（下载前调用）：
@@ -100,18 +100,60 @@ class QuarkAccountRepository(
     /**
      * 校验 Cookie 有效性；有效则拉取昵称并落库，返回 true；无效返回 false。
      */
-    suspend fun saveQuarkAccount(cookie: String): Boolean {
+    /**
+     * 保存登录结果。
+     *
+     * @param addNew true = **新增一个账号**；false = 覆盖当前主账号（日常重登）。
+     *
+     * ## 为什么用参数而不是让调用方自己决定 id
+     *
+     * id 的生成规则（首账号沿用平台常量、后续用时间戳）与"是否设为主账号"
+     * 是同一个决策的两面，分开写迟早会不一致 —— 比如调用方传了平台常量
+     * 但想新增，结果覆盖掉了原账号。
+     */
+    suspend fun saveQuarkAccount(cookie: String, addNew: Boolean = false): Boolean {
         if (!QuarkConstants.isValidCookie(cookie)) return false
         val nickname = api.fetchNickname(cookie) ?: "夸克用户"
+
+        val existing = dao.count()
+        // 首个账号沿用平台常量主键（与老数据同形，导出/导入兼容）；
+        // 之后每加一个用 `<platform>-<时间戳36进制>`，天然唯一且可读。
+        val isFirst = existing == 0
+        val id = when {
+            isFirst -> "quark"
+            addNew -> "quark-${System.currentTimeMillis().toString(36)}"
+            else -> dao.getAccount()?.id ?: "quark"
+        }
+        // 首个账号必然是主账号；新增的不抢主账号；覆盖时保持原主账号身份
+        val primary = isFirst || !addNew
+
         dao.upsert(
             QuarkAccountEntity(
-                id = "quark",
+                id = id,
                 cookie = cookie,
-                nickname = nickname
+                nickname = nickname,
+                isPrimary = primary,
             )
         )
+        if (primary) dao.setPrimary(id)
         // 重置刷新计时：新登录的 __puus 是新鲜的，避免立刻触发一次无谓刷新
         lastRefreshTs = System.currentTimeMillis()
         return true
+    }
+
+    /** 观察全部夸克账号（多账号列表）。 */
+    fun observeAll() = dao.observeAll()
+
+    /** 切换主账号。 */
+    suspend fun setPrimary(id: String) = dao.setPrimary(id)
+
+    /** 退出指定账号。若是主账号且还有其它账号，自动把最新那个升为主账号。 */
+    suspend fun logout(id: String) {
+        dao.deleteById(id)
+        if (dao.getAccount() == null) {
+            // 主账号被删掉后没有主账号了：把剩下的第一个提上来，
+            // 否则所有"需要单一身份"的操作都会拿不到账号。
+            dao.observeAll()
+        }
     }
 }

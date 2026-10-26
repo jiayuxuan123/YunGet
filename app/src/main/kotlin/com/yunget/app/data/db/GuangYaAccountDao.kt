@@ -23,25 +23,63 @@ import androidx.room.Dao
 import androidx.room.Insert
 import androidx.room.OnConflictStrategy
 import androidx.room.Query
+import androidx.room.Transaction
 import kotlinx.coroutines.flow.Flow
 
 @Dao
 interface GuangYaAccountDao {
 
-    @Query("SELECT * FROM guangya_account WHERE id = 'guangya'")
+    @Query(
+        "SELECT * FROM guangya_account ORDER BY isPrimary DESC, updatedAt DESC LIMIT 1"
+    )
     fun observeAccount(): Flow<GuangYaAccountEntity?>
+
+    /** 观察全部账号（多账号列表）。主账号排最前。 */
+    @Query("SELECT * FROM guangya_account ORDER BY isPrimary DESC, updatedAt DESC")
+    fun observeAll(): Flow<List<GuangYaAccountEntity>>
 
     @Insert(onConflict = OnConflictStrategy.REPLACE)
     suspend fun upsert(account: GuangYaAccountEntity)
 
-    @Query("SELECT * FROM guangya_account WHERE id = 'guangya'")
+    @Query(
+        "SELECT * FROM guangya_account ORDER BY isPrimary DESC, updatedAt DESC LIMIT 1"
+    )
     suspend fun getAccount(): GuangYaAccountEntity?
 
-    @Query("DELETE FROM guangya_account WHERE id = 'guangya'")
+    @Query("SELECT * FROM guangya_account WHERE id = :id")
+    suspend fun getById(id: String): GuangYaAccountEntity?
+
+    /** 该平台现有账号数。 */
+    @Query("SELECT COUNT(*) FROM guangya_account")
+    suspend fun count(): Int
+
+    @Query("DELETE FROM guangya_account")
     suspend fun clear()
 
+    /** 只删一个账号。 */
+    @Query("DELETE FROM guangya_account WHERE id = :id")
+    suspend fun deleteById(id: String)
+
     /** 更新备注。空串 = 清掉备注、界面回退显示昵称。 */
-    @Query("UPDATE guangya_account SET remark = :remark WHERE id = 'guangya'")
-    suspend fun updateRemark(remark: String)
+    @Query("UPDATE guangya_account SET remark = :remark WHERE id = :id")
+    suspend fun updateRemark(id: String, remark: String)
+
+    /**
+     * 把某个账号设为主账号，其余降为普通账号。
+     *
+     * 两条语句必须同一事务：只做第一条会短暂出现"零个主账号"，
+     * 那时任何读主账号的请求都会拿到 null。
+     */
+    @Transaction
+    suspend fun setPrimary(id: String) {
+        demoteAll()
+        promote(id)
+    }
+
+    @Query("UPDATE guangya_account SET isPrimary = 0")
+    suspend fun demoteAll()
+
+    @Query("UPDATE guangya_account SET isPrimary = 1 WHERE id = :id")
+    suspend fun promote(id: String)
 
 }

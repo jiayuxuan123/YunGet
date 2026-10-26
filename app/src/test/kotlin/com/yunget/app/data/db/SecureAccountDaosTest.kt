@@ -10,6 +10,7 @@ import org.junit.Assert.assertNotEquals
 import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Test
+import kotlinx.coroutines.flow.map
 
 /**
  * [SecureAccountDaos] 装饰器的行为测试。
@@ -62,8 +63,32 @@ class SecureAccountDaosTest {
             clearCount++
         }
 
-        override suspend fun updateRemark(remark: String) {
-            stored = stored?.copy(remark = remark)
+        override suspend fun updateRemark(id: String, remark: String) {
+            if (stored?.id == id) stored = stored?.copy(remark = remark)
+        }
+
+        override fun observeAll(): Flow<List<QuarkAccountEntity>> =
+            flow.map { listOfNotNull(it) }
+
+        override suspend fun getById(id: String): QuarkAccountEntity? =
+            stored?.takeIf { it.id == id }
+
+        override suspend fun count(): Int = if (stored == null) 0 else 1
+
+        override suspend fun deleteById(id: String) {
+            if (stored?.id == id) clear()
+        }
+
+        override suspend fun setPrimary(id: String) {
+            stored = stored?.copy(isPrimary = stored?.id == id)
+        }
+
+        override suspend fun demoteAll() {
+            stored = stored?.copy(isPrimary = false)
+        }
+
+        override suspend fun promote(id: String) {
+            if (stored?.id == id) stored = stored?.copy(isPrimary = true)
         }
     }
 
