@@ -4,7 +4,7 @@
 
 ## 为什么不止一个引擎
 
-默认走 TurboDL。它是一套独立发布的下载 SDK（内置的是 0.2.0.6），做了多线程 Range 分片、断点续传、动态分段，HLS 交给插件处理，日常的 HTTP/HTTPS 直链基本都靠它。
+默认走 TurboDL。它是一套独立发布的下载 SDK（内置的是 {{引擎版本}}），做了多线程 Range 分片、断点续传、动态分段，HLS 交给插件处理，日常的 HTTP/HTTPS 直链基本都靠它。
 
 但有些任务它压根做不了。磁力和 BT 跟 HTTP 直链不是一回事，得指望 Gopeed 的 Go 内核。项目早期自己写的那套下载器也留在代码里，删掉没什么好处，就当成兜底选项留着。aria2 平时用不着，主要拿来对照排查：某个链接在 TurboDL 里出问题，换成 aria2 试试，就能分清是链接本身有问题，还是引擎处理得不对。
 
@@ -21,7 +21,7 @@
 
 **TurboDL** 是默认引擎，代码里是 `TurboDownloadManager`，底下由 `TurboBootstrap` 启动、`TurboClient` 干活。普通 HTTP/HTTPS 直链、分片并发、断点续传、插件形式的 HLS 都归它管，还支持现场诊断（把连接状态一类的信息导出来看）。没有特别理由就别换。
 
-**内置兼容引擎**在设置里显示为「内置下载器」，标着 Legacy，实现是 `LegacyDownloadManager` 加 `AdaptiveDownloadEngine`。它是项目早期的写法：固定开比较满的并发、4MB 一块、用工作窃取调度。有两点和 TurboDL 不一样——它没有现场诊断，也不持久化请求头，所以那些靠会话（cookie、鉴权头）才能下的链接，它接不住。
+**内置兼容引擎**在设置里显示为「内置下载器」，标着 Legacy，实现是 `LegacyDownloadManager` 加 `AdaptiveDownloadEngine`。它是项目早期的写法：固定开比较满的并发、4&nbsp;MB 一块、用工作窃取调度。有两点和 TurboDL 不一样——它没有现场诊断，也不持久化请求头，所以那些靠会话（cookie、鉴权头）才能下的链接，它接不住。
 
 **aria2** 是实验性的。二进制就是 APK 里的 `libaria2c.so`，实际版本是 aria2-next 2.8.3，只有 arm64 设备可用。并发参数 `-x` 保守取 16，再往上容易触发网盘的风控，反而下不动。HTTPS 需要一份 CA bundle，应用会从系统证书目录自动拼好，不用你手动准备。
 

@@ -357,7 +357,7 @@ var got = host.http.downloadToFile({
 
 > **`base64Decode` / `hexDecode` 给回的是编码文本，不是解码后的字符串。** 两个函数返回的字段名分别是 `base64` 和 `hex`，里面装的是"解出来的字节"重新编码后的文本：`host.crypto.base64Decode('YWJj').base64 === 'YWJj'`。
 >
-> 这个形状对"校验 + 规范化一段编码"很顺手（比如把 URL-safe base64 转成标准 base64），但**没有**"把 base64 解成普通字符串"的 API —— 你想拿解码后的文本，只能自己在 JS 里按字符表转（或让宿主侧做这件事）。这是一个真实的缺口，不是文档没写清。
+> 这个形状对"校验 + 规范化一段编码"很顺手（比如把 URL-safe base64 转成标准 base64），但**没有**「把 base64 解成普通字符串」的 API —— 你想拿解码后的文本，只能自己在 JS 里按字符表转（或让宿主侧做这件事）。这是一个真实的缺口，不是文档没写清。
 
 ### `host.log`
 
@@ -447,8 +447,8 @@ host.clearInterval(repeating);    // 和 clearTimeout 是同一个函数
 
 两个必须分清的区别：
 
-- **"没授予"** → 抛 `permission`，消息里点名"要申请哪个能力"。
-- **"授予了但这次调用被拒"** → 各自的码（比如 scheme 不合法是 `permission`、参数错是 `validation`、超限是 `limit`）。
+- **「没授予」** → 抛 `permission`，消息里点名"要申请哪个能力"。
+- **「授予了但这次调用被拒」** → 各自的码（比如 scheme 不合法是 `permission`、参数错是 `validation`、超限是 `limit`）。
 
 `log` 是唯一刻意不抛错的能力：一次日志调用不能弄坏一次下载。它被拒时你收不到异常，宿主侧会有一条 `host.log is not granted to this plugin (grants: …); the script's log lines are being dropped`。
 

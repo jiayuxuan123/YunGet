@@ -41,13 +41,41 @@ LATEST = DATA["latest"]
 RELEASES = DATA["releases"]
 VERSION = LATEST["tag"].lstrip("v")
 
-#: 与 app/build.gradle.kts 保持一致的构建口径（改代码时一起改）。
-MIN_SDK = "Android 6.0（API 23）"
-TARGET_SDK = "API 34"
-#: YunGet 内置的下载引擎版本，取自 app/build.gradle.kts 的 dev.turbodl 依赖。
-#: 发版时**必须**与那五个 implementation("dev.turbodl:*:X") 一起改 ——
-#: 0.2.1.0 那次发版漏改了这里，站上一直显示 0.2.0.8，直到手机端验收时才被看见。
-TURBODL_VERSION = "0.2.1.0"
+#: 与 app/build.gradle.kts 保持一致的构建口径。
+#:
+#: ★ 这些值**从 app/build.gradle.kts 里读**，不再手写。
+#:   手写的代价是实打实的：0.2.1.0 那次发版漏改了这里，站上一直显示 0.2.0.8，
+#:   直到手机端验收时才被看见；这一次同样的坑又让站上停在 0.2.1.0，
+#:   而实际已经是 0.2.4.0。**同一个错犯了两次**，所以根子上换掉做法：
+#:   数字只有一个来源，改代码时自然跟着变。
+def _read_gradle_fact(pattern: str, default: str = "") -> str:
+    """从 app/build.gradle.kts 里取一个值（正则第一组捕获）。
+
+    读不到就返回默认值 —— 站点构建不该因为读不到一个数字而整个挂掉。
+    """
+    import re as _re
+    gradle = Path(__file__).resolve().parent.parent / "app" / "build.gradle.kts"
+    try:
+        text = gradle.read_text(encoding="utf-8")
+    except OSError:
+        return default
+    m = _re.search(pattern, text)
+    return m.group(1) if m else default
+
+
+#: minSdk / targetSdk：与 app/build.gradle.kts 同源。
+_MIN_SDK_NUM = _read_gradle_fact(r"minSdk\s*=\s*(\d+)", "24")
+#: Android 版本名与 API 等级对照（只列这两个 App 实际会用到的）。
+_ANDROID_BY_API = {"23": "6.0", "24": "7.0", "25": "7.1", "26": "8.0",
+                  "27": "8.1", "28": "9", "29": "10", "30": "11", "31": "12",
+                  "32": "12L", "33": "13", "34": "14", "35": "15", "36": "16"}
+MIN_SDK = f"Android {_ANDROID_BY_API.get(_MIN_SDK_NUM, _MIN_SDK_NUM)}（API {_MIN_SDK_NUM}）"
+MIN_SDK_SHORT = f"{_ANDROID_BY_API.get(_MIN_SDK_NUM, _MIN_SDK_NUM)}+"
+TARGET_SDK = "API " + _read_gradle_fact(r"targetSdk\s*=\s*(\d+)", "34")
+
+#: YunGet 内置的下载引擎版本：**从 app/build.gradle.kts 的 dev.turbodl 依赖读**。
+#: 那五个 implementation("dev.turbodl:*:X") 是唯一来源，站上不再另抄一份。
+TURBODL_VERSION = _read_gradle_fact(r'dev\.turbodl:turbodl-core:([0-9.]+)', "0.0.0")
 
 REPO = "https://github.com/jiayuxuan123/YunGet"
 BLOB = f"{REPO}/blob/main"
@@ -55,6 +83,15 @@ UPSTREAM = "https://github.com/CYQawa/YunX"
 TURBODL_REPO = "https://github.com/jiayuxuan123/TurboDL"
 
 APK = next((a for a in LATEST["assets"] if a["name"].endswith(".apk")), None)
+
+#: 文档里的占位符 → 实际值。文档里写 `{{引擎版本}}` 而不是手写版本号：
+#: 手写的必然滞后（0.2.0.6 那版在站上挂了很久没人发现），改用占位符后
+#: 版本号的唯一来源是 app/build.gradle.kts，改代码时文档跟着变。
+DOC_VARIABLES = {
+    "引擎版本": TURBODL_VERSION,
+    "应用版本": VERSION,
+    "最低安卓": MIN_SDK_SHORT,
+}
 
 #: 官方插件源仓库。索引、脚本、公钥都在这里，App 拉的是它根目录下的 `plugins.json`。
 PLUGINS_REPO = "https://github.com/jiayuxuan123/YunGet-Plugins"
@@ -262,7 +299,8 @@ def _page_doc(doc: dict, lang: str, href) -> str:
             # 万一某篇没有首行标题，就退回 offset=1，保证页面里只有一个 <h1>。
             text, dropped = re.subn(r"\A\s*#[^\n]*\n", "", text, count=1)
             body, toc = mdlite.render(
-                text, _resolver(src, href), h_offset=0 if dropped else 1, toc_max=3
+                text, _resolver(src, href), h_offset=0 if dropped else 1, toc_max=3,
+                variables=DOC_VARIABLES,
             )
 
     src_url = f"{BLOB}/{src}" if src else REPO
@@ -420,7 +458,7 @@ def _page_home(lang: str, href) -> str:
             '<div class="rise">'
             + f'<figure class="pic-drift"><img src="{{IMG:map-of-the-submarine-telegraph-between-america}}" '
             'alt="1857 年大西洋海底电报线路图：一条线从纽芬兰分成数段抵达爱尔兰" '
-            'width="1920" height="827">'
+            'width="1920" height="827" loading="lazy" decoding="async">'
             "<figcaption>1857 年的海底电报线路图（Boston Public Library，CC BY 2.0，via Wikimedia Commons）</figcaption></figure>"
             "</div>"
             '<div class="defs rise">'
@@ -433,7 +471,7 @@ def _page_home(lang: str, href) -> str:
             + '<figure class="pic-drift pic-band rise">'
             '<img src="{IMG:musee-des-arts-et-metiers-cables-sous}" '
             'alt="博物馆里一排海底电缆的剖面：外皮里包着一圈铜芯" '
-            'width="1920" height="1280">'
+            'width="1920" height="1280" loading="lazy" decoding="async">'
             "<figcaption>海底电缆的剖面（Musée des Arts et Métiers，Frédéric BISSON，CC BY 2.0，"
             "via Wikimedia Commons）—— 一根线由许多段包成，和分片下载是一回事。</figcaption></figure>"
             + f'<p class="small">下载引擎是 <a href="{TURBODL_REPO}">TurboDL</a> —— 一个纯 Kotlin/JVM 的'
@@ -818,7 +856,7 @@ sha256sum {APK["name"] if APK else "YunGet-<version>-release.apk"}
             '<div class="platforms">'
             '<div class="platform is-available"><div class="state">可下载</div>'
             "<h3>Android</h3>"
-            f'<p class="small">6.0+（API 23）· targetSdk {TARGET_SDK} · 上方 APK 即为当前版本</p></div>'
+            f'<p class="small">{esc(MIN_SDK_SHORT)}（API {_MIN_SDK_NUM}）· targetSdk {TARGET_SDK} · 上方 APK 即为当前版本</p></div>'
             '<div class="platform is-planned"><div class="state">规划中</div><h3>Windows</h3>'
             '<p class="small">桌面端不是把手机界面放大：需要考虑窗口、键鼠、系统文件选择器、'
             "托盘与系统代理等差异</p></div>"
@@ -833,7 +871,7 @@ sha256sum {APK["name"] if APK else "YunGet-<version>-release.apk"}
                 "各平台状态",
                 "只有 Android 有可下载的构建",
                 [
-                    ("Android", f"可下载 · 6.0+（API 23）· targetSdk {TARGET_SDK}"),
+                    ("Android", f"可下载 · {MIN_SDK_SHORT}（API {_MIN_SDK_NUM}）· targetSdk {TARGET_SDK}"),
                     ("Windows", "规划中 · 窗口、键鼠、文件选择器、托盘各是一摊事"),
                     ("macOS", "规划中 · 内核是纯 JVM，工作主要在界面与系统集成"),
                     ("Linux", "规划中 · 同上"),

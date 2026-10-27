@@ -137,12 +137,21 @@ def _split_row(line: str) -> list[str]:
 
 
 def render(text: str, link=None, *, h_offset: int = 1, toc_max: int = 3,
-           image_prefix: str = "", toc: bool = True) -> tuple[str, str]:
+           image_prefix: str = "", toc: bool = True,
+           variables: dict = None) -> tuple[str, str]:
     """渲染 Markdown，返回 `(正文 HTML, 目录 HTML)`。
 
     `h_offset`：文档的 `#` 是页面里的一级标题，而页面模板已经有一个 `<h1>` 了，
     所以默认把标题整体下沉一级（`#` → `<h2>`），保证每页只有一个 `<h1>`。
+
+    `variables`：`{{名字}}` 形式的占位符替换表。文档里的版本号如果手写就会滞后
+    —— 引擎版本升了，文档里那几处还得靠人记得去改，忘了就是站点说谎。
+    改用占位符后，版本号的唯一来源是构建配置。
     """
+    # 占位符替换要在切行之前做：替换值里可能有换行。
+    if variables:
+        for key, value in variables.items():
+            text = text.replace("{{" + key + "}}", str(value))
     lines = text.replace("\r\n", "\n").replace("\r", "\n").split("\n")
     out: list[str] = []
     heads: list[tuple[int, str, str]] = []

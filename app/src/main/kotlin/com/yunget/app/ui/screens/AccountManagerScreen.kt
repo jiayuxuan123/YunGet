@@ -32,6 +32,7 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
+import androidx.compose.material.icons.outlined.Add
 import androidx.compose.material.icons.outlined.ManageAccounts
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
@@ -40,6 +41,7 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Scaffold
+import androidx.compose.material3.TextButton
 import androidx.compose.material3.Text
 import androidx.compose.material3.TopAppBar
 import androidx.compose.material3.TopAppBarDefaults
@@ -66,7 +68,7 @@ import com.yunget.app.ui.items.platformLogoRes
  * ## 与"账号弹窗"的分工
  *
  * - 账号弹窗：看这个平台的当前账号详情（Cookie、登录时间、退出）；
- * - 这一页：管多个账号（谁是主账号、删哪一个）。
+ * - 这一页：管多个账号（谁是主账号、删哪一个、再加一个）。
  */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -76,6 +78,14 @@ fun AccountManagerScreen(
     onBack: () -> Unit,
     onSelectPrimary: (platformId: String, accountId: String) -> Unit,
     onDeleteAccount: (platformId: String, accountId: String) -> Unit,
+    /**
+     * 为某个平台**再登录一个账号**。
+     *
+     * ★ 这一页原先只能看、切、删 —— 想加一个号必须退回「网盘」页再点那个平台，
+     *   而网盘页对"已经登录过"的平台只显示「已登录」，用户看不出再点一次
+     *   是新增还是覆盖。多账号做完了却没有新增的入口，等于只做了一半。
+     */
+    onAddAccount: (platformId: String) -> Unit = {},
     modifier: Modifier = Modifier,
 ) {
     BackHandler { onBack() }
@@ -96,7 +106,10 @@ fun AccountManagerScreen(
             )
         },
     ) { innerPadding ->
-        val withAccounts = platforms.filter { it.accounts.isNotEmpty() }
+        // 已登录的平台排在前面（多账号管理是主用途），未登录的排在后面
+        // —— 它们的卡片上只有「添加账号」按钮，没有账号列表。
+        val loggedIn = platforms.filter { it.accounts.isNotEmpty() }
+        val notLoggedIn = platforms.filter { it.accounts.isEmpty() }
 
         LazyColumn(
             modifier = Modifier
@@ -105,21 +118,42 @@ fun AccountManagerScreen(
             contentPadding = PaddingValues(16.dp),
             verticalArrangement = Arrangement.spacedBy(14.dp),
         ) {
-            if (withAccounts.isEmpty()) {
+            if (loggedIn.isEmpty()) {
                 item {
                     Text(
-                        text = "还没有登录任何网盘账号。",
+                        text = "还没有登录任何网盘账号。从下面挑一个平台登录即可。",
                         style = MaterialTheme.typography.bodyMedium,
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                     )
                 }
             } else {
-                items(count = withAccounts.size) { index ->
-                    val p = withAccounts[index]
+                items(count = loggedIn.size) { index ->
+                    val p = loggedIn[index]
                     PlatformCard(
                         platform = p,
                         onSelectPrimary = { id -> onSelectPrimary(p.platformId, id) },
                         onDelete = { id -> onDeleteAccount(p.platformId, id) },
+                        onAdd = { onAddAccount(p.platformId) },
+                    )
+                }
+            }
+
+            // 未登录的平台：给一个「添加账号」入口，这一页才真的能"加账号"。
+            // 之前这些平台在这一页完全不出现，用户只能退回网盘页找。
+            if (notLoggedIn.isNotEmpty()) {
+                item {
+                    Text(
+                        text = "其他平台",
+                        style = MaterialTheme.typography.titleSmall,
+                        fontWeight = FontWeight.SemiBold,
+                        modifier = Modifier.padding(top = 8.dp),
+                    )
+                }
+                items(count = notLoggedIn.size) { index ->
+                    val p = notLoggedIn[index]
+                    EmptyPlatformRow(
+                        platform = p,
+                        onAdd = { onAddAccount(p.platformId) },
                     )
                 }
             }
@@ -149,6 +183,7 @@ private fun PlatformCard(
     platform: PlatformAccounts,
     onSelectPrimary: (String) -> Unit,
     onDelete: (String) -> Unit,
+    onAdd: () -> Unit,
 ) {
     Card(
         modifier = Modifier.fillMaxWidth(),
@@ -188,6 +223,59 @@ private fun PlatformCard(
                 onSelectPrimary = onSelectPrimary,
                 onDelete = onDelete,
             )
+            Spacer(Modifier.height(8.dp))
+            AddAccountButton(onAdd)
         }
+    }
+}
+
+/** 未登录的平台：一行提示 + 添加账号按钮。 */
+@Composable
+private fun EmptyPlatformRow(
+    platform: PlatformAccounts,
+    onAdd: () -> Unit,
+) {
+    Card(
+        modifier = Modifier.fillMaxWidth(),
+        shape = MaterialTheme.shapes.large,
+        colors = CardDefaults.cardColors(
+            containerColor = MaterialTheme.colorScheme.surfaceContainerLow,
+        ),
+    ) {
+        Row(
+            modifier = Modifier.fillMaxWidth().padding(14.dp),
+            verticalAlignment = androidx.compose.ui.Alignment.CenterVertically,
+        ) {
+            val logo = platformLogoRes(platform.platformId)
+            if (logo != null) {
+                androidx.compose.foundation.Image(
+                    painter = painterResource(logo),
+                    contentDescription = null,
+                    modifier = Modifier.size(22.dp),
+                )
+                Spacer(Modifier.size(8.dp))
+            }
+            Text(
+                text = platform.displayName,
+                style = MaterialTheme.typography.titleSmall,
+                fontWeight = FontWeight.SemiBold,
+                modifier = Modifier.weight(1f),
+            )
+            TextButton(onClick = onAdd) { Text("添加账号") }
+        }
+    }
+}
+
+/** 「再登录一个账号」按钮 —— 多账号的入口，不该只藏在网盘页里。 */
+@Composable
+private fun AddAccountButton(onAdd: () -> Unit) {
+    TextButton(onClick = onAdd) {
+        Icon(
+            imageVector = Icons.Outlined.Add,
+            contentDescription = null,
+            modifier = Modifier.size(16.dp),
+        )
+        Spacer(Modifier.size(4.dp))
+        Text("添加账号")
     }
 }

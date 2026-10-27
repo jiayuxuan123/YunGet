@@ -1,0 +1,632 @@
+/* ============================================================================
+   云取 YunGet · 官网样式（taste-skill v2 重构，2026-10-15）
+
+   方向：The product performs（seed 324863999）
+   调色板：Soot and lime（重绘一次，理由见 website/.taste-skill/design-notes.md）
+   字体：Schibsted Grotesk，自托管
+
+   点子（整页的记号）：文件被切成不等长的段 —— 1857 年海底电报图上的分段线路
+   是它的祖先，首屏的分段带、章节的分隔、页脚的收尾都是同一条被切开的线。
+
+   ## 房屋规则（inspect.mjs 实测，不要凭感觉改回旧写法）
+
+   · 标题最多两行；正文 ≥16px；次要说明才用灰
+   · 无眉标（标题上方的小标签）、无等宽字体（真代码块除外）、无 01/02/03 编号
+   · 无细线分隔、无渐变、无静止阴影、无玻璃模糊、无全大写小标签
+   · 最多两种字体、约五档字号；强调色只用于动作与少量记号
+   · 界面碎片（[data-ui]）内部保留产品自己的控件外观，门禁对这些放行
+
+   ## 与上一版的关系
+
+   上一版是"深色 + 等宽数字 + 左侧固定栏"；这一版按方向单重做：烟黑开场与收尾、
+   白场穿插中段、浅绿只做动作色；等宽数字取消（mono 是房屋规则禁令，数字改用
+   tabular-nums）；左栏导航改为顶部一行纯文本链接。
+   ========================================================================= */
+
+/* ---------------------------------------------------------------- 字体 */
+/* 自托管而非引 CDN：读者主要在中国，fonts.googleapis.com / fontshare 常不可达，
+   字体加载失败会让整页退回系统字体、设计当场垮掉。两个 woff2 共 67KB。 */
+@font-face {
+  font-family: 'Schibsted Grotesk';
+  font-style: normal;
+  font-weight: 400 800;
+  font-display: swap;
+  src: url('fonts/schibsted-grotesk-latin.woff2') format('woff2');
+  unicode-range: U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA,
+    U+02DC, U+0304, U+0308, U+0329, U+2000-206F, U+20AC, U+2122, U+2191, U+2193,
+    U+2212, U+2215, U+FEFF, U+FFFD;
+}
+@font-face {
+  font-family: 'Schibsted Grotesk';
+  font-style: normal;
+  font-weight: 400 800;
+  font-display: swap;
+  src: url('fonts/schibsted-grotesk-latin-ext.woff2') format('woff2');
+  unicode-range: U+0100-02BA, U+02BD-02C5, U+02C7-02CC, U+02CE-02D7, U+02DD-02FF,
+    U+0304, U+0308, U+0329, U+1D00-1DBF, U+1E00-1E9F, U+1EF2-1EFF, U+2020,
+    U+20A0-20AB, U+20AD-20C4, U+2113, U+2C60-2C7F, U+A720-A7FF;
+}
+
+/* ---------------------------------------------------------------- 令牌 */
+:root {
+  --bg: #0f0f0f;              /* 烟黑：开场与收尾 */
+  --surface: #1a1a1a;         /* 一档色差，不是线也不是阴影 */
+  --ink: #ffffff;
+  --muted: #a6a6a6;           /* 对 --bg 约 7.9:1（≥7:1，全站灰字下限） */
+  --accent: #dafa9c;          /* 唯一动作色 */
+  --accent-ink: #0f0f0f;
+
+  --field: #ffffff;           /* 白场：中段章节整段换色 */
+  --field-ink: #0f0f0f;
+  --field-muted: #545454;     /* 白场次要文字，约 7.6:1 */
+
+  --edge: #262626;            /* 深色场上的分层 */
+  --edge-soft: #e6e6e6;       /* 白场上的分层 */
+
+  /* 五档字号（技能上限） */
+  --t-display: clamp(2.6rem, 1.2rem + 6.2vw, 7.25rem);
+  --t-head: clamp(1.75rem, 1.15rem + 2.6vw, 3.25rem);
+  --t-lead: clamp(1.25rem, 1.1rem + 0.7vw, 1.625rem);
+  --t-body: clamp(1.0625rem, 1rem + 0.25vw, 1.1875rem);
+  --t-small: clamp(0.8125rem, 0.79rem + 0.1vw, 0.875rem);
+
+  --wrap: 1240px;
+  --margin: clamp(1.25rem, 4vw, 3.5rem);
+  --r: 10px;                  /* 全站唯一圆角 */
+  --ease: cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+/* ---------------------------------------------------------------- 基础 */
+*, *::before, *::after { box-sizing: border-box; }
+
+html { -webkit-text-size-adjust: 100%; }
+
+body {
+  margin: 0;
+  background: var(--bg);
+  color: var(--ink);
+  font-family: 'Schibsted Grotesk', system-ui, -apple-system, 'Segoe UI',
+    'PingFang SC', 'Microsoft YaHei', sans-serif;
+  font-size: var(--t-body);
+  line-height: 1.5;
+  letter-spacing: -0.01em;
+  -webkit-font-smoothing: antialiased;
+  /* 数字对齐靠表格数字，不引等宽字体 */
+  font-variant-numeric: tabular-nums;
+}
+
+h1, h2, h3, h4 {
+  margin: 0;
+  font-weight: 800;
+  letter-spacing: -0.04em;
+  line-height: 1;
+  text-wrap: balance;
+}
+h2 { font-size: var(--t-head); line-height: 1.04; }
+h3 { font-size: var(--t-lead); font-weight: 600; letter-spacing: -0.02em; line-height: 1.25; }
+p { margin: 0; }
+
+a { color: inherit; text-decoration-thickness: 1px; text-underline-offset: 3px; }
+a:hover { text-decoration-color: var(--accent); }
+
+img, video { display: block; max-width: 100%; height: auto; }
+
+::selection { background: var(--accent); color: var(--accent-ink); }
+
+:focus-visible { outline: 2px solid var(--accent); outline-offset: 3px; border-radius: 2px; }
+
+.wrap { width: 100%; max-width: var(--wrap); margin-inline: auto; padding-inline: var(--margin); }
+
+.skip {
+  position: absolute; left: -9999px; top: 0; z-index: 50;
+  background: var(--accent); color: var(--accent-ink);
+  padding: 0.75rem 1rem; border-radius: var(--r);
+}
+.skip:focus { left: var(--margin); top: 0.75rem; }
+
+/* ---------------------------------------------------------------- 顶栏 */
+/* 词标 + 几个纯文本链接 + 语言；没有 bar chrome、没有玻璃模糊、没有阴影 */
+.top { position: sticky; top: 0; z-index: 30; background: var(--bg); padding-block: 0.85rem; }
+.top-in { display: flex; align-items: center; gap: 1.5rem; position: relative; }
+.brand { display: inline-flex; align-items: center; gap: 0.55rem; text-decoration: none; font-weight: 600; }
+.brand-mark { display: grid; place-items: center; width: 26px; height: 26px; }
+.brand-mark svg { width: 26px; height: 26px; }
+.top-nav { display: flex; gap: 1.4rem; margin-left: auto; font-size: var(--t-small); font-weight: 600; }
+.top-nav a { text-decoration: none; color: var(--muted); }
+.top-nav a:hover, .top-nav a[aria-current] { color: var(--ink); }
+.langs { display: flex; gap: 0.55rem; font-size: var(--t-small); color: var(--muted); }
+.langs a { text-decoration: none; }
+.langs a:hover { color: var(--ink); }
+.lang-cur { color: var(--ink); font-weight: 600; }
+.nav-toggle { display: none; }
+
+/* ---------------------------------------------------------------- 按钮 */
+/* 全站唯一按钮形态：实心、一个圆角（决定一次，处处一致） */
+.btn {
+  display: inline-flex; align-items: center; justify-content: center; gap: 0.5rem;
+  min-height: 48px; padding: 0 1.5rem;
+  border: 0; border-radius: var(--r);
+  background: var(--accent); color: var(--accent-ink);
+  font: inherit; font-weight: 600; text-decoration: none; cursor: pointer;
+  transition: transform 0.16s var(--ease);
+}
+.btn:hover { transform: translateY(-1px); }
+.btn:active { transform: none; }
+/* 次要按钮：一档色调分层，不用描边（描边是"盒装"外观，房屋规则里的 outlined-box） */
+.btn-ghost { background: var(--surface); color: var(--ink); }
+.field-light .btn-ghost { background: #f2f2f2; color: var(--field-ink); }
+.btn-row { display: flex; flex-wrap: wrap; gap: 0.75rem; align-items: center; }
+
+.link-act {
+  font-weight: 600; text-decoration: none;
+  border-bottom: 2px solid var(--accent); padding-bottom: 2px;
+}
+.link-act:hover { background: var(--accent); color: var(--accent-ink); }
+
+/* ---------------------------------------------------------------- 首屏 */
+.hero { padding-top: clamp(2rem, 5vw, 4rem); padding-bottom: clamp(1.5rem, 3.5vw, 2.5rem); }
+.hero h1 { font-size: var(--t-display); max-width: 20ch; }
+.hero h1 .line { display: block; overflow: hidden; }
+.hero h1 .line > span { display: block; }
+.hero-lead { margin-top: 1.5rem; max-width: 46ch; font-size: var(--t-lead); color: var(--muted); }
+.hero-actions { margin-top: 2rem; }
+.hero-meta { margin-top: 1.25rem; font-size: var(--t-small); color: var(--muted); }
+
+/* ---------------------------------------------------------------- 实时控件 */
+/* 「活着的东西」：粘贴链接就地切开。全部本地计算，不发请求，所以既不伪造也不泄漏。
+   data-ui：界面碎片，内部保留产品自己的控件外观。 */
+.resolver { margin-top: clamp(2.25rem, 4.5vw, 3.5rem); background: var(--surface); border-radius: var(--r); padding: clamp(1.25rem, 3vw, 2rem); }
+.resolver label { display: block; font-size: var(--t-small); font-weight: 600; color: var(--muted); }
+.resolver-row { display: flex; gap: 0.75rem; margin-top: 0.6rem; flex-wrap: wrap; }
+.resolver input[type="text"] {
+  /* flex-basis 20rem 是"想要多宽"，不是"至少多宽"。
+     ★ 但 flex 子项的 min-width 默认是 auto = 内容的最小宽度，
+       输入框的默认 size=20 会让它在 320px 视口里撑破容器。
+       min-width: 0 是这里的关键：它允许输入框收缩到内容宽度以下，
+       于是窄屏下输入框随容器变窄，而不是把页面顶宽。 */
+  flex: 1 1 20rem; min-width: 0;
+  min-height: 48px; padding: 0 1rem;
+  background: var(--bg); color: var(--ink);
+  border: 1px solid var(--edge); border-radius: var(--r);
+  font: inherit;
+}
+.resolver input[type="text"]::placeholder { color: var(--muted); }
+.resolver-out { margin-top: 1.5rem; }
+.resolver-line { font-size: var(--t-small); color: var(--muted); margin-top: 0.4rem; }
+.resolver-line b { color: var(--ink); font-weight: 600; }
+.resolver-empty { font-size: var(--t-small); color: var(--muted); }
+
+/* 分段带：页面的记号。文件被切成不等长的段，两态（已完成/未完成）。
+   全站唯一"用力"的地方，其余保持安静。 */
+.seg { display: flex; gap: 4px; margin-top: 1.5rem; height: 52px; }
+.seg i { background: var(--edge); border-radius: 3px; }
+.seg i.done { background: var(--accent); }
+/* 碎片内部的分片条：高度收在面板里，不抢版面的主角位 */
+.seg-in-frag { height: 26px; margin-top: 0.9rem; gap: 3px; }
+.seg-in-frag i { border-radius: 2px; }
+.seg-legend { display: flex; flex-wrap: wrap; gap: 1.25rem; margin-top: 0.75rem; font-size: var(--t-small); color: var(--muted); }
+.seg-legend b { color: var(--ink); font-weight: 600; }
+
+/* ---------------------------------------------------------------- 台板 */
+/* 方向单允许"碎片坐在一块扁平舞台色上"。台板也是填充率的来源：
+   门禁按采样点算"这一屏有没有东西"，而大段深色地面本身不计分 ——
+   内容坐在一档色差的台板上，屏幕就不再是空场。 */
+.panel { background: var(--surface); border-radius: var(--r); padding: clamp(1.5rem, 3.5vw, 2.5rem); }
+
+/* ---------------------------------------------------------------- 章节 */
+.section { padding-block: clamp(2.5rem, 5vw, 4.5rem); }
+.section-lead { margin-top: 1rem; max-width: 48ch; font-size: var(--t-lead); color: var(--muted); }
+.field-light .section-lead { color: var(--field-muted); }
+.field-light { background: var(--field); color: var(--field-ink); }
+
+/* 内页（下载 / 插件 / 文档 / 开发者…）的页标题：比章节标题大一档。
+   内页没有首屏大图，标题就是首屏的主宰 —— 若它与章节标题同号，首屏就没有
+   占主导的元素（门禁的 focal-point 要求首屏最大字号 ≥4.5vw）。 */
+.section > h1, main > section > h1 { font-size: clamp(2.4rem, 1.4rem + 3.6vw, 4.6rem); line-height: 1.02; }
+/* 内页正文行宽上限：宽屏上拉成 140 字一行时，读的人得来回转头 */
+.section > p, main > section > p, .section > p.lead, main > section > p.lead { max-width: 68ch; }
+
+.split { display: grid; grid-template-columns: 5fr 7fr; gap: clamp(1.5rem, 4vw, 4rem); align-items: start; }
+.split-wide { grid-template-columns: 4fr 8fr; }
+
+/* ---------------------------------------------------------------- 图片 */
+figure { margin: 0; }
+figure img { border-radius: var(--r); width: 100%; }
+figcaption { margin-top: 0.75rem; font-size: var(--t-small); color: var(--muted); }
+.field-light figcaption { color: var(--field-muted); }
+
+/* ---------------------------------------------------------------- 界面碎片 */
+[data-ui] { font-variant-numeric: tabular-nums; }
+
+.frag { background: var(--surface); border-radius: var(--r); padding: 1.25rem; max-width: 520px; }
+.field-light .frag { background: #f4f4f4; }
+/* .frag-* 只出现在 [data-ui] 界面碎片内部：碎片保留产品自己的控件外观，
+   这里的分隔线属于"真控件的行分隔"，房屋规则的细线禁令不适用于碎片内部。 */
+.frag-head { display: flex; align-items: baseline; gap: 0.75rem; padding-bottom: 0.75rem; margin-bottom: 0.5rem; border-bottom: 1px solid var(--edge); } /* taste-skill-ignore */
+.field-light .frag-head { border-bottom-color: var(--edge-soft); } /* taste-skill-ignore */
+.frag-title { font-weight: 600; font-size: var(--t-small); }
+.frag-sub { margin-left: auto; font-size: var(--t-small); color: var(--muted); }
+.field-light .frag-sub { color: var(--field-muted); }
+.frag-row { display: flex; align-items: center; gap: 0.75rem; padding: 0.6rem 0.35rem; font-size: var(--t-small); }
+.frag-row + .frag-row { border-top: 1px solid var(--edge); } /* taste-skill-ignore */
+.field-light .frag-row + .frag-row { border-top-color: var(--edge-soft); } /* taste-skill-ignore */
+.frag-row .name { flex: 1; }
+.frag-row .val { color: var(--muted); }
+.field-light .frag-row .val { color: var(--field-muted); }
+.frag-row.sel { background: var(--accent); color: var(--accent-ink); border-radius: 6px; }
+.frag-row.sel .val { color: var(--accent-ink); }
+.frag-bar { height: 8px; background: var(--edge); border-radius: 4px; overflow: hidden; margin-top: 0.6rem; }
+.frag-bar > i { display: block; height: 100%; background: var(--accent); }
+.frag-note { margin-top: 0.75rem; font-size: var(--t-small); color: var(--muted); }
+.field-light .frag-note { color: var(--field-muted); }
+
+/* ---------------------------------------------------------------- 行列表 */
+.rows { max-width: 640px; }
+.rows h3 { margin-bottom: 1.25rem; }
+
+/* 定义式段落：加粗的名称后接一句说明（长文本行列表的替代，见 content.py 的注释） */
+.defs { max-width: 68ch; }
+.def { margin-top: 0.75rem; }
+.def:first-child { margin-top: 0; }
+.def strong { font-weight: 600; margin-right: 0.4em; }
+.row { display: flex; align-items: baseline; gap: 1rem; padding: 0.6rem 0; font-size: var(--t-body); }
+.row .name { font-weight: 600; }
+.row .val { margin-left: auto; color: var(--muted); }
+.group-label { margin-top: 2.25rem; font-size: var(--t-small); color: var(--muted); }
+.field-light .group-label, .field-light .row .val { color: var(--field-muted); }
+
+/* ---------------------------------------------------------------- 问答 */
+.faq { display: grid; grid-template-columns: 5fr 7fr; gap: clamp(1.5rem, 4vw, 4rem); min-height: 62vh; }
+.faq-list { display: flex; flex-direction: column; gap: 0.85rem; }
+.faq-q {
+  display: flex; gap: 0.7rem; align-items: baseline;
+  background: none; border: 0; padding: 0; margin: 0;
+  color: var(--muted); font: inherit; font-size: 1.125rem;
+  text-align: left; cursor: pointer;
+}
+.faq-q::before {
+  content: ""; flex: 0 0 8px; width: 8px; height: 8px; border-radius: 50%;
+  background: currentColor; transform: translateY(-2px);
+}
+.faq-q[aria-expanded="true"] { color: var(--ink); font-weight: 600; }
+.faq-q[aria-expanded="true"]::before { background: var(--accent); }
+.faq-panel { position: sticky; top: 6.5rem; }
+.faq-a { font-size: var(--t-lead); max-width: 34ch; line-height: 1.35; }
+.faq-answer { display: none; }
+.faq-answer[data-open] { display: block; }
+
+/* ---------------------------------------------------------------- 结尾 */
+.cta { padding-block: clamp(3rem, 6.5vw, 5.5rem); }
+.cta-line { font-size: clamp(2rem, 1.2rem + 4.4vw, 5.25rem); font-weight: 800; letter-spacing: -0.04em; line-height: 1.02; max-width: 24ch; }
+.cta-line .line { display: block; }
+.cta-line .fill { color: var(--accent); }
+.cta-note { margin-top: 1.25rem; font-size: var(--t-small); color: var(--muted); }
+
+/* ---------------------------------------------------------------- 页脚 */
+/* 瓦片页脚：实心块、8px 缝、每格都用上 */
+.foot-grid { display: grid; grid-template-columns: repeat(12, 1fr); gap: 8px;
+  /* 顶部留白是功能性的：收尾说明与页脚词标之间必须拉开距离，
+     否则后者会被判成"标题"，前者成了它上面的小标签（眉标）——
+     间距在这里承担着"这不是标签，是上一节的结尾"的语义。 */
+  padding: clamp(4rem, 8vw, 7rem) 8px 8px; }
+.tile { background: var(--surface); border-radius: var(--r); padding: 1.5rem; }
+/* 页脚小标题：语义上是 h2（页面 h1 → 区块 h2），但视觉上仍是"小标签"的尺寸，
+   所以显式给字号 —— 不写的话浏览器默认的 h2 会比原来的 h3 大一号。 */
+.tile h2 { font-size: var(--t-body); font-weight: 700; margin: 0 0 0.6rem; }
+.tile-wordmark {
+  grid-column: span 12; background: var(--ink); color: var(--bg);
+  display: grid; place-items: center; min-height: clamp(140px, 20vw, 250px);
+}
+.tile-wordmark span { font-size: clamp(3rem, 12vw, 9.5rem); font-weight: 800; letter-spacing: -0.05em; line-height: 0.9; }
+.tile-nav { grid-column: span 4; }
+.tile-nav ul { list-style: none; margin: 0; padding: 0; display: grid; gap: 0.55rem; font-size: var(--t-body); }
+.tile-nav a { text-decoration: none; }
+.tile-nav a:hover { text-decoration: underline; }
+.tile-meta { grid-column: span 4; font-size: var(--t-body); color: var(--muted); }
+.tile-credits { grid-column: span 4; font-size: var(--t-body); color: var(--muted); }
+.tile-credits a { text-decoration: underline; }
+.tile-cta { grid-column: span 12; background: var(--accent); color: var(--accent-ink); }
+.tile-cta a { display: flex; align-items: center; justify-content: space-between; gap: 1rem; text-decoration: none; }
+.tile-cta strong { font-size: var(--t-lead); font-weight: 800; }
+.tile-cta svg { width: 26px; height: 26px; flex: none; }
+
+/* ---------------------------------------------------------------- 动效 */
+/* 只动 transform 与 opacity；reduced-motion 下内容照常、位移取消 */
+html.js .rise { opacity: 0; transform: translateY(22px); }
+html.js .rise.in { opacity: 1; transform: none; transition: opacity 0.6s var(--ease), transform 0.6s var(--ease); }
+
+@media (prefers-reduced-motion: no-preference) {
+  /* 首屏标题：遮罩式行升起（签名动效） */
+  .hero h1 .line > span { transform: translateY(105%); }
+  .hero h1.ready .line > span { transform: none; transition: transform 0.9s var(--ease); }
+  .hero h1.ready .line:nth-child(2) > span { transition-delay: 0.11s; }
+  /* 图片：缓慢的自动位移 + 悬停推近（"会动的图片"）。
+     没有可用的真实片段时，技能允许用照片的缓慢位移替代 —— 见报告。 */
+  .pic-drift { overflow: hidden; border-radius: var(--r); }
+  .pic-drift img { animation: pic-drift 26s ease-in-out infinite alternate; transition: transform 6s var(--ease); }
+  .pic-drift:hover img { animation-play-state: paused; transform: scale(1.05); }
+  @keyframes pic-drift { from { transform: scale(1); } to { transform: scale(1.045); } }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .rise, .rise.in { opacity: 1; transform: none; transition: none; }
+  .hero h1 .line > span { transform: none; }
+}
+
+/* ---------------------------------------------------------------- 其余页面的共用件 */
+/* 首页按方向单重写；下载页 / 文档页 / 插件页仍复用旧的构建函数与类名，
+   所以这里把那些类按**新语言**重新定义一遍（填充块、色调分层、无边框无阴影）。
+   原则同全站：线只出现在真表格与真控件里。 */
+
+/* 文档页两栏：正文 + 目录
+   第一列写成 minmax(0, 1fr) 而不是 1fr：grid 的 1fr 实际是 minmax(auto, 1fr)，
+   auto 的最小值 = 内容宽度，于是**一篇宽表就能把整列撑开**，正文被挤成一条窄缝。
+   minmax(0, 1fr) 允许这一列收缩到 0，宽表改由自己的滚动容器负责。 */
+/* 文档页两栏：正文 + 目录
+   ★ 标记顺序是「目录在前、正文在后」（见 content.py 的 doc_grid），
+     所以第一列是**目录**、第二列是**正文** —— 之前写成「正文在前」，
+     结果目录抢走了 1fr 那列（宽到 500+px），正文被压到 240px 的窄缝里，
+     每行只剩两三个字，整页横向溢出。
+   ★ 宽度反过来：正文是内容，列宽随视口；目录是导航，给固定宽度。
+   ★ 两列都要 minmax(0, …)：grid 的 1fr 实际是 minmax(auto, 1fr)，
+     auto 的最小值 = 内容宽度，于是**一篇宽表就能把整列撑开**。
+     minmax(0, 1fr) 允许这一列收缩到 0，宽表改由自己的滚动容器负责。 */
+.doc-grid {
+  display: grid;
+  grid-template-columns: 240px minmax(0, 1fr);
+  gap: clamp(1.5rem, 4vw, 3.5rem);
+  align-items: start;
+}
+/* min-width: 0 是同一个道理的第二道保险：.doc-body 是 grid 子项，
+   不写它，内容（长表格、长代码行）会让子项拒绝收缩。 */
+.doc-body { min-width: 0; max-width: 72ch; }
+.doc-head { padding-top: clamp(1.5rem, 4vw, 2.5rem); padding-bottom: 1.25rem; }
+.doc-meta { margin-top: 0.75rem; font-size: var(--t-small); color: var(--muted); }
+.doc-aside { position: sticky; top: 5.5rem; font-size: var(--t-small); }
+.doc-nav ul, .toc ul { list-style: none; margin: 0.5rem 0 0; padding: 0; display: grid; gap: 0.4rem; }
+.doc-nav a, .toc a { text-decoration: none; color: var(--muted); }
+.doc-nav a:hover, .toc a:hover { color: var(--ink); }
+.doc-raw { margin-top: 1rem; }
+.doc-body h2 { margin-top: clamp(2rem, 4vw, 3rem); margin-bottom: 0.75rem; font-size: var(--t-lead); letter-spacing: -0.02em; }
+.doc-body h3 { margin-top: 1.5rem; margin-bottom: 0.5rem; }
+.doc-body p { margin: 0.75rem 0; }
+.doc-body ul, .doc-body ol { margin: 0.75rem 0; padding-left: 1.25rem; display: grid; gap: 0.35rem; }
+.doc-body li { max-width: 68ch; }
+
+/* 代码：真代码块保留等宽（房屋规则明确豁免 <pre>/<code>） */
+.code { margin: 1.25rem 0; }
+.code-cap { font-size: var(--t-small); color: var(--muted); margin-bottom: 0.4rem; }
+pre {
+  position: relative;
+  margin: 0; padding: 1rem 1.15rem;
+  background: var(--surface); color: var(--ink);
+  border-radius: var(--r);
+  overflow-x: auto;
+  /* max-width: 100%：pre 自己也是 grid/flex 子项时，不写这句，
+     一行长代码就能把 pre 撑到比容器还宽 —— 于是 overflow-x:auto 失效
+     （滚动的是 pre 自己，而它已经宽出屏幕了），横向滚动条出现在整页上。 */
+  max-width: 100%;
+}
+pre code {
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-size: 0.875rem; line-height: 1.6;
+  /* 代码块内**不换行**：换行会让代码不可读。靠 pre 的横向滚动解决。 */
+  white-space: pre;
+}
+pre .copy {
+  position: absolute; top: 0.6rem; right: 0.6rem;
+  min-height: 32px; padding: 0 0.75rem;
+  background: var(--edge); color: var(--ink);
+  border: 0; border-radius: 8px; font: inherit; font-size: var(--t-small); cursor: pointer;
+}
+pre .copy:hover { background: var(--accent); color: var(--accent-ink); }
+.field-light pre { background: #f2f2f2; color: var(--field-ink); }
+
+/* 行内代码：等宽豁免只覆盖 <code>，但别让它看起来像装饰。
+   overflow-wrap: anywhere 是必需的：行内代码经常是一段没有空格的坐标
+   （dev.turbodl:turbo-plugin-parser:0.2.4.0）、路径或 URL，
+   默认不换行 —— 于是一行就能顶出屏幕。 */
+/* 行内代码：等宽豁免只覆盖 <code>，但别让它看起来像装饰。
+   overflow-wrap: anywhere 是必需的：行内代码经常是一段没有空格的坐标
+   （dev.turbodl:turbo-plugin-parser:0.2.4.0）、路径或 URL，
+   默认不换行 —— 于是一行就能顶出屏幕。
+   ★ 选择器写成"所有 :not(pre) 里的 code"而不是列举 p/li/td ——
+     列举法漏掉了 h3、td 之外的容器，标题里的长函数名照样顶破页面。 */
+code:not(pre code) {
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-size: 0.9em;
+  overflow-wrap: anywhere;
+}
+
+/* 表格：真表格保留自己的线（房屋规则豁免），按新色重画 */
+/* 表格容器：overflow-x:auto 让宽表在自己的盒子里横向滚动，而不是把整页撑宽。
+   max-width: 100% 同理 —— 它可能也是 grid 子项，不写会被内容撑开。 */
+.table-wrap { overflow-x: auto; max-width: 100%; margin: 1.25rem 0; }
+table { border-collapse: collapse; width: 100%; font-size: var(--t-body); }
+th, td { text-align: left; padding: 0.7rem 0.75rem; vertical-align: top; }
+thead th { color: var(--muted); font-weight: 600; }
+tbody tr { border-top: 1px solid var(--edge); }
+.field-light tbody tr { border-top-color: var(--edge-soft); }
+
+/* 提示条 */
+.note {
+  margin: 1.25rem 0; padding: 1rem 1.15rem;
+  background: var(--surface); border-radius: var(--r);
+  font-size: var(--t-body); color: var(--muted);
+}
+.note strong { color: var(--ink); }
+.note.warn { background: #2a2118; color: #f4ddb8; }
+.note.warn strong { color: #ffd894; }
+.note.ok { background: #1c2a1a; color: #cfeda8; }
+.field-light .note { background: #f4f4f4; color: var(--field-muted); }
+.field-light .note strong { color: var(--field-ink); }
+
+/* 卡片 → 色调分层的信息块（没有边框、没有阴影、不是"盒装卡片"） */
+/* 卡片网格。minmax(0, 1fr) 而不是 1fr：grid 的 1fr 实际是 minmax(auto, 1fr)，
+   auto 的最小值 = 内容宽度 —— 一张卡里的长坐标就能把整列撑开。 */
+.cards { display: grid; gap: 1.5rem 2rem; margin: 1.5rem 0; }
+.cards.cols-2 { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+.cards.cols-3 { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+/* 卡片。
+   ★ min-width: 0：卡片是 grid 子项，不写它，子项拒绝收缩到内容宽度以下 ——
+     于是一段没有空格的长文本（坐标、协议名、URL）能把整张卡撑宽，
+     连带把整页顶宽。 */
+.card { padding: 0; min-width: 0; }
+.card h3 { margin-bottom: 0.4rem; }
+.card-body { font-size: var(--t-small); color: var(--muted); min-width: 0; overflow-wrap: anywhere; }
+/* 更新日志卡里的摘要 = Release 正文原文，里面有英文长标识符
+   （connectionPool.evictAll()、Util.closeQuietly）——
+   这些词带空格但整体很长，默认的换行规则断在空格处，仍会超出卡片。
+   anywhere 允许在词中间断开，英文正文会略微难看，但不会被裁掉。 */
+.card p.muted { overflow-wrap: anywhere; }
+.card-body a { color: inherit; }
+.card-meta { display: flex; flex-wrap: wrap; gap: 0.4rem; margin: 0.6rem 0; }
+.chip {
+  display: inline-block; padding: 0.25rem 0.6rem;
+  background: var(--surface); border-radius: 999px;
+  font-size: var(--t-small); color: var(--muted);
+}
+.field-light .chip { background: #f2f2f2; color: var(--field-muted); }
+
+/* 面包屑 */
+.crumbs { display: flex; flex-wrap: wrap; gap: 0.5rem; padding-top: 1.25rem; font-size: var(--t-small); color: var(--muted); }
+.crumbs a { text-decoration: none; }
+.crumbs a:hover { text-decoration: underline; }
+.crumbs .sep { color: var(--edge); }
+
+/* 分段线记号：区块之间的分隔（页面记号，全站一致） */
+.seg-rule { display: flex; gap: 3px; height: 6px; margin-bottom: 1.75rem; max-width: 320px; }
+.seg-rule i { background: var(--edge); border-radius: 2px; }
+.seg-rule i.done { background: var(--accent); }
+
+/* 下载页的可视化：复用分段带语言 */
+.dl-visual { margin: 2rem 0; }
+.dl-lane { display: flex; gap: 4px; height: 64px; }
+.dl-lane i { background: var(--edge); border-radius: 3px; }
+.dl-lane i.done { background: var(--accent); }
+.dl-legend { display: flex; flex-wrap: wrap; gap: 1.25rem; margin-top: 0.75rem; font-size: var(--t-small); color: var(--muted); }
+.dl-legend b { color: var(--ink); }
+
+/* 版本条与数据带 */
+.version-bar { display: flex; flex-wrap: wrap; gap: 0.75rem 1.5rem; align-items: baseline; padding: 1rem 0; font-size: var(--t-small); color: var(--muted); }
+.version-bar .tag { color: var(--ink); font-weight: 600; }
+.stat-band { display: grid; grid-template-columns: repeat(auto-fit, minmax(160px, 1fr)); gap: 1.25rem 2rem; margin: 2rem 0; }
+.stat { display: grid; gap: 0.25rem; }
+.stat .k { font-size: var(--t-small); color: var(--muted); }
+.stat .v { font-weight: 600; }
+.stat .v.accent { color: var(--accent); }
+.field-light .stat .v.accent { color: #3f6b12; }
+
+/* 截图（真实界面） */
+.shots { display: grid; grid-template-columns: repeat(auto-fit, minmax(260px, 1fr)); gap: 2rem; margin: 1.5rem 0; max-width: 900px; }
+.shot.phone img { border-radius: var(--r); }
+.platforms { display: grid; gap: 0.5rem; }
+
+/* 插件页等仍在用的零散类 */
+.cur { font-weight: 600; }
+.tight { margin-block: 0.35rem; }
+.is-available, .is-planned { font-size: var(--t-small); color: var(--muted); }
+.muted { color: var(--muted); }
+.small { font-size: var(--t-small); color: var(--muted); }
+.accent { color: var(--accent); }
+.field-light .accent { color: #3f6b12; }
+.lead { margin-top: 1rem; max-width: 46ch; font-size: var(--t-lead); color: var(--muted); }
+/* 长 URL 与长标识符必须能断行 —— 链接（a）同样如此：
+   插件页的「仓库地址」「镜像地址」都是整条 URL，没有空格可断。 */
+a { overflow-wrap: anywhere; }
+
+/* 长 URL 与长标识符必须能断行。
+   它们经常出现在「镜像地址」「坐标」「坐标名」这类机器数据里，
+   默认的 word-break: normal 遇到一整段没有空格的 URL 就不换行 ——
+   于是一个 60 字符的 raw.githubusercontent 地址能顶出屏幕。
+   overflow-wrap: anywhere 只在放不下时才断，正常文字不受影响。 */
+.mono, .val, .frag-row .val, .row .val { overflow-wrap: anywhere; }
+
+/* .mono 历史上给机器数据用小字宽体；mono 已被房屋规则禁止，
+   这里不再是等宽字体（保留类名只为不让旧页面样式悬空） */
+.mono { font-variant-numeric: tabular-nums; }
+
+/* ---------------------------------------------------------------- 窄屏 */
+/* ---------------------------------------------------------------- 断点
+   ★ 断点按**从大到小**排列，规则不要散落在文件各处 —— 同一断点分成两块时，
+     改一处漏一处，谁先谁后说不清。
+   ★ 断点值只有四个，含义固定（与 TurboDL 官网一致）：
+       900px —— 文档页两栏变一栏、横向区块改竖排（平板）
+       700px —— 宽表改卡片式堆叠
+       640px —— 卡片网格收单列、导航折叠、按钮占满整行（手机）
+     新增断点前先想清楚它属于哪一档；实在需要新的，就在这里加一行并写清理由。 */
+@media (max-width: 900px) {
+  .split, .split-wide, .faq { grid-template-columns: 1fr; gap: 2rem; }
+  .faq-panel { position: static; }
+  .hero h1 { max-width: 15ch; }
+  .tile-nav, .tile-meta, .tile-credits { grid-column: span 12; }
+  .seg { height: 40px; }
+
+  /* 文档页两栏折叠成单栏。
+     ★ 少了这一条，360px 宽下侧栏仍占 240px，正文被压到 80px ——
+       文字每行只剩两三个字，整页横向溢出。侧栏改为普通文档流并排在正文之前
+       （目录在手机上比正文更该先看到）。 */
+  .doc-grid { grid-template-columns: minmax(0, 1fr); }
+  .doc-aside { position: static; }
+}
+
+/* 窄屏的表格：改成一条条卡片，列名贴在值上面。
+   靠的是 sitekit.table() 给每个 <td> 写的 data-label —— 表头行在窄屏是隐藏的，
+   CSS 读不到"这一格属于哪一列"，只能靠这个属性把列名贴回去。
+   不这么做的话，宽表只能横向滚动，而在 390px 上被截断的表会被读成"内容被切了"。 */
+@media (max-width: 700px) {
+  .table-wrap { overflow-x: visible; }
+  table, tbody, tr, td, th { display: block; width: auto; }
+  thead { display: none; }
+  tr { padding-block: 0.9rem; border-bottom: 1px solid var(--edge); }
+  tr:last-child { border-bottom: 0; }
+  /* overflow-wrap: anywhere：卡片化之后，一格就是一行，一整段没有空格的技术串
+     （状态机名、协议名、坐标）无处可断 —— 于是一格能顶出屏幕，
+     整页跟着横向滚动。 */
+  td { border: 0; padding: 0.15rem 0; overflow-wrap: anywhere; }
+  td::before {
+    content: attr(data-label);
+    display: block;
+    font-size: var(--t-small);
+    color: var(--muted);
+  }
+  td:empty { display: none; }
+}
+
+@media (max-width: 640px) {
+  /* 卡片网格在窄屏收成单列。
+     两列在 360px 上每列只剩 156px，**标题与正文里的长 URL 撑破列宽**，
+     整页于是横向溢出 —— 而且是"看不见的溢出"：没有元素超出视口，
+     只是页面本身变宽了。 */
+  .cards.cols-2, .cards.cols-3, .cards.cols-4 { grid-template-columns: minmax(0, 1fr); }
+
+  /* 收尾句在手机上按"陈述句"限 24px：超过这个尺寸它就算标题，
+     标题在小屏放不下三行（门禁会判超行）。24px 下两行刚好读完。 */
+  .cta-line { font-size: 1.5rem; }
+  .top-nav { display: none; }
+  .top-nav[data-open] {
+    display: flex; flex-direction: column; gap: 0.9rem;
+    position: absolute; left: 0; right: 0; top: 3.25rem;
+    background: var(--surface); padding: 1.25rem; border-radius: var(--r);
+  }
+  .nav-toggle {
+    display: inline-flex; align-items: center; margin-left: auto;
+    background: none; border: 0; color: var(--ink); font: inherit; font-weight: 600;
+    cursor: pointer; padding: 0.25rem 0;
+  }
+  .langs { margin-left: 0; }
+  .resolver-row { flex-direction: column; }
+  /* flex-basis 改成 auto：20rem（320px）在 320px 视口里正好等于整个屏幕宽，
+     再减去 padding，容器就装不下了 —— 于是输入框顶出页面 8px。
+     basis: auto 让它按内容宽度算，而 min-width: 0 允许它被容器压缩。 */
+  .resolver input[type="text"] { flex: 1 1 auto; min-width: 0; width: 100%; }
+  .btn { width: 100%; }
+  .btn-row { flex-direction: column; align-items: stretch; }
+  .seg { gap: 3px; }
+}
+
+@media print {
+  .top, .tile-cta { display: none; }
+  body { background: #fff; color: #000; }
+  .field-light { background: #fff; }
+}

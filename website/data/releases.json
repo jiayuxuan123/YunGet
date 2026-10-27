@@ -1,23 +1,91 @@
 {
   "repo": "jiayuxuan123/YunGet",
   "latest": {
-    "tag": "v2.7.10",
-    "name": "云取 YunGet 2.7.10",
-    "published": "2026-10-18T13:57:15Z",
+    "tag": "v2.7.14",
+    "name": "云取 YunGet 2.7.14",
+    "published": "2026-10-27T05:03:38Z",
     "prerelease": false,
-    "url": "https://github.com/jiayuxuan123/YunGet/releases/tag/v2.7.10",
-    "summary": "云取 YunGet 2.7.10\n这一版只做一件事：原生插件在手机上暂时停用。\n为什么停用\n原生插件（以前的\"L2\"）是让插件直接以应用的身份跑在应用进程里的一档。它在手机上一直不稳：Android 10 之后系统不允许加载应用自己写出来的插件文件，最后只能靠\"读进内存再加载\"绕过，越往后系统限制越严。\n而且实际效果也配不上这份麻烦——此前发布的四个网盘原生插件，做的事情只是把解析请求转回应用内部本来就有的实现，并没有带来应用自己做不到的能力。\n停用之后会怎样\n· 手机版现在只支持脚本插件（JS 插件），装上或更新后立即生效；\n· 插件源里那四个网盘原生插件已经撤下，插件市场不再列出它们；\n· 已经装过原生插件的用户：那几个插件留在手机上但不再参与工作，网盘解析走应用内置实现，功能不受影响；需要的话可以在插件列表里把它们卸载掉。\n之后\n等云推出了 Windows 版，原生插件会在 Wind…",
+    "url": "https://github.com/jiayuxuan123/YunGet/releases/tag/v2.7.14",
+    "summary": "账号管理页现在能加账号了\n上一版把多账号做了，但**账号管理页只能看、切换、删除，加不了新号** ——\n想再加一个账号得退回「网盘」页重新点那个平台，而那里已经登录过的平台\n显示的是「已登录」，看不出再点一次是新增还是覆盖。\n现在这一页每张平台卡片下面都有「添加账号」；没登录过的平台也列在\n「其他平台」里，点一下就能登。登录页那个「保存为新增账号」开关照常在。\n网站\n· 版本信息不再滞后：站点上的内置引擎版本、最低安卓版本改为从构建配置读取\n· 修复文档页在桌面端把目录和正文的列宽弄反了（正文被压成 300px 宽）\n· 修复移动端横向溢出：宽表格、长 URL、长代码行、卡片网格",
     "assets": [
       {
-        "name": "YunGet-2.7.10-release.apk",
-        "size": 31682190,
-        "url": "https://github.com/jiayuxuan123/YunGet/releases/download/v2.7.10/YunGet-2.7.10-release.apk",
+        "name": "YunGet-2.7.14-release.apk",
+        "size": 33111457,
+        "url": "https://github.com/jiayuxuan123/YunGet/releases/download/v2.7.14/YunGet-2.7.14-release.apk",
         "downloads": 0,
-        "sha256": "8d1c4662667ba104ae4208a7113c4fd646314508218df021559de1c5dbcc184e"
+        "sha256": "63cb5594aa36d40c845e82bd812fa35eecef205cb370c197f6a0c57884bedb3f"
       }
     ]
   },
   "releases": [
+    {
+      "tag": "v2.7.14",
+      "name": "云取 YunGet 2.7.14",
+      "published": "2026-10-27T05:03:38Z",
+      "prerelease": false,
+      "url": "https://github.com/jiayuxuan123/YunGet/releases/tag/v2.7.14",
+      "summary": "账号管理页现在能加账号了\n上一版把多账号做了，但**账号管理页只能看、切换、删除，加不了新号** ——\n想再加一个账号得退回「网盘」页重新点那个平台，而那里已经登录过的平台\n显示的是「已登录」，看不出再点一次是新增还是覆盖。\n现在这一页每张平台卡片下面都有「添加账号」；没登录过的平台也列在\n「其他平台」里，点一下就能登。登录页那个「保存为新增账号」开关照常在。\n网站\n· 版本信息不再滞后：站点上的内置引擎版本、最低安卓版本改为从构建配置读取\n· 修复文档页在桌面端把目录和正文的列宽弄反了（正文被压成 300px 宽）\n· 修复移动端横向溢出：宽表格、长 URL、长代码行、卡片网格",
+      "assets": [
+        {
+          "name": "YunGet-2.7.14-release.apk",
+          "size": 33111457,
+          "url": "https://github.com/jiayuxuan123/YunGet/releases/download/v2.7.14/YunGet-2.7.14-release.apk",
+          "downloads": 0,
+          "sha256": "63cb5594aa36d40c845e82bd812fa35eecef205cb370c197f6a0c57884bedb3f"
+        }
+      ]
+    },
+    {
+      "tag": "v2.7.13",
+      "name": "云取 YunGet 2.7.13",
+      "published": "2026-10-26T13:42:35Z",
+      "prerelease": false,
+      "url": "https://github.com/jiayuxuan123/YunGet/releases/tag/v2.7.13",
+      "summary": "视频链接解析改为插件\n微博、小红书、Pixiv 的分享链接解析，从程序内置挪到了**下载引擎的插件**里。\n**这对你意味着什么**：这三个平台的页面结构以后再变，修复跟着引擎升级走，不用等应用发版。引擎本身对这三个平台一无所知——它只认「把链接变成可下载请求」这件事，具体是哪个平台由插件负责。\n**对你没有任何操作要求**：功能、界面、行为都不变，链接照样粘进解析页就行。内置的抖音、快手、B站、AcFun 解析器保持原样，它们的签名算法和网页交互比较特殊，暂时还留在应用侧。\n多账号\n· 新增「账号管理」页，一个平台登录几个账号都能看\n· 登录时可以选择「加为新账号」还是「覆盖当前账号」\n· 可切换主账号、可给账号加备注、可删除（删掉主账号会自动提拔另一个）\n· 夸克、UC 等平台的取链会优先用刚刷新过的主账号，避免直链签名过期\n其他\n· 内置下载引擎升级至 TurboDL 0.2.4.0…",
+      "assets": [
+        {
+          "name": "YunGet-2.7.13-release.apk",
+          "size": 33106504,
+          "url": "https://github.com/jiayuxuan123/YunGet/releases/download/v2.7.13/YunGet-2.7.13-release.apk",
+          "downloads": 1099,
+          "sha256": "79a3b7189918a25289906985963730b604b658f743b0b864b98be35e2ecaf22c"
+        }
+      ]
+    },
+    {
+      "tag": "v2.7.12",
+      "name": "云取 YunGet 2.7.12",
+      "published": "2026-10-23T05:41:33Z",
+      "prerelease": false,
+      "url": "https://github.com/jiayuxuan123/YunGet/releases/tag/v2.7.12",
+      "summary": "重要修复\n· **修正两个开关同时打开时，下载完成的文件可能是坏的**\n  「下载中预先合并」和「收尾托管」是引擎高级参数里的两项。两者同时开启时，同一个文件区间会被两个不同的请求先后写入。如果两个请求恰好落到不同服务器，后写的内容会覆盖先写的。\n  表现是：文件大小正确，但内容损坏，且下载过程中不会报任何错。\n  现在只要「收尾托管」开着，就会自动停用「预先合并」。\n· **修正「HTTP 版本策略」选“自动”却实际走 HTTP/2**\n  「HTTP 版本策略」默认就是“自动”，因此程序无法区分“你明确选了自动”和“你没设置过”。它只能用另一个开关——「强制 HTTP/1.1」——来决定，结果是你把这个开关关掉后，策略显示“自动”，实际生效的却是“允许 HTTP/2”。\n  HTTP/2 会把多个分片挤进同一条连接，多线程反而可能完全没有加速。\n  现在“自动”就是自动，不再被其他开关…",
+      "assets": [
+        {
+          "name": "YunGet-2.7.12-release.apk",
+          "size": 32843196,
+          "url": "https://github.com/jiayuxuan123/YunGet/releases/download/v2.7.12/YunGet-2.7.12-release.apk",
+          "downloads": 5041,
+          "sha256": "3291ae7baf0b373978c4dc849c106baf33d424a1585f37d4c5c424c76beb8ed2"
+        }
+      ]
+    },
+    {
+      "tag": "v2.7.11",
+      "name": "云取 YunGet 2.7.11",
+      "published": "2026-10-23T05:03:36Z",
+      "prerelease": false,
+      "url": "https://github.com/jiayuxuan123/YunGet/releases/tag/v2.7.11",
+      "summary": "云取 YunGet 2.7.11\n这一版把内置下载引擎真正升级到了 0.2.3.0，并把它的可调项补齐。\n引擎其实一直没升上去\nTurboDL 0.2.3.0 做得是网络健壮性：UA 协商、失败快速收敛、错误归因。但那次发版**只上传了 CLI 包**，引擎核心和四个插件模块虽然编译出来了却没发布。\n结果就是 App 里声明的依赖一直解析到 0.2.2.0——那三项改进在手机上一次都没生效过。\n这次把缺失的制品补齐并发了出去，依赖也真的指过去了。\n顺带修掉一处死代码\n0.2.3.0 让分片层记录了\"真实失败原因\"（服务器返回了哪个 HTTP 状态码、连接是不是被重置、body 是不是只回了一半），因为只有分片层拿得到响应信息。但它发失败事件时用的还是异常自带的 message，而那句在往上冒的过程中已经退化成\"failed to connect\"之类。\n所以那个精心做的错误归因，从来没有人…",
+      "assets": [
+        {
+          "name": "YunGet-2.7.11-release.apk",
+          "size": 32843032,
+          "url": "https://github.com/jiayuxuan123/YunGet/releases/download/v2.7.11/YunGet-2.7.11-release.apk",
+          "downloads": 92,
+          "sha256": "e506b4722777c3c8881aabccc192e78805b2e0838caf2bff77df69e6cc876968"
+        }
+      ]
+    },
     {
       "tag": "v2.7.10",
       "name": "云取 YunGet 2.7.10",
@@ -30,7 +98,7 @@
           "name": "YunGet-2.7.10-release.apk",
           "size": 31682190,
           "url": "https://github.com/jiayuxuan123/YunGet/releases/download/v2.7.10/YunGet-2.7.10-release.apk",
-          "downloads": 0,
+          "downloads": 4524,
           "sha256": "8d1c4662667ba104ae4208a7113c4fd646314508218df021559de1c5dbcc184e"
         }
       ]
@@ -47,7 +115,7 @@
           "name": "YunGet-2.7.9-release.apk",
           "size": 31714296,
           "url": "https://github.com/jiayuxuan123/YunGet/releases/download/v2.7.9/YunGet-2.7.9-release.apk",
-          "downloads": 6526,
+          "downloads": 6569,
           "sha256": "5d9520fa11c2ca3ce036f948e8c5de87cf1c5fb749fc1623e72edbfb4a19cc77"
         }
       ]
@@ -64,7 +132,7 @@
           "name": "YunGet-2.7.8-release.apk",
           "size": 31707834,
           "url": "https://github.com/jiayuxuan123/YunGet/releases/download/v2.7.8/YunGet-2.7.8-release.apk",
-          "downloads": 65,
+          "downloads": 67,
           "sha256": "4e2b6c56068dada26802469b55b187573276a9909b34c1784ce39e2f55133d21"
         }
       ]
@@ -81,7 +149,7 @@
           "name": "YunGet-2.7.7-release.apk",
           "size": 31710643,
           "url": "https://github.com/jiayuxuan123/YunGet/releases/download/v2.7.7/YunGet-2.7.7-release.apk",
-          "downloads": 563,
+          "downloads": 564,
           "sha256": "a1fe22a7b0bbdc16df34ca48a643aa4b288b323d747eb73f364bac4d4ef6383d"
         }
       ]
@@ -132,7 +200,7 @@
           "name": "YunGet-2.7.4-release.apk",
           "size": 31621011,
           "url": "https://github.com/jiayuxuan123/YunGet/releases/download/v2.7.4/YunGet-2.7.4-release.apk",
-          "downloads": 1410,
+          "downloads": 1412,
           "sha256": "c6921e4d2a11d8e46239c84050c46a8cf9fa3bea45a920825725418f902bd32d"
         }
       ]
@@ -149,7 +217,7 @@
           "name": "YunGet-2.7.3-release.apk",
           "size": 31593625,
           "url": "https://github.com/jiayuxuan123/YunGet/releases/download/v2.7.3/YunGet-2.7.3-release.apk",
-          "downloads": 442,
+          "downloads": 449,
           "sha256": "2affb2e8958b8b147606aacd7c77815d238133c9e820e5110c41aebff8475767"
         }
       ]
@@ -166,7 +234,7 @@
           "name": "YunGet-2.7.2-release.apk",
           "size": 31588032,
           "url": "https://github.com/jiayuxuan123/YunGet/releases/download/v2.7.2/YunGet-2.7.2-release.apk",
-          "downloads": 526,
+          "downloads": 528,
           "sha256": "38681a358c8ca14f2c661a072a3382cd8ab26e8c89ceda23f03bf863fe5933d7"
         }
       ]
@@ -183,7 +251,7 @@
           "name": "YunGet-2.7.1-release.apk",
           "size": 31586091,
           "url": "https://github.com/jiayuxuan123/YunGet/releases/download/v2.7.1/YunGet-2.7.1-release.apk",
-          "downloads": 614,
+          "downloads": 619,
           "sha256": "4140068dadae124607ec22f7d23a297691690f3586c84c7f14fb8da4ce32992f"
         }
       ]
@@ -217,7 +285,7 @@
           "name": "YunGet-2.6.21-release.apk",
           "size": 29256285,
           "url": "https://github.com/jiayuxuan123/YunGet/releases/download/v2.6.21/YunGet-2.6.21-release.apk",
-          "downloads": 1302,
+          "downloads": 1306,
           "sha256": "80e7d72941dec73605eb7b83a58843380bef89c039b8ed57ca705b91affbe67a"
         }
       ]
@@ -234,7 +302,7 @@
           "name": "YunGet-2.6.20-release.apk",
           "size": 29253022,
           "url": "https://github.com/jiayuxuan123/YunGet/releases/download/v2.6.20/YunGet-2.6.20-release.apk",
-          "downloads": 39,
+          "downloads": 41,
           "sha256": "80b5ddf11f8751f2685887a8fc080f8035504c273eb17d7429199a869a70c224"
         }
       ]
@@ -251,7 +319,7 @@
           "name": "YunGet-2.6.19-release.apk",
           "size": 29251699,
           "url": "https://github.com/jiayuxuan123/YunGet/releases/download/v2.6.19/YunGet-2.6.19-release.apk",
-          "downloads": 895,
+          "downloads": 896,
           "sha256": "d01180c164fd9fc7af2dc6cda9ad48485c66a741aa877139dc2809f02886ea70"
         }
       ]
@@ -268,7 +336,7 @@
           "name": "YunGet-2.6.18-release.apk",
           "size": 29248962,
           "url": "https://github.com/jiayuxuan123/YunGet/releases/download/v2.6.18/YunGet-2.6.18-release.apk",
-          "downloads": 179,
+          "downloads": 181,
           "sha256": "12c0e101b075995d546b80323576c4ad586e583f58668cdbb28917b20d45a695"
         }
       ]
@@ -302,7 +370,7 @@
           "name": "YunGet-2.6.15-release.apk",
           "size": 28284269,
           "url": "https://github.com/jiayuxuan123/YunGet/releases/download/v2.6.15/YunGet-2.6.15-release.apk",
-          "downloads": 3976,
+          "downloads": 3988,
           "sha256": "27284307104496d94934cb94f82b2445d586bcebda3d0b4d1b74232427f0e845"
         }
       ]
@@ -319,7 +387,7 @@
           "name": "YunGet-2.6.14-release.apk",
           "size": 28282625,
           "url": "https://github.com/jiayuxuan123/YunGet/releases/download/v2.6.14/YunGet-2.6.14-release.apk",
-          "downloads": 340,
+          "downloads": 342,
           "sha256": "fc841063fe834dc5597208da749d9a99d2f23261d4200d0c0eaccae02c086216"
         }
       ]
@@ -421,7 +489,7 @@
           "name": "app-release.apk",
           "size": 18993570,
           "url": "https://github.com/jiayuxuan123/YunGet/releases/download/v2.6.7/app-release.apk",
-          "downloads": 3349,
+          "downloads": 3352,
           "sha256": "aea85a934fd642afc63fc87ef822914e37f63730f66993482f1e5c419f7218e6"
         }
       ]
@@ -457,74 +525,6 @@
           "url": "https://github.com/jiayuxuan123/YunGet/releases/download/v2.6.5/app-release.apk",
           "downloads": 13,
           "sha256": "0042772d8f3b87ffeb3a362497e50cb274ac597c75151d320b3779d0467136bb"
-        }
-      ]
-    },
-    {
-      "tag": "v2.6.4",
-      "name": "YunGet 2.6.4：修复解析卡顿（DoH 缓存 / IPv4 优先）+ 启动阶段诊断",
-      "published": "2026-09-15T08:08:04Z",
-      "prerelease": false,
-      "url": "https://github.com/jiayuxuan123/YunGet/releases/tag/v2.6.4",
-      "summary": "升级 TurboDL rc18；针对「任何链接解析都卡半分钟」的三处修复 + 启动阶段诊断日志\n依赖升级\nTurboDL `0.2.0-rc17` → `0.2.0-rc18`。\n修的问题（用户实报）\n> 「不管什么链接，它解析的阶段都非常非常非常久……大概过了半分钟以后才开始。」（2.6.2 / 2.6.3 都这样）\n这类问题**在开发机（回环）上永远复现不了**：没有真实 DNS、没有 IPv6、没有 TLS 握手。\n所以本版按真实网络的三个客观缺陷动手。\n1. DoH 每次查询都是完整 HTTPS 往返，且**完全没有缓存**\n`DohDns.lookup` 每次调用都发一次 DoH 请求（超时 10s 连接 + 10s 读），而它会被**每个新连接**调用。\n只要 DoH 服务器慢/不通，就是「每个链接解析先撞一次超时」——症状与描述完全一致。\n**修复**：加查询缓存（成功 5…",
-      "assets": [
-        {
-          "name": "app-release.apk",
-          "size": 18977202,
-          "url": "https://github.com/jiayuxuan123/YunGet/releases/download/v2.6.4/app-release.apk",
-          "downloads": 26,
-          "sha256": "977db92ddeae16d668273a6d4f34b781d12d52294ef664ca8177100ce8141d36"
-        }
-      ]
-    },
-    {
-      "tag": "v2.6.3",
-      "name": "YunGet 2.6.3：修复并发惩罚服务器下任务直接失败",
-      "published": "2026-09-15T05:22:42Z",
-      "prerelease": false,
-      "url": "https://github.com/jiayuxuan123/YunGet/releases/tag/v2.6.3",
-      "summary": "YunGet 2.6.3：修复并发惩罚服务器下任务直接失败\n依赖升级\nTurboDL `0.2.0-rc16` → `0.2.0-rc17`。\n修复的问题：同一台服务器，32 线程失败、128 线程成功\nTurboDL 新增的连接数扫描测量台在「**对并发有惩罚**的服务端模型」\n（并发超过 16 就返回 503 —— 网盘 CDN 常见行为）下发现：\n| 连接数 | 修复前 |\n|---|---|\n| 8 / 16 | ✅ 正常（1.4 MB/s） |\n| **32** | ❌ **整个任务失败**：「分片持续被限流（429/503），重试 4 次后放弃」 |\n| 128 | ✅ 能完成，但撞了 299 次 503 |\n**同一台服务器，设 32 线程失败、设 128 线程成功，纯看运气。**\n如果某台服务器对并发有惩罚，这就是「高线程反而更慢/更不稳」的机制之一。\n根因\n两处叠加：\n1…",
-      "assets": [
-        {
-          "name": "app-release.apk",
-          "size": 18977203,
-          "url": "https://github.com/jiayuxuan123/YunGet/releases/download/v2.6.3/app-release.apk",
-          "downloads": 72,
-          "sha256": "24fbfa7bde18f5f1e7df362d6496eab060539004f002e27161268d0e7d629cf6"
-        }
-      ]
-    },
-    {
-      "tag": "v2.6.2",
-      "name": "YunGet 2.6.2：解析更快、续传修好、完成状态不再显示 99%",
-      "published": "2026-09-15T04:31:59Z",
-      "prerelease": false,
-      "url": "https://github.com/jiayuxuan123/YunGet/releases/tag/v2.6.2",
-      "summary": "YunGet 2.6.2：解析更快、续传修好、完成状态不再显示 99%\n本版内容\n1. 升级 TurboDL 到 `0.2.0-rc16`\n**解析阶段更快**（用户实报：10MB/6MB 这种小文件，解析也要等很久）\n引擎原先把「服务器**确定性地**不支持分片」这个结论当成了「瞬时抖动」——\n每一轮探测都白发 2 个请求，还要把重试次数跑满并叠加退避，而结论永远不会变。\n网盘链接因为调用方已知文件大小会**跳过探测**，所以反而更快 —— 这是那个反直觉现象的来源。\n现在确定性结论立即返回：不支持分片的服务器探测请求从 8 次降到 2 次；\n返回网页（反爬/拦截）的服务器从\"跑满重试\"变成 **26ms 立即失败**并给出准确原因。\n**消除「每个分片各自重走一次 302」**\n跳过探测时引擎用的是原始链接，于是**每个分片都要自己跟一次 302**。\n实测：8 连接 / 32 分片…",
-      "assets": [
-        {
-          "name": "app-release.apk",
-          "size": 18977203,
-          "url": "https://github.com/jiayuxuan123/YunGet/releases/download/v2.6.2/app-release.apk",
-          "downloads": 23,
-          "sha256": "2c21ce3c90cb74c4b19ace5c8ba0afcdccda6968de6e928c2dcbf144610e9cf9"
-        }
-      ]
-    },
-    {
-      "tag": "v2.6.1",
-      "name": "YunGet 2.6.1：默认线程数翻倍（升级 TurboDL rc14）",
-      "published": "2026-09-14T09:37:26Z",
-      "prerelease": false,
-      "url": "https://github.com/jiayuxuan123/YunGet/releases/tag/v2.6.1",
-      "summary": "升级 TurboDL 到 0.2.0-rc14\n依赖升级\ndev.turbodl:* 由 0.2.0-rc13 → 0.2.0-rc14。\nrc14 带来的变化\n1. 默认连接数 8 → 16（对本 App 直接有利）\n实测（本地服务器**每连接限速 2MB/s**，24MB 文件）：\n| 连接数 | 吞吐 |\n|---|---|\n| 8（旧默认） | 7.3 MB/s |\n| 16 | 8.9 MB/s |\n| 64 | 12.1 MB/s |\n**+65%，单调。** 机制：服务器按**每条连接**限速时，总吞吐 = 单连接上限 × 连接数\n—— 此时**连接数是唯一的倍率**，分片粒度调参替代不了它。\n这对本宿主很关键：云盘直链普遍是**按连接限速**的，\n所以\"设置页调大线程数\"是真能提速的，而 rc13 之前的默认值 8 偏保守。\n（用户仍可在设置页自行调高到 64。）\n2. 放…",
-      "assets": [
-        {
-          "name": "app-release.apk",
-          "size": 18977203,
-          "url": "https://github.com/jiayuxuan123/YunGet/releases/download/v2.6.1/app-release.apk",
-          "downloads": 226,
-          "sha256": "903e288ec9f4754c408c07e2d68b58f75a4e88be4618222172786e7df39deb14"
         }
       ]
     }

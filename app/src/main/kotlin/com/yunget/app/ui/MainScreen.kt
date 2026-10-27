@@ -1139,6 +1139,24 @@ fun MainScreen(
                     "lanzou" -> lanzouViewModel.removeAccount(id)
                 }
             },
+            // 从账号管理页直接再加一个号：先关掉这一页，再打开对应平台的登录页。
+            // 登录页自己会在「已有账号」时显示"保存为新增账号"开关，所以这里
+            // 不需要额外传"这次是新增"的意图 —— 由用户在那个开关上决定。
+            onAddAccount = { platform ->
+                showAccountManager = false
+                when (platform) {
+                    "quark" -> showQuarkLogin = true
+                    "uc" -> showUCLogin = true
+                    "xunlei" -> showXunleiLogin = true
+                    "baidu" -> showBaiduLogin = true
+                    "c139" -> showC139Login = true
+                    "pan123" -> showPan123Login = true
+                    "pan115" -> showPan115Login = true
+                    "guangya" -> showGuangYaLogin = true
+                    "ilanzou" -> showILanzouLogin = true
+                    "lanzou" -> showLanzouLogin = true
+                }
+            },
         )
     }
 

@@ -179,7 +179,13 @@ img, video { display: block; max-width: 100%; height: auto; }
 .resolver label { display: block; font-size: var(--t-small); font-weight: 600; color: var(--muted); }
 .resolver-row { display: flex; gap: 0.75rem; margin-top: 0.6rem; flex-wrap: wrap; }
 .resolver input[type="text"] {
-  flex: 1 1 20rem; min-height: 48px; padding: 0 1rem;
+  /* flex-basis 20rem 是"想要多宽"，不是"至少多宽"。
+     ★ 但 flex 子项的 min-width 默认是 auto = 内容的最小宽度，
+       输入框的默认 size=20 会让它在 320px 视口里撑破容器。
+       min-width: 0 是这里的关键：它允许输入框收缩到内容宽度以下，
+       于是窄屏下输入框随容器变窄，而不是把页面顶宽。 */
+  flex: 1 1 20rem; min-width: 0;
+  min-height: 48px; padding: 0 1rem;
   background: var(--bg); color: var(--ink);
   border: 1px solid var(--edge); border-radius: var(--r);
   font: inherit;
@@ -304,6 +310,9 @@ figcaption { margin-top: 0.75rem; font-size: var(--t-small); color: var(--muted)
      间距在这里承担着"这不是标签，是上一节的结尾"的语义。 */
   padding: clamp(4rem, 8vw, 7rem) 8px 8px; }
 .tile { background: var(--surface); border-radius: var(--r); padding: 1.5rem; }
+/* 页脚小标题：语义上是 h2（页面 h1 → 区块 h2），但视觉上仍是"小标签"的尺寸，
+   所以显式给字号 —— 不写的话浏览器默认的 h2 会比原来的 h3 大一号。 */
+.tile h2 { font-size: var(--t-body); font-weight: 700; margin: 0 0 0.6rem; }
 .tile-wordmark {
   grid-column: span 12; background: var(--ink); color: var(--bg);
   display: grid; place-items: center; min-height: clamp(140px, 20vw, 250px);
@@ -349,9 +358,28 @@ html.js .rise.in { opacity: 1; transform: none; transition: opacity 0.6s var(--e
    所以这里把那些类按**新语言**重新定义一遍（填充块、色调分层、无边框无阴影）。
    原则同全站：线只出现在真表格与真控件里。 */
 
-/* 文档页两栏：正文 + 目录 */
-.doc-grid { display: grid; grid-template-columns: minmax(0, 1fr) 240px; gap: clamp(1.5rem, 4vw, 3.5rem); align-items: start; }
-.doc-body { max-width: 72ch; }
+/* 文档页两栏：正文 + 目录
+   第一列写成 minmax(0, 1fr) 而不是 1fr：grid 的 1fr 实际是 minmax(auto, 1fr)，
+   auto 的最小值 = 内容宽度，于是**一篇宽表就能把整列撑开**，正文被挤成一条窄缝。
+   minmax(0, 1fr) 允许这一列收缩到 0，宽表改由自己的滚动容器负责。 */
+/* 文档页两栏：正文 + 目录
+   ★ 标记顺序是「目录在前、正文在后」（见 content.py 的 doc_grid），
+     所以第一列是**目录**、第二列是**正文** —— 之前写成「正文在前」，
+     结果目录抢走了 1fr 那列（宽到 500+px），正文被压到 240px 的窄缝里，
+     每行只剩两三个字，整页横向溢出。
+   ★ 宽度反过来：正文是内容，列宽随视口；目录是导航，给固定宽度。
+   ★ 两列都要 minmax(0, …)：grid 的 1fr 实际是 minmax(auto, 1fr)，
+     auto 的最小值 = 内容宽度，于是**一篇宽表就能把整列撑开**。
+     minmax(0, 1fr) 允许这一列收缩到 0，宽表改由自己的滚动容器负责。 */
+.doc-grid {
+  display: grid;
+  grid-template-columns: 240px minmax(0, 1fr);
+  gap: clamp(1.5rem, 4vw, 3.5rem);
+  align-items: start;
+}
+/* min-width: 0 是同一个道理的第二道保险：.doc-body 是 grid 子项，
+   不写它，内容（长表格、长代码行）会让子项拒绝收缩。 */
+.doc-body { min-width: 0; max-width: 72ch; }
 .doc-head { padding-top: clamp(1.5rem, 4vw, 2.5rem); padding-bottom: 1.25rem; }
 .doc-meta { margin-top: 0.75rem; font-size: var(--t-small); color: var(--muted); }
 .doc-aside { position: sticky; top: 5.5rem; font-size: var(--t-small); }
@@ -374,8 +402,17 @@ pre {
   background: var(--surface); color: var(--ink);
   border-radius: var(--r);
   overflow-x: auto;
+  /* max-width: 100%：pre 自己也是 grid/flex 子项时，不写这句，
+     一行长代码就能把 pre 撑到比容器还宽 —— 于是 overflow-x:auto 失效
+     （滚动的是 pre 自己，而它已经宽出屏幕了），横向滚动条出现在整页上。 */
+  max-width: 100%;
 }
-pre code { font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; font-size: 0.875rem; line-height: 1.6; }
+pre code {
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-size: 0.875rem; line-height: 1.6;
+  /* 代码块内**不换行**：换行会让代码不可读。靠 pre 的横向滚动解决。 */
+  white-space: pre;
+}
 pre .copy {
   position: absolute; top: 0.6rem; right: 0.6rem;
   min-height: 32px; padding: 0 0.75rem;
@@ -385,11 +422,26 @@ pre .copy {
 pre .copy:hover { background: var(--accent); color: var(--accent-ink); }
 .field-light pre { background: #f2f2f2; color: var(--field-ink); }
 
-/* 行内代码：等宽豁免只覆盖 <code>，但别让它看起来像装饰 */
-p code, li code, td code { font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; font-size: 0.9em; }
+/* 行内代码：等宽豁免只覆盖 <code>，但别让它看起来像装饰。
+   overflow-wrap: anywhere 是必需的：行内代码经常是一段没有空格的坐标
+   （dev.turbodl:turbo-plugin-parser:0.2.4.0）、路径或 URL，
+   默认不换行 —— 于是一行就能顶出屏幕。 */
+/* 行内代码：等宽豁免只覆盖 <code>，但别让它看起来像装饰。
+   overflow-wrap: anywhere 是必需的：行内代码经常是一段没有空格的坐标
+   （dev.turbodl:turbo-plugin-parser:0.2.4.0）、路径或 URL，
+   默认不换行 —— 于是一行就能顶出屏幕。
+   ★ 选择器写成"所有 :not(pre) 里的 code"而不是列举 p/li/td ——
+     列举法漏掉了 h3、td 之外的容器，标题里的长函数名照样顶破页面。 */
+code:not(pre code) {
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-size: 0.9em;
+  overflow-wrap: anywhere;
+}
 
 /* 表格：真表格保留自己的线（房屋规则豁免），按新色重画 */
-.table-wrap { overflow-x: auto; margin: 1.25rem 0; }
+/* 表格容器：overflow-x:auto 让宽表在自己的盒子里横向滚动，而不是把整页撑宽。
+   max-width: 100% 同理 —— 它可能也是 grid 子项，不写会被内容撑开。 */
+.table-wrap { overflow-x: auto; max-width: 100%; margin: 1.25rem 0; }
 table { border-collapse: collapse; width: 100%; font-size: var(--t-body); }
 th, td { text-align: left; padding: 0.7rem 0.75rem; vertical-align: top; }
 thead th { color: var(--muted); font-weight: 600; }
@@ -410,12 +462,23 @@ tbody tr { border-top: 1px solid var(--edge); }
 .field-light .note strong { color: var(--field-ink); }
 
 /* 卡片 → 色调分层的信息块（没有边框、没有阴影、不是"盒装卡片"） */
+/* 卡片网格。minmax(0, 1fr) 而不是 1fr：grid 的 1fr 实际是 minmax(auto, 1fr)，
+   auto 的最小值 = 内容宽度 —— 一张卡里的长坐标就能把整列撑开。 */
 .cards { display: grid; gap: 1.5rem 2rem; margin: 1.5rem 0; }
 .cards.cols-2 { grid-template-columns: repeat(2, minmax(0, 1fr)); }
 .cards.cols-3 { grid-template-columns: repeat(3, minmax(0, 1fr)); }
-.card { padding: 0; }
+/* 卡片。
+   ★ min-width: 0：卡片是 grid 子项，不写它，子项拒绝收缩到内容宽度以下 ——
+     于是一段没有空格的长文本（坐标、协议名、URL）能把整张卡撑宽，
+     连带把整页顶宽。 */
+.card { padding: 0; min-width: 0; }
 .card h3 { margin-bottom: 0.4rem; }
-.card-body { font-size: var(--t-small); color: var(--muted); }
+.card-body { font-size: var(--t-small); color: var(--muted); min-width: 0; overflow-wrap: anywhere; }
+/* 更新日志卡里的摘要 = Release 正文原文，里面有英文长标识符
+   （connectionPool.evictAll()、Util.closeQuietly）——
+   这些词带空格但整体很长，默认的换行规则断在空格处，仍会超出卡片。
+   anywhere 允许在词中间断开，英文正文会略微难看，但不会被裁掉。 */
+.card p.muted { overflow-wrap: anywhere; }
 .card-body a { color: inherit; }
 .card-meta { display: flex; flex-wrap: wrap; gap: 0.4rem; margin: 0.6rem 0; }
 .chip {
@@ -468,20 +531,75 @@ tbody tr { border-top: 1px solid var(--edge); }
 .accent { color: var(--accent); }
 .field-light .accent { color: #3f6b12; }
 .lead { margin-top: 1rem; max-width: 46ch; font-size: var(--t-lead); color: var(--muted); }
+/* 长 URL 与长标识符必须能断行 —— 链接（a）同样如此：
+   插件页的「仓库地址」「镜像地址」都是整条 URL，没有空格可断。 */
+a { overflow-wrap: anywhere; }
+
+/* 长 URL 与长标识符必须能断行。
+   它们经常出现在「镜像地址」「坐标」「坐标名」这类机器数据里，
+   默认的 word-break: normal 遇到一整段没有空格的 URL 就不换行 ——
+   于是一个 60 字符的 raw.githubusercontent 地址能顶出屏幕。
+   overflow-wrap: anywhere 只在放不下时才断，正常文字不受影响。 */
+.mono, .val, .frag-row .val, .row .val { overflow-wrap: anywhere; }
+
 /* .mono 历史上给机器数据用小字宽体；mono 已被房屋规则禁止，
    这里不再是等宽字体（保留类名只为不让旧页面样式悬空） */
 .mono { font-variant-numeric: tabular-nums; }
 
 /* ---------------------------------------------------------------- 窄屏 */
+/* ---------------------------------------------------------------- 断点
+   ★ 断点按**从大到小**排列，规则不要散落在文件各处 —— 同一断点分成两块时，
+     改一处漏一处，谁先谁后说不清。
+   ★ 断点值只有四个，含义固定（与 TurboDL 官网一致）：
+       900px —— 文档页两栏变一栏、横向区块改竖排（平板）
+       700px —— 宽表改卡片式堆叠
+       640px —— 卡片网格收单列、导航折叠、按钮占满整行（手机）
+     新增断点前先想清楚它属于哪一档；实在需要新的，就在这里加一行并写清理由。 */
 @media (max-width: 900px) {
   .split, .split-wide, .faq { grid-template-columns: 1fr; gap: 2rem; }
   .faq-panel { position: static; }
   .hero h1 { max-width: 15ch; }
   .tile-nav, .tile-meta, .tile-credits { grid-column: span 12; }
   .seg { height: 40px; }
+
+  /* 文档页两栏折叠成单栏。
+     ★ 少了这一条，360px 宽下侧栏仍占 240px，正文被压到 80px ——
+       文字每行只剩两三个字，整页横向溢出。侧栏改为普通文档流并排在正文之前
+       （目录在手机上比正文更该先看到）。 */
+  .doc-grid { grid-template-columns: minmax(0, 1fr); }
+  .doc-aside { position: static; }
+}
+
+/* 窄屏的表格：改成一条条卡片，列名贴在值上面。
+   靠的是 sitekit.table() 给每个 <td> 写的 data-label —— 表头行在窄屏是隐藏的，
+   CSS 读不到"这一格属于哪一列"，只能靠这个属性把列名贴回去。
+   不这么做的话，宽表只能横向滚动，而在 390px 上被截断的表会被读成"内容被切了"。 */
+@media (max-width: 700px) {
+  .table-wrap { overflow-x: visible; }
+  table, tbody, tr, td, th { display: block; width: auto; }
+  thead { display: none; }
+  tr { padding-block: 0.9rem; border-bottom: 1px solid var(--edge); }
+  tr:last-child { border-bottom: 0; }
+  /* overflow-wrap: anywhere：卡片化之后，一格就是一行，一整段没有空格的技术串
+     （状态机名、协议名、坐标）无处可断 —— 于是一格能顶出屏幕，
+     整页跟着横向滚动。 */
+  td { border: 0; padding: 0.15rem 0; overflow-wrap: anywhere; }
+  td::before {
+    content: attr(data-label);
+    display: block;
+    font-size: var(--t-small);
+    color: var(--muted);
+  }
+  td:empty { display: none; }
 }
 
 @media (max-width: 640px) {
+  /* 卡片网格在窄屏收成单列。
+     两列在 360px 上每列只剩 156px，**标题与正文里的长 URL 撑破列宽**，
+     整页于是横向溢出 —— 而且是"看不见的溢出"：没有元素超出视口，
+     只是页面本身变宽了。 */
+  .cards.cols-2, .cards.cols-3, .cards.cols-4 { grid-template-columns: minmax(0, 1fr); }
+
   /* 收尾句在手机上按"陈述句"限 24px：超过这个尺寸它就算标题，
      标题在小屏放不下三行（门禁会判超行）。24px 下两行刚好读完。 */
   .cta-line { font-size: 1.5rem; }
@@ -498,7 +616,10 @@ tbody tr { border-top: 1px solid var(--edge); }
   }
   .langs { margin-left: 0; }
   .resolver-row { flex-direction: column; }
-  .resolver input[type="text"] { flex: 1 1 auto; }
+  /* flex-basis 改成 auto：20rem（320px）在 320px 视口里正好等于整个屏幕宽，
+     再减去 padding，容器就装不下了 —— 于是输入框顶出页面 8px。
+     basis: auto 让它按内容宽度算，而 min-width: 0 允许它被容器压缩。 */
+  .resolver input[type="text"] { flex: 1 1 auto; min-width: 0; width: 100%; }
   .btn { width: 100%; }
   .btn-row { flex-direction: column; align-items: stretch; }
   .seg { gap: 3px; }

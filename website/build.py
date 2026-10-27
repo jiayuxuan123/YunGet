@@ -35,6 +35,8 @@ from datetime import datetime, timezone
 from pathlib import Path
 
 from sitekit import (
+    asset,
+    asset_fingerprint,
     breadcrumb,
     buttons,
     cards,
@@ -44,6 +46,7 @@ from sitekit import (
     note,
     rel,
     section,
+    set_asset_fingerprints,
     table,
     write,
 )
@@ -191,7 +194,7 @@ class Site:
 <script>document.documentElement.className+=" js";try{{var t=localStorage.getItem("theme");if(t)document.documentElement.setAttribute("data-theme",t)}}catch(e){{}}setTimeout(function(){{if(!window.__motionReady){{var n=document.querySelectorAll(".rise");for(var i=0;i<n.length;i++)n[i].classList.add("in")}}}},2500);</script>
 <!-- 单一样式表：上一版依赖 Pico（classless）再逐条覆盖，重构后全部规则都在 site.css 里，
      少一层第三方样式与 5 条兼容 hack（见 site.css 头部注释） -->
-<link rel="stylesheet" href="{rel(page["dir"], "assets/site.css")}">
+<link rel="stylesheet" href="{asset(page["dir"], "site.css")}">
 </head>
 <body class="{esc(cfg.get('body_class', ''))}">
 <a class="skip" href="#main">{esc(self.ui(lang, "skip"))}</a>
@@ -258,7 +261,10 @@ class Site:
                 f'<li><a href="{self.href(page, h[1:]) if h.startswith("@") else h}">{esc(t)}</a></li>'
                 for t, h in links
             )
-            cols.append(f'<div class="tile tile-nav"><h3>{esc(title)}</h3><ul>{items}</ul></div>')
+            # h2 而不是 h3：页面结构是 h1（页面标题）→ h2（区块标题）。
+            # 页脚用 h3 会让标题层级从 h1 直接跳到 h3 ——
+            # 屏幕阅读器靠层级判断结构，跳级意味着它认为中间少了一层内容。
+            cols.append(f'<div class="tile tile-nav"><h2>{esc(title)}</h2><ul>{items}</ul></div>')
 
         # 导航只保留第一列（技能：页脚是设计过的收尾，不是站点地图）
         nav_tile = cols[0] if cols else ""
@@ -268,7 +274,7 @@ class Site:
         # 图片来源：只在有真实图片署名时出现
         credits = getattr(self, "foot_credits", "")
         credits_tile = (
-            f'<div class="tile tile-credits"><h3>{esc(self.ui(lang, "credits"))}</h3><p>{credits}</p></div>'
+            f'<div class="tile tile-credits"><h2>{esc(self.ui(lang, "credits"))}</h2><p>{credits}</p></div>'
             if credits else ""
         )
 
@@ -286,7 +292,7 @@ class Site:
 </div>
 </div>
 </footer>
-<script src="{rel(page["dir"], "assets/site.js")}" defer></script>
+<script src="{asset(page["dir"], "site.js")}" defer></script>
 </body>
 </html>
 """
@@ -395,6 +401,10 @@ class Site:
             write(self.out / rel_path, text)
             written.add(rel_path)
 
+        # 资源指纹要在渲染之前算好：页面里的 <link>/<script> 要引用带指纹的文件名，
+        # 而指纹文件名下的文件也要被复制到输出目录。
+        set_asset_fingerprints(self.assets_dir)
+
         self.out.mkdir(parents=True, exist_ok=True)
         emit(".nojekyll", "")
         for page in self.pages:
@@ -403,7 +413,9 @@ class Site:
         emit("robots.txt", self.robots())
         emit("404.html", self.not_found())
 
-        # 静态资源原样拷贝（图片压缩由 make_assets.py 负责，这里不做二次处理）
+        # 静态资源原样拷贝（图片压缩由 make_assets.py 负责，这里不做二次处理）。
+        # .css/.js 额外写一份**带内容指纹**的文件名：页面引用的是那个名字，
+        # 浏览器 URL 变了缓存自然失效（见 sitekit.asset 的说明）。
         if self.assets_dir.exists():
             for src in sorted(self.assets_dir.rglob("*")):
                 if src.is_file() and not src.name.startswith("."):
@@ -412,6 +424,12 @@ class Site:
                     dst.parent.mkdir(parents=True, exist_ok=True)
                     shutil.copy2(src, dst)
                     written.add(rel_path)
+
+                    fingerprinted = asset_fingerprint(src.name)
+                    if fingerprinted and fingerprinted != src.name:
+                        f_dst = self.out / ("assets/" + fingerprinted)
+                        shutil.copy2(src, f_dst)
+                        written.add("assets/" + fingerprinted)
 
         # 清理上次生成、这次不再有的文件；空目录一并收掉
         for stale in sorted(previous - written):
