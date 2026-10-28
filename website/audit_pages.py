@@ -57,12 +57,17 @@ class PageAudit(HTMLParser):
             self.findings.append("html 缺 lang 属性")
         if tag == "img":
             self.images.append((self._where(), a))
+            src = a.get("src", "")
             if "alt" not in a:
-                self.findings.append(f"img 缺 alt：{a.get('src', '?')[:70]}")
-            if "width" not in a or "height" not in a:
-                self.findings.append(f"img 缺显式 width/height（会抖）：{a.get('src', '?')[:70]}")
+                self.findings.append(f"img 缺 alt：{src[:70]}")
+            # ★ 尺寸检查只对**本站资产**有意义：外部图片（shields.io 徽章、
+            #   GitHub 头像）的宽高我们并不知道，写成 0 反而会因比例不对而变形。
+            #   缺尺寸会让页面抖动（CLS），但那条判断的前提是"我们能把尺寸写对"。
+            is_external = src.startswith(("http://", "https://", "//"))
+            if not is_external and ("width" not in a or "height" not in a):
+                self.findings.append(f"img 缺显式 width/height（会抖）：{src[:70]}")
             if "loading" not in a:
-                self.findings.append(f"img 缺 loading=lazy：{a.get('src', '?')[:70]}")
+                self.findings.append(f"img 缺 loading=lazy：{src[:70]}")
         if re.fullmatch(r"h[1-6]", tag):
             self.headings.append((tag, self._where()))
         if tag == "a":
@@ -140,8 +145,14 @@ def audit_file(path: Path) -> list[str]:
 
     if "..." in prose:
         out.append("正文里有 `...`，应为 `…`")
-    if re.search(r'(?<![\w"])"[^"]{2,40}"', prose):
-        out.append("正文里有直引号，中文语境应为「」或“”")
+    # ★ 直引号只在**中文语境**里算问题。英文正文用 "…" 是正确排版
+    #   （换成 curly quotes 属于排版改进，不是缺陷）。
+    #   只按"有没有直引号"报警，会让纯英文页面满屏假警报 ——
+    #   真实信号被噪声淹没，报告就没人看了。
+    for m in re.finditer(r'(?<![\w"])"([^"]{2,60})"', prose):
+        if re.search(r"[\u4e00-\u9fff]", m.group(1)):
+            out.append("正文里的中文直引号应为「」或“”")
+            break
     for m in re.finditer(r"\b(\d+)(MB|GB|KB|TB|ms|s)\b", prose):
         out.append(f"数字与单位之间缺 &nbsp;：{m.group(0)}")
         break

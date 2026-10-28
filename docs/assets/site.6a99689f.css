@@ -381,7 +381,42 @@ html.js .rise.in { opacity: 1; transform: none; transition: opacity 0.6s var(--e
    不写它，内容（长表格、长代码行）会让子项拒绝收缩。 */
 .doc-body { min-width: 0; max-width: 72ch; }
 .doc-head { padding-top: clamp(1.5rem, 4vw, 2.5rem); padding-bottom: 1.25rem; }
-.doc-meta { margin-top: 0.75rem; font-size: var(--t-small); color: var(--muted); }
+.doc-meta { margin-top: 0.75rem; font-size: var(--t-small); color: var(--muted); display: flex; flex-wrap: wrap; gap: 0.25rem 0.9rem; }
+/* 「在 GitHub 上查看 / 原文下载」两个小链接同样只有 16px 高。
+   min-height: 24px + 细微的横向内缩，让它们在手机上也按得准，
+   视觉上仍然是一行次要信息。 */
+.doc-meta a {
+  display: inline-flex;
+  align-items: center;
+  min-height: 24px;
+  text-decoration: underline;
+  text-underline-offset: 3px;
+}
+
+/* 标题旁的「#」锚点：13×26，是页面上最小的可点目标。
+   它只在鼠标悬停时才该出现（触屏没有悬停，一直显示反而碍事），
+   并且给一块 24×24 的透明命中区。 */
+.doc-body h2, .doc-body h3, .doc-body h4 { position: relative; }
+.anchor {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 24px;
+  min-height: 24px;
+  margin-left: 0.35rem;
+  color: var(--muted);
+  text-decoration: none;
+  opacity: 0;
+  transition: opacity 0.15s ease;
+}
+.doc-body h2:hover .anchor,
+.doc-body h3:hover .anchor,
+.doc-body h4:hover .anchor,
+.anchor:focus-visible { opacity: 1; }
+/* 触屏没有悬停：在粗指针设备上常显，否则这个锚点等于不存在。 */
+@media (pointer: coarse) {
+  .anchor { opacity: 0.55; }
+}
 .doc-aside { position: sticky; top: 5.5rem; font-size: var(--t-small); }
 .doc-nav ul, .toc ul { list-style: none; margin: 0.5rem 0 0; padding: 0; display: grid; gap: 0.4rem; }
 .doc-nav a, .toc a { text-decoration: none; color: var(--muted); }
@@ -490,9 +525,19 @@ tbody tr { border-top: 1px solid var(--edge); }
 
 /* 面包屑 */
 .crumbs { display: flex; flex-wrap: wrap; gap: 0.5rem; padding-top: 1.25rem; font-size: var(--t-small); color: var(--muted); }
-.crumbs a { text-decoration: none; }
-.crumbs a:hover { text-decoration: underline; }
-.crumbs .sep { color: var(--edge); }
+/* 面包屑链接：给足点击区域。
+   文字只有 20px 高，手指按下去经常落空 —— WCAG 2.5.8 要求可点目标至少 24×24，
+   而这类小字链接最容易漏掉。用 padding 撑高而不是放大字号（字号是版式的一部分）。 */
+.crumbs a {
+  text-decoration: none;
+  display: inline-flex;
+  align-items: center;
+  min-height: 24px;
+  padding-block: 2px;
+}
+/* 分隔符：--edge 是**描边色**（发丝线），当成文字色用时对 --bg 只有 1.27:1 ——
+   屏幕上基本看不见。文字与描边是两套色阶，不能互相借用。 */
+.crumbs .sep { color: var(--muted); }
 
 /* 分段线记号：区块之间的分隔（页面记号，全站一致） */
 .seg-rule { display: flex; gap: 3px; height: 6px; margin-bottom: 1.75rem; max-width: 320px; }

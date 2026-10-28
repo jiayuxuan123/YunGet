@@ -194,4 +194,4 @@ def breadcrumb(items: list[tuple[str, str]]) -> str:
             parts.append(f'<span aria-current="page">{esc(text)}</span>')
         else:
             parts.append(f'<a href="{href}">{esc(text)}</a>')
-    return '<nav class="crumbs">' + '<span class="sep">/</span>'.join(parts) + "</nav>"
+    return '<nav class="crumbs">' + '<span class="sep" aria-hidden="true">/</span>'.join(parts) + "</nav>"
