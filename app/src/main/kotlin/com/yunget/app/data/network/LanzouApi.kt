@@ -439,6 +439,15 @@ class LanzouApi(
             // 子目录要先列出来：它们只在页面 HTML 上，不在分页结果里
             all += parseSubFolders(baseHtml)
             val seen = all.map { it.fid }.toMutableSet()
+            // 分页请求实际要带的提取码。
+            //
+            // 【为什么要可变、且允许置空】分享页在浏览器里输过密码之后，服务端已经用 Cookie
+            // 记住了解锁状态；此时 filemoreajax 再收到 pwd 反而返回 zt=3（密码错误）。
+            // 实测受害者是"个人网盘 → 文件夹 → 下载文件夹"：这条链路的分享是自己刚创建的，
+            // 用户根本没有输入过什么提取码，却弹出「蓝奏提取码错误，请检查后重新解析」。
+            // 现在遇到 zt=3 先用空提取码重试一次，多数情况就正常了。
+            var pwdToSend = pwd.orEmpty()
+            var rateLimitRetries = 0
             var pg = 1
             while (pg <= LanzouConstants.MAX_FOLDER_PAGES) {
                 var attempt = 0
@@ -452,7 +461,7 @@ class LanzouApi(
                                 "fid" to params.fid,
                                 "t" to params.t,
                                 "k" to params.k,
-                                "pwd" to pwd.orEmpty(),
+                                "pwd" to pwdToSend,
                                 "pg" to pg.toString()
                             ),
                             referer = page.shareUrl,
@@ -469,15 +478,35 @@ class LanzouApi(
                 }
                 val body = json ?: break
                 val zt = body.optInt("zt", 0)
+                // 首页是否已经成功过。子目录来自页面 HTML，不算"列表成功"：
+                // 如果第一页就失败，返回一堆子目录等于骗人，必须报错。
+                val firstPageDone = pg > 1
                 when (zt) {
                     1 -> {}
                     2 -> return@withContext all
-                    3 -> throw IllegalStateException("蓝奏提取码错误，请检查后重新解析")
-                    4 -> {
-                        pg--
-                        if (attempt >= 2) throw IllegalStateException("蓝奏请求过于频繁，请稍后再试")
+                    3 -> {
+                        // 先去掉提取码重试同一页（见 pwdToSend 的说明）。
+                        if (pwdToSend.isNotEmpty()) {
+                            pwdToSend = ""
+                            continue
+                        }
+                        if (!firstPageDone) throw IllegalStateException("蓝奏提取码错误，请检查后重新解析")
+                        // 已经翻过页才被拒：保留已列出的文件，不再往下翻。
+                        break
                     }
-                    else -> throw IllegalStateException("蓝奏解析失败，请确认分享链接和提取码后重试")
+                    4 -> {
+                        // 请求过于频繁：已经翻过页就到此为止，不要为了翻页把已有结果丢掉。
+                        if (firstPageDone) break
+                        rateLimitRetries++
+                        if (rateLimitRetries > 2) throw IllegalStateException("蓝奏请求过于频繁，请稍后再试")
+                        delay(800)
+                    }
+                    else -> {
+                        if (!firstPageDone) {
+                            throw IllegalStateException("蓝奏解析失败，请确认分享链接和提取码后重试")
+                        }
+                        break
+                    }
                 }
                 val arr = body.optJSONArray("text")
                 if (arr == null || arr.length() == 0) break

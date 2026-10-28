@@ -29,7 +29,7 @@ android {
         // Android 7.0 发布于 2016 年，覆盖率早已 >99%。
         minSdk = 24
         targetSdk = 34
-        versionCode = 64
+        versionCode = 65
         // 2.7.10 内容：**原生（L2）插件在手机端暂时禁用**
         //  ① 移除整条 dex 加载链：AndroidNativePluginLoader、YunHostBridge、l2-providers 模块；
         //  ② 移除网盘 CloudProvider 抽象（CloudProvider.kt / Resolver / ShareRepository）
@@ -358,6 +358,10 @@ android {
         //     （全链路 h2，多线程可能完全没加速）——界面说的和实际做的相反。
         //     引擎新增 UNSET 哨兵，只有它才回退到旧字段；界面也合并成一个三选一。
         //  ③ 慢启动起始并发超过总 worker 数时"起步就超发"，现在夹到 worker 数。
+        // 2.7.17：
+        //   修复：分享文件夹翻页时，已解锁的分享若仍带提取码，蓝奏会判"密码错误" ——
+        //         现在先去掉提取码重试一次；已列出文件后翻页被拒或限流，保留已有列表，
+        //         不再把整个列表判为失败并弹"提取码错误"。
         // 2.7.16（引擎 0.2.7.0）：
         //   修复：单条连接出问题不再导致整个任务失败；失败提示改为显示真正出错连接的原因。
         //   优化：连接失效判定 60 秒 → 30 秒，排队中的连接不会被误判；
@@ -367,7 +371,7 @@ android {
         //  视频平台解析（微博/小红书/Pixiv）改为**引擎级原生插件** turbo-plugin-parser，
         //  与 HLS 插件同一套机制：只往 LINK_PARSER 注册解析器、往 PROTOCOL_HANDLER
         //  每平台声明一条，引擎内核对这三个平台一无所知。平台改版只需换这个插件。
-        versionName = "2.7.16"
+        versionName = "2.7.17"
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
     }
