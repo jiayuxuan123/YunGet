@@ -107,8 +107,6 @@ fun EngineAdvancedScreen(
     var segmentsPerConnection by remember { mutableStateOf(repo.segmentsPerConnection) }
     var tailAssist by remember { mutableStateOf(repo.tailAssist) }
     var adaptiveConcurrency by remember { mutableStateOf(repo.adaptiveConcurrency) }
-    var overlapMerge by remember { mutableStateOf(repo.overlapMerge) }
-    var bufferedSegmentWrite by remember { mutableStateOf(repo.bufferedSegmentWrite) }
     var backpressureFailures by remember { mutableStateOf(repo.backpressureFailures) }
     var maxConnectionsPerHost by remember { mutableStateOf(repo.maxConnectionsPerHost) }
     var stallTimeoutSec by remember { mutableStateOf((repo.stallTimeoutMs / 1000L).toInt()) }
@@ -194,8 +192,6 @@ fun EngineAdvancedScreen(
                         segmentsPerConnection = 4
                         tailAssist = true
                         adaptiveConcurrency = true
-                        overlapMerge = false
-                        bufferedSegmentWrite = false
                         backpressureFailures = 0
                         maxConnectionsPerHost = 0
                         stallTimeoutSec = 45
@@ -217,8 +213,6 @@ fun EngineAdvancedScreen(
                         repo.segmentsPerConnection = 4
                         repo.tailAssist = true
                         repo.adaptiveConcurrency = true
-                        repo.overlapMerge = false
-                        repo.bufferedSegmentWrite = false
                         repo.backpressureFailures = 0
                         repo.maxConnectionsPerHost = 0
                         repo.stallTimeoutMs = 45_000L
@@ -316,30 +310,6 @@ fun EngineAdvancedScreen(
                     if (!on) showAdaptiveWarning = true
                 },
                 accentIcon = Icons.Outlined.Warning
-            )
-
-            // 6. 下载中预先合并
-            ParamSwitch(
-                title = "下载中预先合并",
-                description = "把完成的分片立刻写进目标文件，让合并 I/O 与网络等待重叠。" +
-                    "开启会增加磁盘写入量（每个分片写两次）。",
-                checked = overlapMerge,
-                onCheckedChange = {
-                    overlapMerge = it
-                    repo.overlapMerge = it
-                }
-            )
-
-            // 7. 分片缓冲写入
-            ParamSwitch(
-                title = "分片缓冲写入",
-                description = "分片先缓冲再落盘，减少小写入次数。机械盘/低速 SD 卡上更稳，" +
-                    "但在大内存设备上收益不明显。",
-                checked = bufferedSegmentWrite,
-                onCheckedChange = {
-                    bufferedSegmentWrite = it
-                    repo.bufferedSegmentWrite = it
-                }
             )
 
             // 8. 背压降并发阈值
