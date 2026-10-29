@@ -1,6 +1,7 @@
 package com.yunget.app.data.prefs
 
 import android.content.Context
+import com.yunget.app.data.download.EngineDefaults
 
 /**
  * 应用设置（SharedPreferences 持久化）。
@@ -354,7 +355,7 @@ class SettingsRepository(context: Context) {
     /**
      * 停滞多久断开该连接（毫秒，默认 45000；0 = 关闭）。
      *
-     * 服务端接受连接却不发数据时，没有它就要一路等到读超时（默认 60 秒）。
+     * 服务端接受连接却不发数据时，没有它就要一路等到读超时（默认 30 秒）。
      */
     var stallTimeoutMs: Long
         get() = prefs.getLong("stall_timeout_ms", 45_000L)
@@ -407,56 +408,56 @@ class SettingsRepository(context: Context) {
      * 调小 = 切得更细、并发利用率更高，但建连与合并开销上升。
      */
     var engineBlockSizeBytes: Long
-        get() = prefs.getLong("engine_block_size_bytes", 16L * 1024 * 1024)
+        get() = prefs.getLong("engine_block_size_bytes", EngineDefaults.BLOCK_SIZE)
         set(value) {
             prefs.edit().putLong("engine_block_size_bytes", value.coerceAtLeast(4096L)).apply()
         }
 
     /** 最小分片大小（字节，默认 64KB）。低于它的块不再继续切分（引擎要求 ≥4KB）。 */
     var engineMinSegmentSizeBytes: Long
-        get() = prefs.getLong("engine_min_segment_size_bytes", 64L * 1024)
+        get() = prefs.getLong("engine_min_segment_size_bytes", EngineDefaults.MIN_SEGMENT_SIZE)
         set(value) {
             prefs.edit().putLong("engine_min_segment_size_bytes", value.coerceAtLeast(4096L)).apply()
         }
 
     /** 单任务分片总数上限（默认 0 = 不限）。 */
     var engineMaxSegmentsPerTask: Int
-        get() = prefs.getInt("engine_max_segments_per_task", 0)
+        get() = prefs.getInt("engine_max_segments_per_task", EngineDefaults.MAX_SEGMENTS_PER_TASK)
         set(value) {
             prefs.edit().putInt("engine_max_segments_per_task", value.coerceAtLeast(0)).apply()
         }
 
     /** 单个分片最多再被切几次（默认 2）。配合动态分片消除慢连接长尾。 */
     var engineMaxSplitsPerSegment: Int
-        get() = prefs.getInt("engine_max_splits_per_segment", 2)
+        get() = prefs.getInt("engine_max_splits_per_segment", EngineDefaults.MAX_SPLITS_PER_SEGMENT)
         set(value) {
             prefs.edit().putInt("engine_max_splits_per_segment", value.coerceIn(0, 16)).apply()
         }
 
     /** 连接超时（毫秒，默认 15000）。 */
     var engineConnectTimeoutMs: Long
-        get() = prefs.getLong("engine_connect_timeout_ms", 15_000L)
+        get() = prefs.getLong("engine_connect_timeout_ms", EngineDefaults.CONNECT_TIMEOUT_MS)
         set(value) {
             prefs.edit().putLong("engine_connect_timeout_ms", value.coerceIn(1_000L, 120_000L)).apply()
         }
 
-    /** 读超时（毫秒，默认 60000）。服务端接了连接却不发数据时，靠它兜底。 */
+    /** 读超时（毫秒，默认 30000，与引擎默认值一致）。服务端接了连接却不发数据时，靠它兜底。 */
     var engineReadTimeoutMs: Long
-        get() = prefs.getLong("engine_read_timeout_ms", 60_000L)
+        get() = prefs.getLong("engine_read_timeout_ms", EngineDefaults.READ_TIMEOUT_MS)
         set(value) {
             prefs.edit().putLong("engine_read_timeout_ms", value.coerceIn(5_000L, 600_000L)).apply()
         }
 
     /** 首字节探测超时（毫秒，默认 6000，引擎要求 ≥1000）。 */
     var engineProbeTimeoutMs: Long
-        get() = prefs.getLong("engine_probe_timeout_ms", 6_000L)
+        get() = prefs.getLong("engine_probe_timeout_ms", EngineDefaults.PROBE_TIMEOUT_MS)
         set(value) {
             prefs.edit().putLong("engine_probe_timeout_ms", value.coerceIn(1_000L, 60_000L)).apply()
         }
 
     /** 探测重试次数（默认 1）。CDN 抖动导致探测失败时多试几次，代价是首字节更慢。 */
     var engineProbeRetries: Int
-        get() = prefs.getInt("engine_probe_retries", 1)
+        get() = prefs.getInt("engine_probe_retries", EngineDefaults.PROBE_RETRIES)
         set(value) {
             prefs.edit().putInt("engine_probe_retries", value.coerceIn(0, 5)).apply()
         }
@@ -469,7 +470,7 @@ class SettingsRepository(context: Context) {
      * 用户以为调了慢启动，实际起点仍是引擎默认。
      */
     var engineSlowStartInitial: Int
-        get() = prefs.getInt("engine_slow_start_initial", 0)
+        get() = prefs.getInt("engine_slow_start_initial", EngineDefaults.SLOW_START_INITIAL)
         set(value) {
             prefs.edit().putInt("engine_slow_start_initial", value.coerceAtLeast(0)).apply()
         }
@@ -482,7 +483,7 @@ class SettingsRepository(context: Context) {
      * 只有在目标站点明确只认某个 UA 时才需要填。
      */
     var engineUserAgent: String
-        get() = prefs.getString("engine_user_agent", "").orEmpty()
+        get() = prefs.getString("engine_user_agent", EngineDefaults.USER_AGENT).orEmpty()
         set(value) {
             prefs.edit().putString("engine_user_agent", value.trim()).apply()
         }

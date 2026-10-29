@@ -134,7 +134,7 @@ class TurboDownloadManager(
     private val maxSegmentsPerTaskProvider: () -> Int = { 0 },
     private val maxSplitsPerSegmentProvider: () -> Int = { 2 },
     private val connectTimeoutMsProvider: () -> Long = { 15_000L },
-    private val readTimeoutMsProvider: () -> Long = { 60_000L },
+    private val readTimeoutMsProvider: () -> Long = { 30_000L },
     private val probeTimeoutMsProvider: () -> Long = { 6_000L },
     private val probeRetriesProvider: () -> Int = { 1 },
     private val slowStartInitialProvider: () -> Int = { 0 },

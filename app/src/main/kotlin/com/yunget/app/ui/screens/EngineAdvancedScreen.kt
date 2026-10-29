@@ -18,6 +18,8 @@
 
 package com.yunget.app.ui.screens
 
+import com.yunget.app.data.download.EngineDefaults
+
 import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.clickable
@@ -218,15 +220,15 @@ fun EngineAdvancedScreen(
                         repo.stallTimeoutMs = 45_000L
                         repo.trustWeakValidator = false
                         repo.skipProbeWhenSizeKnown = true
-                        repo.engineBlockSizeBytes = 16L * 1024 * 1024
-                        repo.engineMinSegmentSizeBytes = 64L * 1024
-                        repo.engineMaxSegmentsPerTask = 0
-                        repo.engineMaxSplitsPerSegment = 2
-                        repo.engineConnectTimeoutMs = 15_000L
-                        repo.engineReadTimeoutMs = 60_000L
-                        repo.engineProbeTimeoutMs = 6_000L
-                        repo.engineProbeRetries = 1
-                        repo.engineSlowStartInitial = 0
+                        repo.engineBlockSizeBytes = EngineDefaults.BLOCK_SIZE
+                        repo.engineMinSegmentSizeBytes = EngineDefaults.MIN_SEGMENT_SIZE
+                        repo.engineMaxSegmentsPerTask = EngineDefaults.MAX_SEGMENTS_PER_TASK
+                        repo.engineMaxSplitsPerSegment = EngineDefaults.MAX_SPLITS_PER_SEGMENT
+                        repo.engineConnectTimeoutMs = EngineDefaults.CONNECT_TIMEOUT_MS
+                        repo.engineReadTimeoutMs = EngineDefaults.READ_TIMEOUT_MS
+                        repo.engineProbeTimeoutMs = EngineDefaults.PROBE_TIMEOUT_MS
+                        repo.engineProbeRetries = EngineDefaults.PROBE_RETRIES
+                        repo.engineSlowStartInitial = EngineDefaults.SLOW_START_INITIAL
                         repo.engineUserAgent = ""
                         repo.engineHttpVersionPolicy = 0
                     }) {
@@ -348,7 +350,7 @@ fun EngineAdvancedScreen(
             ParamStepper(
                 title = "停滞断开阈值",
                 description = "服务端接受连接却不发数据时，多久断开重试。" +
-                    "没有它就要一路等到读超时（默认 60 秒）。",
+                    "没有它就要一路等到读超时（默认 30 秒）。",
                 value = stallTimeoutSec,
                 range = 0..300,
                 step = 5,
@@ -437,7 +439,7 @@ fun EngineAdvancedScreen(
 
             ParamStepper(
                 title = "读超时",
-                description = "连上之后最多等多久数据（默认 60 秒）。它是兜底 —— " +
+                description = "连上之后最多等多久数据（默认 30 秒）。它是兜底 —— " +
                     "日常的「接了不发」由上面的停滞断开阈值先处理。",
                 value = readTimeoutSec,
                 range = 5..600,

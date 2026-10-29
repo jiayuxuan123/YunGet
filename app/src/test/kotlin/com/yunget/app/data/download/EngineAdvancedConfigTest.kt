@@ -18,6 +18,8 @@
 
 package com.yunget.app.data.download
 
+import com.yunget.app.data.download.EngineDefaults
+
 import dev.turbodl.core.HttpVersionPolicy
 import dev.turbodl.core.TurboConfig
 import org.junit.Assert.assertEquals
@@ -42,18 +44,12 @@ import org.junit.Test
 class EngineAdvancedConfigTest {
 
     /** 与 SettingsRepository 的默认值保持一致（改了那边就要同步这里）。 */
-    private fun appDefaultConfig() = TurboConfig(
-        blockSize = 16L * 1024 * 1024,
-        minSegmentSize = 64L * 1024,
-        maxSegmentsPerTask = 0,
-        maxSplitsPerSegment = 2,
-        connectTimeoutMs = 15_000L,
-        readTimeoutMs = 60_000L,
-        probeTimeoutMs = 6_000L,
-        probeRetries = 1,
-        slowStartInitial = 0,
-        userAgent = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 " +
-            "(KHTML, like Gecko) Chrome/125.0.0.0 Safari/537.36",
+    /**
+     * 应用侧默认值不再在这里手抄一份 —— 用手抄的副本去测"有没有漂移"，
+     * 恰恰会让漂移藏起来（引擎改默认值，抄本不会跟着改）。
+     * 现在两边都取自各自的唯一来源：[EngineDefaults] 与 `TurboConfig()`。
+     */
+    private fun appDefaultConfig() = EngineDefaults.config().copy(
         // App 侧永远显式传策略；0 映射为 AUTO
         httpVersionPolicy = HttpVersionPolicy.AUTO,
     )
@@ -72,7 +68,8 @@ class EngineAdvancedConfigTest {
         assertEquals("probeTimeoutMs 默认值漂移", engine.probeTimeoutMs, app.probeTimeoutMs)
         assertEquals("probeRetries 默认值漂移", engine.probeRetries, app.probeRetries)
         assertEquals("slowStartInitial 默认值漂移", engine.slowStartInitial, app.slowStartInitial)
-        assertEquals("userAgent 默认值漂移", engine.userAgent, app.userAgent)
+        // App 留空 = "用引擎默认 UA"；比较的是**生效值**，不是字面量。
+        assertEquals("userAgent 默认值漂移", engine.userAgent, app.userAgent.ifBlank { engine.userAgent })
         // 【这一项不再比默认值相等】
         // App 永远传显式策略（AUTO/FORCE_HTTP1/FORCE_HTTP2），而引擎的默认值
         // 是 UNSET（= "没设置，回落到 forceHttp1"）。两者语义不同：
