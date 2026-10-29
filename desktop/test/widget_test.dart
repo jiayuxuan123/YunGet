@@ -1,30 +1,31 @@
-// This is a basic Flutter widget test.
-//
-// To perform an interaction with a widget in your test, use the WidgetTester
-// utility in the flutter_test package. For example, you can send tap and scroll
-// gestures. You can also use WidgetTester to find child widgets in the widget
-// tree, read text, and verify that the values of widget properties are correct.
-
-import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
-
-import 'package:yunget_desktop/main.dart';
+import 'package:yunget_desktop/host/models.dart';
 
 void main() {
-  testWidgets('Counter increments smoke test', (WidgetTester tester) async {
-    // Build our app and trigger a frame.
-    await tester.pumpWidget(const MyApp());
+  test('任务 JSON 解析：进度与状态', () {
+    final task = DownloadTask.fromJson({
+      'id': 7,
+      'fileName': 'a.bin',
+      'url': 'https://example.com/a.bin',
+      'destPath': 'D:/dl/a.bin',
+      'size': 2000,
+      'downloaded': 500,
+      'status': 'RUNNING',
+      'error': null,
+      'speed': 1024,
+      'connections': 8,
+    });
+    expect(task.id, 7);
+    expect(task.progress, 0.25);
+    expect(task.isActive, true);
+    expect(formatBytes(2048), '2.0 KB');
+    expect(formatSpeed(0), '—');
+  });
 
-    // Verify that our counter starts at 0.
-    expect(find.text('0'), findsOneWidget);
-    expect(find.text('1'), findsNothing);
-
-    // Tap the '+' icon and trigger a frame.
-    await tester.tap(find.byIcon(Icons.add));
-    await tester.pump();
-
-    // Verify that our counter has incremented.
-    expect(find.text('0'), findsNothing);
-    expect(find.text('1'), findsOneWidget);
+  test('设置缺字段时落到默认值', () {
+    final settings = HostSettings.fromJson(const {});
+    expect(settings.connections, 16);
+    expect(settings.concurrentTasks, 3);
+    expect(settings.readTimeoutMs, 30000);
   });
 }

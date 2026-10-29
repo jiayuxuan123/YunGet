@@ -1,7 +1,10 @@
 package com.yunget.host
 
 import java.io.BufferedReader
+import java.io.FileDescriptor
+import java.io.FileOutputStream
 import java.io.InputStreamReader
+import java.io.PrintStream
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
@@ -31,7 +34,11 @@ import org.json.JSONObject
  */
 fun main() {
     val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
-    val out = Output { line -> println(line); System.out.flush() }
+    // 协议输出必须是 UTF-8。默认的 System.out 在 Windows 上按控制台代码页（GBK）编码，
+    // 带中文的错误信息会变成非法 UTF-8 字节，对端按 UTF-8 解码失败后**整行丢弃** ——
+    // 表现就是"只有带中文的响应石沉大海，任务却照跑"。这类问题在日志里极难看出来。
+    val stdout = PrintStream(FileOutputStream(FileDescriptor.out), true, "UTF-8")
+    val out = Output { line -> stdout.println(line); stdout.flush() }
     val host = Host(scope, out)
 
     // 父进程消失（管道断开）时 stdin 读到 EOF，循环结束，进程自然退出。
