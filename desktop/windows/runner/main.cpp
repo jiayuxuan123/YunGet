@@ -27,7 +27,8 @@ int APIENTRY wWinMain(_In_ HINSTANCE instance, _In_opt_ HINSTANCE prev,
   FlutterWindow window(project);
   Win32Window::Point origin(10, 10);
   Win32Window::Size size(1280, 720);
-  if (!window.Create(L"yunget_desktop", origin, size)) {
+  // 标题用宽字符转义：源文件不带 BOM 时 MSVC 不保证按 UTF-8 解析中文。
+  if (!window.Create(L"\u4e91\u53d6 YunGet", origin, size)) {
     return EXIT_FAILURE;
   }
   window.SetQuitOnClose(true);

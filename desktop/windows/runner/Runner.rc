@@ -89,13 +89,13 @@ BEGIN
     BEGIN
         BLOCK "040904e4"
         BEGIN
-            VALUE "CompanyName", "com.yunget" "\0"
-            VALUE "FileDescription", "yunget_desktop" "\0"
+            VALUE "CompanyName", "YunGet" "\0"
+            VALUE "FileDescription", "YunGet" "\0"
             VALUE "FileVersion", VERSION_AS_STRING "\0"
-            VALUE "InternalName", "yunget_desktop" "\0"
+            VALUE "InternalName", "YunGet" "\0"
             VALUE "LegalCopyright", "Copyright (C) 2026 com.yunget. All rights reserved." "\0"
-            VALUE "OriginalFilename", "yunget_desktop.exe" "\0"
-            VALUE "ProductName", "yunget_desktop" "\0"
+            VALUE "OriginalFilename", "YunGet.exe" "\0"
+            VALUE "ProductName", "YunGet" "\0"
             VALUE "ProductVersion", VERSION_AS_STRING "\0"
         END
     END
