@@ -615,6 +615,9 @@ dependencies {
     implementation("androidx.lifecycle:lifecycle-viewmodel-ktx:2.8.7")
     implementation("androidx.lifecycle:lifecycle-viewmodel-compose:2.8.7")
     implementation("com.squareup.okhttp3:okhttp:4.12.0")
+
+    // 共享内核：网盘解析/模型（纯 JVM，桌面端也用它）
+    implementation(project(":core"))
     // headless WebView 解析（视频平台）：关闭 X-Requested-With 并同步 client hints
     implementation(libs.androidx.webkit)
 

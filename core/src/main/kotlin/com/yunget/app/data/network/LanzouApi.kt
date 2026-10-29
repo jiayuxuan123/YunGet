@@ -62,7 +62,7 @@ data class LanzouSharePage(
  * - 个人盘：Cookie（ylogin + phpdisk_info）→ mydisk.php 取 uid/vei → doupload.php 系列 task。
  */
 class LanzouApi(
-    private val clientProvider: () -> OkHttpClient = { HttpClients.apiClient() }
+    private val clientProvider: () -> OkHttpClient = { CoreHttp.client() }
 ) {
     private val client get() = clientProvider()
     private val noRedirect get() = client.newBuilder().followRedirects(false).build()

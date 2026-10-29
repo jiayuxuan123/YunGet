@@ -27,6 +27,9 @@ rootProject.name = "YunGet"
 
 include(":app")
 
+// 纯 JVM 的共享内核（网盘解析/模型/任务模型）：Android 与桌面/Flutter 的引擎宿主共用。
+include(":core")
+
 // 手机端的插件只有 JS（L1）一种形态，因此没有独立的插件打包模块 —— 原生（L2）插件的
 // 打包模块 :l2-providers 与整套 dex 加载机制已随「原生插件在手机端暂时禁用」一并移除
 // （后续在 Windows 端启用原生插件）。

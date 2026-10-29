@@ -17,8 +17,6 @@
 
 package com.yunget.app.data.network
 
-import android.util.Log
-
 /**
  * 蓝奏取链链路的诊断日志（走 logcat）。
  *
@@ -30,17 +28,30 @@ import android.util.Log
  * **只记 host 与 path，不记 query**：蓝奏的直链 query 里带签名，等于一把临时钥匙，
  * 没有理由为了一句诊断把它写进日志（日志是要发给别人看的）。
  */
-internal object LanzouLog {
+object LanzouLog {
+
+    /**
+     * 日志出口。核心模块不知道自己跑在哪儿（Android / 桌面），由宿主安装：
+     * Android 装到 logcat（导出日志时能带上），桌面装到文件或控制台。
+     * 默认丢弃，保证核心在没有任何宿主配置时也不会崩。
+     */
+    @Volatile
+    var sink: (String) -> Unit = {}
+
+    /** 安装日志出口（宿主启动时调一次）。 */
+    fun install(sink: (String) -> Unit) {
+        this.sink = sink
+    }
 
     private const val TAG = "LanzouParse"
 
     /** 下载节点的一次探测（HEAD）。`first` 标出首跳，方便看出后面是被重定向到哪一步的。 */
     fun hop(host: String, path: String, code: Int, first: Boolean) {
-        Log.d(TAG, "hop${if (first) "(首跳)" else ""} $code $host$path")
+        sink("hop${if (first) "(首跳)" else ""} $code $host$path")
     }
 
     /** 其它需要留痕的节点：命中校验页、提交验证、参数取自哪一份 HTML 等。 */
     fun note(message: String) {
-        Log.d(TAG, message)
+        sink(message)
     }
 }

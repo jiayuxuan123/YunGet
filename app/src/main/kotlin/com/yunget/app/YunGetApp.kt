@@ -33,6 +33,14 @@ class YunGetApp : Application() {
         // 网络日志拦截器需要上下文（读「诊断模式」开关）。
         // 放在最前面：之后任何一次 apiClient() 都会带上它。
         com.yunget.app.data.network.HttpClients.appContext = this.applicationContext
+        // 共享内核的两个出口：HTTP 客户端与日志。内核不依赖 Android，
+        // 由这里把应用已配置好的网络栈与 logcat 装进去（内核默认是裸客户端/丢弃日志）。
+        com.yunget.app.data.network.CoreHttp.install {
+            com.yunget.app.data.network.HttpClients.apiClient()
+        }
+        com.yunget.app.data.network.LanzouLog.install { msg ->
+            android.util.Log.d("LanzouParse", msg)
+        }
         // 结构化诊断日志的落盘装配（滚动文件 + 后台写线程）。
         // 默认关闭，由设置里的「诊断模式」打开 —— 开启后所有出站请求、
         // WebView 事件、数据库操作都会留痕。
