@@ -35,6 +35,9 @@ application {
 
 // 单文件分发包：Flutter 侧只需要一个 jar。
 tasks.jar {
+    // 必须显式依赖 runtimeClasspath：否则 :core 的 jar 不会在打包前重建，
+    // 结果是把上一次的 core.jar 打进来 —— 改了内核代码、跑起来却还是旧行为。
+    dependsOn(configurations.runtimeClasspath)
     manifest { attributes["Main-Class"] = "com.yunget.host.MainKt" }
     duplicatesStrategy = DuplicatesStrategy.EXCLUDE
     from(configurations.runtimeClasspath.get().map { if (it.isDirectory) it else zipTree(it) }) {

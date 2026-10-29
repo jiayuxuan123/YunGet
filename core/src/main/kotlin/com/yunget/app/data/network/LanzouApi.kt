@@ -62,6 +62,7 @@ data class LanzouSharePage(
  * - 个人盘：Cookie（ylogin + phpdisk_info）→ mydisk.php 取 uid/vei → doupload.php 系列 task。
  */
 class LanzouApi(
+
     private val clientProvider: () -> OkHttpClient = { CoreHttp.client() }
 ) {
     private val client get() = clientProvider()
@@ -386,8 +387,13 @@ class LanzouApi(
         val origin = "${uri.scheme}://${uri.host}"
         val title = extractTitle(html)
         val needsPwd = isLockedSharePage(html)
+        // 文件夹判定：除了页面里的分页标记，还要看分享 id 的前缀 ——
+        // 蓝奏的文件夹分享 id 以 `b` 开头，单文件分享以 `i` 开头。
+        // 新版文件夹页面上没有 `filemoreajax` 这些旧标记，只靠 HTML 会被误判成单文件，
+        // 于是列表直接返回空（实测 2026-10-29：/b0cmny2aj 解析出标题但 0 项）。
+        val shareKey = uri.path.trim('/').substringAfterLast('/')
         val isFolder = html.contains("filemoreajax") || html.contains("class=\"filemore\"") ||
-            html.contains("file_more")
+            html.contains("file_more") || shareKey.startsWith("b")
         val iframeUrl = Regex("""<iframe[^>]+src=["']([^"']+)["']""").find(html)?.groupValues?.get(1)
             ?.let { absolutize(origin, it) }
         val fileId = Regex("""(?:ajaxm|ajaxfile)\.php\?file=(\d+)""").find(html)?.groupValues?.get(1)
@@ -412,6 +418,7 @@ class LanzouApi(
                 fidToken = ""
             )
         } else null
+        LanzouLog.note("解析结果: key=$shareKey folder=$isFolder needsPwd=$needsPwd iframe=${iframeUrl != null}")
         LanzouSharePage(
             shareUrl = normalized,
             baseUrl = origin,
@@ -508,6 +515,7 @@ class LanzouApi(
                         throw IllegalStateException("蓝奏解析失败，请确认分享链接和提取码后重试")
                 }
 
+                LanzouLog.note("分页 pg=$pg zt=$zt 项目=${body.optJSONArray("text")?.length() ?: -1} 子目录=${all.size}")
                 val arr = body.optJSONArray("text")
                 if (arr == null || arr.length() == 0) break
                 var added = 0
@@ -595,9 +603,18 @@ class LanzouApi(
             val fields = mutableListOf<Pair<String, String>>()
             val declared = listOf(stripNotes(html), html).firstNotNullOfOrNull { dataObject(it) }
             if (declared != null) {
-                declared.forEach { (k, v) -> fields += k to v }
-                // 带提取码时补上 p（页面对象里有就不覆盖）
-                if (withPwd && fields.none { it.first == "p" }) fields += "p" to pwd!!
+                // 带提取码时必须**覆盖**页面对象里的 p 和 kd。
+                //
+                // 页面对象（data:{action,sign,kd,p}）在“需要提取码”的分享里也会出现，
+                // 但它的 p 是空占位、kd 是 0（未解锁）。旧写法是“页面里有 p 就不覆盖”，
+                // 于是我们把空值原样提交，服务端如实回答 zt=0 密码错误 ——
+                // 而用户明明填对了码。实测（2026-10-29，i0zxZ3d30m8f / fosv）就是这一支。
+                val overrides = if (withPwd) setOf("p", "kd") else emptySet()
+                declared.forEach { (k, v) -> if (k !in overrides) fields += k to v }
+                if (withPwd) {
+                    fields += "p" to pwd!!
+                    fields += "kd" to "1"
+                }
             } else {
                 val sign = jsParam(html, "wp_sign") ?: jsParam(html, "sign") ?: inputValue(html, "sign")
                     ?: throw IllegalStateException("蓝奏分享页缺少下载参数，请重新解析")
@@ -619,6 +636,10 @@ class LanzouApi(
             }
 
             val ajaxJson = formPost(ajaxUrl, fields, entryUrl, origin, null)
+            LanzouLog.note(
+                "取链响应 zt=${ajaxJson.optInt("zt", -1)} inf=${ajaxJson.optString("inf").take(40)} " +
+                    "字段=${fields.joinToString(",") { it.first }} withPwd=$withPwd"
+            )
             LanzouLog.note(
                 "取链：提交 ${URI(ajaxUrl).path.orEmpty()}（${if (declared != null) "参数取自页面对象 ${declared.size} 项" else "参数取自固定变量名"}）"
             )

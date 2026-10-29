@@ -2,10 +2,11 @@ package com.yunget.host
 
 import com.yunget.app.data.network.LanzouApi
 import com.yunget.app.data.network.LanzouConstants
-import com.yunget.app.data.network.LanzouSharePage
 import com.yunget.app.data.network.ShareLinkParser
 import com.yunget.app.data.network.SharePlatform
 import com.yunget.app.data.network.model.ShareFile
+import com.yunget.app.data.network.model.ShareSession
+import com.yunget.app.data.repository.LanzouResolveRepository
 import dev.turbodl.core.DownloadRequest
 import dev.turbodl.core.ProxyMode
 import dev.turbodl.core.ProxyType
@@ -31,14 +32,20 @@ import org.json.JSONObject
  */
 class Host(private val scope: CoroutineScope, private val out: Output) {
 
-    /** 一次解析会话：分享页 + 提取码 + 已列出的文件（按 fid 索引，取直链时要用）。 */
-    private class Session(val page: LanzouSharePage, val pwd: String?) {
+    /**
+     * 一次解析会话：仓库返回的会话（分享地址 + 提取码）+ 已列出的文件。
+     *
+     * 列表与取链接口都走 [LanzouResolveRepository] —— 它已经处理了"单文件 vs 文件夹"
+     * 的分支。宿主自己直接调 Api 的话，单文件分享会被当成文件夹去请求分页参数，
+     * 于是报"分页异常"（这个错误真在测试里出现过）。
+     */
+    private class Session(val share: ShareSession) {
         val files = ConcurrentHashMap<String, ShareFile>()
     }
 
     private var settings = Settings.load()
     private val store = TaskStore()
-    private val api = LanzouApi()
+    private val lanzouRepo = LanzouResolveRepository(LanzouApi())
     private val client = TurboClient(buildConfig(settings))
 
     private val sessions = ConcurrentHashMap<String, Session>()
@@ -80,17 +87,17 @@ class Host(private val scope: CoroutineScope, private val out: Output) {
             ?: return out.error(id, "无法识别的分享链接（首版桌面端支持网盘分享链接，直链请用 download）")
         when (parsed.platform) {
             SharePlatform.LANZOU -> {
-                val page = api.resolveShare(parsed.shareId, pwd ?: parsed.pwd)
+                // 必须把**原始链接**交给解析：parse 给出的 shareId 只是末段 id，
+                // 不能当 URL 用（OkHttp 会直接报 "no scheme found"）。
+                val share = lanzouRepo.createSession(link, pwd ?: parsed.pwd, "").getOrThrow()
                 val sid = UUID.randomUUID().toString().take(8)
-                sessions[sid] = Session(page, pwd ?: parsed.pwd)
+                sessions[sid] = Session(share)
                 out.ok(
                     id,
                     mapOf(
                         "session" to sid,
                         "platform" to parsed.platform.name,
-                        "title" to page.title,
-                        "isFolder" to page.isFolder,
-                        "needsPwd" to page.needsPwd,
+                        "title" to share.title,
                     )
                 )
             }
@@ -101,7 +108,7 @@ class Host(private val scope: CoroutineScope, private val out: Output) {
     private suspend fun list(id: String?, p: JSONObject) {
         val session = sessions[p.optString("session")] ?: return out.error(id, "会话已失效，请重新解析")
         val dir = p.optString("dir")
-        val files = api.listShareFolder(session.page, session.pwd, dir)
+        val files = lanzouRepo.listFiles(session.share, dir, "").getOrThrow()
         files.forEach { session.files[it.fid] = it }
         val array = JSONArray()
         files.forEach { f ->
@@ -122,7 +129,7 @@ class Host(private val scope: CoroutineScope, private val out: Output) {
         val fid = p.optString("file")
         val file = session.files[fid] ?: return out.error(id, "文件不存在，请刷新列表")
         if (file.isdir) return out.error(id, "这是文件夹，不能直接下载")
-        val link = api.getShareDownloadLink(session.page, file, session.pwd)
+        val link = lanzouRepo.getShareDownloadLink(session.share, file, "").getOrThrow()
         // 蓝奏的下载节点要求 Referer 与 down_ip Cookie；这两个头必须由宿主给出，
         // 界面只负责原样传回来（它不该知道协议的细节）。
         val origin = runCatching { URI(link.downloadUrl) }.getOrNull()

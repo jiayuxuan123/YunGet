@@ -40,6 +40,8 @@ fun main() {
     val stdout = PrintStream(FileOutputStream(FileDescriptor.out), true, "UTF-8")
     val out = Output { line -> stdout.println(line); stdout.flush() }
     val host = Host(scope, out)
+    // 把内核的协议诊断日志接到协议里（客户端会打印/收集），排查解析问题时不用另开日志文件。
+    com.yunget.app.data.network.LanzouLog.install { msg -> out.log(msg) }
 
     // 父进程消失（管道断开）时 stdin 读到 EOF，循环结束，进程自然退出。
     Runtime.getRuntime().addShutdownHook(Thread { runCatching { host.close() } })
