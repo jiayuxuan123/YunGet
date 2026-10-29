@@ -376,12 +376,16 @@ class LanzouApi(
     /** A1/A2：获取分享页并解析（文件夹分享 / 文件分享）。 */
     suspend fun resolveShare(shareUrl: String, pwd: String?): LanzouSharePage = withContext(Dispatchers.IO) {
         val normalized = LanzouConstants.normalizeShareUrl(shareUrl)
-        val html = fetchPageFollowingLanzou(normalized)
+        var html = fetchPageFollowingLanzou(normalized)
+        // 带提取码却在密码页：先把码提交给分享页解锁（否则后面拿到的参数来自密码页，
+        // 分页/取链全都会失败）。解锁失败就按原样继续，让上层给出准确报错。
+        if (!pwd.isNullOrBlank() && isLockedSharePage(html)) {
+            unlockSharePage(normalized, pwd)?.let { html = it }
+        }
         val uri = URI(normalized)
         val origin = "${uri.scheme}://${uri.host}"
         val title = extractTitle(html)
-        val needsPwd = html.contains("请输入密码") || html.contains("id=\"pwbox\"") ||
-            html.contains("input_password") || html.contains("密码不正确")
+        val needsPwd = isLockedSharePage(html)
         val isFolder = html.contains("filemoreajax") || html.contains("class=\"filemore\"") ||
             html.contains("file_more")
         val iframeUrl = Regex("""<iframe[^>]+src=["']([^"']+)["']""").find(html)?.groupValues?.get(1)
@@ -561,8 +565,11 @@ class LanzouApi(
 
             // ① 定位「这个文件自己的页面」
             val childPageUrl = downloadPageUrlFor(page, file)
-            val entryHtml = childPageUrl?.let { fetchPageFollowingLanzou(it) } ?: page.html
+            var entryHtml = childPageUrl?.let { fetchPageFollowingLanzou(it) } ?: page.html
             val entryUrl = childPageUrl ?: page.shareUrl
+            if (withPwd && isLockedSharePage(entryHtml)) {
+                unlockSharePage(entryUrl, pwd!!)?.let { entryHtml = it }
+            }
             LanzouLog.note(
                 if (childPageUrl != null) "取链：文件页 $origin${URI(childPageUrl).path.orEmpty()}（文件夹分享）"
                 else "取链：分享页 ${URI(entryUrl).path.orEmpty()}（单文件分享）"
@@ -619,7 +626,7 @@ class LanzouApi(
             LanzouLog.note(
                 "取链：提交 ${URI(ajaxUrl).path.orEmpty()}（${if (declared != null) "参数取自页面对象 ${declared.size} 项" else "参数取自固定变量名"}）"
             )
-            validateAjax(ajaxJson)
+            validateAjax(ajaxJson, sentPwd = withPwd)
             val dom = ajaxJson.optString("dom")
             val rel = ajaxJson.optString("url")
             if (dom.isBlank() || rel.isBlank() || rel.startsWith("/") || rel.contains("://")) {
@@ -864,6 +871,55 @@ class LanzouApi(
         }
     }
 
+    /** 页面是否停在"请输入提取码"的表单上。 */
+    internal fun isLockedSharePage(html: String): Boolean =
+        html.contains("请输入密码") || html.contains("id=\"pwbox\"") ||
+            html.contains("input_password") || html.contains("密码不正确")
+
+    /** 记录 `Set-Cookie: name=value; Path=/...` 里的 name/value。 */
+    private fun captureSetCookie(host: String, header: String) {
+        val pair = header.substringBefore(';').trim()
+        val name = pair.substringBefore('=', "").trim()
+        val value = pair.substringAfter('=', "").trim()
+        if (name.isNotEmpty() && value.isNotEmpty()) setCookie(host, name, value)
+    }
+
+    /**
+     * 用提取码解锁分享页，返回解锁后的 HTML；没解开返回 null。
+     *
+     * 为什么不能只靠取链接口的 p 字段：浏览器是先把提取码**提交给分享页**，
+     * 服务端用会话记住"已解锁"，再取链。个人盘"先建分享再取链"这条路径上，
+     * 跳过提交这一步时服务端会回「请输入密码」，而我们把它翻译成了"提取码错误"。
+     * 这里照浏览器的做法走一遍：POST pwd → 逐跳跟随重定向 → 回收 Set-Cookie。
+     */
+    private fun unlockSharePage(shareUrl: String, pwd: String): String? {
+        var current = shareUrl
+        val body = FormBody.Builder().add("pwd", pwd).build()
+        repeat(4) {
+            val host = hostOf(current)
+            val origin = runCatching { URI(current) }.getOrNull()?.let { "${it.scheme}://${it.host}" }.orEmpty()
+            val request = Request.Builder()
+                .url(current)
+                .header("User-Agent", LanzouConstants.WEB_UA)
+                .header("Referer", shareUrl)
+                .apply { if (origin.isNotEmpty()) header("Origin", origin) }
+                .apply { val c = cookieHeader(host); if (c.isNotEmpty()) header("Cookie", c) }
+                .post(body)
+                .build()
+            noRedirect.newCall(request).execute().use { resp ->
+                resp.headers("Set-Cookie").forEach { captureSetCookie(host, it) }
+                if (resp.code in 300..399) {
+                    val loc = resp.header("Location") ?: return null
+                    current = absolutize(current, loc)
+                    return@use
+                }
+                val html = resp.body?.string().orEmpty()
+                return if (isLockedSharePage(html)) null else html
+            }
+        }
+        return null
+    }
+
     private fun fetchPageFollowingLanzou(url: String): String {
         var current = url
         val challenged = mutableSetOf<String>()
@@ -927,11 +983,20 @@ class LanzouApi(
         }
     }
 
-    private fun validateAjax(json: JSONObject) {
+    private fun validateAjax(json: JSONObject, sentPwd: Boolean = false) {
         if (json.optInt("zt", 0) == 1) return
         val inf = json.optString("inf")
         when {
-            inf.contains("密码") || inf.contains("提取码") -> throw IllegalStateException("蓝奏提取码错误，请检查后重新解析")
+            inf.contains("密码") || inf.contains("提取码") -> {
+                // 区分两种完全不同的情况：我们根本没带码（该提示"需要提取码"），
+                // 还是带了码被拒（才是"提取码错误"）。以前一律报后者，
+                // 于是从未输入过提取码的路径（个人盘取链）也会被告知"提取码错误"。
+                val needCode = !sentPwd && (inf.contains("请输入") || inf.contains("需要"))
+                throw IllegalStateException(
+                    if (needCode) "该分享需要提取码，请填写后重试"
+                    else "蓝奏提取码错误，请检查后重新解析"
+                )
+            }
             inf.contains("不存在") || inf.contains("取消") || inf.contains("过期") || inf.contains("删除") ->
                 throw IllegalStateException("蓝奏文件已取消分享或不存在")
             inf.contains("频繁") || inf.contains("次数") || inf.contains("稍后") ->
@@ -1037,9 +1102,13 @@ class LanzouApi(
             val origin = runCatching { URI(base) }.getOrNull()?.let { "${it.scheme}://${it.host}" } ?: base
             "$origin/${raw.trimStart('/')}"
         }
+        // 蓝奏有时把提取码放在链接里（`.../xxxx?pwd=abcd`）而 info.pwd 为空。
+        // 丢掉它会让后面的取链走"无密码"分支，服务端回「请输入密码」，
+        // 最终显示成「提取码错误」—— 用户根本没机会输入过任何提取码。
+        val codeFromUrl = Regex("""[?&]pwd=([A-Za-z0-9]+)""").find(url)?.groupValues?.get(1).orEmpty()
         return ShareInfo(
             shareUrl = url,
-            passcode = pwd,
+            passcode = pwd.ifBlank { codeFromUrl },
             pwdId = raw,
             title = "蓝奏云分享",
             expiredType = com.yunget.app.data.network.model.ShareExpire.UNKNOWN

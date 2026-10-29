@@ -278,4 +278,22 @@ class LanzouShareParseTest {
         assertTrue(guard.enter("https://b.lanzouj.com/file/x", ""))
         assertTrue(guard.enter("https://a.lanzouj.com/file/y", ""))
     }
+
+    /**
+     * 2.7.18：识别"停在提取码表单"的分享页。
+     *
+     * 这个判定是解锁流程的入口。以前它只出现在 resolveShare 里，取链路径完全不做判定，
+     * 于是"个人盘先建分享再取链"会拿着一份密码页去取参数，服务端回「请输入密码」，
+     * 最后被翻译成「蓝奏提取码错误」——用户根本没输入过提取码。
+     */
+    @Test
+    fun `识别停在提取码表单的分享页`() {
+        val locked = """<html><body><div class="pwdbox">请输入密码</div>
+            <input type="password" name="pwd" id="pwd"></body></html>"""
+        val wrong = """<html><body><span>密码不正确</span></body></html>"""
+        val unlocked = """<html><body><div class="filemoreajax"></div><iframe src="/fn?file=1"></iframe></body></html>"""
+        assertTrue(api.isLockedSharePage(locked))
+        assertTrue(api.isLockedSharePage(wrong))
+        assertFalse(api.isLockedSharePage(unlocked))
+    }
 }
