@@ -19,8 +19,6 @@ import java.util.Locale
  */
 class CrashHandler(private val context: Context) : Thread.UncaughtExceptionHandler {
 
-    private val defaultHandler = Thread.getDefaultUncaughtExceptionHandler()
-
     override fun uncaughtException(thread: Thread, throwable: Throwable) {
         val log = buildCrashLog(thread, throwable)
         saveCrashLog(log)

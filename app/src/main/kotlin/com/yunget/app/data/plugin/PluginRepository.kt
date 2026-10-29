@@ -761,9 +761,6 @@ class PluginRepository(context: Context) {
         }
     }
 
-    private fun sourceUriForPaste(fileName: String?, id: String): String =
-        if (fileName.isNullOrBlank()) "inline:$id" else "file:$fileName"
-
     /**
      * 写文本到已知安全路径。
      *

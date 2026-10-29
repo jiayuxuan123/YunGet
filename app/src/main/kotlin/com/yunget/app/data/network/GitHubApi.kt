@@ -330,17 +330,6 @@ class GitHubApi(
             }
         }
 
-    /** 构建带鉴权头的 Request 并执行，返回 JSONObject；非 2xx / 空响应 / 解析失败返回 null */
-    private fun requestJson(url: String): JSONObject? {
-        val request = buildRequest(url)
-        client.newCall(request).execute().use { response ->
-            noteResponseCode(response.code)
-            if (!response.isSuccessful) return null
-            val body = response.body?.string() ?: return null
-            return runCatching { JSONObject(body) }.getOrNull()
-        }
-    }
-
     /** 构建带鉴权头的 Request 并执行，返回 JSONArray；非 2xx / 空响应 / 解析失败返回 null */
     private fun requestJsonArray(url: String): JSONArray? {
         val request = buildRequest(url)

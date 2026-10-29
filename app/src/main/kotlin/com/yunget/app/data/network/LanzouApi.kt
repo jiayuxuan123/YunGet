@@ -1142,11 +1142,6 @@ class LanzouApi(
         .replace(Regex("""<!--.*?-->""", RegexOption.DOT_MATCHES_ALL), "\n")
         .replace(Regex("""/\*.*?\*/""", RegexOption.DOT_MATCHES_ALL), "\n")
 
-    /** 读取未加引号的 JS 变量值（如 `var kdns = 0`）。 */
-    private fun jsVarRaw(html: String, name: String): String? =
-        Regex("""(?:var|let|const)\s+$name\s*=\s*([^;,\n\r]+)""").find(html)?.groupValues?.get(1)
-            ?.trim()?.trim('\'', '"')
-
     /** 页面若是 acw_sc__v2 校验页则返回应设置的 Cookie 值。 */
     private fun lanzouChallengeCookie(source: String): String? {
         val arg1 = Regex("""\barg1\s*=\s*'([0-9A-Fa-f]{40})'""").find(source)?.groupValues?.getOrNull(1)

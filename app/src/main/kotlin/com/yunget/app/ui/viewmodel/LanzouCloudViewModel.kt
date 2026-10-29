@@ -261,19 +261,6 @@ class LanzouCloudViewModel(
 
     // ---------- 下载 ----------
 
-    private suspend fun enqueueFile(cred: LanzouCreds, file: ShareFile, fileName: String): Boolean =
-        runCatching {
-            val link = api.getPersonalDownloadLink(cred.cookie, cred.uid, cred.vei, fileNumeric(file.fid), file.fname)
-            // 本项目未移植 DownloadManager 的 platform 参数，此处省略
-            downloadManager.enqueue(
-                url = link.downloadUrl,
-                fileName = fileName,
-                size = link.size,
-                headers = downloadHeaders(link.downloadUrl)
-            )
-            true
-        }.getOrDefault(false)
-
     private suspend fun downloadFolderFiles(
         cred: LanzouCreds,
         folder: ShareFile,
