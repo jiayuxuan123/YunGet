@@ -482,36 +482,32 @@ class LanzouApi(
                 }
                 val body = json ?: break
                 val zt = body.optInt("zt", 0)
-                // 首页是否已经成功过。子目录来自页面 HTML，不算"列表成功"：
-                // 如果第一页就失败，返回一堆子目录等于骗人，必须报错。
-                val firstPageDone = pg > 1
-                when (zt) {
-                    1 -> {}
-                    2 -> return@withContext all
-                    3 -> {
-                        // 先去掉提取码重试同一页（见 pwdToSend 的说明）。
-                        if (pwdToSend.isNotEmpty()) {
-                            pwdToSend = ""
-                            continue
-                        }
-                        if (!firstPageDone) throw IllegalStateException("蓝奏提取码错误，请检查后重新解析")
-                        // 已经翻过页才被拒：保留已列出的文件，不再往下翻。
+                // 决策抽成纯函数（folderPageAction）：这些组合是用户实际踩到的那几种，
+                // 放在 HTTP 循环里既难读也难测。这里只负责把决策落成动作。
+                when (folderPageAction(zt, firstPageDone = pg > 1, pwdPresent = pwdToSend.isNotEmpty())) {
+                    FolderPageAction.NEXT -> {}
+                    FolderPageAction.DONE -> {
+                        if (zt == 2) return@withContext all
                         break
                     }
-                    4 -> {
-                        // 请求过于频繁：已经翻过页就到此为止，不要为了翻页把已有结果丢掉。
-                        if (firstPageDone) break
+                    FolderPageAction.RETRY_WITHOUT_PWD -> {
+                        // 已解锁的分享再带提取码会被判"密码错误"（见 pwdToSend 的说明）。
+                        pwdToSend = ""
+                        continue
+                    }
+                    FolderPageAction.RETRY_LATER -> {
                         rateLimitRetries++
                         if (rateLimitRetries > 2) throw IllegalStateException("蓝奏请求过于频繁，请稍后再试")
                         delay(800)
                     }
-                    else -> {
-                        if (!firstPageDone) {
-                            throw IllegalStateException("蓝奏解析失败，请确认分享链接和提取码后重试")
-                        }
-                        break
-                    }
+                    FolderPageAction.FAIL_PWD ->
+                        throw IllegalStateException("蓝奏提取码错误，请检查后重新解析")
+                    FolderPageAction.FAIL_BUSY ->
+                        throw IllegalStateException("蓝奏请求过于频繁，请稍后再试")
+                    FolderPageAction.FAIL_OTHER ->
+                        throw IllegalStateException("蓝奏解析失败，请确认分享链接和提取码后重试")
                 }
+
                 val arr = body.optJSONArray("text")
                 if (arr == null || arr.length() == 0) break
                 var added = 0
@@ -1309,3 +1305,47 @@ class LanzouApi(
     private fun firstNonBlank(vararg values: String): String =
         values.firstOrNull { !it.isNullOrBlank() }?.trim().orEmpty()
 }
+
+/**
+ * 分页请求返回 `zt` 之后该做什么。
+ *
+ * 这些组合都来自真实故障：已解锁的分享再带提取码会被判"密码错误"（应重试不带码）、
+ * 已经翻过页却被拒或限流（应保留已加载的列表）、首页就失败（才该报错）。
+ * 抽成纯函数是为了让每一种组合都能被单测钉住 —— 之前这段逻辑埋在 HTTP 循环里，
+ * 改动只能靠联网手测，于是同一个错误报了两轮。
+ */
+internal enum class FolderPageAction {
+    /** 本页有效，继续解析并翻下一页。 */
+    NEXT,
+
+    /** 没有下一页（或已翻过的页被拒）：保留已加载的内容，正常结束。 */
+    DONE,
+
+    /** 带着提取码被拒：去掉提取码重试同一页。 */
+    RETRY_WITHOUT_PWD,
+
+    /** 首页被限流：稍后重试。 */
+    RETRY_LATER,
+
+    /** 首页就报提取码错误：只有这种情况才该这么提示。 */
+    FAIL_PWD,
+
+    /** 首页就被限流且重试用尽。 */
+    FAIL_BUSY,
+
+    /** 首页返回无法解释的 zt。 */
+    FAIL_OTHER,
+}
+
+internal fun folderPageAction(zt: Int, firstPageDone: Boolean, pwdPresent: Boolean): FolderPageAction =
+    when (zt) {
+        1 -> FolderPageAction.NEXT
+        2 -> FolderPageAction.DONE
+        3 -> when {
+            pwdPresent -> FolderPageAction.RETRY_WITHOUT_PWD
+            firstPageDone -> FolderPageAction.DONE
+            else -> FolderPageAction.FAIL_PWD
+        }
+        4 -> if (firstPageDone) FolderPageAction.DONE else FolderPageAction.RETRY_LATER
+        else -> if (firstPageDone) FolderPageAction.DONE else FolderPageAction.FAIL_OTHER
+    }

@@ -296,4 +296,31 @@ class LanzouShareParseTest {
         assertTrue(api.isLockedSharePage(wrong))
         assertFalse(api.isLockedSharePage(unlocked))
     }
+
+    /**
+     * 2.7.19：分页返回码该落成什么动作。
+     *
+     * 这段判断以前埋在 HTTP 循环里，只能靠联网手测，于是同一个"提取码错误"报了两轮。
+     * 现在它是有返回值的纯函数，每种组合都能钉住。
+     */
+    @Test
+    fun `分页返回码决定下一步动作`() {
+        // 正常页 / 没有下一页
+        assertEquals(FolderPageAction.NEXT, folderPageAction(zt = 1, firstPageDone = false, pwdPresent = true))
+        assertEquals(FolderPageAction.DONE, folderPageAction(zt = 2, firstPageDone = true, pwdPresent = false))
+
+        // 密码错误：带着码先脱码重试；没带码且是首页才报错；翻过页则保留已有列表
+        assertEquals(FolderPageAction.RETRY_WITHOUT_PWD, folderPageAction(zt = 3, firstPageDone = false, pwdPresent = true))
+        assertEquals(FolderPageAction.RETRY_WITHOUT_PWD, folderPageAction(zt = 3, firstPageDone = true, pwdPresent = true))
+        assertEquals(FolderPageAction.FAIL_PWD, folderPageAction(zt = 3, firstPageDone = false, pwdPresent = false))
+        assertEquals(FolderPageAction.DONE, folderPageAction(zt = 3, firstPageDone = true, pwdPresent = false))
+
+        // 限流：首页重试，翻过页就收下已有结果
+        assertEquals(FolderPageAction.RETRY_LATER, folderPageAction(zt = 4, firstPageDone = false, pwdPresent = false))
+        assertEquals(FolderPageAction.DONE, folderPageAction(zt = 4, firstPageDone = true, pwdPresent = false))
+
+        // 无法解释的返回码：首页报错，否则保留已有结果
+        assertEquals(FolderPageAction.FAIL_OTHER, folderPageAction(zt = 9, firstPageDone = false, pwdPresent = false))
+        assertEquals(FolderPageAction.DONE, folderPageAction(zt = 9, firstPageDone = true, pwdPresent = false))
+    }
 }
