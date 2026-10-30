@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""TurboDL / YunGet 官网的静态站点生成器（纯标准库）。
+"""YunGet 官网的静态站点生成器（纯标准库，YunGet 专用）。
 
 ## 为什么用生成器而不是手写 HTML
 
@@ -186,34 +186,42 @@ class Site:
 <meta property="og:url" content="{esc(canon)}">
 <meta property="og:image" content="{esc(og_image)}">
 <meta name="twitter:card" content="summary_large_image">
-<meta name="theme-color" content="#ffffff" media="(prefers-color-scheme: light)">
-<meta name="theme-color" content="#08090b" media="(prefers-color-scheme: dark)">
+<meta name="color-scheme" content="light dark">
+<meta name="theme-color" content="#f1eadb" media="(prefers-color-scheme: light)">
+<meta name="theme-color" content="#171812" media="(prefers-color-scheme: dark)">
 <link rel="icon" href="{rel(page["dir"], "assets/favicon.svg")}" type="image/svg+xml">
 <link rel="apple-touch-icon" href="{rel(page["dir"], "assets/apple-touch-icon.png")}">
-<!-- 主题：在样式表之前定下 data-theme，避免深色偏好下闪一帧白 -->
-<script>document.documentElement.className+=" js";try{{var t=localStorage.getItem("theme");if(t)document.documentElement.setAttribute("data-theme",t)}}catch(e){{}}setTimeout(function(){{if(!window.__motionReady){{var n=document.querySelectorAll(".rise");for(var i=0;i<n.length;i++)n[i].classList.add("in")}}}},2500);</script>
-<!-- 单一样式表：上一版依赖 Pico（classless）再逐条覆盖，重构后全部规则都在 site.css 里，
-     少一层第三方样式与 5 条兼容 hack（见 site.css 头部注释） -->
+<link rel="preload" href="{rel(page["dir"], "assets/fonts/schibsted-grotesk-latin.woff2")}" as="font" type="font/woff2" crossorigin>
+<!-- 主题在样式表之前落地，避免深色偏好下闪白。 -->
+<script>document.documentElement.classList.add("js");try{{var t=localStorage.getItem("theme");if(t==="light"||t==="dark")document.documentElement.setAttribute("data-theme",t)}}catch(e){{}}setTimeout(function(){{document.documentElement.classList.add("motion-fallback")}},1800);</script>
 <link rel="stylesheet" href="{asset(page["dir"], "site.css")}">
 </head>
-<body class="{esc(cfg.get('body_class', ''))}">
+<body class="{esc(cfg.get('body_class', ''))}" data-page="{esc(page["key"])}" data-kind="{esc(self.page_kind(page))}">
 <a class="skip" href="#main">{esc(self.ui(lang, "skip"))}</a>
 """
 
-    def header(self, page: dict) -> str:
-        """顶栏：词标 + 几个纯文本链接 + 语言切换。
+    def page_kind(self, page: dict) -> str:
+        """页面类别：只影响视觉编排，不改变任何内容或路由。"""
+        key = page.get("key", "")
+        if key == "home":
+            return "home"
+        if key.startswith(("doc-", "legal-")):
+            return "document"
+        return "inner"
 
-        重构后从"左侧固定侧栏"改为顶部一行（方向单要求：没有 bar chrome、
-        没有玻璃模糊、没有阴影，就是词标与几个链接）。窄屏由 .nav-toggle 展开。
-        """
+    def header(self, page: dict) -> str:
+        """顶栏：运单抬头、路线导航、主题开关与快速取件入口。"""
         cfg = self.cfg
         lang = page["lang"]
         brand_href = rel(page["dir"], self.index["home"].get(lang) or self.index["home"][cfg["default_lang"]])
         nav_items = []
-        for key, _labels in cfg["nav"]:
+        for i, (key, _labels) in enumerate(cfg["nav"], 1):
             href = self.href(page, key)
             active = ' aria-current="page"' if page["key"] == key else ""
-            nav_items.append(f'<a href="{href}"{active}>{esc(self.label((key, _labels), lang))}</a>')
+            nav_items.append(
+                f'<a href="{href}"{active}><span class="nav-index" aria-hidden="true">{i:02d}</span>'
+                f'<span>{esc(self.label((key, _labels), lang))}</span></a>'
+            )
         nav = "".join(nav_items)
 
         # 语言切换：同一 page key 在另一个语言下的地址；目标语言没有该页时退回其首页（不做死链）
@@ -229,29 +237,54 @@ class Site:
                     if target is None:
                         target = self.index["home"].get(code)
                     links.append(f'<a href="{rel(page["dir"], target)}">{esc(self.label((code, _lab), lang))}</a>')
-            switcher = '<div class="langs">' + "".join(links) + "</div>"
+            switcher = '<div class="langs" aria-label="语言">' + "".join(links) + "</div>"
+
+        dl_href = self.href(page, "download")
+        nav_titles = {key: labels for key, labels in cfg["nav"]}
+        if page.get("key") in nav_titles:
+            route_title = esc(self.label((page["key"], nav_titles[page["key"]]), lang))
+        else:
+            route_title = esc(page.get("title", cfg["name"]))
+        theme_label = esc(self.ui(lang, "theme"))
+        menu_label = esc(self.ui(lang, "menu"))
 
         return f"""<header class="top">
-<div class="wrap top-in">
-<a class="brand" href="{brand_href}"><span class="brand-mark">{cfg['mark_svg']}</span><span class="brand-name">{esc(cfg['name'])}</span></a>
-<button class="nav-toggle" type="button" aria-expanded="false" aria-controls="top-nav">{esc(self.ui(lang, "menu"))}</button>
-<nav class="top-nav" id="top-nav">{nav}</nav>
-{switcher}
+<div class="top-rule">
+<div class="wrap top-rule-in">
+<span>YUNGET / CLOUD COURIER</span>
+<span class="route-title">{route_title}</span>
+<span>ANDROID · OPEN SOURCE</span>
 </div>
+</div>
+<div class="wrap top-in">
+<a class="brand" href="{brand_href}" aria-label="{esc(cfg['name'])} 首页">
+<span class="brand-mark"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32" width="24" height="24" aria-hidden="true"><rect width="32" height="32" fill="#c83f2e"/><rect x="3" y="3" width="26" height="26" fill="#f1eadb"/><path d="M8 8h16v7H8z" fill="none" stroke="#181914" stroke-width="1.8"/><path d="M8 13h16M12 8v5M20 8v5" fill="none" stroke="#181914" stroke-width="1.5"/><path d="M10 18h5l1.5 2 1.5-2h4" fill="none" stroke="#c83f2e" stroke-width="1.8" stroke-linecap="square"/><path d="M16 20v5M12.5 22.5 16 26l3.5-3.5" fill="none" stroke="#181914" stroke-width="1.8" stroke-linecap="square" stroke-linejoin="miter"/></svg></span>
+<span class="brand-copy"><strong>{esc(cfg['name'])}</strong><small>云端包裹 / CLOUD COURIER</small></span>
+</a>
+<nav class="top-nav" id="top-nav" aria-label="主导航">{nav}</nav>
+<div class="top-actions">
+{switcher}
+<button class="theme-toggle" type="button" data-theme-toggle aria-label="{theme_label}" aria-pressed="false">
+<svg class="theme-sun" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true"><circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M4.93 4.93l1.42 1.42M17.66 17.66l1.41 1.41M2 12h2M20 12h2M4.93 19.07l1.42-1.42M17.66 6.34l1.41-1.41"/></svg>
+<svg class="theme-moon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true"><path d="M20.5 14.2A8.5 8.5 0 0 1 9.8 3.5 8.5 8.5 0 1 0 20.5 14.2Z"/></svg>
+<span class="theme-label">夜间</span>
+</button>
+<a class="icon-link" href="https://github.com/jiayuxuan123/YunGet" aria-label="在 GitHub 查看 YunGet">
+<svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M12 .7a11.5 11.5 0 0 0-3.64 22.41c.58.1.79-.25.79-.56v-2.17c-3.22.7-3.9-1.37-3.9-1.37-.53-1.34-1.29-1.7-1.29-1.7-1.05-.72.08-.7.08-.7 1.16.08 1.78 1.2 1.78 1.2 1.03 1.77 2.71 1.26 3.37.96.1-.75.4-1.26.73-1.55-2.57-.29-5.27-1.28-5.27-5.69 0-1.26.45-2.29 1.19-3.1-.12-.29-.52-1.46.11-3.05 0 0 .97-.31 3.16 1.18a10.9 10.9 0 0 1 5.76 0c2.2-1.49 3.16-1.18 3.16-1.18.63 1.59.23 2.76.11 3.05.74.81 1.19 1.84 1.19 3.1 0 4.42-2.71 5.39-5.29 5.68.42.36.78 1.06.78 2.14v3.17c0 .31.21.67.8.56A11.5 11.5 0 0 0 12 .7Z"/></svg>
+</a>
+<a class="top-download" href="{dl_href}">取件<span aria-hidden="true">↘</span></a>
+<button class="nav-toggle" type="button" aria-expanded="false" aria-controls="top-nav" aria-label="{menu_label}">
+<span></span><span></span><span></span>
+</button>
+</div>
+</div>
+<div class="route-progress" aria-hidden="true"><i></i></div>
 </header>
 <main id="main">
 """
 
     def footer(self, page: dict) -> str:
-        """页脚：瓦片式（方向单 A footer of tiles）。
-
-        布局：词标大瓦片占满一行 → 导航/元信息/图片来源三片 → 强调色收尾瓦片。
-        链接以 `@` 开头表示"站内页面 key"，渲染时才解析成相对路径 —— 页脚出现在
-        `/` 与 `/legal/privacy/` 两种深度下，写死相对路径只会在其中一层对。
-
-        图片致谢放在页脚而不是藏在某页角落：技能要求每一张外来的真实图片
-        都在页面上署名（`assets/credits.json` 是署名数据的唯一来源）。
-        """
+        """页脚：一张完整的出库运单，而不是普通站点地图。"""
         cfg = self.cfg
         lang = page["lang"]
         cols_cfg = cfg["footer"][lang] if lang in cfg["footer"] else cfg["footer"][cfg["default_lang"]]
@@ -261,34 +294,38 @@ class Site:
                 f'<li><a href="{self.href(page, h[1:]) if h.startswith("@") else h}">{esc(t)}</a></li>'
                 for t, h in links
             )
-            # h2 而不是 h3：页面结构是 h1（页面标题）→ h2（区块标题）。
-            # 页脚用 h3 会让标题层级从 h1 直接跳到 h3 ——
-            # 屏幕阅读器靠层级判断结构，跳级意味着它认为中间少了一层内容。
-            cols.append(f'<div class="tile tile-nav"><h2>{esc(title)}</h2><ul>{items}</ul></div>')
+            cols.append(f'<section class="foot-col"><h2>{esc(title)}</h2><ul>{items}</ul></section>')
 
-        # 导航只保留第一列（技能：页脚是设计过的收尾，不是站点地图）
-        nav_tile = cols[0] if cols else ""
         paras = "".join(f"<p>{p}</p>" for p in cols_cfg["paragraphs"])
-        meta_tile = f'<div class="tile tile-meta">{paras}</div>'
-
-        # 图片来源：只在有真实图片署名时出现
         credits = getattr(self, "foot_credits", "")
-        credits_tile = (
-            f'<div class="tile tile-credits"><h2>{esc(self.ui(lang, "credits"))}</h2><p>{credits}</p></div>'
+        credits_block = (
+            f'<section class="foot-credits"><h2>{esc(self.ui(lang, "credits"))}</h2><p>{credits}</p></section>'
             if credits else ""
         )
 
         dl_href = self.href(page, "download")
         return f"""</main>
 <footer class="site-foot">
-<div class="foot-grid">
-<div class="tile tile-wordmark"><span>{esc(cfg['name'])}</span></div>
-{nav_tile}
-{meta_tile}
-{credits_tile}
-<div class="tile tile-cta">
-<a href="{dl_href}"><strong>{esc(self.ui(lang, "foot_cta"))}</strong>
-<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 4v16M5 13l7 7 7-7"/></svg></a>
+<div class="foot-tear" aria-hidden="true"></div>
+<div class="wrap foot-mast">
+<div class="foot-stamp" aria-hidden="true"><span>云取</span><strong>已封装</strong><small>SEALED</small></div>
+<div class="foot-mark"><span>YUNGET</span><small>把下一条链接，变成文件。</small></div>
+<a class="foot-cta" href="{dl_href}">
+<span><small>OUTBOUND PARCEL</small><strong>{esc(self.ui(lang, "foot_cta"))}</strong></span>
+<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 12h14M13 6l6 6-6 6"/></svg>
+</a>
+</div>
+<div class="wrap foot-ledger">
+<nav class="foot-nav-grid" aria-label="页脚导航">{"".join(cols)}</nav>
+<div class="foot-fine">
+<section class="foot-meta"><h2>项目身份 / MANIFEST</h2>{paras}</section>
+{credits_block}
+</div>
+</div>
+<div class="wrap foot-bottom">
+<span>{esc(cfg['name'])} · CLOUD COURIER</span>
+<span>OPEN SOURCE / AGPL-3.0</span>
+<a href="https://github.com/jiayuxuan123/YunGet">SOURCE ↗</a>
 </div>
 </div>
 </footer>
@@ -306,6 +343,8 @@ class Site:
         body = page["body"]
         if callable(body):
             body = body(page["lang"], lambda key: self.href(page, key))
+        if page.get("key") != "home" and body.startswith('<section class="hero">'):
+            body = body.replace('<section class="hero">', '<section class="hero page-intro">', 1)
         # 正文里用 `{LINK:page-key}` 标记"站内跳转"、`{IMG:name}` 标记"站点图片"，
         # 在这里统一换成相对路径：这样内容文件不必知道自己在哪一层目录下。
         body = re.sub(
@@ -321,8 +360,14 @@ class Site:
         crumbs = page.get("breadcrumb")
         crumb_html = breadcrumb([(t, self.href(page, k) if k else "") for t, k in crumbs]) if crumbs else ""
         head = self.head(page)
-        # 面包屑插在 <main> 之后、正文之前
-        return head + self.header(page) + crumb_html + body + self.footer(page)
+        # 页面画布统一包裹正文：外壳、内页与文档共享路线标记，但不共享内容结构。
+        canvas = (
+            f'<div class="page-canvas" data-page="{esc(page["key"])}">'
+            + crumb_html
+            + body
+            + "</div>"
+        )
+        return head + self.header(page) + canvas + self.footer(page)
 
     # ---- 其它文件 ----
 
@@ -368,23 +413,27 @@ class Site:
             for k, labels in cfg["nav"]
         ]
         body = (
-            f'<section><h1>{esc(self.ui(lang, "notfound_title"))}</h1>'
+            '<section class="notfound">'
+            '<div class="notfound-code" aria-hidden="true"><span>4</span><i></i><span>4</span></div>'
+            '<p class="route-kicker">ROUTE NOT FOUND / 运单退回</p>'
+            f'<h1>{esc(self.ui(lang, "notfound_title"))}</h1>'
             f'<p class="lead">{esc(self.ui(lang, "notfound_body"))}</p>'
             + buttons(links)
-            + "</section>"
+            + '</section>'
         )
         fake = dict(page)
         fake["body"] = body
         fake["desc"] = self.ui(lang, "notfound_body")
-        return self.head(fake) + self.header(fake) + body + self.footer(fake)
+        canvas = f'<div class="page-canvas" data-page="404">{body}</div>'
+        return self.head(fake) + self.header(fake) + canvas + self.footer(fake)
 
     # ---- 顶层 ----
 
     def build(self) -> int:
         """渲染并落盘。
 
-        【不会清空输出目录】输出目录里可能本来就有**人工维护**的文档（例如 TurboDL 的
-        `docs/plugins/*.md`、`docs/i18n/*`）；整目录删除会把它们一起抹掉。所以这里读上次的
+        【不会清空输出目录】输出目录里可能还有人工维护的内容；整目录删除会一并抹掉。
+        所以这里读上次的
         产物清单，只删「上次由本站点生成、这次不再生成」的文件。
         """
         manifest_path = self.out / MANIFEST

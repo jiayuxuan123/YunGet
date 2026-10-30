@@ -1,7 +1,8 @@
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32" width="32" height="32" role="img" aria-label="TurboDL">
-  <g fill="none" stroke="#d2691e" stroke-width="2.3" stroke-linecap="round">
-    <path d="M6 5v9.5M16 3.2v11.3M26 5v9.5"/>
-  </g>
-  <path d="M16 15.6l6.2 6.2H9.8z" fill="#d2691e"/>
-  <path d="M16 21v7" stroke="#d2691e" stroke-width="2.3" stroke-linecap="round"/>
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32" width="32" height="32" role="img" aria-label="云取 YunGet">
+  <rect width="32" height="32" fill="#c83f2e"/>
+  <rect x="3" y="3" width="26" height="26" fill="#f1eadb"/>
+  <path d="M8 8h16v7H8z" fill="none" stroke="#181914" stroke-width="1.8"/>
+  <path d="M8 13h16M12 8v5M20 8v5" fill="none" stroke="#181914" stroke-width="1.5"/>
+  <path d="M10 18h5l1.5 2 1.5-2h4" fill="none" stroke="#c83f2e" stroke-width="1.8" stroke-linecap="square"/>
+  <path d="M16 20v5M12.5 22.5 16 26l3.5-3.5" fill="none" stroke="#181914" stroke-width="1.8" stroke-linecap="square" stroke-linejoin="miter"/>
 </svg>

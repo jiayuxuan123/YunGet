@@ -13,28 +13,52 @@
 <meta property="og:url" content="https://jiayuxuan123.github.io/YunGet/legal/notice/index.html">
 <meta property="og:image" content="https://jiayuxuan123.github.io/YunGet/assets/og.png">
 <meta name="twitter:card" content="summary_large_image">
-<meta name="theme-color" content="#ffffff" media="(prefers-color-scheme: light)">
-<meta name="theme-color" content="#08090b" media="(prefers-color-scheme: dark)">
+<meta name="color-scheme" content="light dark">
+<meta name="theme-color" content="#f1eadb" media="(prefers-color-scheme: light)">
+<meta name="theme-color" content="#171812" media="(prefers-color-scheme: dark)">
 <link rel="icon" href="../../assets/favicon.svg" type="image/svg+xml">
 <link rel="apple-touch-icon" href="../../assets/apple-touch-icon.png">
-<!-- 主题：在样式表之前定下 data-theme，避免深色偏好下闪一帧白 -->
-<script>document.documentElement.className+=" js";try{var t=localStorage.getItem("theme");if(t)document.documentElement.setAttribute("data-theme",t)}catch(e){}setTimeout(function(){if(!window.__motionReady){var n=document.querySelectorAll(".rise");for(var i=0;i<n.length;i++)n[i].classList.add("in")}},2500);</script>
-<!-- 单一样式表：上一版依赖 Pico（classless）再逐条覆盖，重构后全部规则都在 site.css 里，
-     少一层第三方样式与 5 条兼容 hack（见 site.css 头部注释） -->
-<link rel="stylesheet" href="../../assets/site.6a99689f.css">
+<link rel="preload" href="../../assets/fonts/schibsted-grotesk-latin.woff2" as="font" type="font/woff2" crossorigin>
+<!-- 主题在样式表之前落地，避免深色偏好下闪白。 -->
+<script>document.documentElement.classList.add("js");try{var t=localStorage.getItem("theme");if(t==="light"||t==="dark")document.documentElement.setAttribute("data-theme",t)}catch(e){}setTimeout(function(){document.documentElement.classList.add("motion-fallback")},1800);</script>
+<link rel="stylesheet" href="../../assets/site.5077ab8f.css">
 </head>
-<body class="brand-yunget">
+<body class="brand-yunget" data-page="legal-notice" data-kind="document">
 <a class="skip" href="#main">跳到正文</a>
 <header class="top">
-<div class="wrap top-in">
-<a class="brand" href="../../index.html"><span class="brand-mark"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32" width="24" height="24" aria-hidden="true"><g fill="none" stroke="currentColor" stroke-width="2.3" stroke-linecap="round"><path d="M6 5v9.5M16 3.2v11.3M26 5v9.5"/></g><path d="M16 15.6l6.2 6.2H9.8z" fill="currentColor"/><path d="M16 21v7" stroke="currentColor" stroke-width="2.3" stroke-linecap="round"/></svg></span><span class="brand-name">云取 YunGet</span></a>
-<button class="nav-toggle" type="button" aria-expanded="false" aria-controls="top-nav">菜单</button>
-<nav class="top-nav" id="top-nav"><a href="../../index.html">概览</a><a href="../../download/index.html">下载</a><a href="../../plugins/index.html">插件</a><a href="../../docs/index.html">文档</a><a href="../../developers/index.html">开发者</a></nav>
-
+<div class="top-rule">
+<div class="wrap top-rule-in">
+<span>YUNGET / CLOUD COURIER</span>
+<span class="route-title">署名与致谢</span>
+<span>ANDROID · OPEN SOURCE</span>
 </div>
+</div>
+<div class="wrap top-in">
+<a class="brand" href="../../index.html" aria-label="云取 YunGet 首页">
+<span class="brand-mark"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32" width="24" height="24" aria-hidden="true"><rect width="32" height="32" fill="#c83f2e"/><rect x="3" y="3" width="26" height="26" fill="#f1eadb"/><path d="M8 8h16v7H8z" fill="none" stroke="#181914" stroke-width="1.8"/><path d="M8 13h16M12 8v5M20 8v5" fill="none" stroke="#181914" stroke-width="1.5"/><path d="M10 18h5l1.5 2 1.5-2h4" fill="none" stroke="#c83f2e" stroke-width="1.8" stroke-linecap="square"/><path d="M16 20v5M12.5 22.5 16 26l3.5-3.5" fill="none" stroke="#181914" stroke-width="1.8" stroke-linecap="square" stroke-linejoin="miter"/></svg></span>
+<span class="brand-copy"><strong>云取 YunGet</strong><small>云端包裹 / CLOUD COURIER</small></span>
+</a>
+<nav class="top-nav" id="top-nav" aria-label="主导航"><a href="../../index.html"><span class="nav-index" aria-hidden="true">01</span><span>概览</span></a><a href="../../download/index.html"><span class="nav-index" aria-hidden="true">02</span><span>下载</span></a><a href="../../plugins/index.html"><span class="nav-index" aria-hidden="true">03</span><span>插件</span></a><a href="../../docs/index.html"><span class="nav-index" aria-hidden="true">04</span><span>文档</span></a><a href="../../developers/index.html"><span class="nav-index" aria-hidden="true">05</span><span>开发者</span></a></nav>
+<div class="top-actions">
+
+<button class="theme-toggle" type="button" data-theme-toggle aria-label="切换深色 / 浅色主题" aria-pressed="false">
+<svg class="theme-sun" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true"><circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M4.93 4.93l1.42 1.42M17.66 17.66l1.41 1.41M2 12h2M20 12h2M4.93 19.07l1.42-1.42M17.66 6.34l1.41-1.41"/></svg>
+<svg class="theme-moon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true"><path d="M20.5 14.2A8.5 8.5 0 0 1 9.8 3.5 8.5 8.5 0 1 0 20.5 14.2Z"/></svg>
+<span class="theme-label">夜间</span>
+</button>
+<a class="icon-link" href="https://github.com/jiayuxuan123/YunGet" aria-label="在 GitHub 查看 YunGet">
+<svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M12 .7a11.5 11.5 0 0 0-3.64 22.41c.58.1.79-.25.79-.56v-2.17c-3.22.7-3.9-1.37-3.9-1.37-.53-1.34-1.29-1.7-1.29-1.7-1.05-.72.08-.7.08-.7 1.16.08 1.78 1.2 1.78 1.2 1.03 1.77 2.71 1.26 3.37.96.1-.75.4-1.26.73-1.55-2.57-.29-5.27-1.28-5.27-5.69 0-1.26.45-2.29 1.19-3.1-.12-.29-.52-1.46.11-3.05 0 0 .97-.31 3.16 1.18a10.9 10.9 0 0 1 5.76 0c2.2-1.49 3.16-1.18 3.16-1.18.63 1.59.23 2.76.11 3.05.74.81 1.19 1.84 1.19 3.1 0 4.42-2.71 5.39-5.29 5.68.42.36.78 1.06.78 2.14v3.17c0 .31.21.67.8.56A11.5 11.5 0 0 0 12 .7Z"/></svg>
+</a>
+<a class="top-download" href="../../download/index.html">取件<span aria-hidden="true">↘</span></a>
+<button class="nav-toggle" type="button" aria-expanded="false" aria-controls="top-nav" aria-label="菜单">
+<span></span><span></span><span></span>
+</button>
+</div>
+</div>
+<div class="route-progress" aria-hidden="true"><i></i></div>
 </header>
 <main id="main">
-<nav class="crumbs"><a href="../index.html">协议与说明</a><span class="sep" aria-hidden="true">/</span><span aria-current="page">署名与致谢</span></nav><section class="doc-head"><h1>署名与致谢</h1><p class="lead">上游 CYQawa/YunX 的版权与协议声明，以及本项目与上游的关系说明。</p></section><div class="doc-meta"><span class="mono small">NOTICE</span><a class="mono small" href="https://github.com/jiayuxuan123/YunGet/blob/main/NOTICE">在 GitHub 上查看</a><a class="mono small" href="https://github.com/jiayuxuan123/YunGet/raw/main/NOTICE">原文下载</a></div><div class="doc-grid"><aside class="doc-aside"><details class="toc doc-nav" open><summary>全部页面</summary><ul><li><a href="../../docs/readme/index.html">项目说明</a></li><li><a href="../../docs/guide/index.html">使用说明</a></li><li><a href="../../docs/faq/index.html">常见问题</a></li><li><a href="../../docs/build/index.html">从源码构建</a></li><li><a href="../../docs/engines/index.html">下载引擎</a></li><li><a href="../../docs/plugin-dev/index.html">写一个插件</a></li><li><a href="../../docs/plugin-api/index.html">插件 ABI 参考</a></li><li><a href="../../docs/plugin-publish/index.html">打包与发布</a></li><li><a href="../../docs/plugin-security/index.html">插件安全模型</a></li><li><a href="../license/index.html">开源协议（AGPL-3.0）</a></li><li class="cur"><span>署名与致谢</span></li><li><a href="../privacy/index.html">隐私说明</a></li><li><a href="../terms/index.html">使用条款与免责声明</a></li></ul></details></aside><article class="doc-body"><pre class="doc-raw">YunGet（云取）
+<div class="page-canvas" data-page="legal-notice"><nav class="crumbs"><a href="../index.html">协议与说明</a><span class="sep" aria-hidden="true">/</span><span aria-current="page">署名与致谢</span></nav><section class="doc-head"><h1>署名与致谢</h1><p class="lead">上游 CYQawa/YunX 的版权与协议声明，以及本项目与上游的关系说明。</p></section><div class="doc-meta"><span class="mono small">NOTICE</span><a class="mono small" href="https://github.com/jiayuxuan123/YunGet/blob/main/NOTICE">在 GitHub 上查看</a><a class="mono small" href="https://github.com/jiayuxuan123/YunGet/raw/main/NOTICE">原文下载</a></div><div class="doc-grid"><aside class="doc-aside"><details class="toc doc-nav" open><summary>全部页面</summary><ul><li><a href="../../docs/readme/index.html">项目说明</a></li><li><a href="../../docs/guide/index.html">使用说明</a></li><li><a href="../../docs/faq/index.html">常见问题</a></li><li><a href="../../docs/build/index.html">从源码构建</a></li><li><a href="../../docs/engines/index.html">下载引擎</a></li><li><a href="../../docs/plugin-dev/index.html">写一个插件</a></li><li><a href="../../docs/plugin-api/index.html">插件 ABI 参考</a></li><li><a href="../../docs/plugin-publish/index.html">打包与发布</a></li><li><a href="../../docs/plugin-security/index.html">插件安全模型</a></li><li><a href="../license/index.html">开源协议（AGPL-3.0）</a></li><li class="cur"><span>署名与致谢</span></li><li><a href="../privacy/index.html">隐私说明</a></li><li><a href="../terms/index.html">使用条款与免责声明</a></li></ul></details></aside><article class="doc-body"><pre class="doc-raw">YunGet（云取）
 ==============
 
 本项目是 CYQawa/YunX（云析）的二次开发（fork）版本。
@@ -65,19 +89,31 @@
    上游原项目的捐赠请移步上游仓库，二者互不相关。
 
 依据 AGPL-3.0，本项目在分发时同步公开全部源代码，并保留上游的版权与协议声明。
-上游代码版权归其原作者所有。</pre></article></div><p class="small"><a href="../../docs/index.html">← 全部文档</a></p></main>
+上游代码版权归其原作者所有。</pre></article></div><p class="small"><a href="../../docs/index.html">← 全部文档</a></p></div></main>
 <footer class="site-foot">
-<div class="foot-grid">
-<div class="tile tile-wordmark"><span>云取 YunGet</span></div>
-<div class="tile tile-nav"><h2>项目</h2><ul><li><a href="https://github.com/jiayuxuan123/YunGet">GitHub</a></li><li><a href="../../download/index.html">下载</a></li><li><a href="../../changelog/index.html">更新日志</a></li><li><a href="https://github.com/jiayuxuan123/YunGet/issues">问题反馈</a></li></ul></div>
-<div class="tile tile-meta"><p>云取 YunGet v2.7.14 · AGPL-3.0 · 内置 TurboDL 0.2.4.0 · Android 7.0（API 24）</p><p>本项目是 CYQawa/YunX（云析）的二次开发版本，与上游作者无隐性关联。仅供个人学习与技术交流，请勿用于商业用途；下载内容的版权归原作者及相关权利人所有。</p></div>
-<div class="tile tile-credits"><h2>图片来源</h2><p><a href="https://commons.wikimedia.org/wiki/File:Map_of_the_submarine_telegraph_between_America_%26_Europe,_with_its_various_communications_on_the_two_continents_(7557408938).jpg">Map of the submarine telegraph between America &amp; Europe, with its various communications on the two continents (7557408938)</a>（http://maps.bpl.org，CC BY 2.0，via Wikimedia Commons）；<a href="https://commons.wikimedia.org/wiki/File:Mus%C3%A9e_des_Arts_et_M%C3%A9tiers_-_C%C3%A2bles_sous-marins_(37545950582).jpg">Musée des Arts et Métiers - Câbles sous-marins (37545950582)</a>（Frédéric BISSON from Rouen, France，CC BY 2.0，via Wikimedia Commons）</p></div>
-<div class="tile tile-cta">
-<a href="../../download/index.html"><strong>下载云取，把链接变成文件</strong>
-<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 4v16M5 13l7 7 7-7"/></svg></a>
+<div class="foot-tear" aria-hidden="true"></div>
+<div class="wrap foot-mast">
+<div class="foot-stamp" aria-hidden="true"><span>云取</span><strong>已封装</strong><small>SEALED</small></div>
+<div class="foot-mark"><span>YUNGET</span><small>把下一条链接，变成文件。</small></div>
+<a class="foot-cta" href="../../download/index.html">
+<span><small>OUTBOUND PARCEL</small><strong>下载云取，把链接变成文件</strong></span>
+<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 12h14M13 6l6 6-6 6"/></svg>
+</a>
+</div>
+<div class="wrap foot-ledger">
+<nav class="foot-nav-grid" aria-label="页脚导航"><section class="foot-col"><h2>项目</h2><ul><li><a href="https://github.com/jiayuxuan123/YunGet">GitHub</a></li><li><a href="../../download/index.html">下载</a></li><li><a href="../../changelog/index.html">更新日志</a></li><li><a href="https://github.com/jiayuxuan123/YunGet/issues">问题反馈</a></li></ul></section><section class="foot-col"><h2>文档</h2><ul><li><a href="../../docs/readme/index.html">项目说明</a></li><li><a href="../../docs/guide/index.html">使用说明</a></li><li><a href="../../docs/faq/index.html">常见问题</a></li><li><a href="../../docs/engines/index.html">下载引擎</a></li><li><a href="../../docs/build/index.html">从源码构建</a></li></ul></section><section class="foot-col"><h2>插件</h2><ul><li><a href="../../plugins/index.html">插件（市场与安装）</a></li><li><a href="../../developers/index.html">开发者（怎么写）</a></li><li><a href="../../docs/plugin-dev/index.html">写一个插件</a></li><li><a href="../../docs/plugin-api/index.html">插件 ABI 参考</a></li><li><a href="../../docs/plugin-publish/index.html">打包与发布</a></li><li><a href="../../docs/plugin-security/index.html">插件安全模型</a></li></ul></section><section class="foot-col"><h2>协议与说明</h2><ul><li><a href="../license/index.html">AGPL-3.0 原文</a></li><li><a href="index.html">署名与致谢</a></li><li><a href="../privacy/index.html">隐私说明</a></li><li><a href="../terms/index.html">使用条款</a></li><li><a href="../../support/index.html">支持开发</a></li></ul></section><section class="foot-col"><h2>相关</h2><ul><li><a href="https://github.com/CYQawa/YunX">上游 CYQawa/YunX</a></li><li><a href="https://github.com/jiayuxuan123/TurboDL">下载引擎 TurboDL</a></li><li><a href="https://github.com/jiayuxuan123/YunGet-Plugins">插件源 YunGet-Plugins</a></li><li><a href="../../community/index.html">社区</a></li></ul></section></nav>
+<div class="foot-fine">
+<section class="foot-meta"><h2>项目身份 / MANIFEST</h2><p>云取 YunGet v2.7.14 · AGPL-3.0 · 内置 TurboDL 0.2.7.0 · Android 7.0（API 24）</p><p>本项目是 CYQawa/YunX（云析）的二次开发版本，与上游作者无隐性关联。仅供个人学习与技术交流，请勿用于商业用途；下载内容的版权归原作者及相关权利人所有。</p></section>
+<section class="foot-credits"><h2>图片来源</h2><p><a href="https://commons.wikimedia.org/wiki/File:Map_of_the_submarine_telegraph_between_America_%26_Europe,_with_its_various_communications_on_the_two_continents_(7557408938).jpg">Map of the submarine telegraph between America &amp; Europe, with its various communications on the two continents (7557408938)</a>（http://maps.bpl.org，CC BY 2.0，via Wikimedia Commons）；<a href="https://commons.wikimedia.org/wiki/File:Mus%C3%A9e_des_Arts_et_M%C3%A9tiers_-_C%C3%A2bles_sous-marins_(37545950582).jpg">Musée des Arts et Métiers - Câbles sous-marins (37545950582)</a>（Frédéric BISSON from Rouen, France，CC BY 2.0，via Wikimedia Commons）</p></section>
+</div>
+</div>
+<div class="wrap foot-bottom">
+<span>云取 YunGet · CLOUD COURIER</span>
+<span>OPEN SOURCE / AGPL-3.0</span>
+<a href="https://github.com/jiayuxuan123/YunGet">SOURCE ↗</a>
 </div>
 </div>
 </footer>
-<script src="../../assets/site.89e65e81.js" defer></script>
+<script src="../../assets/site.8b2ee733.js" defer></script>
 </body>
 </html>

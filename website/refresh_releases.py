@@ -5,13 +5,12 @@
        也不会因为 GitHub API 限流而构建失败）。
 
 用法：
-    python website/refresh_releases.py --repo jiayuxuan123/TurboDL
     python website/refresh_releases.py --repo jiayuxuan123/YunGet
 
 ## 为什么不用 /releases/latest
 
-GitHub 的 `/releases/latest` **按设计跳过 prerelease**。TurboDL 发过一批 rc，将来也可能再
-发；用 latest 会让站点显示一个比实际更旧的版本。这里取列表后自己挑「最大的版本号」，
+GitHub 的 `/releases/latest` **按设计跳过 prerelease**。YunGet 可能发布预发布版本；
+用 latest 会让站点显示一个比实际更旧的版本。这里取列表后自己挑「最大的版本号」，
 与 YunGet 应用内 UpdateChecker 的算法保持同一个口径（它也是这么做的，并且注释了原因）。
 
 ## 数据里保留什么

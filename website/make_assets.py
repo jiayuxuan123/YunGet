@@ -1,25 +1,24 @@
 #!/usr/bin/env python3
-"""生成站点视觉资产（纯本地，不联网）。
+"""生成 YunGet 官网视觉资产（纯本地，不联网）。
 
 产出（写进 `website/assets/`，`build.py` 再拷进 `docs/assets/`）：
 
-- `logo.svg` / `logo-mark.svg`：品牌标识，手写矢量，无外部依赖；
+- `logo-mark.svg`：云取运单标识，手写矢量，无外部依赖；
 - `favicon.svg`：站点图标（矢量，现代浏览器直接用）；
 - `apple-touch-icon.png`、`favicon-32.png`：栅格兜底（用 PIL 从同一几何画出来）；
 - `og.png`：社交分享大图 1200×630（真实版本号 + 真实标语，不是装饰画）。
 
 为什么用代码画而不是找图：品牌标识、站点图标与分享大图没有现成素材，而设计文档要求
-"真实、清晰、像一个正在使用的产品"——那就用能表达产品语义的几何图形（并发下载的多路
-箭头 / 并行分片），而不是塞一张通用科技感插画。真实截图不走这里：`build_screenshots()`
-只把 YunGet `images/` 里允许上站的那两张压缩后放进 `assets/`。
+"真实、清晰、像一个正在使用的产品"。这一版把“云端包裹运单”做成唯一母题：
+纸色、墨色、朱红路由、分片条码。真实截图不走这里：`build_screenshots()` 只把
+YunGet `images/` 里允许上站的那两张压缩后放进 `assets/`。
 
-运行：`python website/make_assets.py [--site turbodl|yunget]`
+运行：`python website/make_assets.py`
 """
 
 from __future__ import annotations
 
-import argparse
-import io
+import json
 from pathlib import Path
 
 from PIL import Image, ImageDraw, ImageFont
@@ -45,107 +44,114 @@ def font(size: int):
 
 
 # --------------------------------------------------------------------------- #
-# 品牌标识（几何，两站共用构图、换色）
+# 品牌标识：一枚被分片路由切开的云端包裹
 # --------------------------------------------------------------------------- #
 
-def mark_svg(color: str, size: int = 32) -> str:
-    """多路并发下行的抽象：三条并行的流汇聚到一个向下的箭头。"""
-    return f'''<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32" width="{size}" height="{size}" role="img" aria-label="TurboDL">
-  <g fill="none" stroke="{color}" stroke-width="2.3" stroke-linecap="round">
-    <path d="M6 5v9.5M16 3.2v11.3M26 5v9.5"/>
-  </g>
-  <path d="M16 15.6l6.2 6.2H9.8z" fill="{color}"/>
-  <path d="M16 21v7" stroke="{color}" stroke-width="2.3" stroke-linecap="round"/>
+def mark_svg(size: int = 32) -> str:
+    """暖纸、墨色与朱红组成的运单标记。"""
+    return f'''<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32" width="{size}" height="{size}" role="img" aria-label="云取 YunGet">
+  <rect width="32" height="32" fill="#c83f2e"/>
+  <rect x="3" y="3" width="26" height="26" fill="#f1eadb"/>
+  <path d="M8 8h16v7H8z" fill="none" stroke="#181914" stroke-width="1.8"/>
+  <path d="M8 13h16M12 8v5M20 8v5" fill="none" stroke="#181914" stroke-width="1.5"/>
+  <path d="M10 18h5l1.5 2 1.5-2h4" fill="none" stroke="#c83f2e" stroke-width="1.8" stroke-linecap="square"/>
+  <path d="M16 20v5M12.5 22.5 16 26l3.5-3.5" fill="none" stroke="#181914" stroke-width="1.8" stroke-linecap="square" stroke-linejoin="miter"/>
 </svg>
 '''
 
 
 def draw_mark(d: ImageDraw.ImageDraw, ox: int, oy: int, s: float, color: str) -> None:
-    """把 [mark_svg] 的同一几何用 PIL 画出来（用于需要栅格的场合）。"""
-    w = max(2, int(2.3 * s))
-    for x, y0, y1 in ((6, 5, 14.5), (16, 3.2, 14.5), (26, 5, 14.5)):
-        d.line([(ox + x * s, oy + y0 * s), (ox + x * s, oy + y1 * s)], fill=color, width=w)
-    d.polygon(
-        [
-            (ox + 16 * s, oy + 15.6 * s),
-            (ox + 22.2 * s, oy + 21.8 * s),
-            (ox + 9.8 * s, oy + 21.8 * s),
-        ],
+    """把 [mark_svg] 的同一几何用 PIL 画出来。color 保留为墨色参数。"""
+    red = "#c83f2e"
+    paper = "#f1eadb"
+    d.rectangle([ox, oy, ox + 32 * s, oy + 32 * s], fill=red)
+    d.rectangle([ox + 3 * s, oy + 3 * s, ox + 29 * s, oy + 29 * s], fill=paper)
+    d.rectangle(
+        [ox + 8 * s, oy + 8 * s, ox + 24 * s, oy + 15 * s],
+        outline=color,
+        width=max(1, round(1.8 * s)),
+    )
+    width = max(1, round(1.5 * s))
+    d.line([(ox + 8 * s, oy + 13 * s), (ox + 24 * s, oy + 13 * s)], fill=color, width=width)
+    d.line([(ox + 12 * s, oy + 8 * s), (ox + 12 * s, oy + 13 * s)], fill=color, width=width)
+    d.line([(ox + 20 * s, oy + 8 * s), (ox + 20 * s, oy + 13 * s)], fill=color, width=width)
+    route_width = max(1, round(1.8 * s))
+    d.line(
+        [(ox + 10 * s, oy + 18 * s), (ox + 15 * s, oy + 18 * s), (ox + 16.5 * s, oy + 20 * s),
+         (ox + 18 * s, oy + 18 * s), (ox + 22 * s, oy + 18 * s)],
+        fill=red,
+        width=route_width,
+    )
+    d.line([(ox + 16 * s, oy + 20 * s), (ox + 16 * s, oy + 26 * s)], fill=color, width=route_width)
+    d.line(
+        [(ox + 12.5 * s, oy + 22.5 * s), (ox + 16 * s, oy + 26 * s), (ox + 19.5 * s, oy + 22.5 * s)],
         fill=color,
+        width=route_width,
     )
-    d.line([(ox + 16 * s, oy + 21 * s), (ox + 16 * s, oy + 28 * s)], fill=color, width=w)
 
 
 # --------------------------------------------------------------------------- #
-# 各站点的资产
+# 站点资产
 # --------------------------------------------------------------------------- #
-
-def build_turbodl() -> list[str]:
-    made = []
-    ink = "#14181f"
-    accent = "#2f6fed"
-
-    (OUT / "logo-mark.svg").write_text(mark_svg(accent), encoding="utf-8")
-    (OUT / "favicon.svg").write_text(mark_svg(accent), encoding="utf-8")
-    made += ["logo-mark.svg", "favicon.svg"]
-
-    # 矢量首选的现代做法；再给两个栅格兜底（Safari / 旧 Android 浏览器）
-    for size, name in ((180, "apple-touch-icon.png"), (32, "favicon-32.png")):
-        img = Image.new("RGB", (size, size), "#ffffff")
-        d = ImageDraw.Draw(img)
-        s = size / 32.0
-        draw_mark(d, 0, int(-1.5 * s), s * 1.02, accent)
-        img.save(OUT / name, "PNG", optimize=True)
-        made.append(name)
-
-    # OG 大图：真实标语 + 真实版本占位（版本由 make_assets 的调用方通过参数给出时覆盖）
-    img = Image.new("RGB", (1200, 630), "#ffffff")
-    d = ImageDraw.Draw(img)
-    d.rectangle([0, 0, 1200, 8], fill=accent)
-    draw_mark(d, 92, 96, 3.4, accent)
-    d.text((232, 104), "TurboDL", font=font(58), fill=ink)
-    d.text((94, 250), "Multi-threaded download engine for the JVM", font=font(46), fill=ink)
-    d.text(
-        (94, 322),
-        "Resume · Adaptive concurrency · Plugin framework",
-        font=font(32),
-        fill="#5a6472",
-    )
-    d.text((94, 430), "Kotlin / JVM 17+   ·   MIT", font=font(28), fill="#8b95a5")
-    d.line([(94, 500), (1106, 500)], fill="#e3e7ee", width=2)
-    d.text((94, 526), "github.com/jiayuxuan123/TurboDL", font=font(26), fill=accent)
-    img.save(OUT / "og.png", "PNG", optimize=True)
-    made.append("og.png")
-    return made
-
 
 def build_yunget() -> list[str]:
     made = []
-    accent = "#d2691e"
-    ink = "#14181f"
+    red = "#c83f2e"
+    paper = "#f1eadb"
+    paper_raised = "#fbf7ed"
+    ink = "#181914"
+    blue = "#214d78"
 
-    (OUT / "logo-mark.svg").write_text(mark_svg(accent), encoding="utf-8")
-    (OUT / "favicon.svg").write_text(mark_svg(accent), encoding="utf-8")
+    (OUT / "logo-mark.svg").write_text(mark_svg(), encoding="utf-8")
+    (OUT / "favicon.svg").write_text(mark_svg(), encoding="utf-8")
     made += ["logo-mark.svg", "favicon.svg"]
 
     for size, name in ((180, "apple-touch-icon.png"), (32, "favicon-32.png")):
-        img = Image.new("RGB", (size, size), "#ffffff")
+        img = Image.new("RGB", (size, size), paper)
         d = ImageDraw.Draw(img)
         s = size / 32.0
-        draw_mark(d, 0, int(-1.5 * s), s * 1.02, accent)
+        draw_mark(d, 0, 0, s, ink)
         img.save(OUT / name, "PNG", optimize=True)
         made.append(name)
 
-    img = Image.new("RGB", (1200, 630), "#ffffff")
+    data = json.loads((HERE / "data" / "releases.json").read_text(encoding="utf-8"))
+    version = data["latest"]["tag"].lstrip("v")
+
+    img = Image.new("RGB", (1200, 630), paper)
     d = ImageDraw.Draw(img)
-    d.rectangle([0, 0, 1200, 8], fill=accent)
-    d.text((94, 96), "云取 YunGet", font=font(64), fill=ink)
-    d.text((94, 200), "网盘分享链接解析与高速下载", font=font(52), fill=ink)
-    d.text((94, 290), "夸克 · UC · 迅雷 · 百度 · 123 · 139", font=font(34), fill="#5a6472")
-    d.text((94, 352), "分片并发 · 断点续传 · HLS 下载", font=font(34), fill="#5a6472")
-    d.text((94, 470), "Android 6.0+   ·   AGPL-3.0", font=font(28), fill="#8b95a5")
-    d.line([(94, 528), (1106, 528)], fill="#e3e7ee", width=2)
-    d.text((94, 552), "github.com/jiayuxuan123/YunGet", font=font(26), fill=accent)
+    d.rectangle([0, 0, 1200, 14], fill=ink)
+    for index, width in enumerate((110, 36, 72, 24, 92)):
+        left = sum((110, 36, 72, 24, 92)[:index])
+        d.rectangle([left, 0, left + width - 3, 14], fill=red if index % 2 == 0 else paper_raised)
+
+    d.rectangle([72, 72, 1128, 558], outline=ink, width=3)
+    draw_mark(d, 98, 100, 3.2, ink)
+    d.text((222, 102), "云取 YunGet", font=font(70), fill=ink)
+    d.text((225, 182), "云 端 包 裹 · CLOUD COURIER", font=font(22), fill=red)
+
+    d.line([(98, 236), (1102, 236)], fill=ink, width=2)
+    d.text((98, 272), "把分享链接", font=font(62), fill=ink)
+    d.text((98, 344), "变成你的文件。", font=font(62), fill=ink)
+    d.text((100, 432), "解析 · 分段并发 · 断点续传 · 本地凭证", font=font(28), fill=blue)
+
+    d.rectangle([850, 266, 1102, 482], fill=paper_raised, outline=ink, width=2)
+    d.text((872, 286), "WAYBILL", font=font(18), fill=red)
+    d.text((872, 324), f"v{version}", font=font(40), fill=ink)
+    d.text((872, 376), "ANDROID", font=font(22), fill=ink)
+    d.text((872, 410), "AGPL-3.0", font=font(22), fill=ink)
+    d.text((872, 444), "LOCAL CREDENTIALS", font=font(15), fill=blue)
+
+    # 固定条码序列：与站点的分段下载记号同源，不随机。
+    x = 100
+    for width in (5, 2, 8, 3, 4, 2, 9, 3, 6, 2, 5, 3, 8, 2, 4):
+        d.rectangle([x, 502, x + width, 538], fill=ink)
+        x += width + 7
+    d.text((430, 502), "YUNGET / OPEN SOURCE", font=font(20), fill=ink)
+    d.text((430, 529), "github.com/jiayuxuan123/YunGet", font=font(18), fill=red)
+
+    d.rectangle([972, 74, 1126, 158], outline=red, width=3)
+    d.text((997, 89), "已封装", font=font(30), fill=red)
+    d.text((1002, 126), "SEALED / LOCAL", font=font(12), fill=red)
     img.save(OUT / "og.png", "PNG", optimize=True)
     made.append("og.png")
     return made
@@ -198,17 +204,13 @@ def build_support_qr() -> list[str]:
 
 
 def main() -> int:
-    ap = argparse.ArgumentParser()
-    ap.add_argument("--site", choices=["turbodl", "yunget"], default="yunget")
-    args = ap.parse_args()
     OUT.mkdir(parents=True, exist_ok=True)
 
-    made = build_turbodl() if args.site == "turbodl" else build_yunget()
-    if args.site == "yunget":
-        made += build_screenshots()
-        made += build_support_qr()
+    made = build_yunget()
+    made += build_screenshots()
+    made += build_support_qr()
 
-    print(f"[assets] {args.site}: {len(made)} 个文件 → {OUT}")
+    print(f"[assets] yunget: {len(made)} 个文件 → {OUT}")
     for name in made:
         p = OUT / name
         print(f"  {name}  {p.stat().st_size // 1024} KB")

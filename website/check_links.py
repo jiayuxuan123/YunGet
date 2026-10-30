@@ -127,7 +127,7 @@ def opener() -> urllib.request.OpenerDirector:
     return urllib.request.build_opener(LimitedRedirects())
 
 
-_USER_AGENT = "Mozilla/5.0 (compatible; TurboDL-site-link-check)"
+_USER_AGENT = "Mozilla/5.0 (compatible; YunGet-site-link-check)"
 
 
 def probe(url: str, timeout: float) -> tuple[str, str]:
