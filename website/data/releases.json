@@ -1,23 +1,54 @@
 {
   "repo": "jiayuxuan123/YunGet",
   "latest": {
-    "tag": "v2.7.21",
-    "name": "云取 YunGet 2.7.21：同步 TurboDL 0.3.0.0",
-    "published": "2026-10-31T05:11:28Z",
+    "tag": "v2.7.22",
+    "name": "云取 YunGet 2.7.22：PC 桌面端 PCL 式重构与 TurboDL 0.3.1.0 满速起跑",
+    "published": "2026-10-31T06:37:16Z",
     "prerelease": false,
-    "url": "https://github.com/jiayuxuan123/YunGet/releases/tag/v2.7.21",
-    "summary": "云取 YunGet 2.7.21 把 Android 端内嵌引擎同步到 TurboDL 0.3.0.0。\n下载引擎\n· 同步 0.3.0.0 的调度与资源预算重做：公平任务槽、全局连接预算接口、懒启动 worker、动态分片供给。\n· 修复目标文件被删除后旧进度复活、收尾托管越界写入、预热误读整文件、暂停后 `await` 旧结果、暂停/取消竞态、完成 Job 泄漏等隐性缺陷。\n· 桌面 JVM 使用直接 ByteBuffer；Android/Dalvik 自动回落堆缓冲，手机端内存策略不放宽。\n· 手机端现有 UI、默认线程数与下载行为不变；全局连接预算暂未在设置页暴露。\n验证\n· `:app:assembleRelease` 成功。\n· `:app:verifyApkVersion` 通过：versionCode 69 / versionName 2.7.21。\n· `:app:tes…",
+    "url": "https://github.com/jiayuxuan123/YunGet/releases/tag/v2.7.22",
+    "summary": "云取 YunGet 2.7.22 更新日志：\n【桌面 PC 版全面重构（对标移动端）】\n1. 自绘 PCL 式一体化标题栏：彻底移除 Windows 系统原生白边框与重叠按钮，采用墨黑微质感、居中胶囊导航、右侧快捷指令与高对比度平滑缩放/关闭按钮，全区域支持拖动与双击最大化。\n2. 零延迟即时交互：任务操作（暂停/恢复/取消/全部暂停）引入本地状态乐观更新，点击毫秒级响应，告别 IPC 回显等待延迟。\n3. 对齐移动端功能：新增「网盘平台」专区（夸克、UC、迅雷、123、139、115、蓝奏等 10 款核心网盘入口及特性解析）；解析列表支持一键复制直链、输入框支持一键粘贴/清空。\n4. 引擎连接数拉满：设置页开放拉满至 TurboDL 引擎最大 256 线程，提供自适应档位。\n5. 附带 Windows 便携免安装压缩包（内置裁剪版精简 JRE 运行时与 Host 核心）。\n【移动端与核心…",
     "assets": [
       {
-        "name": "YunGet-2.7.21-release.apk",
-        "size": 33123729,
-        "url": "https://github.com/jiayuxuan123/YunGet/releases/download/v2.7.21/YunGet-2.7.21-release.apk",
+        "name": "YunGet-v2.7.22.apk",
+        "size": 33125122,
+        "url": "https://github.com/jiayuxuan123/YunGet/releases/download/v2.7.22/YunGet-v2.7.22.apk",
         "downloads": 0,
-        "sha256": "1ae528aad69b735224390839558404d350b18fa3b85b9010e3358aca6d1ed544"
+        "sha256": "8e72510e082e68787bd61c2fe7fc15cfeb6bd32d242b131903bc935f75bc9fa2"
+      },
+      {
+        "name": "YunGet-windows-x64-v2.7.22.zip",
+        "size": 37877376,
+        "url": "https://github.com/jiayuxuan123/YunGet/releases/download/v2.7.22/YunGet-windows-x64-v2.7.22.zip",
+        "downloads": 0,
+        "sha256": "b3466b81c69f05b2231af297eba0d9cac6b58854ba07771ced90f4a13542890e"
       }
     ]
   },
   "releases": [
+    {
+      "tag": "v2.7.22",
+      "name": "云取 YunGet 2.7.22：PC 桌面端 PCL 式重构与 TurboDL 0.3.1.0 满速起跑",
+      "published": "2026-10-31T06:37:16Z",
+      "prerelease": false,
+      "url": "https://github.com/jiayuxuan123/YunGet/releases/tag/v2.7.22",
+      "summary": "云取 YunGet 2.7.22 更新日志：\n【桌面 PC 版全面重构（对标移动端）】\n1. 自绘 PCL 式一体化标题栏：彻底移除 Windows 系统原生白边框与重叠按钮，采用墨黑微质感、居中胶囊导航、右侧快捷指令与高对比度平滑缩放/关闭按钮，全区域支持拖动与双击最大化。\n2. 零延迟即时交互：任务操作（暂停/恢复/取消/全部暂停）引入本地状态乐观更新，点击毫秒级响应，告别 IPC 回显等待延迟。\n3. 对齐移动端功能：新增「网盘平台」专区（夸克、UC、迅雷、123、139、115、蓝奏等 10 款核心网盘入口及特性解析）；解析列表支持一键复制直链、输入框支持一键粘贴/清空。\n4. 引擎连接数拉满：设置页开放拉满至 TurboDL 引擎最大 256 线程，提供自适应档位。\n5. 附带 Windows 便携免安装压缩包（内置裁剪版精简 JRE 运行时与 Host 核心）。\n【移动端与核心…",
+      "assets": [
+        {
+          "name": "YunGet-v2.7.22.apk",
+          "size": 33125122,
+          "url": "https://github.com/jiayuxuan123/YunGet/releases/download/v2.7.22/YunGet-v2.7.22.apk",
+          "downloads": 0,
+          "sha256": "8e72510e082e68787bd61c2fe7fc15cfeb6bd32d242b131903bc935f75bc9fa2"
+        },
+        {
+          "name": "YunGet-windows-x64-v2.7.22.zip",
+          "size": 37877376,
+          "url": "https://github.com/jiayuxuan123/YunGet/releases/download/v2.7.22/YunGet-windows-x64-v2.7.22.zip",
+          "downloads": 0,
+          "sha256": "b3466b81c69f05b2231af297eba0d9cac6b58854ba07771ced90f4a13542890e"
+        }
+      ]
+    },
     {
       "tag": "v2.7.21",
       "name": "云取 YunGet 2.7.21：同步 TurboDL 0.3.0.0",
@@ -30,7 +61,7 @@
           "name": "YunGet-2.7.21-release.apk",
           "size": 33123729,
           "url": "https://github.com/jiayuxuan123/YunGet/releases/download/v2.7.21/YunGet-2.7.21-release.apk",
-          "downloads": 0,
+          "downloads": 217,
           "sha256": "1ae528aad69b735224390839558404d350b18fa3b85b9010e3358aca6d1ed544"
         }
       ]
@@ -47,7 +78,7 @@
           "name": "YunGet-2.7.20-release.apk",
           "size": 33111329,
           "url": "https://github.com/jiayuxuan123/YunGet/releases/download/v2.7.20/YunGet-2.7.20-release.apk",
-          "downloads": 3274,
+          "downloads": 3276,
           "sha256": "8a7de26d248ea3d708334181b7d254adb67a3eea197a258973d51b6f3bddd300"
         }
       ]
@@ -132,7 +163,7 @@
           "name": "YunGet-2.7.14-release.apk",
           "size": 33111457,
           "url": "https://github.com/jiayuxuan123/YunGet/releases/download/v2.7.14/YunGet-2.7.14-release.apk",
-          "downloads": 2754,
+          "downloads": 2755,
           "sha256": "63cb5594aa36d40c845e82bd812fa35eecef205cb370c197f6a0c57884bedb3f"
         }
       ]
@@ -200,7 +231,7 @@
           "name": "YunGet-2.7.10-release.apk",
           "size": 31682190,
           "url": "https://github.com/jiayuxuan123/YunGet/releases/download/v2.7.10/YunGet-2.7.10-release.apk",
-          "downloads": 4528,
+          "downloads": 4530,
           "sha256": "8d1c4662667ba104ae4208a7113c4fd646314508218df021559de1c5dbcc184e"
         }
       ]
@@ -491,23 +522,6 @@
           "url": "https://github.com/jiayuxuan123/YunGet/releases/download/v2.6.14/YunGet-2.6.14-release.apk",
           "downloads": 343,
           "sha256": "fc841063fe834dc5597208da749d9a99d2f23261d4200d0c0eaccae02c086216"
-        }
-      ]
-    },
-    {
-      "tag": "v2.6.13",
-      "name": "YunGet 2.6.13：123 云盘改网页登录（避免风控）；HLS 插件安全加固",
-      "published": "2026-09-29T14:27:03Z",
-      "prerelease": false,
-      "url": "https://github.com/jiayuxuan123/YunGet/releases/tag/v2.6.13",
-      "summary": "123 云盘改为网页登录（避免账号密码接口触发风控）；HLS 插件安全加固\n---\n123 云盘改为网页登录\n**改动原因**：原登录方式需要向 `user.123pan.cn/api/user/sign_in` 提交**明文账号密码**。\n这类直接调用登录接口的行为容易被官方判定为异常客户端而触发风控，进而影响账号使用。\n**新的登录方式**：在应用内打开 123 云盘官方网页（`yun.123pan.cn`），\n由用户在**官方页面**完成登录（验证码、扫码等均由官网处理），\n应用从网页 localStorage 的 `authorToken` 读取结果凭证。\n取到的 token 与旧接口返回的 `data.token` **同源同形**（都是 Bearer JWT），\n因此后续的凭证校验与业务请求无需任何改动。\n**三个入口**：\n1. **自动检测**（主路径）：网页登录完成后自动…",
-      "assets": [
-        {
-          "name": "YunGet-2.6.13-release.apk",
-          "size": 28273925,
-          "url": "https://github.com/jiayuxuan123/YunGet/releases/download/v2.6.13/YunGet-2.6.13-release.apk",
-          "downloads": 81,
-          "sha256": "692601f02b1e41342eca8d84d9de6c93ea87bc6e2232dcf6dfe7e73ae0d81269"
         }
       ]
     }
