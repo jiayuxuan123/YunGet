@@ -1,23 +1,125 @@
 {
   "repo": "jiayuxuan123/YunGet",
   "latest": {
-    "tag": "v2.7.14",
-    "name": "云取 YunGet 2.7.14",
-    "published": "2026-10-27T05:03:38Z",
+    "tag": "v2.7.21",
+    "name": "云取 YunGet 2.7.21：同步 TurboDL 0.3.0.0",
+    "published": "2026-10-31T05:11:28Z",
     "prerelease": false,
-    "url": "https://github.com/jiayuxuan123/YunGet/releases/tag/v2.7.14",
-    "summary": "账号管理页现在能加账号了\n上一版把多账号做了，但**账号管理页只能看、切换、删除，加不了新号** ——\n想再加一个账号得退回「网盘」页重新点那个平台，而那里已经登录过的平台\n显示的是「已登录」，看不出再点一次是新增还是覆盖。\n现在这一页每张平台卡片下面都有「添加账号」；没登录过的平台也列在\n「其他平台」里，点一下就能登。登录页那个「保存为新增账号」开关照常在。\n网站\n· 版本信息不再滞后：站点上的内置引擎版本、最低安卓版本改为从构建配置读取\n· 修复文档页在桌面端把目录和正文的列宽弄反了（正文被压成 300px 宽）\n· 修复移动端横向溢出：宽表格、长 URL、长代码行、卡片网格",
+    "url": "https://github.com/jiayuxuan123/YunGet/releases/tag/v2.7.21",
+    "summary": "云取 YunGet 2.7.21 把 Android 端内嵌引擎同步到 TurboDL 0.3.0.0。\n下载引擎\n· 同步 0.3.0.0 的调度与资源预算重做：公平任务槽、全局连接预算接口、懒启动 worker、动态分片供给。\n· 修复目标文件被删除后旧进度复活、收尾托管越界写入、预热误读整文件、暂停后 `await` 旧结果、暂停/取消竞态、完成 Job 泄漏等隐性缺陷。\n· 桌面 JVM 使用直接 ByteBuffer；Android/Dalvik 自动回落堆缓冲，手机端内存策略不放宽。\n· 手机端现有 UI、默认线程数与下载行为不变；全局连接预算暂未在设置页暴露。\n验证\n· `:app:assembleRelease` 成功。\n· `:app:verifyApkVersion` 通过：versionCode 69 / versionName 2.7.21。\n· `:app:tes…",
     "assets": [
       {
-        "name": "YunGet-2.7.14-release.apk",
-        "size": 33111457,
-        "url": "https://github.com/jiayuxuan123/YunGet/releases/download/v2.7.14/YunGet-2.7.14-release.apk",
+        "name": "YunGet-2.7.21-release.apk",
+        "size": 33123729,
+        "url": "https://github.com/jiayuxuan123/YunGet/releases/download/v2.7.21/YunGet-2.7.21-release.apk",
         "downloads": 0,
-        "sha256": "63cb5594aa36d40c845e82bd812fa35eecef205cb370c197f6a0c57884bedb3f"
+        "sha256": "1ae528aad69b735224390839558404d350b18fa3b85b9010e3358aca6d1ed544"
       }
     ]
   },
   "releases": [
+    {
+      "tag": "v2.7.21",
+      "name": "云取 YunGet 2.7.21：同步 TurboDL 0.3.0.0",
+      "published": "2026-10-31T05:11:28Z",
+      "prerelease": false,
+      "url": "https://github.com/jiayuxuan123/YunGet/releases/tag/v2.7.21",
+      "summary": "云取 YunGet 2.7.21 把 Android 端内嵌引擎同步到 TurboDL 0.3.0.0。\n下载引擎\n· 同步 0.3.0.0 的调度与资源预算重做：公平任务槽、全局连接预算接口、懒启动 worker、动态分片供给。\n· 修复目标文件被删除后旧进度复活、收尾托管越界写入、预热误读整文件、暂停后 `await` 旧结果、暂停/取消竞态、完成 Job 泄漏等隐性缺陷。\n· 桌面 JVM 使用直接 ByteBuffer；Android/Dalvik 自动回落堆缓冲，手机端内存策略不放宽。\n· 手机端现有 UI、默认线程数与下载行为不变；全局连接预算暂未在设置页暴露。\n验证\n· `:app:assembleRelease` 成功。\n· `:app:verifyApkVersion` 通过：versionCode 69 / versionName 2.7.21。\n· `:app:tes…",
+      "assets": [
+        {
+          "name": "YunGet-2.7.21-release.apk",
+          "size": 33123729,
+          "url": "https://github.com/jiayuxuan123/YunGet/releases/download/v2.7.21/YunGet-2.7.21-release.apk",
+          "downloads": 0,
+          "sha256": "1ae528aad69b735224390839558404d350b18fa3b85b9010e3358aca6d1ed544"
+        }
+      ]
+    },
+    {
+      "tag": "v2.7.20",
+      "name": "云取 YunGet 2.7.20",
+      "published": "2026-10-29T09:37:45Z",
+      "prerelease": false,
+      "url": "https://github.com/jiayuxuan123/YunGet/releases/tag/v2.7.20",
+      "summary": "修复\n· 带提取码的分享解析失败：页面参数里自带一个空的提取码占位（kd 为 0），旧逻辑看到\"页面里已经有这个字段\"就不再覆盖，把空值提交给服务端，服务端返回\"密码错误\"。即使用户填对了提取码也进不去。现在只要提供了提取码，就以用户输入的为准。\n· 文件夹分享的识别：新版分享页没有旧版的分页标记，会被当成单文件分享，结果列表为空。现在同时按分享 id 的前缀（文件夹以 b 开头）判断。\n验证\n用真实公开分享链接实测：无提取码的文件分享与带提取码的文件分享都能正常解析、取直链并完整下载（分别为 875 字节与 166789 字节，字节数一致）。",
+      "assets": [
+        {
+          "name": "YunGet-2.7.20-release.apk",
+          "size": 33111329,
+          "url": "https://github.com/jiayuxuan123/YunGet/releases/download/v2.7.20/YunGet-2.7.20-release.apk",
+          "downloads": 3274,
+          "sha256": "8a7de26d248ea3d708334181b7d254adb67a3eea197a258973d51b6f3bddd300"
+        }
+      ]
+    },
+    {
+      "tag": "v2.7.19",
+      "name": "云取 YunGet 2.7.19",
+      "published": "2026-10-29T05:43:27Z",
+      "prerelease": false,
+      "url": "https://github.com/jiayuxuan123/YunGet/releases/tag/v2.7.19",
+      "summary": "修复\n· 连接失效后的等待时间没有按上一版说明生效：应用侧的默认值仍是 60 秒，覆盖了引擎改成 30 秒的新默认值。现在应用默认值与引擎一致。\n· 这一组默认值原来在设置项、设置页\"恢复默认\"、以及测试里各写了一份，改引擎时三处不会一起动。现在只有一处来源，测试直接与引擎默认值比对，下次再漂移会立刻被测出来。\n说明\n· 已手动改过\"读超时\"的用户仍保留自己的设置，不受影响。",
+      "assets": [
+        {
+          "name": "YunGet-2.7.19-release.apk",
+          "size": 33110311,
+          "url": "https://github.com/jiayuxuan123/YunGet/releases/download/v2.7.19/YunGet-2.7.19-release.apk",
+          "downloads": 454,
+          "sha256": "eb48c53c7d05d54323903d2612d30b2c5cb57f5b8a901208720acb3ea2a4cb77"
+        }
+      ]
+    },
+    {
+      "tag": "v2.7.18",
+      "name": "云取 YunGet 2.7.18",
+      "published": "2026-10-29T04:28:55Z",
+      "prerelease": false,
+      "url": "https://github.com/jiayuxuan123/YunGet/releases/tag/v2.7.18",
+      "summary": "修复\n· 个人网盘下载文件和文件夹时，取链接前漏掉了一步\"提交提取码\"，服务端因此返回\"请输入密码\"，界面上却显示成\"提取码错误\"——而用户根本没有输入过提取码。现在会按浏览器的方式先提交提取码再取链接。\n· 分享链接里自带提取码时（链接末尾带 pwd 参数），现在会识别出来。此前这一步被丢掉，只能按\"无提取码\"流程取链接，必然失败。\n· 只提交过一次提取码却被拒绝时才提示\"提取码错误\"；没有提交过提取码则提示\"该分享需要提取码，请填写后重试\"，不再一律说成提取码错误。\n· 分享文件夹翻页被拒绝或触发限流时，保留已经加载出来的文件，不再把整个列表判为失败（2.7.17 已包含）。\n测试\n新增一条用例，覆盖\"分享页是否停在提取码表单\"的判定。该判定是解锁流程的入口。",
+      "assets": [
+        {
+          "name": "YunGet-2.7.18-release.apk",
+          "size": 33115548,
+          "url": "https://github.com/jiayuxuan123/YunGet/releases/download/v2.7.18/YunGet-2.7.18-release.apk",
+          "downloads": 183,
+          "sha256": "ddf84bdedbce509c689970fb82558025ed95356515f4506459abc4f17c0fa48b"
+        }
+      ]
+    },
+    {
+      "tag": "v2.7.17",
+      "name": "云取 YunGet 2.7.17",
+      "published": "2026-10-28T14:54:03Z",
+      "prerelease": false,
+      "url": "https://github.com/jiayuxuan123/YunGet/releases/tag/v2.7.17",
+      "summary": "修复\n· 修正网盘分享文件夹的翻页请求。分享页已经解锁后，翻页时再带一次提取码会被判为\"密码错误\"，现在会先去掉提取码重试。\n· 已经加载出文件列表后，如果后续翻页被拒绝或触发限流，保留已加载的内容，不再把整个列表判为失败并弹出\"提取码错误\"。\n· 打开分享的第一页就失败时，仍会给出对应原因：提取码错误、请求过于频繁、或解析失败。",
+      "assets": [
+        {
+          "name": "YunGet-2.7.17-release.apk",
+          "size": 33115155,
+          "url": "https://github.com/jiayuxuan123/YunGet/releases/download/v2.7.17/YunGet-2.7.17-release.apk",
+          "downloads": 936,
+          "sha256": "5aa9a5c93c2df181c578d36587a1391438fa82b5d1ab965e093126c8f8190b66"
+        }
+      ]
+    },
+    {
+      "tag": "v2.7.16",
+      "name": "云取 YunGet 2.7.16",
+      "published": "2026-10-28T14:33:25Z",
+      "prerelease": false,
+      "url": "https://github.com/jiayuxuan123/YunGet/releases/tag/v2.7.16",
+      "summary": "本次更新含引擎自 0.2.4.0 以来的全部变化，以下按用户能感知的部分列出。\n下载速度\n· 分片改为直接写入目标文件的对应位置，不再为每个分片创建临时文件、下完再合并。同一块盘、16MB 数据实测：512 个分片时，旧方式创建文件加合并需 728 毫秒，直接写只需 11 毫秒；高并发下吞吐由 20 MB/s 提升到 88 MB/s，且不再随连接数增加而下降。\n· 每条连接使用独立的写入通道。此前所有连接共用一个通道，16 条连接同时写入会排队，聚合速度被压在单条连接的水平。\n· 增加域名解析缓存，避免几十条连接各自重复解析、在建立连接阶段白等。解析失败的结果也会短暂缓存，防止大量连接同时打满解析。\n· 提升启动爬升速度：每档间隔由 250 毫秒缩短为 100 毫秒，从 4 条爬到设定连接数由 500 毫秒降到 200 毫秒。\n· 实测：本机 256MB、16 连接为 165–200 MB…",
+      "assets": [
+        {
+          "name": "YunGet-2.7.16-release.apk",
+          "size": 33114879,
+          "url": "https://github.com/jiayuxuan123/YunGet/releases/download/v2.7.16/YunGet-2.7.16-release.apk",
+          "downloads": 88,
+          "sha256": "4b9672df7c1d575014371d7cd5a0f2c431f8749dd92e581538c4fab978c4cd5c"
+        }
+      ]
+    },
     {
       "tag": "v2.7.14",
       "name": "云取 YunGet 2.7.14",
@@ -30,7 +132,7 @@
           "name": "YunGet-2.7.14-release.apk",
           "size": 33111457,
           "url": "https://github.com/jiayuxuan123/YunGet/releases/download/v2.7.14/YunGet-2.7.14-release.apk",
-          "downloads": 0,
+          "downloads": 2754,
           "sha256": "63cb5594aa36d40c845e82bd812fa35eecef205cb370c197f6a0c57884bedb3f"
         }
       ]
@@ -47,7 +149,7 @@
           "name": "YunGet-2.7.13-release.apk",
           "size": 33106504,
           "url": "https://github.com/jiayuxuan123/YunGet/releases/download/v2.7.13/YunGet-2.7.13-release.apk",
-          "downloads": 1099,
+          "downloads": 1122,
           "sha256": "79a3b7189918a25289906985963730b604b658f743b0b864b98be35e2ecaf22c"
         }
       ]
@@ -64,7 +166,7 @@
           "name": "YunGet-2.7.12-release.apk",
           "size": 32843196,
           "url": "https://github.com/jiayuxuan123/YunGet/releases/download/v2.7.12/YunGet-2.7.12-release.apk",
-          "downloads": 5041,
+          "downloads": 5055,
           "sha256": "3291ae7baf0b373978c4dc849c106baf33d424a1585f37d4c5c424c76beb8ed2"
         }
       ]
@@ -81,7 +183,7 @@
           "name": "YunGet-2.7.11-release.apk",
           "size": 32843032,
           "url": "https://github.com/jiayuxuan123/YunGet/releases/download/v2.7.11/YunGet-2.7.11-release.apk",
-          "downloads": 92,
+          "downloads": 93,
           "sha256": "e506b4722777c3c8881aabccc192e78805b2e0838caf2bff77df69e6cc876968"
         }
       ]
@@ -98,7 +200,7 @@
           "name": "YunGet-2.7.10-release.apk",
           "size": 31682190,
           "url": "https://github.com/jiayuxuan123/YunGet/releases/download/v2.7.10/YunGet-2.7.10-release.apk",
-          "downloads": 4524,
+          "downloads": 4528,
           "sha256": "8d1c4662667ba104ae4208a7113c4fd646314508218df021559de1c5dbcc184e"
         }
       ]
@@ -115,7 +217,7 @@
           "name": "YunGet-2.7.9-release.apk",
           "size": 31714296,
           "url": "https://github.com/jiayuxuan123/YunGet/releases/download/v2.7.9/YunGet-2.7.9-release.apk",
-          "downloads": 6569,
+          "downloads": 6573,
           "sha256": "5d9520fa11c2ca3ce036f948e8c5de87cf1c5fb749fc1623e72edbfb4a19cc77"
         }
       ]
@@ -132,7 +234,7 @@
           "name": "YunGet-2.7.8-release.apk",
           "size": 31707834,
           "url": "https://github.com/jiayuxuan123/YunGet/releases/download/v2.7.8/YunGet-2.7.8-release.apk",
-          "downloads": 67,
+          "downloads": 68,
           "sha256": "4e2b6c56068dada26802469b55b187573276a9909b34c1784ce39e2f55133d21"
         }
       ]
@@ -149,7 +251,7 @@
           "name": "YunGet-2.7.7-release.apk",
           "size": 31710643,
           "url": "https://github.com/jiayuxuan123/YunGet/releases/download/v2.7.7/YunGet-2.7.7-release.apk",
-          "downloads": 564,
+          "downloads": 565,
           "sha256": "a1fe22a7b0bbdc16df34ca48a643aa4b288b323d747eb73f364bac4d4ef6383d"
         }
       ]
@@ -166,7 +268,7 @@
           "name": "YunGet-2.7.6-release.apk",
           "size": 31709721,
           "url": "https://github.com/jiayuxuan123/YunGet/releases/download/v2.7.6/YunGet-2.7.6-release.apk",
-          "downloads": 82,
+          "downloads": 83,
           "sha256": "f4460bfe913836e83043ad7c212fc9d3c1749ccabffae2292d7cfa0ec9ea8732"
         }
       ]
@@ -183,7 +285,7 @@
           "name": "YunGet-2.7.5-release.apk",
           "size": 31681596,
           "url": "https://github.com/jiayuxuan123/YunGet/releases/download/v2.7.5/YunGet-2.7.5-release.apk",
-          "downloads": 514,
+          "downloads": 515,
           "sha256": "57e0beee75c8f4041a25f97e7c79c2e143357018fadab214226bf95e5b202c64"
         }
       ]
@@ -200,7 +302,7 @@
           "name": "YunGet-2.7.4-release.apk",
           "size": 31621011,
           "url": "https://github.com/jiayuxuan123/YunGet/releases/download/v2.7.4/YunGet-2.7.4-release.apk",
-          "downloads": 1412,
+          "downloads": 1413,
           "sha256": "c6921e4d2a11d8e46239c84050c46a8cf9fa3bea45a920825725418f902bd32d"
         }
       ]
@@ -217,7 +319,7 @@
           "name": "YunGet-2.7.3-release.apk",
           "size": 31593625,
           "url": "https://github.com/jiayuxuan123/YunGet/releases/download/v2.7.3/YunGet-2.7.3-release.apk",
-          "downloads": 449,
+          "downloads": 450,
           "sha256": "2affb2e8958b8b147606aacd7c77815d238133c9e820e5110c41aebff8475767"
         }
       ]
@@ -234,7 +336,7 @@
           "name": "YunGet-2.7.2-release.apk",
           "size": 31588032,
           "url": "https://github.com/jiayuxuan123/YunGet/releases/download/v2.7.2/YunGet-2.7.2-release.apk",
-          "downloads": 528,
+          "downloads": 529,
           "sha256": "38681a358c8ca14f2c661a072a3382cd8ab26e8c89ceda23f03bf863fe5933d7"
         }
       ]
@@ -251,7 +353,7 @@
           "name": "YunGet-2.7.1-release.apk",
           "size": 31586091,
           "url": "https://github.com/jiayuxuan123/YunGet/releases/download/v2.7.1/YunGet-2.7.1-release.apk",
-          "downloads": 619,
+          "downloads": 620,
           "sha256": "4140068dadae124607ec22f7d23a297691690f3586c84c7f14fb8da4ce32992f"
         }
       ]
@@ -268,7 +370,7 @@
           "name": "YunGet-2.7.0-release.apk",
           "size": 31586005,
           "url": "https://github.com/jiayuxuan123/YunGet/releases/download/v2.7.0/YunGet-2.7.0-release.apk",
-          "downloads": 75,
+          "downloads": 77,
           "sha256": "d35b27bf3a94e363b67f6c57a1a488bae07e5c276ccf3c5cec50980e2c06cc7e"
         }
       ]
@@ -285,7 +387,7 @@
           "name": "YunGet-2.6.21-release.apk",
           "size": 29256285,
           "url": "https://github.com/jiayuxuan123/YunGet/releases/download/v2.6.21/YunGet-2.6.21-release.apk",
-          "downloads": 1306,
+          "downloads": 1308,
           "sha256": "80e7d72941dec73605eb7b83a58843380bef89c039b8ed57ca705b91affbe67a"
         }
       ]
@@ -302,7 +404,7 @@
           "name": "YunGet-2.6.20-release.apk",
           "size": 29253022,
           "url": "https://github.com/jiayuxuan123/YunGet/releases/download/v2.6.20/YunGet-2.6.20-release.apk",
-          "downloads": 41,
+          "downloads": 42,
           "sha256": "80b5ddf11f8751f2685887a8fc080f8035504c273eb17d7429199a869a70c224"
         }
       ]
@@ -319,7 +421,7 @@
           "name": "YunGet-2.6.19-release.apk",
           "size": 29251699,
           "url": "https://github.com/jiayuxuan123/YunGet/releases/download/v2.6.19/YunGet-2.6.19-release.apk",
-          "downloads": 896,
+          "downloads": 897,
           "sha256": "d01180c164fd9fc7af2dc6cda9ad48485c66a741aa877139dc2809f02886ea70"
         }
       ]
@@ -336,7 +438,7 @@
           "name": "YunGet-2.6.18-release.apk",
           "size": 29248962,
           "url": "https://github.com/jiayuxuan123/YunGet/releases/download/v2.6.18/YunGet-2.6.18-release.apk",
-          "downloads": 181,
+          "downloads": 183,
           "sha256": "12c0e101b075995d546b80323576c4ad586e583f58668cdbb28917b20d45a695"
         }
       ]
@@ -353,7 +455,7 @@
           "name": "YunGet-2.6.17-release.apk",
           "size": 29247705,
           "url": "https://github.com/jiayuxuan123/YunGet/releases/download/v2.6.17/YunGet-2.6.17-release.apk",
-          "downloads": 37,
+          "downloads": 38,
           "sha256": "0884ced6d4a8de22cc826558349926645dfe216e2b55c4e84648508db4878604"
         }
       ]
@@ -370,7 +472,7 @@
           "name": "YunGet-2.6.15-release.apk",
           "size": 28284269,
           "url": "https://github.com/jiayuxuan123/YunGet/releases/download/v2.6.15/YunGet-2.6.15-release.apk",
-          "downloads": 3988,
+          "downloads": 3990,
           "sha256": "27284307104496d94934cb94f82b2445d586bcebda3d0b4d1b74232427f0e845"
         }
       ]
@@ -387,7 +489,7 @@
           "name": "YunGet-2.6.14-release.apk",
           "size": 28282625,
           "url": "https://github.com/jiayuxuan123/YunGet/releases/download/v2.6.14/YunGet-2.6.14-release.apk",
-          "downloads": 342,
+          "downloads": 343,
           "sha256": "fc841063fe834dc5597208da749d9a99d2f23261d4200d0c0eaccae02c086216"
         }
       ]
@@ -404,127 +506,8 @@
           "name": "YunGet-2.6.13-release.apk",
           "size": 28273925,
           "url": "https://github.com/jiayuxuan123/YunGet/releases/download/v2.6.13/YunGet-2.6.13-release.apk",
-          "downloads": 80,
+          "downloads": 81,
           "sha256": "692601f02b1e41342eca8d84d9de6c93ea87bc6e2232dcf6dfe7e73ae0d81269"
-        }
-      ]
-    },
-    {
-      "tag": "v2.6.12",
-      "name": "YunGet 2.6.12：新增网盘链接收藏；修复登录后网盘页残留「请先登录」；修正进度写库节流",
-      "published": "2026-09-29T14:05:25Z",
-      "prerelease": false,
-      "url": "https://github.com/jiayuxuan123/YunGet/releases/tag/v2.6.12",
-      "summary": "新增网盘链接收藏；修复登录后网盘页残留「请先登录」；修正进度写库节流\n继续同步上游 [CYQawa/YunX](https://github.com/CYQawa/YunX) 的改进。\n---\n新增：网盘链接收藏\n解析页标题栏新增收藏入口，可保存分享链接与提取码并按分类管理；\n点击收藏条目直接跳回解析页开始解析，无需重新粘贴。\n数据存入新增的 Room 表 `bookmark`（数据库版本 10 → 11，带迁移），\n字段与上游保持一致以便后续同步。分类既可用预置项，也可由已保存条目自动汇总。\n---\n修复：登录成功后网盘页仍显示「请先登录」\n**现象**：首次登录某个网盘后，切到该网盘的文件页，仍停在「请先登录夸克网盘」之类的提示，\n必须手动点一次「重试」才能看到文件列表。\n**根因**：6 个云盘浏览 ViewModel 在构造时无条件执行 `init { loadRoot() }`。…",
-      "assets": [
-        {
-          "name": "YunGet-2.6.12-release.apk",
-          "size": 28258406,
-          "url": "https://github.com/jiayuxuan123/YunGet/releases/download/v2.6.12/YunGet-2.6.12-release.apk",
-          "downloads": 32,
-          "sha256": "f870e99e99a42575269fc62025b0cfc33eba024a5c83566714efb7954311244a"
-        }
-      ]
-    },
-    {
-      "tag": "v2.6.11",
-      "name": "YunGet 2.6.11：同步上游安全加固（凭证加密/日志脱敏）、保存流式落盘、Material 3 Expressive 界面",
-      "published": "2026-09-29T13:37:49Z",
-      "prerelease": false,
-      "url": "https://github.com/jiayuxuan123/YunGet/releases/tag/v2.6.11",
-      "summary": "同步上游 YunX 的安全加固、保存路径重构与 Material 3 Expressive 界面\n本版将上游 [CYQawa/YunX](https://github.com/CYQawa/YunX) 的多项改进合并进本项目。\n合并前先做了逐文件比对（归一化包名与许可证头后，122 个同名文件中 51 个内容完全一致），\n据此决定三类处理方式：可直接采用、需适配定制点、以及双方已分叉需保留各自的实现。\n---\n安全：凭证加密存储\n**此前状态**：各网盘的登录凭证（cookie / accessToken / refreshToken）以**明文**存储在\nRoom 数据库中。设备被 root 或数据库文件被取出时，账号凭证可直接读取。\n**改造后**：\n· 落库前使用 **AES-GCM** 加密，密钥由 **Android Keystore** 持有且不可导出\n· 附加认证数据（AAD…",
-      "assets": [
-        {
-          "name": "YunGet-2.6.11-release.apk",
-          "size": 28206128,
-          "url": "https://github.com/jiayuxuan123/YunGet/releases/download/v2.6.11/YunGet-2.6.11-release.apk",
-          "downloads": 34,
-          "sha256": "6d9257c36cc2c1a3a29635b3492cd8154f8d973d75883b23cd7c3514e630e125"
-        }
-      ]
-    },
-    {
-      "tag": "v2.6.10",
-      "name": "YunGet 2.6.10：修复检查更新检测不到新版本；下载引擎升级 0.2.0.1；备份引擎升 aria2-next 2.8.3",
-      "published": "2026-09-29T09:58:48Z",
-      "prerelease": false,
-      "url": "https://github.com/jiayuxuan123/YunGet/releases/tag/v2.6.10",
-      "summary": "修复「检查更新」检测不到新版本；下载引擎升级至 0.2.0.1；内置 aria2 引擎升级至 aria2-next 2.8.3\n---\n修复：检查更新无法发现新版本\n**现象**：安装 2.6.9 后，应用内「检查更新」提示已是最新版本，无法发现后续发布。\n**根因**：此前使用 GitHub 的 `/releases/latest` 接口。该接口按设计**只返回已正式发布的版本，\n跳过预发布版本**，而本项目的测试版本正是以预发布形式发布。实测对比：\n| 接口 | 返回结果 |\n|---|---|\n| `/releases/latest`（原使用） | `v2.6.7`（跳过了所有预发布版本） |\n| `/releases?per_page=30`（现使用） | `v2.6.10`、`v2.6.9`、`v2.6.7` … |\n**改动**：改用 Release 列表接口，并自行按**版本…",
-      "assets": [
-        {
-          "name": "YunGet-2.6.10-release.apk",
-          "size": 27139908,
-          "url": "https://github.com/jiayuxuan123/YunGet/releases/download/v2.6.10/YunGet-2.6.10-release.apk",
-          "downloads": 171,
-          "sha256": "6bdcceec13a3243aa9820277047a13a759bd121cd053ca71c3245d4064d8f414"
-        }
-      ]
-    },
-    {
-      "tag": "v2.6.9",
-      "name": "YunGet 2.6.9：下载引擎可切换（TurboDL / 内置兼容 / aria2 原生）",
-      "published": "2026-09-28T10:48:05Z",
-      "prerelease": true,
-      "url": "https://github.com/jiayuxuan123/YunGet/releases/tag/v2.6.9",
-      "summary": "下载引擎可切换（TurboDL / 内置兼容 / aria2 原生）+ 若干缺陷修复\n---\n新增：下载引擎可切换\n设置页 → 下载 → **下载引擎**，三选一：\n| 引擎 | 说明 |\n|---|---|\n| **TurboDL（默认）** | 多线程 Range 分片 / 工作窃取 / 断点续传 / 现场诊断 |\n| 内置兼容引擎 | 项目早期实现，保留作兜底；不支持现场诊断 |\n| **aria2 原生引擎（实验）** | 内置官方 aria2c 1.37.0，仅 arm64 |\n**切换需重启 App 生效** —— 这不是偷懒：管理器由 ViewModel 持有，\n而各业务 ViewModel 在构造时强引用它；若做热切换，旧 ViewModel 会继续指向旧管理器，\n导致**两套引擎同时活着**（连接池重复占用）。弹窗里已明确提示。\n同时把 `DownloadManager`…",
-      "assets": [
-        {
-          "name": "YunGet-2.6.9-release.apk",
-          "size": 21487222,
-          "url": "https://github.com/jiayuxuan123/YunGet/releases/download/v2.6.9/YunGet-2.6.9-release.apk",
-          "downloads": 21,
-          "sha256": "0c64daaf604b4cc9679cefce5c7da2d15018023b4a3343fe80dd2213e97413ad"
-        }
-      ]
-    },
-    {
-      "tag": "v2.6.7",
-      "name": "YunGet 2.6.7：续传修复（二）取不到指纹不再丢弃旧分片",
-      "published": "2026-09-15T09:49:31Z",
-      "prerelease": false,
-      "url": "https://github.com/jiayuxuan123/YunGet/releases/tag/v2.6.7",
-      "summary": "YunGet 2.6.7：续传修复（二）—— 取不到指纹不再丢弃旧分片\n上一版只修了一半\n2.6.6 用「内容指纹」替代了「弱校验器一律丢弃」，但判定是**二值**的：指纹不通过就丢弃。\n而\"不通过\"其实包含两种完全不同的情况：\n| 情况 | 2.6.6 行为 | 正确行为 |\n|---|---|---|\n| 拿到了服务器字节、**内容确实不同** | 丢弃 ✅ | 丢弃 |\n| **根本没拿到**（状态码异常 / 请求失败 / 无可读分片） | **丢弃 ❌** | **保留** |\n第二种就是「**一次指纹请求没成功，就把已下载的数据全删了**」——\n也就是你看到的\"暂停之后还是从头下\"。**拿不到证据 ≠ 内容已变。**\n本版改动\n判定改为**三值**：\n· **一致** → 保留旧分片，续传可用\n· **确证不同** → 丢弃（安全底线不变）\n· **取不到** → **保留**（…",
-      "assets": [
-        {
-          "name": "app-release.apk",
-          "size": 18993570,
-          "url": "https://github.com/jiayuxuan123/YunGet/releases/download/v2.6.7/app-release.apk",
-          "downloads": 3352,
-          "sha256": "aea85a934fd642afc63fc87ef822914e37f63730f66993482f1e5c419f7218e6"
-        }
-      ]
-    },
-    {
-      "tag": "v2.6.6",
-      "name": "YunGet 2.6.6：修复暂停就整包重下",
-      "published": "2026-09-15T09:28:22Z",
-      "prerelease": false,
-      "url": "https://github.com/jiayuxuan123/YunGet/releases/tag/v2.6.6",
-      "summary": "YunGet 2.6.6：修复「暂停就整包重下」+ 回退上一版的分片上限\n本版处理你反馈的三个问题。**其中两个是我自己造成的，一并说明。**\n> 你反馈：「速度快不起来（要不还是修，或者回退吧）。用夸克链接暂停了，它**就重新下载了**；\n>   而且现在**速度和线程上升都变慢了**；暂停后再点进来，卡在**已下载 0%** 然后才显示下载。」\n1. 「暂停就重新下载」——夸克这类链接一直是这样\n夸克 CDN **不给 ETag / Last-Modified**，引擎的续传校验只能拿到\"弱校验器\"，\n而旧策略规定「弱校验器不足以安全续传 → **丢弃全部已有分片**」。\n两者叠加就是：**一暂停，已下载的全没了，从头再来**。1.3GB 就是十几分钟白下。\n**现在改用「内容指纹」代替「一律丢弃」**：续传前取一个已存分片的前 **64KB**，\n和服务器请求同一区间逐字节比对 ——…",
-      "assets": [
-        {
-          "name": "app-release.apk",
-          "size": 18993583,
-          "url": "https://github.com/jiayuxuan123/YunGet/releases/download/v2.6.6/app-release.apk",
-          "downloads": 12,
-          "sha256": "5d475749865a95d5f752fc44f05900bbea86c8044bb5cbe483e9c891c7afb74c"
-        }
-      ]
-    },
-    {
-      "tag": "v2.6.5",
-      "name": "YunGet 2.6.5：高并发下分片数收敛（64 线程比 128 更快）",
-      "published": "2026-09-15T08:57:11Z",
-      "prerelease": false,
-      "url": "https://github.com/jiayuxuan123/YunGet/releases/tag/v2.6.5",
-      "summary": "升级 TurboDL rc19；高并发下分片数收敛（实测 1.45~1.9 倍）\n依赖升级\nTurboDL `0.2.0-rc18` → `0.2.0-rc19`。\n本版内容\n1. 总切块数加上限（`maxSegmentsPerTask`，默认 128；0 = 不限）\n块数原本 = `连接数 × 4`，**没有上限**：128 线程 → 512 块（压到 256 块，每块仅 64KB）。\n每个块 = 一次 HTTP 请求 + 一个临时文件 + 合并时的一次读写。\n新增的正交实验（`FanoutCostTest`，交错 round-robin，三次取中位数）：\n| 连接数 \\ 分片数 | 256 | 128 |\n|---|---|---|\n| **128** | 4.4 MB/s | **6.4** |\n| **64** | 4.8 | **9.2** |\n· 分片数 256→128 平均…",
-      "assets": [
-        {
-          "name": "app-release.apk",
-          "size": 18993587,
-          "url": "https://github.com/jiayuxuan123/YunGet/releases/download/v2.6.5/app-release.apk",
-          "downloads": 13,
-          "sha256": "0042772d8f3b87ffeb3a362497e50cb274ac597c75151d320b3779d0467136bb"
         }
       ]
     }
