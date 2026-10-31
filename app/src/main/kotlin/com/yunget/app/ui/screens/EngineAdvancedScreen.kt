@@ -299,12 +299,11 @@ fun EngineAdvancedScreen(
             Spacer(modifier = Modifier.height(20.dp))
             SectionLabel("吞吐与并发")
 
-            // 5. 吞吐自适应（带已知缺陷警告）
+            // 5. 吞吐自适应（默认开启：先从用户线程数起跑，再向下收敛）
             ParamSwitch(
                 title = "吞吐自适应",
-                description = "按实测吞吐寻找「够用的最低并发」。" +
-                    "⚠️ 已知缺陷：真实链路上它可能把并发一路降到 1 —— " +
-                    "遇到过「下载越跑越慢、线程只降不升」就先关掉这一项。",
+                description = "默认开启：先按你设置的最大线程数立即起跑，" +
+                    "再根据总吞吐向下收敛，避免聚合限速时白白堆连接。",
                 checked = adaptiveConcurrency,
                 onCheckedChange = { on ->
                     adaptiveConcurrency = on
@@ -562,7 +561,7 @@ fun EngineAdvancedScreen(
         }
     }
 
-    // 关掉「吞吐自适应」后的提示：这不是普通开关，用户需要知道后果
+    // 关闭「吞吐自适应」后的提示：默认开启，关闭会让并发完全由手动线程数决定
     if (showAdaptiveWarning) {
         AlertDialog(
             onDismissRequest = { showAdaptiveWarning = false },
@@ -576,9 +575,8 @@ fun EngineAdvancedScreen(
             title = { Text("已关闭吞吐自适应") },
             text = {
                 Text(
-                    text = "并发现在由你手动控制的线程数决定，引擎不再自动下调。" +
-                        "如果仍遇到「越下越慢」，可以再试试把「动态分片」也关掉，" +
-                        "让分片数保持固定。",
+                    text = "并发现在完全由你设置的线程数决定，引擎不会再按实测吞吐收敛。" +
+                        "普通下载通常不需要关闭它；只有在排查链路问题时再使用这个状态。",
                     style = MaterialTheme.typography.bodyMedium
                 )
             },

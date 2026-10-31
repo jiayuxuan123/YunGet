@@ -5,7 +5,7 @@ Unicode true
 
 !define APP_NAME "云取 YunGet"
 !define APP_EXE "YunGet.exe"
-!define APP_VER "0.1.0"
+!define APP_VER "0.3.0"
 !define APP_PUBLISHER "YunGet"
 
 Name "${APP_NAME}"

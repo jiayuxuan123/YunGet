@@ -24,7 +24,7 @@ void main() {
 
   test('设置缺字段时落到默认值', () {
     final settings = HostSettings.fromJson(const {});
-    expect(settings.connections, 16);
+    expect(settings.connections, 256);
     expect(settings.concurrentTasks, 3);
     expect(settings.readTimeoutMs, 30000);
   });

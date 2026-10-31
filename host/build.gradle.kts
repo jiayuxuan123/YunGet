@@ -22,7 +22,7 @@ kotlin {
 
 dependencies {
     implementation(project(":core"))
-    implementation("dev.turbodl:turbodl-core:0.2.7.0")
+    implementation("dev.turbodl:turbodl-core:0.3.1.0")
     implementation("com.squareup.okhttp3:okhttp:4.12.0")
     implementation("org.jetbrains.kotlinx:kotlinx-coroutines-core:1.9.0")
     implementation("org.json:json:20240303")

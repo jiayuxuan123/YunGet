@@ -39,7 +39,9 @@ class HostClient {
     if (fromEnv != null && File(fromEnv).existsSync()) return fromEnv;
 
     final exeDir = File(Platform.resolvedExecutable).parent;
-    final bundled = File('${exeDir.path}${Platform.pathSeparator}host${Platform.pathSeparator}yunget-host.jar');
+    final bundled = File(
+      '${exeDir.path}${Platform.pathSeparator}host${Platform.pathSeparator}yunget-host.jar',
+    );
     if (bundled.existsSync()) return bundled.path;
 
     // 开发期：从 build/windows/x64/runner/Release/ 往上六层才是 YunGet/，
@@ -59,7 +61,9 @@ class HostClient {
   /// 优先 javaw：它是 GUI 子系统程序，不会在屏幕上闪一个黑框。
   static String _locateJava() {
     final exeDir = File(Platform.resolvedExecutable).parent;
-    final bundled = File('${exeDir.path}${Platform.pathSeparator}jre${Platform.pathSeparator}bin${Platform.pathSeparator}javaw.exe');
+    final bundled = File(
+      '${exeDir.path}${Platform.pathSeparator}jre${Platform.pathSeparator}bin${Platform.pathSeparator}javaw.exe',
+    );
     if (bundled.existsSync()) return bundled.path;
     return Platform.isWindows ? 'javaw' : 'java';
   }
@@ -119,7 +123,9 @@ class HostClient {
     final id = '${_nextId++}';
     final completer = Completer<Object?>();
     _pending[id] = completer;
-    _process.stdin.writeln(jsonEncode({'id': id, 'method': method, 'params': params ?? {}}));
+    _process.stdin.writeln(
+      jsonEncode({'id': id, 'method': method, 'params': params ?? {}}),
+    );
     // 【必须 flush】进程的 stdin 是带缓冲的 IOSink，只 writeln 不 flush 时请求会一直
     // 留在缓冲区里，宿主一个字节都收不到 —— 表现是"界面点了解析没反应、也没有报错"。
     // 命令行手工测试用管道喂输入时新行会自动刷出，恰好把这个坑盖住了。

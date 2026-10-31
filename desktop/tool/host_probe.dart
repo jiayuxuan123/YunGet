@@ -21,16 +21,23 @@ Future<void> main(List<String> args) async {
     if (e['event'] == 'log') print('[host] ${e['message']}');
   });
   try {
-    final resolved = asMap(await client.call('resolve', {'link': link, 'pwd': pwd}));
+    final resolved = asMap(
+      await client.call('resolve', {'link': link, 'pwd': pwd}),
+    );
     final session = (resolved['session'] ?? '').toString();
-    print('解析: ${resolved['title']}  folder=${resolved['isFolder']}  platform=${resolved['platform']}');
+    print(
+      '解析: ${resolved['title']}  folder=${resolved['isFolder']}  platform=${resolved['platform']}',
+    );
     if (session.isEmpty) return;
 
-    final list = await client.call('list', {'session': session, 'dir': ''}) as List;
+    final list =
+        await client.call('list', {'session': session, 'dir': ''}) as List;
     print('列表: ${list.length} 项');
     for (final item in list.take(10)) {
       final f = asMap(item);
-      print('  - ${f['name']}  ${f['isDir'] == true ? '[目录]' : '${f['size']} B'}');
+      print(
+        '  - ${f['name']}  ${f['isDir'] == true ? '[目录]' : '${f['size']} B'}',
+      );
     }
     final files = list.map(asMap).where((f) => f['isDir'] != true).toList();
     if (files.isEmpty) {
@@ -38,33 +45,46 @@ Future<void> main(List<String> args) async {
       return;
     }
     final target = files.first;
-    final direct = asMap(await client.call('directLink', {'session': session, 'file': target['fid']}));
+    final direct = asMap(
+      await client.call('directLink', {
+        'session': session,
+        'file': target['fid'],
+      }),
+    );
     print('直链: ${direct['fileName']}  ${direct['size']} B');
 
     final size = (direct['size'] as num?)?.toInt() ?? -1;
     if (!download) return;
     if (size > 20 * 1024 * 1024) {
-      print('文件 ${size} B 超过 20MB，跳过下载（省流量）');
+      print('文件 $size B 超过 20MB，跳过下载（省流量）');
       return;
     }
-    final task = asMap(await client.call('download', {
-      'url': direct['url'],
-      'fileName': direct['fileName'],
-      'size': direct['size'],
-      'headers': direct['headers'],
-    }));
+    final task = asMap(
+      await client.call('download', {
+        'url': direct['url'],
+        'fileName': direct['fileName'],
+        'size': direct['size'],
+        'headers': direct['headers'],
+      }),
+    );
     final id = (task['id'] as num).toInt();
     print('已提交任务 $id，等待完成…');
     for (var i = 0; i < 120; i++) {
       await Future<void>.delayed(const Duration(milliseconds: 500));
       final list = await client.call('tasks') as List;
-      final now = list.map(asMap).firstWhere((t) => (t['id'] as num) == id, orElse: () => const {});
+      final now = list
+          .map(asMap)
+          .firstWhere((t) => (t['id'] as num) == id, orElse: () => const {});
       if (now.isEmpty) continue;
       final status = now['status'];
       if (status == 'DONE' || status == 'FAILED') {
-        print('结果: $status  ${now['downloaded']}/${now['size']}  ${now['error'] ?? ''}');
+        print(
+          '结果: $status  ${now['downloaded']}/${now['size']}  ${now['error'] ?? ''}',
+        );
         final f = File(now['destPath'].toString());
-        print('文件: ${f.path} 存在=${f.existsSync()} 大小=${f.existsSync() ? f.lengthSync() : -1}');
+        print(
+          '文件: ${f.path} 存在=${f.existsSync()} 大小=${f.existsSync() ? f.lengthSync() : -1}',
+        );
         return;
       }
     }
@@ -74,4 +94,5 @@ Future<void> main(List<String> args) async {
   }
 }
 
-Map<String, dynamic> asMap(Object? v) => v is Map<String, dynamic> ? v : const {};
+Map<String, dynamic> asMap(Object? v) =>
+    v is Map<String, dynamic> ? v : const {};

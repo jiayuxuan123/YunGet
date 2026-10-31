@@ -1,7 +1,13 @@
 /// 与宿主协议一一对应的数据模型。字段名刻意和 Kotlin 侧保持一致，
 /// 改协议时两边 grep 同一个字符串就能找到全部位置。
 class ShareFile {
-  ShareFile({required this.fid, required this.name, required this.size, required this.isDir, this.time = ''});
+  ShareFile({
+    required this.fid,
+    required this.name,
+    required this.size,
+    required this.isDir,
+    this.time = '',
+  });
 
   final String fid;
   final String name;
@@ -10,23 +16,29 @@ class ShareFile {
   final String time;
 
   factory ShareFile.fromJson(Map<String, dynamic> json) => ShareFile(
-        fid: (json['fid'] ?? '').toString(),
-        name: (json['name'] ?? '').toString(),
-        size: (json['size'] as num?)?.toInt() ?? 0,
-        isDir: json['isDir'] == true,
-        time: (json['time'] ?? '').toString(),
-      );
+    fid: (json['fid'] ?? '').toString(),
+    name: (json['name'] ?? '').toString(),
+    size: (json['size'] as num?)?.toInt() ?? 0,
+    isDir: json['isDir'] == true,
+    time: (json['time'] ?? '').toString(),
+  );
 }
 
 class ShareResolveResult {
-  ShareResolveResult({required this.session, required this.platform, required this.title, required this.isFolder});
+  ShareResolveResult({
+    required this.session,
+    required this.platform,
+    required this.title,
+    required this.isFolder,
+  });
 
   final String session;
   final String platform;
   final String title;
   final bool isFolder;
 
-  factory ShareResolveResult.fromJson(Map<String, dynamic> json) => ShareResolveResult(
+  factory ShareResolveResult.fromJson(Map<String, dynamic> json) =>
+      ShareResolveResult(
         session: (json['session'] ?? '').toString(),
         platform: (json['platform'] ?? '').toString(),
         title: (json['title'] ?? '').toString(),
@@ -35,7 +47,12 @@ class ShareResolveResult {
 }
 
 class DirectLink {
-  DirectLink({required this.url, required this.size, required this.fileName, required this.headers});
+  DirectLink({
+    required this.url,
+    required this.size,
+    required this.fileName,
+    required this.headers,
+  });
 
   final String url;
   final int size;
@@ -46,7 +63,9 @@ class DirectLink {
     final rawHeaders = json['headers'];
     final headers = <String, String>{};
     if (rawHeaders is Map) {
-      rawHeaders.forEach((key, value) => headers[key.toString()] = value.toString());
+      rawHeaders.forEach(
+        (key, value) => headers[key.toString()] = value.toString(),
+      );
     }
     return DirectLink(
       url: (json['url'] ?? '').toString(),
@@ -69,6 +88,7 @@ class DownloadTask {
     required this.error,
     required this.speed,
     required this.connections,
+    required this.createdAt,
   });
 
   final int id;
@@ -81,24 +101,56 @@ class DownloadTask {
   final String? error;
   final int speed;
   final int connections;
+  final int createdAt;
 
   double get progress => size > 0 ? (downloaded / size).clamp(0.0, 1.0) : 0.0;
   bool get isActive => status == 'RUNNING';
   bool get isDone => status == 'DONE';
   bool get isFailed => status == 'FAILED';
+  bool get isPaused => status == 'PAUSED';
+  bool get canResume => isPaused || isFailed;
+
+  DownloadTask copyWith({
+    int? id,
+    String? fileName,
+    String? url,
+    String? destPath,
+    int? size,
+    int? downloaded,
+    String? status,
+    String? error,
+    int? speed,
+    int? connections,
+    int? createdAt,
+  }) => DownloadTask(
+    id: id ?? this.id,
+    fileName: fileName ?? this.fileName,
+    url: url ?? this.url,
+    destPath: destPath ?? this.destPath,
+    size: size ?? this.size,
+    downloaded: downloaded ?? this.downloaded,
+    status: status ?? this.status,
+    error: error ?? this.error,
+    speed: speed ?? this.speed,
+    connections: connections ?? this.connections,
+    createdAt: createdAt ?? this.createdAt,
+  );
 
   factory DownloadTask.fromJson(Map<String, dynamic> json) => DownloadTask(
-        id: (json['id'] as num?)?.toInt() ?? 0,
-        fileName: (json['fileName'] ?? '').toString(),
-        url: (json['url'] ?? '').toString(),
-        destPath: (json['destPath'] ?? '').toString(),
-        size: (json['size'] as num?)?.toInt() ?? -1,
-        downloaded: (json['downloaded'] as num?)?.toInt() ?? 0,
-        status: (json['status'] ?? 'PAUSED').toString(),
-        error: (json['error']?.toString().isNotEmpty ?? false) ? json['error'].toString() : null,
-        speed: (json['speed'] as num?)?.toInt() ?? 0,
-        connections: (json['connections'] as num?)?.toInt() ?? 0,
-      );
+    id: (json['id'] as num?)?.toInt() ?? 0,
+    fileName: (json['fileName'] ?? '').toString(),
+    url: (json['url'] ?? '').toString(),
+    destPath: (json['destPath'] ?? '').toString(),
+    size: (json['size'] as num?)?.toInt() ?? -1,
+    downloaded: (json['downloaded'] as num?)?.toInt() ?? 0,
+    status: (json['status'] ?? 'PAUSED').toString(),
+    error: (json['error']?.toString().isNotEmpty ?? false)
+        ? json['error'].toString()
+        : null,
+    speed: (json['speed'] as num?)?.toInt() ?? 0,
+    connections: (json['connections'] as num?)?.toInt() ?? 0,
+    createdAt: (json['createdAt'] as num?)?.toInt() ?? 0,
+  );
 }
 
 class HostSettings {
@@ -111,6 +163,9 @@ class HostSettings {
     required this.proxyHost,
     required this.proxyPort,
     required this.readTimeoutMs,
+    required this.closeToTray,
+    required this.notifyOnComplete,
+    required this.notifyOnFailure,
   });
 
   final String downloadDir;
@@ -121,6 +176,9 @@ class HostSettings {
   final String proxyHost;
   final int proxyPort;
   final int readTimeoutMs;
+  final bool closeToTray;
+  final bool notifyOnComplete;
+  final bool notifyOnFailure;
 
   HostSettings copyWith({
     String? downloadDir,
@@ -131,47 +189,82 @@ class HostSettings {
     String? proxyHost,
     int? proxyPort,
     int? readTimeoutMs,
-  }) =>
-      HostSettings(
-        downloadDir: downloadDir ?? this.downloadDir,
-        connections: connections ?? this.connections,
-        concurrentTasks: concurrentTasks ?? this.concurrentTasks,
-        speedLimitBytesPerSec: speedLimitBytesPerSec ?? this.speedLimitBytesPerSec,
-        proxy: proxy ?? this.proxy,
-        proxyHost: proxyHost ?? this.proxyHost,
-        proxyPort: proxyPort ?? this.proxyPort,
-        readTimeoutMs: readTimeoutMs ?? this.readTimeoutMs,
-      );
+    bool? closeToTray,
+    bool? notifyOnComplete,
+    bool? notifyOnFailure,
+  }) => HostSettings(
+    downloadDir: downloadDir ?? this.downloadDir,
+    connections: connections ?? this.connections,
+    concurrentTasks: concurrentTasks ?? this.concurrentTasks,
+    speedLimitBytesPerSec: speedLimitBytesPerSec ?? this.speedLimitBytesPerSec,
+    proxy: proxy ?? this.proxy,
+    proxyHost: proxyHost ?? this.proxyHost,
+    proxyPort: proxyPort ?? this.proxyPort,
+    readTimeoutMs: readTimeoutMs ?? this.readTimeoutMs,
+    closeToTray: closeToTray ?? this.closeToTray,
+    notifyOnComplete: notifyOnComplete ?? this.notifyOnComplete,
+    notifyOnFailure: notifyOnFailure ?? this.notifyOnFailure,
+  );
 
   Map<String, dynamic> toJson() => {
-        'downloadDir': downloadDir,
-        'connections': connections,
-        'concurrentTasks': concurrentTasks,
-        'speedLimitBytesPerSec': speedLimitBytesPerSec,
-        'proxy': proxy,
-        'proxyHost': proxyHost,
-        'proxyPort': proxyPort,
-        'readTimeoutMs': readTimeoutMs,
-      };
+    'downloadDir': downloadDir,
+    'connections': connections,
+    'concurrentTasks': concurrentTasks,
+    'speedLimitBytesPerSec': speedLimitBytesPerSec,
+    'proxy': proxy,
+    'proxyHost': proxyHost,
+    'proxyPort': proxyPort,
+    'readTimeoutMs': readTimeoutMs,
+    'closeToTray': closeToTray,
+    'notifyOnComplete': notifyOnComplete,
+    'notifyOnFailure': notifyOnFailure,
+  };
 
   factory HostSettings.fromJson(Map<String, dynamic> json) => HostSettings(
-        downloadDir: (json['downloadDir'] ?? '').toString(),
-        connections: (json['connections'] as num?)?.toInt() ?? 16,
-        concurrentTasks: (json['concurrentTasks'] as num?)?.toInt() ?? 3,
-        speedLimitBytesPerSec: (json['speedLimitBytesPerSec'] as num?)?.toInt() ?? 0,
-        proxy: (json['proxy'] ?? 'system').toString(),
-        proxyHost: (json['proxyHost'] ?? '').toString(),
-        proxyPort: (json['proxyPort'] as num?)?.toInt() ?? 0,
-        readTimeoutMs: (json['readTimeoutMs'] as num?)?.toInt() ?? 30000,
-      );
+    downloadDir: (json['downloadDir'] ?? '').toString(),
+    connections: (json['connections'] as num?)?.toInt() ?? 256,
+    concurrentTasks: (json['concurrentTasks'] as num?)?.toInt() ?? 3,
+    speedLimitBytesPerSec:
+        (json['speedLimitBytesPerSec'] as num?)?.toInt() ?? 0,
+    proxy: (json['proxy'] ?? 'system').toString(),
+    proxyHost: (json['proxyHost'] ?? '').toString(),
+    proxyPort: (json['proxyPort'] as num?)?.toInt() ?? 0,
+    readTimeoutMs: (json['readTimeoutMs'] as num?)?.toInt() ?? 30000,
+    closeToTray: json['closeToTray'] as bool? ?? true,
+    notifyOnComplete: json['notifyOnComplete'] as bool? ?? true,
+    notifyOnFailure: json['notifyOnFailure'] as bool? ?? true,
+  );
 }
 
 String formatBytes(int bytes) {
   if (bytes < 0) return '未知';
   if (bytes < 1024) return '$bytes B';
   if (bytes < 1024 * 1024) return '${(bytes / 1024).toStringAsFixed(1)} KB';
-  if (bytes < 1024 * 1024 * 1024) return '${(bytes / 1024 / 1024).toStringAsFixed(1)} MB';
+  if (bytes < 1024 * 1024 * 1024) {
+    return '${(bytes / 1024 / 1024).toStringAsFixed(1)} MB';
+  }
   return '${(bytes / 1024 / 1024 / 1024).toStringAsFixed(2)} GB';
 }
 
-String formatSpeed(int bytesPerSec) => bytesPerSec <= 0 ? '—' : '${formatBytes(bytesPerSec)}/s';
+String formatSpeed(int bytesPerSec) =>
+    bytesPerSec <= 0 ? '—' : '${formatBytes(bytesPerSec)}/s';
+
+String formatEta(DownloadTask task) {
+  if (!task.isActive ||
+      task.size <= 0 ||
+      task.downloaded >= task.size ||
+      task.speed <= 0) {
+    return '—';
+  }
+  final seconds = ((task.size - task.downloaded) / task.speed).ceil();
+  if (seconds < 60) return '$seconds 秒';
+  if (seconds < 3600) return '${(seconds / 60).ceil()} 分钟';
+  return '${(seconds / 3600).toStringAsFixed(1)} 小时';
+}
+
+String formatTimestamp(int milliseconds) {
+  if (milliseconds <= 0) return '—';
+  final value = DateTime.fromMillisecondsSinceEpoch(milliseconds).toLocal();
+  String two(int n) => n.toString().padLeft(2, '0');
+  return '${value.year}-${two(value.month)}-${two(value.day)} ${two(value.hour)}:${two(value.minute)}';
+}

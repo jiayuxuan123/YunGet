@@ -10,6 +10,7 @@ import com.yunget.app.data.repository.LanzouResolveRepository
 import dev.turbodl.core.DownloadRequest
 import dev.turbodl.core.ProxyMode
 import dev.turbodl.core.ProxyType
+import dev.turbodl.core.AdaptiveConcurrencyMode
 import dev.turbodl.core.TaskState
 import dev.turbodl.core.TurboClient
 import dev.turbodl.core.TurboConfig
@@ -219,13 +220,17 @@ class Host(private val scope: CoroutineScope, private val out: Output) {
         if (p.length() > 0) {
             settings = settings.copy(
                 downloadDir = p.optString("downloadDir", settings.downloadDir),
-                connections = p.optInt("connections", settings.connections).coerceIn(1, 256),
+                connections = p.optInt("connections", settings.connections)
+                    .coerceIn(Settings.MIN_CONNECTIONS, Settings.MAX_CONNECTIONS),
                 concurrentTasks = p.optInt("concurrentTasks", settings.concurrentTasks).coerceIn(1, 64),
                 speedLimitBytesPerSec = p.optLong("speedLimitBytesPerSec", settings.speedLimitBytesPerSec),
                 proxy = p.optString("proxy", settings.proxy),
                 proxyHost = p.optString("proxyHost", settings.proxyHost),
                 proxyPort = p.optInt("proxyPort", settings.proxyPort),
                 readTimeoutMs = p.optLong("readTimeoutMs", settings.readTimeoutMs),
+                closeToTray = p.optBoolean("closeToTray", settings.closeToTray),
+                notifyOnComplete = p.optBoolean("notifyOnComplete", settings.notifyOnComplete),
+                notifyOnFailure = p.optBoolean("notifyOnFailure", settings.notifyOnFailure),
             )
             settings.save()
             runCatching { client.updateConfig(buildConfig(settings)) }
@@ -307,6 +312,9 @@ class Host(private val scope: CoroutineScope, private val out: Output) {
         readTimeoutMs = s.readTimeoutMs,
         // 分片目录必须固定：换目录等于丢掉所有续传进度。
         workDir = Paths.chunksDir,
+        adaptiveConcurrency = true,
+        adaptiveConcurrencyMode = AdaptiveConcurrencyMode.DOWNWARD,
+        slowStart = false,
         proxy = when (s.proxy) {
             "direct" -> ProxyMode.Direct
             "manual" -> ProxyMode.Manual(ProxyType.HTTP, s.proxyHost, s.proxyPort)

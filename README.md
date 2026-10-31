@@ -4,7 +4,7 @@
 >
 > **本项目是 [CYQawa/YunX（云析）](https://github.com/CYQawa/YunX) 的二次开发版本**，在其协议与架构基础上进行功能扩展，并将下载能力逐步迁移至独立的 [TurboDL](https://github.com/jiayuxuan123/TurboDL) 下载引擎。遵循 GNU AGPL-3.0 协议开源。
 
-当前版本 **2.7.21**（versionCode 69）· Android 7.0+（minSdk 24，targetSdk 34）· 内置 TurboDL 0.3.0.0
+当前版本 **2.7.22**（versionCode 70）· Android 7.0+（minSdk 24，targetSdk 34）· 内置 TurboDL 0.3.1.0
 
 **官网**：[jiayuxuan123.github.io/YunGet](https://jiayuxuan123.github.io/YunGet/) —— 下载、使用说明、常见问题、隐私与条款
 
@@ -293,7 +293,7 @@ HLS 下载功能主要面向**完整资源下载**，而不是实时播放。
 - Android SDK（`local.properties` 里的 `sdk.dir`，或环境变量 `ANDROID_HOME` / `ANDROID_SDK_ROOT`）
 - `compileSdk 36` / `minSdk 24` / `targetSdk 34`
 
-**获取 TurboDL SDK。** 依赖里的 `dev.turbodl:*:0.3.0.0` 从 TurboDL Release 的离线包或本地 Maven 解析：
+**获取 TurboDL SDK。** 依赖里的 `dev.turbodl:*:0.3.1.0` 从 TurboDL Release 的离线包或本地 Maven 解析：
 
 ```kotlin
 // settings.gradle.kts 的 dependencyResolutionManagement
@@ -307,7 +307,7 @@ repositories {
 ```kotlin
 // app/build.gradle.kts
 dependencies {
-    implementation("com.github.jiayuxuan123.TurboDL:turbodl-core:0.3.0.0")
+    implementation("com.github.jiayuxuan123.TurboDL:turbodl-core:0.3.1.0")
 }
 ```
 

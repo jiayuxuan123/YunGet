@@ -422,7 +422,11 @@ fun SettingsScreen(
         SettingsItem(
             icon = Icons.Outlined.TrendingUp,
             title = "慢启动",
-            description = if (slowStartOn) "开启：并发从少逐步爬升到设定值，更稳不易被风控" else "关闭：立即全开并发",
+            description = if (slowStartOn) {
+                "开启：并发从少逐步爬升到设定值，更稳不易被风控"
+            } else {
+                "关闭：立即全开并发；吞吐自适应仍会在聚合限速时向下收敛"
+            },
             onClick = {
                 slowStartOn = !slowStartOn
                 settingsRepo.slowStart = slowStartOn

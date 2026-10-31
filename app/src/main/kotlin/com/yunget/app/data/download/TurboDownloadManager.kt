@@ -10,6 +10,7 @@ import dev.turbodl.core.DownloadRequest
 import dev.turbodl.core.DnsMode
 import dev.turbodl.core.ProxyMode
 import dev.turbodl.core.HttpVersionPolicy
+import dev.turbodl.core.AdaptiveConcurrencyMode
 import dev.turbodl.core.TaskState
 import dev.turbodl.core.TurboConfig
 import dev.turbodl.core.TurboDiagnostics
@@ -105,8 +106,8 @@ class TurboDownloadManager(
     private val dohUrlProvider: () -> String? = { null },
     /** 连接预热开关提供者（默认开） */
     private val warmUpProvider: () -> Boolean = { true },
-    /** 慢启动开关提供者（默认开） */
-    private val slowStartProvider: () -> Boolean = { true },
+    /** 慢启动开关提供者（默认关：云盘/直链大文件先按用户线程数起跑，自适应仍开启） */
+    private val slowStartProvider: () -> Boolean = { false },
     /**
      * 引擎高级参数（全部可选，默认 null = 保持原有硬编码行为）。
      *
@@ -364,6 +365,9 @@ class TurboDownloadManager(
         trustAllCerts = ignoreSslProvider(),
         tailAssist = tailAssistProvider(),
         adaptiveConcurrency = adaptiveConcurrencyProvider(),
+        // 云取的主要负载是网盘/直链大文件：自适应保持开启，但必须先从
+        // 用户设定的线程数起跑，再在聚合限速时向下收敛。
+        adaptiveConcurrencyMode = AdaptiveConcurrencyMode.DOWNWARD,
         overlapMerge = overlapMergeProvider(),
         bufferedSegmentWrite = bufferedSegmentWriteProvider(),
         stallTimeoutMs = stallTimeoutMsProvider().coerceIn(0L, 300_000L),

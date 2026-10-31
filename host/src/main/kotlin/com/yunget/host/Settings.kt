@@ -29,7 +29,7 @@ object Paths {
 /** 用户设置。字段与 Android 端的同名设置一一对应，换端不必重新学。 */
 data class Settings(
     val downloadDir: String = Paths.defaultDownloadDir.absolutePath,
-    val connections: Int = 16,
+    val connections: Int = DEFAULT_CONNECTIONS,
     val concurrentTasks: Int = 3,
     val speedLimitBytesPerSec: Long = 0L,
     /** direct / system / manual */
@@ -37,8 +37,13 @@ data class Settings(
     val proxyHost: String = "",
     val proxyPort: Int = 0,
     val readTimeoutMs: Long = 30_000L,
+    /** 关闭主窗口时收进托盘，避免误关正在下载的任务。 */
+    val closeToTray: Boolean = true,
+    val notifyOnComplete: Boolean = true,
+    val notifyOnFailure: Boolean = true,
 ) {
     fun toJson(): JSONObject = JSONObject()
+        .put("schemaVersion", SETTINGS_SCHEMA_VERSION)
         .put("downloadDir", downloadDir)
         .put("connections", connections)
         .put("concurrentTasks", concurrentTasks)
@@ -47,23 +52,43 @@ data class Settings(
         .put("proxyHost", proxyHost)
         .put("proxyPort", proxyPort)
         .put("readTimeoutMs", readTimeoutMs)
+        .put("closeToTray", closeToTray)
+        .put("notifyOnComplete", notifyOnComplete)
+        .put("notifyOnFailure", notifyOnFailure)
 
     fun save() = AtomicJson.write(Paths.settingsFile, toJson())
 
     companion object {
+        const val SETTINGS_SCHEMA_VERSION = 2
+        const val MIN_CONNECTIONS = 1
+        const val MAX_CONNECTIONS = 256
+        const val DEFAULT_CONNECTIONS = MAX_CONNECTIONS
+        private const val LEGACY_DEFAULT_CONNECTIONS = 16
+
         fun load(): Settings = runCatching {
             if (!Paths.settingsFile.isFile) return@runCatching Settings()
             val o = JSONObject(Paths.settingsFile.readText())
-            Settings(
+            val storedConnections = o.optInt("connections", DEFAULT_CONNECTIONS)
+            val migrateLegacyConnections = !o.has("schemaVersion") &&
+                o.has("connections") &&
+                storedConnections == LEGACY_DEFAULT_CONNECTIONS
+            val loaded = Settings(
                 downloadDir = o.optString("downloadDir").ifBlank { Paths.defaultDownloadDir.absolutePath },
-                connections = o.optInt("connections", 16).coerceIn(1, 256),
+                connections = (if (migrateLegacyConnections) DEFAULT_CONNECTIONS else storedConnections)
+                    .coerceIn(MIN_CONNECTIONS, MAX_CONNECTIONS),
                 concurrentTasks = o.optInt("concurrentTasks", 3).coerceIn(1, 64),
                 speedLimitBytesPerSec = o.optLong("speedLimitBytesPerSec", 0L).coerceAtLeast(0),
                 proxy = o.optString("proxy", "system"),
                 proxyHost = o.optString("proxyHost", ""),
                 proxyPort = o.optInt("proxyPort", 0),
                 readTimeoutMs = o.optLong("readTimeoutMs", 30_000L).coerceIn(5_000L, 600_000L),
+                closeToTray = o.optBoolean("closeToTray", true),
+                notifyOnComplete = o.optBoolean("notifyOnComplete", true),
+                notifyOnFailure = o.optBoolean("notifyOnFailure", true),
             )
+            // 只在命中旧默认值时立刻落盘，写入 schemaVersion 后不会再次迁移。
+            if (migrateLegacyConnections) runCatching { loaded.save() }
+            loaded
         }.getOrDefault(Settings())
     }
 }

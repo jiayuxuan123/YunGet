@@ -174,9 +174,14 @@ class SettingsRepository(context: Context) {
             prefs.edit().putBoolean("warm_up_connections", value).apply()
         }
 
-    /** 慢启动（默认开）：并发从少逐步爬升到设定值，避免瞬时几十连接冲击服务器 */
+    /**
+     * 慢启动（默认关）：云取的主要任务是网盘/直链大文件，文件本身可能在下完前
+     * 只有很短的可下载窗口；线程数必须先从用户设定值起跑。
+     *
+     * 吞吐自适应仍然默认开启，负责在服务器聚合限速时向下收敛。
+     */
     var slowStart: Boolean
-        get() = prefs.getBoolean("slow_start", true)
+        get() = prefs.getBoolean("slow_start", false)
         set(value) {
             prefs.edit().putBoolean("slow_start", value).apply()
         }
@@ -298,11 +303,10 @@ class SettingsRepository(context: Context) {
         }
 
     /**
-     * 吞吐自适应（默认开）：按实测吞吐寻找"够用的最低并发"。
+     * 吞吐自适应（默认开）：先从用户线程数起跑，再按实测总吞吐向下收敛。
      *
-     * ⚠️ 已知缺陷（0.2.3.0 起记录）：真实链路上它可能把并发一路降到 1，
-     * 实测有一次 373 MiB 花了 377 秒，而同链路关掉它只要 35 秒。
-     * 遇到"下载越跑越慢、线程数只降不升"，先关掉这一项。
+     * 不是“关掉自适应换速度”，而是“自适应必须从用户设定的并发上限开始测量”；
+     * 这样短文件也能立刻拿到高并发，聚合限速时才收敛到更稳的档位。
      */
     var adaptiveConcurrency: Boolean
         get() = prefs.getBoolean("adaptive_concurrency", true)

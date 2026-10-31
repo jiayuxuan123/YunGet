@@ -1,5 +1,5 @@
 name: yunget_desktop
-description: "A new Flutter project."
+description: "云取 YunGet Windows 桌面客户端。"
 # The following line prevents the package from being accidentally published to
 # pub.dev using `flutter pub publish`. This is preferred for private packages.
 publish_to: 'none' # Remove this line if you wish to publish to pub.dev
@@ -16,7 +16,7 @@ publish_to: 'none' # Remove this line if you wish to publish to pub.dev
 # https://developer.apple.com/library/archive/documentation/General/Reference/InfoPlistKeyReference/Articles/CoreFoundationKeys.html
 # In Windows, build-name is used as the major, minor, and patch parts
 # of the product and file versions while build-number is used as the build suffix.
-version: 1.0.0+1
+version: 0.3.0+1
 
 environment:
   sdk: ^3.13.7
@@ -34,6 +34,11 @@ dependencies:
   # The following adds the Cupertino Icons font to your application.
   # Use with the CupertinoIcons class for iOS style icons.
   cupertino_icons: ^1.0.8
+  window_manager: ^0.5.2
+  tray_manager: ^0.8.0
+  local_notifier: ^0.1.6
+  file_selector: ^1.1.0
+  desktop_drop: ^0.8.4
 
 dev_dependencies:
   flutter_test:
@@ -58,6 +63,9 @@ flutter:
   # included with your application, so that you can use the icons in
   # the material Icons class.
   uses-material-design: true
+
+  assets:
+    - windows/runner/resources/app_icon.ico
 
   # To add assets to your application, add an assets section, like this:
   # assets:
