@@ -29,7 +29,7 @@ android {
         // Android 7.0 发布于 2016 年，覆盖率早已 >99%。
         minSdk = 24
         targetSdk = 34
-        versionCode = 68
+        versionCode = 69
         // 2.7.10 内容：**原生（L2）插件在手机端暂时禁用**
         //  ① 移除整条 dex 加载链：AndroidNativePluginLoader、YunHostBridge、l2-providers 模块；
         //  ② 移除网盘 CloudProvider 抽象（CloudProvider.kt / Resolver / ShareRepository）
@@ -376,6 +376,10 @@ android {
         //   修复：分享文件夹翻页时，已解锁的分享若仍带提取码，蓝奏会判"密码错误" ——
         //         现在先去掉提取码重试一次；已列出文件后翻页被拒或限流，保留已有列表，
         //         不再把整个列表判为失败并弹"提取码错误"。
+        // 2.7.21（引擎 0.3.0.0）：
+        //   同步 TurboDL 调度、续传与资源预算重做：全局连接预算、公平任务槽、
+        //   目标文件删除后的空洞续传修复、暂停/取消竞态修复、预热误读整文件修复。
+        //   手机端保持现有 UI 与默认行为；全局预算默认不设上限，后续设置页再暴露。
         // 2.7.16（引擎 0.2.7.0）：
         //   修复：单条连接出问题不再导致整个任务失败；失败提示改为显示真正出错连接的原因。
         //   优化：连接失效判定 60 秒 → 30 秒，排队中的连接不会被误判；
@@ -385,7 +389,7 @@ android {
         //  视频平台解析（微博/小红书/Pixiv）改为**引擎级原生插件** turbo-plugin-parser，
         //  与 HLS 插件同一套机制：只往 LINK_PARSER 注册解析器、往 PROTOCOL_HANDLER
         //  每平台声明一条，引擎内核对这三个平台一无所知。平台改版只需换这个插件。
-        versionName = "2.7.20"
+        versionName = "2.7.21"
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
     }
@@ -626,16 +630,16 @@ dependencies {
     // headless WebView 解析（视频平台）：关闭 X-Requested-With 并同步 client hints
     implementation(libs.androidx.webkit)
 
-    // TurboDL SDK（纯 JVM 多线程下载引擎 + 可选插件框架），从 mavenLocal 解析 dev.turbodl:*:0.2.7.0
+    // TurboDL SDK（纯 JVM 多线程下载引擎 + 可选插件框架），从 mavenLocal 解析 dev.turbodl:*:0.3.0.0
     // 0.2.0.8：读缓冲改为按并发摊薄（修 256 连接 = 256MB = 整堆的 OOM，见 2.7.2 说明）
-    implementation("dev.turbodl:turbodl-core:0.2.7.0")
-    implementation("dev.turbodl:turbo-plugin-runtime:0.2.7.0")
-    implementation("dev.turbodl:turbo-plugin-bootstrap:0.2.7.0")
-    implementation("dev.turbodl:turbo-plugin-hls:0.2.7.0")
+    implementation("dev.turbodl:turbodl-core:0.3.0.0")
+    implementation("dev.turbodl:turbo-plugin-runtime:0.3.0.0")
+    implementation("dev.turbodl:turbo-plugin-bootstrap:0.3.0.0")
+    implementation("dev.turbodl:turbo-plugin-hls:0.3.0.0")
     // 视频平台链接解析（微博/小红书/Pixiv）—— 引擎级原生插件，与 HLS 同一套机制。
     // 它自己往 LINK_PARSER 注册解析器、往 PROTOCOL_HANDLER 每平台声明一条；
     // 宿主只负责把它装进 PluginHost（见 TurboBootstrap.extraPlugins）。
-    implementation("dev.turbodl:turbo-plugin-parser:0.2.7.0")
+    implementation("dev.turbodl:turbo-plugin-parser:0.3.0.0")
 
     // JavaScript 插件加载器：让用户能自己写/导入脚本插件。
     //
@@ -649,7 +653,7 @@ dependencies {
     //     公开 API（interruptEvaluation / memoryLimit / memoryUsage…）与 jvm 版逐名一致，
     //     且 Android 侧走 System.loadLibrary（不再有 createTempFile 问题）。
     // 所以：排掉 jvm 版，换成 android 版 —— turbo-plugin-js 自身一行代码都不用改。
-    implementation("dev.turbodl:turbo-plugin-js:0.2.7.0") {
+    implementation("dev.turbodl:turbo-plugin-js:0.3.0.0") {
         exclude(group = "io.github.dokar3", module = "quickjs-kt-jvm")
     }
     implementation("io.github.dokar3:quickjs-kt-android:1.0.15")
