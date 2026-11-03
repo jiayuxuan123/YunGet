@@ -82,7 +82,8 @@ BLOB = f"{REPO}/blob/main"
 UPSTREAM = "https://github.com/CYQawa/YunX"
 TURBODL_REPO = "https://github.com/jiayuxuan123/TurboDL"
 
-APK = next((a for a in LATEST["assets"] if a["name"].endswith(".apk")), None)
+APKS = [a for a in LATEST["assets"] if a["name"].lower().endswith(".apk")]
+APK = next((a for a in APKS if "universal" in a["name"].lower()), None) or next(iter(APKS), None)
 
 #: 文档里的占位符 → 实际值。文档里写 `{{引擎版本}}` 而不是手写版本号：
 #: 手写的必然滞后（0.2.0.6 那版在站上挂了很久没人发现），改用占位符后
@@ -345,11 +346,12 @@ def _doc_nav(current: dict, href) -> str:
 def _apk_rows() -> list[list[str]]:
     return [
         [
-            esc(APK["name"]),
-            f'<span class="num">{APK["size"] / 1048576:.1f} MB</span>',
-            f'<span class="mono small">{esc((APK["sha256"] or "")[:16])}…</span>',
+            f'<a href="{esc(a["url"])}">{esc(a["name"])}</a>',
+            f'<span class="num">{a["size"] / 1048576:.1f} MB</span>',
+            f'<span class="mono small">{esc((a["sha256"] or "")[:16])}…</span>',
         ]
-    ] if APK else []
+        for a in APKS
+    ]
 
 
 def _segment_visual() -> str:
@@ -827,15 +829,16 @@ def _page_download(lang: str, href) -> str:
         section(
             "Android",
             table(["文件", "大小", "SHA-256（前 16 位）"], _apk_rows())
+            + '<p>通用包适用于大多数设备；也可按设备架构选择对应的安装包。</p>'
             + buttons([(f'下载 {esc(APK["name"])}' if APK else "下载", APK["url"] if APK else LATEST["url"])])
-            + code_block(
+            + (code_block(
                 f"""# 校验下载到的 APK（取完整哈希：见下方 Release 页的附件信息）
 sha256sum {APK["name"] if APK else "YunGet-<version>-release.apk"}
 # 期望：{sha if sha else "(见 Release 页)"}""",
                 "shell",
             )
             if sha
-            else "",
+            else ""),
         ),
         section(
             "安装说明",
