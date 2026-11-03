@@ -81,6 +81,19 @@ REPO = "https://github.com/jiayuxuan123/YunGet"
 BLOB = f"{REPO}/blob/main"
 UPSTREAM = "https://github.com/CYQawa/YunX"
 TURBODL_REPO = "https://github.com/jiayuxuan123/TurboDL"
+DOWNLOAD_EDGE = "https://dl.yunl.us.ci"
+
+
+def _download_edge_url(url: str) -> str:
+    """Map only this project's immutable Release assets to the Cloudflare edge."""
+    mappings = (
+        ("https://github.com/jiayuxuan123/YunGet/releases/download/", "yunget"),
+        ("https://github.com/jiayuxuan123/TurboDL/releases/download/", "turbodl"),
+    )
+    for prefix, project in mappings:
+        if url.startswith(prefix):
+            return f"{DOWNLOAD_EDGE}/{project}/releases/download/{url[len(prefix):]}"
+    return url
 
 APKS = [a for a in LATEST["assets"] if a["name"].lower().endswith(".apk")]
 APK = next((a for a in APKS if "universal" in a["name"].lower()), None) or next(iter(APKS), None)
@@ -346,7 +359,8 @@ def _doc_nav(current: dict, href) -> str:
 def _apk_rows() -> list[list[str]]:
     return [
         [
-            f'<a href="{esc(a["url"])}">{esc(a["name"])}</a>',
+            f'<a href="{esc(_download_edge_url(a["url"]))}">{esc(a["name"])}</a>',
+            f'<a href="{esc(a["url"])}">GitHub</a>',
             f'<span class="num">{a["size"] / 1048576:.1f} MB</span>',
             f'<span class="mono small">{esc((a["sha256"] or "")[:16])}…</span>',
         ]
@@ -828,9 +842,13 @@ def _page_download(lang: str, href) -> str:
         "</div></div></section>",
         section(
             "Android",
-            table(["文件", "大小", "SHA-256（前 16 位）"], _apk_rows())
+            table(["Cloudflare 缓存下载", "GitHub 原始链接", "大小", "SHA-256（前 16 位）"], _apk_rows())
             + '<p>通用包适用于大多数设备；也可按设备架构选择对应的安装包。</p>'
-            + buttons([(f'下载 {esc(APK["name"])}' if APK else "下载", APK["url"] if APK else LATEST["url"])])
+            + buttons([
+                (f'Cloudflare 缓存下载 · {esc(APK["name"])}', _download_edge_url(APK["url"]))
+                if APK else ("GitHub Release", LATEST["url"]),
+                ("GitHub 原始下载", APK["url"]) if APK else ("GitHub Release", LATEST["url"]),
+            ])
             + (code_block(
                 f"""# 校验下载到的 APK（取完整哈希：见下方 Release 页的附件信息）
 sha256sum {APK["name"] if APK else "YunGet-<version>-release.apk"}
