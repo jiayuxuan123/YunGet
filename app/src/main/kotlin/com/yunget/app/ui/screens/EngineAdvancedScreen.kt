@@ -30,10 +30,12 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.selection.selectable
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
@@ -64,6 +66,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import com.yunget.app.data.prefs.SettingsRepository
@@ -649,11 +652,9 @@ private fun HttpPolicySelector(
         2 to "允许 2",
     )
     val detail = when (value) {
-        1 -> "全部链路强制 HTTP/1.1。每个分片走独立连接，最不容易被 h2 多路复用抹平并发收益。"
-        2 -> "全部链路允许 HTTP/2。仅当确知目标站点只支持 h2、或单连接反而更快时使用 —— " +
-            "多线程下载通常不会有加速。"
-        else -> "分片并发走 HTTP/1.1（保住多连接收益），探测与整文件单流回退允许协商 h2" +
-            "（兼容只支持 h2 的服务器）。绝大多数情况用这个。"
+        1 -> "全部链路强制 HTTP/1.1。在会受 h2 多路复用影响的 CDN 上，有利于让分片使用独立连接；实际效果取决于服务器。"
+        2 -> "全部链路允许 HTTP/2。仅当确知目标站点只支持 h2、或单连接反而更快时使用；多线程下载不一定更快。"
+        else -> "分片并发优先 HTTP/1.1，探测与整文件单流回退允许协商 h2（兼容只支持 h2 的服务器）。这是保守默认值。"
     }
 
     Surface(
@@ -693,7 +694,13 @@ private fun HttpPolicySelector(
                     ) {
                         Box(
                             modifier = Modifier
-                                .clickable { onChange(idx) }
+                                .selectable(
+                                    selected = selected,
+                                    role = Role.RadioButton,
+                                    onClick = { onChange(idx) },
+                                )
+                                .heightIn(min = 48.dp)
+                                .fillMaxWidth()
                                 .padding(vertical = 9.dp),
                             contentAlignment = Alignment.Center
                         ) {
@@ -850,24 +857,27 @@ private fun ParamStepper(
 /** 步进器上的圆形按钮。 */
 @Composable
 private fun StepButton(label: String, enabled: Boolean, onClick: () -> Unit) {
-    Surface(
-        shape = androidx.compose.foundation.shape.CircleShape,
-        color = if (enabled) {
-            MaterialTheme.colorScheme.surfaceContainerHighest
-        } else {
-            MaterialTheme.colorScheme.surfaceContainerLowest
-        }
-    ) {
-        IconButton(onClick = onClick, enabled = enabled, modifier = Modifier.size(36.dp)) {
-            Text(
-                text = label,
-                style = MaterialTheme.typography.titleMedium,
-                color = if (enabled) {
-                    MaterialTheme.colorScheme.onSurface
-                } else {
-                    MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.38f)
-                }
-            )
+    IconButton(onClick = onClick, enabled = enabled, modifier = Modifier.size(48.dp)) {
+        Surface(
+            modifier = Modifier.size(36.dp),
+            shape = androidx.compose.foundation.shape.CircleShape,
+            color = if (enabled) {
+                MaterialTheme.colorScheme.surfaceContainerHighest
+            } else {
+                MaterialTheme.colorScheme.surfaceContainerLowest
+            }
+        ) {
+            Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+                Text(
+                    text = label,
+                    style = MaterialTheme.typography.titleMedium,
+                    color = if (enabled) {
+                        MaterialTheme.colorScheme.onSurface
+                    } else {
+                        MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.38f)
+                    }
+                )
+            }
         }
     }
 }

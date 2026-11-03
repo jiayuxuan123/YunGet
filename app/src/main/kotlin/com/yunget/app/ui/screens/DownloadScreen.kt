@@ -10,7 +10,6 @@ import android.provider.Settings
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.animation.AnimatedVisibility
-import androidx.compose.animation.core.tween
 import androidx.compose.animation.expandVertically
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
@@ -19,6 +18,8 @@ import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.ExperimentalLayoutApi
+import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
@@ -56,6 +57,7 @@ import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TopAppBarScrollBehavior
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -81,10 +83,14 @@ import java.io.File
 import com.yunget.app.ui.theme.ThemeController
 import com.yunget.app.ui.theme.effectsDefault
 import com.yunget.app.ui.theme.effectsFast
+import com.yunget.app.ui.theme.spatialDefault
+import com.yunget.app.ui.theme.spatialFast
+import kotlinx.coroutines.delay
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.Card
 import androidx.compose.material3.Checkbox
+import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.OutlinedTextField
@@ -104,9 +110,23 @@ fun DownloadScreen(
     val tasks by viewModel.tasks.collectAsState()
     val stats by viewModel.stats.collectAsState()
     val speedSeries by viewModel.speedSeries.collectAsState()
+    val (rootTasks, folderGroups) = remember(tasks) {
+        val (folders, roots) = tasks.partition { it.fileName.contains('/') }
+        roots to folders.groupBy { it.fileName.substringBefore('/') }
+    }
     var showAddDialog by remember { mutableStateOf(false) }
     var pendingDelete by remember { mutableStateOf<DownloadTaskEntity?>(null) }
     var showDeleteAllConfirm by remember { mutableStateOf(false) }
+    var showEmptyState by remember { mutableStateOf(false) }
+
+    LaunchedEffect(tasks.isEmpty()) {
+        if (tasks.isEmpty()) {
+            delay(250)
+            showEmptyState = tasks.isEmpty()
+        } else {
+            showEmptyState = false
+        }
+    }
 
     // Android 9- 写公共目录需要 WRITE_EXTERNAL_STORAGE
     val needLegacyPermission = Build.VERSION.SDK_INT < Build.VERSION_CODES.Q
@@ -130,11 +150,13 @@ fun DownloadScreen(
     }
 
     Box(modifier = modifier.fillMaxSize()) {
-        if (tasks.isEmpty()) {
+        if (showEmptyState) {
             EmptyDownloadState(
                 onAdd = requestAddDownload,
                 modifier = Modifier.align(Alignment.Center)
             )
+        } else if (tasks.isEmpty()) {
+            CircularProgressIndicator(modifier = Modifier.align(Alignment.Center))
         } else {
             Column(modifier = Modifier.fillMaxSize()) {
                 // 批量操作栏：全部暂停 / 全部开始 / 删除全部（并发任务多时附带合计速度）
@@ -162,12 +184,6 @@ fun DownloadScreen(
                     contentPadding = PaddingValues(start = 16.dp, end = 16.dp, top = 8.dp, bottom = 96.dp),
                     verticalArrangement = Arrangement.spacedBy(10.dp)
                 ) {
-                    // 根目录任务（无相对路径）单独显示
-                    val rootTasks = tasks.filter { !it.fileName.contains('/') }
-                    // 文件夹下载任务：按「顶级目录」分组（整个文件夹归为一组，内部子文件夹不拆开）
-                    val folderGroups = tasks.filter { it.fileName.contains('/') }
-                        .groupBy { it.fileName.substringBefore('/') }
-
                     items(rootTasks, key = { it.id }) { task ->
                         DownloadTaskCard(
                             task = task,
@@ -290,6 +306,7 @@ fun DownloadScreen(
  * 并发多个任务时在中间显示**合计速度** —— 每个任务卡上都有各自的速度，但"现在一共跑多快"
  * 得自己加，而下载页最常被问的就是这个问题。
  */
+@OptIn(ExperimentalLayoutApi::class)
 @Composable
 private fun DownloadBatchBar(
     hasActive: Boolean,
@@ -300,11 +317,13 @@ private fun DownloadBatchBar(
     onResumeAll: () -> Unit,
     onDeleteAll: () -> Unit
 ) {
-    Row(
+    FlowRow(
         modifier = Modifier
             .fillMaxWidth()
             .padding(horizontal = 16.dp, vertical = 2.dp),
-        verticalAlignment = Alignment.CenterVertically
+        horizontalArrangement = Arrangement.spacedBy(4.dp),
+        verticalArrangement = Arrangement.spacedBy(2.dp),
+        itemVerticalAlignment = Alignment.CenterVertically,
     ) {
         TextButton(onClick = onPauseAll, enabled = hasActive) {
             Icon(
@@ -324,7 +343,6 @@ private fun DownloadBatchBar(
             Spacer(modifier = Modifier.width(4.dp))
             Text("全部开始")
         }
-        Spacer(modifier = Modifier.weight(1f))
         // 合计速度：只在一个以上任务同时下载时出现（单任务时卡片上已经有了，重复显示是噪音）
         if (activeCount > 1 && totalSpeed > 0) {
             Text(
@@ -333,7 +351,6 @@ private fun DownloadBatchBar(
                 fontWeight = FontWeight.Medium,
                 color = MaterialTheme.colorScheme.primary
             )
-            Spacer(modifier = Modifier.width(4.dp))
         }
         TextButton(onClick = onDeleteAll) {
             Icon(
@@ -561,8 +578,14 @@ private fun FolderDownloadGroup(
             // 展开区：总体进度条 + 子任务紧凑列表
             AnimatedVisibility(
                 visible = expanded,
-                enter = fadeIn(effectsDefault()) + expandVertically(tween(200), expandFrom = Alignment.Top),
-                exit = fadeOut(effectsFast()) + shrinkVertically(tween(150), shrinkTowards = Alignment.Top)
+                enter = fadeIn(effectsDefault()) + expandVertically(
+                    animationSpec = spatialDefault(),
+                    expandFrom = Alignment.Top,
+                ),
+                exit = fadeOut(effectsFast()) + shrinkVertically(
+                    animationSpec = spatialFast(),
+                    shrinkTowards = Alignment.Top,
+                )
             ) {
                 Column {
                     // 总体进度条（细条，圆角）
@@ -666,36 +689,37 @@ private fun DownloadSubTaskRow(
                 // 主操作（暂停/继续/重试/打开）
                 when (task.status) {
                     DownloadTaskEntity.STATUS_DOWNLOADING,
-                    DownloadTaskEntity.STATUS_PENDING -> IconButton(onClick = onPause, modifier = Modifier.size(32.dp)) {
+                    DownloadTaskEntity.STATUS_PENDING -> IconButton(onClick = onPause) {
                         Icon(
                             Icons.Outlined.Pause, contentDescription = "暂停",
                             tint = MaterialTheme.colorScheme.primary, modifier = Modifier.size(18.dp)
                         )
                     }
-                    DownloadTaskEntity.STATUS_PAUSED -> IconButton(onClick = onResume, modifier = Modifier.size(32.dp)) {
+                    DownloadTaskEntity.STATUS_PAUSED -> IconButton(onClick = onResume) {
                         Icon(
                             Icons.Outlined.PlayArrow, contentDescription = "继续",
                             tint = MaterialTheme.colorScheme.primary, modifier = Modifier.size(18.dp)
                         )
                     }
-                    DownloadTaskEntity.STATUS_FAILED -> IconButton(onClick = onResume, modifier = Modifier.size(32.dp)) {
+                    DownloadTaskEntity.STATUS_FAILED -> IconButton(onClick = onResume) {
                         Icon(
                             Icons.Outlined.Refresh, contentDescription = "重试",
                             tint = MaterialTheme.colorScheme.error, modifier = Modifier.size(18.dp)
                         )
                     }
-                    DownloadTaskEntity.STATUS_COMPLETED -> IconButton(
-                        onClick = { openSavedFile(context, task.savePath) },
-                        modifier = Modifier.size(32.dp)
-                    ) {
-                        Icon(
-                            Icons.Outlined.OpenInNew, contentDescription = "打开",
-                            tint = MaterialTheme.colorScheme.primary, modifier = Modifier.size(18.dp)
-                        )
+                    DownloadTaskEntity.STATUS_COMPLETED -> {
+                        if (task.savePath.isNotBlank()) {
+                            IconButton(onClick = { openSavedFile(context, task.savePath) }) {
+                                Icon(
+                                    Icons.Outlined.OpenInNew, contentDescription = "打开",
+                                    tint = MaterialTheme.colorScheme.primary, modifier = Modifier.size(18.dp)
+                                )
+                            }
+                        }
                     }
                 }
                 // 删除
-                IconButton(onClick = onRemove, modifier = Modifier.size(32.dp)) {
+                IconButton(onClick = onRemove) {
                     Icon(
                         Icons.Outlined.Delete, contentDescription = "删除",
                         tint = MaterialTheme.colorScheme.error, modifier = Modifier.size(18.dp)
@@ -794,21 +818,27 @@ private fun DownloadTaskCard(
                     DownloadTaskEntity.STATUS_FAILED -> IconButton(onClick = onResume) {
                         Icon(Icons.Outlined.Refresh, contentDescription = "重试", tint = MaterialTheme.colorScheme.error)
                     }
-                                        DownloadTaskEntity.STATUS_COMPLETED -> Row {
-                        // APK 文件：额外显示「安装」按钮
-                        if (task.fileName.endsWith(".apk", true)) {
-                            IconButton(onClick = { installApk(context, task.savePath, task.fileName) }) {
-                                Icon(
-                                    imageVector = Icons.Outlined.SystemUpdate,
-                                    contentDescription = "安装",
-                                    tint = MaterialTheme.colorScheme.primary
-                                )
+                    DownloadTaskEntity.STATUS_COMPLETED -> {
+                        if (task.savePath.isNotBlank()) {
+                            Row {
+                                // APK 文件：额外显示「安装」按钮
+                                if (task.fileName.endsWith(".apk", true)) {
+                                    IconButton(onClick = { installApk(context, task.savePath, task.fileName) }) {
+                                        Icon(
+                                            imageVector = Icons.Outlined.SystemUpdate,
+                                            contentDescription = "安装",
+                                            tint = MaterialTheme.colorScheme.primary
+                                        )
+                                    }
+                                }
+                                IconButton(onClick = { openSavedFile(context, task.savePath) }) {
+                                    Icon(
+                                        Icons.Outlined.OpenInNew,
+                                        contentDescription = "打开",
+                                        tint = MaterialTheme.colorScheme.primary
+                                    )
+                                }
                             }
-                        }
-                        IconButton(onClick = {
-                            openSavedFile(context, task.savePath)
-                        }) {
-                            Icon(Icons.Outlined.OpenInNew, contentDescription = "打开", tint = MaterialTheme.colorScheme.primary)
                         }
                     }
                 }
@@ -843,7 +873,7 @@ private fun DownloadTaskCard(
             // ---- 实时统计：速度 / 剩余时间 / 线程数 ----
             if (isDownloading && stats != null && stats.speed > 0) {
                 Text(
-                    text = "${formatSpeed(stats.speed)} · 剩余 ${formatRemain(stats.remainMillis)} · ${stats.chunkCount} 线程",
+                    text = "${formatSpeed(stats.speed)} · 剩余 ${formatRemain(stats.remainMillis)} · ${stats.connectionSummary()}",
                     style = MaterialTheme.typography.labelSmall,
                     color = MaterialTheme.colorScheme.primary
                 )
@@ -945,21 +975,26 @@ private fun formatRemain(millis: Long): String {
 }
 
 private fun openSavedFile(context: android.content.Context, savePath: String) {
-    if (savePath.isBlank()) return
-    val uri = if (savePath.startsWith("content://")) {
-        Uri.parse(savePath)
-    } else {
-        // Android 7.0+ 禁止暴露 file:// URI，必须经 FileProvider 转 content://
-        FileProvider.getUriForFile(context, "${context.packageName}.fileprovider", File(savePath))
-    }
-    val intent = Intent(Intent.ACTION_VIEW).apply {
-        setDataAndType(uri, "*/*")
-        addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+    if (savePath.isBlank()) {
+        SnackbarController.show("文件不存在或已被删除")
+        return
     }
     runCatching {
+        val uri = if (savePath.startsWith("content://")) {
+            Uri.parse(savePath)
+        } else {
+            val file = File(savePath)
+            check(file.isFile) { "文件不存在或已被删除" }
+            // Android 7.0+ 禁止暴露 file:// URI，必须经 FileProvider 转 content://
+            FileProvider.getUriForFile(context, "${context.packageName}.fileprovider", file)
+        }
+        val intent = Intent(Intent.ACTION_VIEW).apply {
+            setDataAndType(uri, "*/*")
+            addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+        }
         context.startActivity(Intent.createChooser(intent, "打开文件"))
     }.onFailure {
-        SnackbarController.show("无法打开该文件")
+        SnackbarController.show("文件不存在或无法打开")
     }
 }
 
@@ -983,17 +1018,19 @@ private fun installApk(context: android.content.Context, savePath: String, fileN
         }
         return
     }
-    val uri = if (savePath.startsWith("content://")) {
-        Uri.parse(savePath)
-    } else {
-        // Android 7.0+ 禁止暴露 file:// URI，必须经 FileProvider 转 content://
-        FileProvider.getUriForFile(context, "${context.packageName}.fileprovider", File(savePath))
-    }
-    val intent = Intent(Intent.ACTION_VIEW).apply {
-        setDataAndType(uri, "application/vnd.android.package-archive")
-        addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
-    }
     runCatching {
+        val uri = if (savePath.startsWith("content://")) {
+            Uri.parse(savePath)
+        } else {
+            val file = File(savePath)
+            check(file.isFile) { "文件不存在或已被删除" }
+            // Android 7.0+ 禁止暴露 file:// URI，必须经 FileProvider 转 content://
+            FileProvider.getUriForFile(context, "${context.packageName}.fileprovider", file)
+        }
+        val intent = Intent(Intent.ACTION_VIEW).apply {
+            setDataAndType(uri, "application/vnd.android.package-archive")
+            addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+        }
         context.startActivity(Intent.createChooser(intent, "安装应用"))
     }.onFailure {
         SnackbarController.show("无法打开安装器")

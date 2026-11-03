@@ -87,6 +87,49 @@ object UpdateChecker {
         val htmlUrl: String = "",
     )
 
+    private val knownAbis = listOf("arm64-v8a", "armeabi-v7a", "x86_64", "x86")
+
+    /**
+     * Pick the APK that the current device can actually install.
+     *
+     * The first release after ABI splitting also keeps a universal APK as a
+     * bridge for older clients. New clients prefer an exact ABI and only use a
+     * compatible 32-bit fallback or the universal asset when needed.
+     */
+    fun selectApk(release: Release, supportedAbis: List<String>): Asset? {
+        val apks = release.assets.filter { it.name.endsWith(".apk", ignoreCase = true) }
+        if (apks.isEmpty()) return null
+        if (apks.size == 1) return apks.first()
+
+        val deviceAbis = supportedAbis.map { it.trim().lowercase() }.filter { it.isNotBlank() }
+        for (abi in deviceAbis) {
+            apks.firstOrNull { assetHasAbi(it.name, abi) }?.let { return it }
+        }
+        for (abi in deviceAbis) {
+            for (fallback in compatible32BitFallbacks(abi)) {
+                apks.firstOrNull { assetHasAbi(it.name, fallback) }?.let { return it }
+            }
+        }
+        return apks.firstOrNull { asset ->
+            asset.name.contains("universal", ignoreCase = true) ||
+                knownAbis.none { assetHasAbi(asset.name, it) }
+        }
+    }
+
+    private fun assetHasAbi(name: String, abi: String): Boolean {
+        val token = Regex(
+            "(^|[-_.])${Regex.escape(abi.lowercase())}([-_.]|$)",
+            RegexOption.IGNORE_CASE,
+        )
+        return token.containsMatchIn(name)
+    }
+
+    private fun compatible32BitFallbacks(abi: String): List<String> = when (abi) {
+        "arm64-v8a" -> listOf("armeabi-v7a", "armeabi")
+        "x86_64" -> listOf("x86")
+        else -> emptyList()
+    }
+
     /** 更新检测结果：失败时带上可读原因（HTTP 码 / 异常信息），既写 E 级日志也直接给用户提示 */
     sealed class CheckResult {
         data class Success(val release: Release) : CheckResult()

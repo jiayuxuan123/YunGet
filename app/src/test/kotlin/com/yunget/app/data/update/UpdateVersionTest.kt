@@ -1,6 +1,7 @@
 package com.yunget.app.data.update
 
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Test
 
@@ -125,5 +126,78 @@ class UpdateVersionTest {
             "dev 版应能检测到同号正式版（修复前此处会判为相等而漏更新）",
             cmp("2.6.9", current) > 0,
         )
+    }
+
+    private fun asset(name: String) = UpdateChecker.Asset(
+        name = name,
+        downloadUrl = "https://example.test/$name",
+    )
+
+    private fun release(vararg names: String) = UpdateChecker.Release(
+        tagName = "v2.7.24",
+        body = "",
+        assets = names.map(::asset),
+        publishedAt = "",
+    )
+
+    @Test
+    fun deviceChoosesExactAbiBeforeUniversalPackage() {
+        val release = release(
+            "YunGet-2.7.24-universal.apk",
+            "YunGet-2.7.24-arm64-v8a.apk",
+            "YunGet-2.7.24-armeabi-v7a.apk",
+            "YunGet-2.7.24-x86_64.apk",
+        )
+        assertEquals(
+            "YunGet-2.7.24-arm64-v8a.apk",
+            UpdateChecker.selectApk(release, listOf("arm64-v8a"))?.name,
+        )
+        assertEquals(
+            "YunGet-2.7.24-armeabi-v7a.apk",
+            UpdateChecker.selectApk(release, listOf("armeabi-v7a"))?.name,
+        )
+        assertEquals(
+            "YunGet-2.7.24-x86_64.apk",
+            UpdateChecker.selectApk(release, listOf("x86_64"))?.name,
+        )
+    }
+
+    @Test
+    fun arm64DeviceCanUse32BitFallbackButNeverX8664() {
+        val release = release(
+            "YunGet-2.7.24-x86_64.apk",
+            "YunGet-2.7.24-armeabi-v7a.apk",
+        )
+        assertEquals(
+            "YunGet-2.7.24-armeabi-v7a.apk",
+            UpdateChecker.selectApk(release, listOf("arm64-v8a"))?.name,
+        )
+    }
+
+    @Test
+    fun universalBridgeIsUsedWhenNoAbiMatches() {
+        val release = release(
+            "YunGet-2.7.24-arm64-v8a.apk",
+            "YunGet-2.7.24-universal.apk",
+        )
+        assertEquals(
+            "YunGet-2.7.24-universal.apk",
+            UpdateChecker.selectApk(release, listOf("mips"))?.name,
+        )
+    }
+
+    @Test
+    fun singleLegacyApkRemainsSelectable() {
+        val release = release("app-release.apk")
+        assertEquals(
+            "app-release.apk",
+            UpdateChecker.selectApk(release, listOf("arm64-v8a"))?.name,
+        )
+    }
+
+    @Test
+    fun noPickableAssetReturnsNull() {
+        val release = release("notes.txt", "checksums.txt")
+        assertNull(UpdateChecker.selectApk(release, listOf("arm64-v8a")))
     }
 }

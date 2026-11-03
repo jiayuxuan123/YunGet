@@ -304,8 +304,13 @@ fun ResolveScreen(
     // 获取下载直链加载弹窗（转存/取链需要时间，避免无反馈）
     if (viewModel.isFetchingDownloadLink) {
         AlertDialog(
-            onDismissRequest = { },
-            confirmButton = { },
+            onDismissRequest = { viewModel.cancelFetchDownloadLink() },
+            dismissButton = {
+                TextButton(onClick = { viewModel.cancelFetchDownloadLink() }) {
+                    Text("取消")
+                }
+            },
+            confirmButton = {},
             title = { Text("获取下载链接") },
             text = {
                 Row(verticalAlignment = Alignment.CenterVertically) {

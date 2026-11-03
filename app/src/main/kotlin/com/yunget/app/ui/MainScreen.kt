@@ -1273,7 +1273,7 @@ fun MainScreen(
                 onDownload = {
                     showUpdateDialog = false
                     // 用内置下载功能下载更新 APK 到 Download 目录，并切到下载页
-                    val apk = release.assets.firstOrNull { it.name.endsWith(".apk", true) }
+                    val apk = UpdateChecker.selectApk(release, Build.SUPPORTED_ABIS.toList())
                     if (apk != null) {
                         scope.launch {
                             downloadManager.enqueue(url = apk.downloadUrl, fileName = apk.name)
@@ -1287,7 +1287,7 @@ fun MainScreen(
                 onDownloadMirror = {
                     showUpdateDialog = false
                     // 镜像站下载：GitHub 直连慢/失败时走国内加速镜像
-                    val apk = release.assets.firstOrNull { it.name.endsWith(".apk", true) }
+                    val apk = UpdateChecker.selectApk(release, Build.SUPPORTED_ABIS.toList())
                     if (apk != null) {
                         scope.launch {
                             downloadManager.enqueue(url = UpdateChecker.mirrorUrl(apk.downloadUrl), fileName = apk.name)

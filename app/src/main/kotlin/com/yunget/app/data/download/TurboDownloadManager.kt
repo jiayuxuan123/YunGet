@@ -44,8 +44,18 @@ import com.yunget.app.util.DiagLog
 data class DownloadStats(
     val speed: Long = 0L,        // 字节/秒
     val remainMillis: Long = -1L, // 剩余时间（毫秒），未知为 -1
-    val chunkCount: Int = 1       // 分片（线程）数
-)
+    /** 当前实际活动连接数；0 表示未知或尚未建立连接，不是虚拟出来的一路。 */
+    val chunkCount: Int = 0,
+    /** 当前配置的连接上限；0 表示该引擎没有提供可展示的上限。 */
+    val connectionLimit: Int = 0,
+) {
+    fun connectionSummary(): String = when {
+        chunkCount > 0 && connectionLimit > 0 -> "$chunkCount/$connectionLimit 连接"
+        chunkCount > 0 -> "$chunkCount 连接"
+        connectionLimit > 0 -> "连接 --/$connectionLimit"
+        else -> "连接 --"
+    }
+}
 
 private const val TAG = "YunGet-DL"
 
@@ -895,6 +905,9 @@ class TurboDownloadManager(
                 return@launch
             }
             taskNames[id] = task.fileName
+            // A retry starts a new attempt; keeping the previous failure text makes
+            // the UI show "downloading" and an old error at the same time.
+            dao.updateError(id, "")
             // 请求头：优先用传入的，其次内存缓存，最后从 DB 恢复（进程重启后）。
             val restoredHeaders = effectiveHeaders.ifEmpty {
                 taskHeaders[id] ?: parseHeadersJson(task.requestHeadersJson)
@@ -918,8 +931,16 @@ class TurboDownloadManager(
             )
             dao.updateStatus(id, DownloadTaskEntity.STATUS_DOWNLOADING)
             val turboId = client.submit(request)
-            turboIds[id] = turboId
-            turboIdToRoomId[turboId] = id
+            turboIds.putIfAbsent(id, turboId)
+            turboIdToRoomId.putIfAbsent(turboId, id)
+            val stateAfterSubmit = client.progress.value[turboId]?.state
+            if (stateAfterSubmit == TaskState.COMPLETED ||
+                stateAfterSubmit == TaskState.FAILED ||
+                stateAfterSubmit == TaskState.CANCELED
+            ) {
+                turboIds.remove(id, turboId)
+                turboIdToRoomId.remove(turboId, id)
+            }
         }
     }
 
@@ -1163,7 +1184,8 @@ class TurboDownloadManager(
                                     } else {
                                         -1L
                                     },
-                                    chunkCount = threadProvider().coerceAtLeast(1),
+                                    chunkCount = 0,
+                                    connectionLimit = threadProvider().coerceAtLeast(1),
                                 ))
                             }
                             // 前台通知：与内置路径共用同一条节流与速度来源（_stats），故写在 _stats 之后
@@ -1272,8 +1294,11 @@ class TurboDownloadManager(
     // ---------- TurboDL 事件桥接 ----------
 
     private fun onTurboEvent(ev: TurboEvent) {
-        val roomId = turboIdToRoomId[ev.taskId] ?: return
+        val roomId = turboIdToRoomId[ev.taskId]
+            ?: recoverRoomIdFromCreatedEvent(ev)
+            ?: return
         when (ev) {
+            is TurboEvent.Created -> Unit
             is TurboEvent.Progress -> {
                 val p = ev.progress
                 // 【诊断】首字节耗时 = 从探测完成到第一批字节。若它很大而探测(见 Metadata 日志)很小，
@@ -1286,7 +1311,8 @@ class TurboDownloadManager(
                     it + (roomId to DownloadStats(
                         speed = p.speedBytesPerSec,
                         remainMillis = p.etaMillis,
-                        chunkCount = p.activeConnections.coerceAtLeast(1),
+                        chunkCount = p.activeConnections.coerceAtLeast(0),
+                        connectionLimit = threadProvider().coerceAtLeast(1),
                     ))
                 }
                 // 进度写库节流：每任务至多每 800ms 或每增长 1MB 写一次，避免高频 launch+DB 竞争拖慢吞吐。
@@ -1315,7 +1341,9 @@ class TurboDownloadManager(
                 dao.updateStatus(roomId, DownloadTaskEntity.STATUS_FAILED)
                 dao.updateError(roomId, ev.reason)
                 DiagLog.e(context, DiagLog.Category.DOWNLOAD, "下载失败：id=$roomId 原因=${ev.reason}")
-                turboOutputs.remove(roomId)?.delete()
+                if (DownloadRecoveryPolicy.shouldDiscardPartial(ev.reason)) {
+                    turboOutputs.remove(roomId)?.delete()
+                }
                 onTaskFinished()
             }
             is TurboEvent.StateChanged -> {
@@ -1353,8 +1381,21 @@ class TurboDownloadManager(
                     }
                 }
             }
-            else -> {}
         }
+    }
+
+    /**
+     * `TurboClient.submit()` emits Created synchronously, before it can return the
+     * engine id to this manager. A tiny task may consequently complete before the
+     * normal post-submit mapping is installed. The request's stable key is the
+     * authoritative bridge back to the Room task id.
+     */
+    private fun recoverRoomIdFromCreatedEvent(ev: TurboEvent): Long? {
+        if (ev !is TurboEvent.Created) return null
+        val roomId = TurboTaskMapping.roomIdFromStableKey(ev.request.stableKey) ?: return null
+        turboIdToRoomId.putIfAbsent(ev.taskId, roomId)
+        turboIds.putIfAbsent(roomId, ev.taskId)
+        return roomId
     }
 
     /**

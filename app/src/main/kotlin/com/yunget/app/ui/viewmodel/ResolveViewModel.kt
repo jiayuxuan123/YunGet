@@ -47,6 +47,7 @@ import com.yunget.app.data.repository.XunleiAccountRepository
 import com.yunget.app.data.repository.XunleiResolveRepository
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
+import kotlinx.coroutines.Job
 import com.yunget.app.data.network.video.VideoLinkParser
 import com.yunget.app.data.network.video.userMessage
 
@@ -161,6 +162,9 @@ class ResolveViewModel(
     /** 获取下载直链中（UI 显示加载弹窗） */
     var isFetchingDownloadLink by mutableStateOf(false)
         private set
+
+    private var fetchDownloadLinkJob: Job? = null
+    private var fetchDownloadLinkGeneration = 0
 
     /** 待转存文件（转存弹窗）；null 表示未在转存流程 */
     var saveTarget by mutableStateOf<ShareFile?>(null)
@@ -936,7 +940,9 @@ class ResolveViewModel(
 
     /** 获取文件下载直链（各平台实现不同：夸克转存后取 / UC 直接取 / 迅雷转存后取详情直链） */
     fun fetchDownloadLink(file: ShareFile) {
-        viewModelScope.launch {
+        fetchDownloadLinkJob?.cancel()
+        val generation = ++fetchDownloadLinkGeneration
+        fetchDownloadLinkJob = viewModelScope.launch {
             downloadLink = null
             downloadError = null
             isFetchingDownloadLink = true
@@ -970,9 +976,19 @@ class ResolveViewModel(
                     .onSuccess { downloadLink = it }
                     .onFailure { downloadError = it.message ?: "获取下载链接失败" }
             } finally {
-                isFetchingDownloadLink = false
+                if (generation == fetchDownloadLinkGeneration) {
+                    isFetchingDownloadLink = false
+                    fetchDownloadLinkJob = null
+                }
             }
         }
+    }
+
+    fun cancelFetchDownloadLink() {
+        fetchDownloadLinkGeneration++
+        fetchDownloadLinkJob?.cancel()
+        fetchDownloadLinkJob = null
+        isFetchingDownloadLink = false
     }
 
     fun dismissDownloadDialog() {

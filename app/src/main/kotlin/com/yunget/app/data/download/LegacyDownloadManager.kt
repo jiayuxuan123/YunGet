@@ -433,7 +433,7 @@ class LegacyDownloadManager(
         val hardCap = if (isXunlei) RANGE_WORKERS_CAP else null
         Log.d(TAG, "自适应下载: id=$id total=$total targetWorkers=$threadCount hardCap=$hardCap isXunlei=$isXunlei")
 
-        _stats.update { it + (id to DownloadStats(0L, -1L, threadCount)) }
+        _stats.update { it + (id to DownloadStats(0L, -1L, 0, threadCount)) }
 
         val lastUpdate = AtomicLong(minOf(task.downloadedSize, total))
         val speedRecorder = SpeedRecorder()
@@ -464,7 +464,9 @@ class LegacyDownloadManager(
                         if (isTaskActive()) {
                             speedRecorder.onBytes(absolute)?.let { speed ->
                                 val remain = if (speed > 0) (total - absolute) * 1000 / speed else -1L
-                                _stats.update { it + (id to DownloadStats(speed, remain, liveWorkers.get())) }
+                                _stats.update {
+                                    it + (id to DownloadStats(speed, remain, liveWorkers.get(), threadCount))
+                                }
                             }
                             notifyProgress(id, task.fileName, absolute, total)
                             val last = lastUpdate.get()
@@ -478,7 +480,14 @@ class LegacyDownloadManager(
                     onWorkers = { w ->
                         liveWorkers.set(w)
                         val cur = _stats.value[id]
-                        _stats.update { it + (id to DownloadStats(cur?.speed ?: 0L, cur?.remainMillis ?: -1L, w)) }
+                        _stats.update {
+                            it + (id to DownloadStats(
+                                cur?.speed ?: 0L,
+                                cur?.remainMillis ?: -1L,
+                                w,
+                                threadCount,
+                            ))
+                        }
                     },
                     isActive = { taskJob?.isActive == true },
                 )
@@ -514,7 +523,9 @@ class LegacyDownloadManager(
                 if (!isTaskActive()) return@download
                 speedRecorder.onBytes(absolute)?.let { speed ->
                     val remain = if (speed > 0) (total - absolute) * 1000 / speed else -1L
-                    _stats.update { it + (id to DownloadStats(speed, remain, liveWorkers.get())) }
+                    _stats.update {
+                        it + (id to DownloadStats(speed, remain, liveWorkers.get(), threadCount))
+                    }
                 }
                 notifyProgress(id, task.fileName, absolute, total)
                 val last = lastUpdate.get()
@@ -527,7 +538,14 @@ class LegacyDownloadManager(
             onWorkers = { w ->
                 liveWorkers.set(w)
                 val cur = _stats.value[id]
-                _stats.update { it + (id to DownloadStats(cur?.speed ?: 0L, cur?.remainMillis ?: -1L, w)) }
+                _stats.update {
+                    it + (id to DownloadStats(
+                        cur?.speed ?: 0L,
+                        cur?.remainMillis ?: -1L,
+                        w,
+                        threadCount,
+                    ))
+                }
             },
             isActive = { taskJob?.isActive == true }
         )
@@ -582,7 +600,7 @@ class LegacyDownloadManager(
         if (!isTaskActive()) return
         dao.updateProgress(id, DownloadTaskEntity.STATUS_DOWNLOADING, task.downloadedSize, 0)
         if (!isTaskActive()) return
-        _stats.update { it + (id to DownloadStats(0L, -1L, 1)) }
+        _stats.update { it + (id to DownloadStats(0L, -1L, 1, 1)) }
         val chunkDir = chunkDirOf(id).apply { mkdirs() }
         val partFile = File(chunkDir, "part_0")
         val downloaded = AtomicLong(partFile.length())
@@ -625,7 +643,7 @@ class LegacyDownloadManager(
     /** HLS（m3u8 转码流，如 UC play）下载：拉取分片合并 → 保存 → 完成回调 */
     private suspend fun hlsDownload(id: Long, task: DownloadTaskEntity, headers: Map<String, String>) {
         if (!isTaskActive()) return
-        _stats.update { it + (id to DownloadStats(0L, -1L, 1)) }
+        _stats.update { it + (id to DownloadStats(0L, -1L, 1, 1)) }
         val hlsFile = File(context.cacheDir, "hls_$id")
         hlsFile.delete()
         val downloaded = AtomicLong(0)

@@ -423,7 +423,7 @@ fun SettingsScreen(
             icon = Icons.Outlined.TrendingUp,
             title = "慢启动",
             description = if (slowStartOn) {
-                "开启：并发从少逐步爬升到设定值，更稳不易被风控"
+                "开启：并发从少量逐步爬升到设定值，减少瞬时连接冲击"
             } else {
                 "关闭：立即全开并发；吞吐自适应仍会在聚合限速时向下收敛"
             },
@@ -972,7 +972,7 @@ fun SettingsScreen(
             release = release,
             onDownload = {
                 updateRelease = null
-                val apk = release.assets.firstOrNull { it.name.endsWith(".apk", true) }
+                val apk = UpdateChecker.selectApk(release, Build.SUPPORTED_ABIS.toList())
                 if (apk != null) {
                     onDownloadUpdateApk(apk.downloadUrl, apk.name)
                     SnackbarController.show("已加入下载 ${apk.name}")
@@ -982,7 +982,7 @@ fun SettingsScreen(
             },
             onDownloadMirror = {
                 updateRelease = null
-                val apk = release.assets.firstOrNull { it.name.endsWith(".apk", true) }
+                val apk = UpdateChecker.selectApk(release, Build.SUPPORTED_ABIS.toList())
                 if (apk != null) {
                     onDownloadUpdateApk(UpdateChecker.mirrorUrl(apk.downloadUrl), apk.name)
                     SnackbarController.show("已通过镜像站加入下载 ${apk.name}")

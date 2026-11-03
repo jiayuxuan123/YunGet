@@ -29,7 +29,7 @@ android {
         // Android 7.0 发布于 2016 年，覆盖率早已 >99%。
         minSdk = 24
         targetSdk = 34
-        versionCode = 70
+        versionCode = 71
         // 2.7.10 内容：**原生（L2）插件在手机端暂时禁用**
         //  ① 移除整条 dex 加载链：AndroidNativePluginLoader、YunHostBridge、l2-providers 模块；
         //  ② 移除网盘 CloudProvider 抽象（CloudProvider.kt / Resolver / ShareRepository）
@@ -390,9 +390,26 @@ android {
         //  视频平台解析（微博/小红书/Pixiv）改为**引擎级原生插件** turbo-plugin-parser，
         //  与 HLS 插件同一套机制：只往 LINK_PARSER 注册解析器、往 PROTOCOL_HANDLER
         //  每平台声明一条，引擎内核对这三个平台一无所知。平台改版只需换这个插件。
-        versionName = "2.7.22"
+        versionName = "2.7.23"
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
+    }
+
+    /**
+     * Direct GitHub releases should not download every ABI's native payload.
+     * The arm64 package carries aria2 + QuickJS; the other packages carry only
+     * the libraries needed by that device. ARMv7 is still kept for older phones,
+     * and x86_64 is kept for emulators/desktop test devices.
+     */
+    splits {
+        abi {
+            isEnable = true
+            reset()
+            include("arm64-v8a", "armeabi-v7a", "x86_64")
+            // Keep a universal bridge APK: 2.7.22 and older updaters do not
+            // understand ABI-specific assets and select the first APK blindly.
+            isUniversalApk = true
+        }
     }
 
     signingConfigs {
@@ -412,6 +429,12 @@ android {
 
     buildFeatures {
         compose = true
+    }
+
+    testOptions {
+        unitTests.all {
+            it.useJUnit()
+        }
     }
 
     packaging {
@@ -488,8 +511,17 @@ tasks.register("verifyApkVersion") {
     dependsOn("assembleRelease")
 
     doLast {
-        val apk = layout.buildDirectory.file("outputs/apk/release/app-release.apk").get().asFile
-        if (!apk.isFile) throw GradleException("未找到 release APK：$apk")
+        val releaseDir = layout.buildDirectory.dir("outputs/apk/release").get().asFile
+        val abiApkNames = setOf(
+            "app-arm64-v8a-release.apk",
+            "app-armeabi-v7a-release.apk",
+            "app-x86_64-release.apk",
+            "app-universal-release.apk",
+        )
+        val apks = releaseDir.listFiles { file ->
+            file.isFile && file.name in abiApkNames
+        }?.sortedBy { it.name }.orEmpty()
+        if (apks.isEmpty()) throw GradleException("未找到任何 release APK：$releaseDir")
 
         val expectedName = android.defaultConfig.versionName
         val expectedCode = android.defaultConfig.versionCode
@@ -516,26 +548,28 @@ tasks.register("verifyApkVersion") {
             ?.firstOrNull { it.isFile }
             ?: throw GradleException("在 $sdkDir/build-tools 下找不到 aapt2")
 
-        val badging = providers.exec {
-            commandLine(aapt2.absolutePath, "dump", "badging", apk.absolutePath)
-        }.standardOutput.asText.get()
+        for (apk in apks) {
+            val badging = providers.exec {
+                commandLine(aapt2.absolutePath, "dump", "badging", apk.absolutePath)
+            }.standardOutput.asText.get()
 
-        val m = Regex("versionCode='(\\d+)' versionName='([^']*)'").find(badging)
-            ?: throw GradleException("无法从 APK 解析版本信息：$apk")
-        val actualCode = m.groupValues[1].toInt()
-        val actualName = m.groupValues[2]
+            val m = Regex("versionCode='(\\d+)' versionName='([^']*)'").find(badging)
+                ?: throw GradleException("无法从 APK 解析版本信息：$apk")
+            val actualCode = m.groupValues[1].toInt()
+            val actualName = m.groupValues[2]
 
-        if (actualCode != expectedCode || actualName != expectedName) {
-            throw GradleException(
-                buildString {
-                    appendLine("APK 内嵌版本与源码不一致 —— 产物是**陈旧**的，绝不能发布！")
-                    appendLine("    APK  : versionCode=$actualCode versionName=$actualName")
-                    appendLine("    源码 : versionCode=$expectedCode versionName=$expectedName")
-                    appendLine("处理：确认版本号改动已完成，然后重新执行 assembleRelease（不要复用旧产物）。")
-                }
-            )
+            if (actualCode != expectedCode || actualName != expectedName) {
+                throw GradleException(
+                    buildString {
+                        appendLine("APK 内嵌版本与源码不一致 —— 产物是**陈旧**的，绝不能发布！")
+                        appendLine("    APK  : ${apk.name} versionCode=$actualCode versionName=$actualName")
+                        appendLine("    源码 : versionCode=$expectedCode versionName=$expectedName")
+                        appendLine("处理：确认版本号改动已完成，然后重新执行 assembleRelease（不要复用旧产物）。")
+                    }
+                )
+            }
+            logger.lifecycle("verifyApkVersion OK: ${apk.name} versionCode=$expectedCode versionName=$expectedName")
         }
-        logger.lifecycle("verifyApkVersion OK: versionCode=$expectedCode versionName=$expectedName")
     }
 }
 
@@ -631,16 +665,16 @@ dependencies {
     // headless WebView 解析（视频平台）：关闭 X-Requested-With 并同步 client hints
     implementation(libs.androidx.webkit)
 
-    // TurboDL SDK（纯 JVM 多线程下载引擎 + 可选插件框架），从 mavenLocal 解析 dev.turbodl:*:0.3.1.0
+    // TurboDL SDK（纯 JVM 多线程下载引擎 + 可选插件框架），从 mavenLocal 解析 dev.turbodl:*:0.4.1.0
     // 0.2.0.8：读缓冲改为按并发摊薄（修 256 连接 = 256MB = 整堆的 OOM，见 2.7.2 说明）
-    implementation("dev.turbodl:turbodl-core:0.3.1.0")
-    implementation("dev.turbodl:turbo-plugin-runtime:0.3.1.0")
-    implementation("dev.turbodl:turbo-plugin-bootstrap:0.3.1.0")
-    implementation("dev.turbodl:turbo-plugin-hls:0.3.1.0")
+    implementation("dev.turbodl:turbodl-core:0.4.1.0")
+    implementation("dev.turbodl:turbo-plugin-runtime:0.4.1.0")
+    implementation("dev.turbodl:turbo-plugin-bootstrap:0.4.1.0")
+    implementation("dev.turbodl:turbo-plugin-hls:0.4.1.0")
     // 视频平台链接解析（微博/小红书/Pixiv）—— 引擎级原生插件，与 HLS 同一套机制。
     // 它自己往 LINK_PARSER 注册解析器、往 PROTOCOL_HANDLER 每平台声明一条；
     // 宿主只负责把它装进 PluginHost（见 TurboBootstrap.extraPlugins）。
-    implementation("dev.turbodl:turbo-plugin-parser:0.3.1.0")
+    implementation("dev.turbodl:turbo-plugin-parser:0.4.1.0")
 
     // JavaScript 插件加载器：让用户能自己写/导入脚本插件。
     //
@@ -654,7 +688,7 @@ dependencies {
     //     公开 API（interruptEvaluation / memoryLimit / memoryUsage…）与 jvm 版逐名一致，
     //     且 Android 侧走 System.loadLibrary（不再有 createTempFile 问题）。
     // 所以：排掉 jvm 版，换成 android 版 —— turbo-plugin-js 自身一行代码都不用改。
-    implementation("dev.turbodl:turbo-plugin-js:0.3.1.0") {
+    implementation("dev.turbodl:turbo-plugin-js:0.4.1.0") {
         exclude(group = "io.github.dokar3", module = "quickjs-kt-jvm")
     }
     implementation("io.github.dokar3:quickjs-kt-android:1.0.15")
