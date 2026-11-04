@@ -1,0 +1,45 @@
+{
+  "schemaVersion": 2,
+  "generatedAt": "2026-11-04T00:00:00Z",
+  "title": "Design System: YunGet Website",
+  "extensions": {
+    "colorMeta": {
+      "route": {"role": "primary", "displayName": "Route Green"},
+      "signal": {"role": "secondary", "displayName": "Signal Orange"},
+      "paper": {"role": "neutral", "displayName": "Warm Paper"},
+      "ink": {"role": "neutral", "displayName": "Wayfinding Ink"}
+    },
+    "motion": [
+      {"name": "route-draw", "value": "cubic-bezier(0.16, 1, 0.3, 1)", "purpose": "Single route reveal; disabled under reduced motion."}
+    ],
+    "breakpoints": [
+      {"name": "mobile", "value": "760px"},
+      {"name": "tablet", "value": "960px"}
+    ]
+  },
+  "components": [
+    {
+      "name": "Primary Action",
+      "kind": "button",
+      "refersTo": "button-primary",
+      "description": "Download and main route action.",
+      "html": "<a class=\"ds-primary\" href=\"#\">下载 APK</a>",
+      "css": ".ds-primary{display:inline-flex;align-items:center;justify-content:center;min-height:44px;padding:12px 18px;background:var(--route);color:var(--paper-raised);border:1px solid var(--route);border-radius:4px;text-decoration:none;font-weight:700}.ds-primary:hover{background:var(--route-deep)}.ds-primary:focus-visible{outline:3px solid var(--focus);outline-offset:3px}"
+    },
+    {
+      "name": "Route Station",
+      "kind": "custom",
+      "description": "Numbered stop on the link-to-file route.",
+      "html": "<div class=\"ds-stop\"><span>01</span><strong>分享链接</strong><p>粘贴链接或整段分享文本。</p></div>",
+      "css": ".ds-stop{display:grid;grid-template-columns:40px 1fr;gap:4px 14px;padding:16px 0;border-top:1px solid var(--rule)}.ds-stop span{grid-row:1/3;width:32px;height:32px;border-radius:50%;display:grid;place-items:center;background:var(--route);color:var(--paper-raised);font:700 12px/1 var(--font-sans)}.ds-stop p{color:var(--muted)}"
+    }
+  ],
+  "narrative": {
+    "northStar": "The Download Line",
+    "overview": "YunGet is one continuous route from a cloud-drive share link to a local file.",
+    "keyCharacteristics": ["One visible route", "Flat structural rules", "Download-first mobile clarity"],
+    "rules": [{"name": "The One Line Rule", "body": "Green shows route and action, not decoration.", "section": "colors"}],
+    "dos": ["Do show the complete route before implementation details.", "Do use real release and plugin data."],
+    "donts": ["Don't imply a YunGet transfer server.", "Don't use fake transfer data."]
+  }
+}

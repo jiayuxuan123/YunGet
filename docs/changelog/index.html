@@ -14,158 +14,185 @@
 <meta property="og:image" content="https://jiayuxuan123.github.io/YunGet/assets/og.png">
 <meta name="twitter:card" content="summary_large_image">
 <meta name="color-scheme" content="light dark">
-<meta name="theme-color" content="#f1eadb" media="(prefers-color-scheme: light)">
-<meta name="theme-color" content="#171812" media="(prefers-color-scheme: dark)">
+<meta name="theme-color" content="#F4F0E6" media="(prefers-color-scheme: light)">
+<meta name="theme-color" content="#131C18" media="(prefers-color-scheme: dark)">
 <link rel="icon" href="../assets/favicon.svg" type="image/svg+xml">
 <link rel="apple-touch-icon" href="../assets/apple-touch-icon.png">
 <link rel="preload" href="../assets/fonts/schibsted-grotesk-latin.woff2" as="font" type="font/woff2" crossorigin>
-<!-- 主题在样式表之前落地，避免深色偏好下闪白。 -->
-<script>document.documentElement.classList.add("js");try{var t=localStorage.getItem("theme");if(t==="light"||t==="dark")document.documentElement.setAttribute("data-theme",t)}catch(e){}setTimeout(function(){document.documentElement.classList.add("motion-fallback")},1800);</script>
-<link rel="stylesheet" href="../assets/site.5077ab8f.css">
+<!-- 主题在样式表之前落地；内容本身不依赖脚本显隐。 -->
+<script>document.documentElement.classList.add("js");try{var t=localStorage.getItem("theme");if(t==="light"||t==="dark")document.documentElement.setAttribute("data-theme",t)}catch(e){}</script>
+<link rel="stylesheet" href="../assets/site.2badf907.css">
 </head>
 <body class="brand-yunget" data-page="changelog" data-kind="inner">
 <a class="skip" href="#main">跳到正文</a>
-<header class="top">
-<div class="top-rule">
-<div class="wrap top-rule-in">
-<span>YUNGET / CLOUD COURIER</span>
-<span class="route-title">更新日志</span>
-<span>ANDROID · OPEN SOURCE</span>
-</div>
-</div>
-<div class="wrap top-in">
+<header class="site-head" data-site-head>
+<div class="wrap head-inner">
 <a class="brand" href="../index.html" aria-label="云取 YunGet 首页">
-<span class="brand-mark"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32" width="24" height="24" aria-hidden="true"><rect width="32" height="32" fill="#c83f2e"/><rect x="3" y="3" width="26" height="26" fill="#f1eadb"/><path d="M8 8h16v7H8z" fill="none" stroke="#181914" stroke-width="1.8"/><path d="M8 13h16M12 8v5M20 8v5" fill="none" stroke="#181914" stroke-width="1.5"/><path d="M10 18h5l1.5 2 1.5-2h4" fill="none" stroke="#c83f2e" stroke-width="1.8" stroke-linecap="square"/><path d="M16 20v5M12.5 22.5 16 26l3.5-3.5" fill="none" stroke="#181914" stroke-width="1.8" stroke-linecap="square" stroke-linejoin="miter"/></svg></span>
-<span class="brand-copy"><strong>云取 YunGet</strong><small>云端包裹 / CLOUD COURIER</small></span>
+<span class="brand-mark" aria-hidden="true">
+<svg viewBox="0 0 32 32" fill="none" stroke="currentColor">
+<path d="M7 6v8.5a5 5 0 0 0 5 5h8a5 5 0 0 1 5 5V26" stroke-width="2"/>
+<circle cx="7" cy="5" r="3" fill="var(--signal)"/>
+<circle cx="25" cy="26" r="3" fill="var(--route)"/>
+</svg>
+</span>
+<span class="brand-copy"><strong>云取 YunGet</strong><small>YUNGET · LOCAL ROUTE</small></span>
 </a>
-<nav class="top-nav" id="top-nav" aria-label="主导航"><a href="../index.html"><span class="nav-index" aria-hidden="true">01</span><span>概览</span></a><a href="../download/index.html"><span class="nav-index" aria-hidden="true">02</span><span>下载</span></a><a href="../plugins/index.html"><span class="nav-index" aria-hidden="true">03</span><span>插件</span></a><a href="../docs/index.html"><span class="nav-index" aria-hidden="true">04</span><span>文档</span></a><a href="../developers/index.html"><span class="nav-index" aria-hidden="true">05</span><span>开发者</span></a></nav>
-<div class="top-actions">
+<nav class="main-nav" id="site-nav" aria-label="主导航"><a href="../index.html">概览</a><a href="../download/index.html">下载</a><a href="../plugins/index.html">插件</a><a href="../docs/index.html">文档</a><a href="../developers/index.html">开发者</a>
 
 <button class="theme-toggle" type="button" data-theme-toggle aria-label="切换深色 / 浅色主题" aria-pressed="false">
-<svg class="theme-sun" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true"><circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M4.93 4.93l1.42 1.42M17.66 17.66l1.41 1.41M2 12h2M20 12h2M4.93 19.07l1.42-1.42M17.66 6.34l1.41-1.41"/></svg>
+<svg class="theme-sun" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true"><circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M4.9 4.9l1.4 1.4M17.7 17.7l1.4 1.4M2 12h2M20 12h2M4.9 19.1l1.4-1.4M17.7 6.3l1.4-1.4"/></svg>
 <svg class="theme-moon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true"><path d="M20.5 14.2A8.5 8.5 0 0 1 9.8 3.5 8.5 8.5 0 1 0 20.5 14.2Z"/></svg>
-<span class="theme-label">夜间</span>
+<span class="visually-hidden theme-label">夜间</span>
 </button>
-<a class="icon-link" href="https://github.com/jiayuxuan123/YunGet" aria-label="在 GitHub 查看 YunGet">
-<svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M12 .7a11.5 11.5 0 0 0-3.64 22.41c.58.1.79-.25.79-.56v-2.17c-3.22.7-3.9-1.37-3.9-1.37-.53-1.34-1.29-1.7-1.29-1.7-1.05-.72.08-.7.08-.7 1.16.08 1.78 1.2 1.78 1.2 1.03 1.77 2.71 1.26 3.37.96.1-.75.4-1.26.73-1.55-2.57-.29-5.27-1.28-5.27-5.69 0-1.26.45-2.29 1.19-3.1-.12-.29-.52-1.46.11-3.05 0 0 .97-.31 3.16 1.18a10.9 10.9 0 0 1 5.76 0c2.2-1.49 3.16-1.18 3.16-1.18.63 1.59.23 2.76.11 3.05.74.81 1.19 1.84 1.19 3.1 0 4.42-2.71 5.39-5.29 5.68.42.36.78 1.06.78 2.14v3.17c0 .31.21.67.8.56A11.5 11.5 0 0 0 12 .7Z"/></svg>
-</a>
-<a class="top-download" href="../download/index.html">取件<span aria-hidden="true">↘</span></a>
-<button class="nav-toggle" type="button" aria-expanded="false" aria-controls="top-nav" aria-label="菜单">
-<span></span><span></span><span></span>
+</nav>
+<div class="head-actions">
+<a class="head-download" href="../download/index.html">下载 APK</a>
+<button class="nav-toggle" type="button" aria-expanded="false" aria-controls="site-nav" aria-label="菜单">
+<span></span><span></span>
 </button>
 </div>
 </div>
-<div class="route-progress" aria-hidden="true"><i></i></div>
 </header>
 <main id="main">
-<div class="page-canvas" data-page="changelog"><section><h1>更新日志</h1><p class="lead">由发布说明本身生成 —— 应用内的「检查更新」读的是同一份数据，所以两处看到的版本与内容永远一致。</p></section><section class="section"><div class="seg-rule" aria-hidden="true"><i class="done" style="width:23.333%"></i><i class="" style="width:10.000%"></i><i class="done" style="width:16.667%"></i><i class="" style="width:6.667%"></i><i class="" style="width:30.000%"></i><i class="done" style="width:13.333%"></i></div><h2>发布台账</h2><p>每次发布、日期、附件数与预发布标记。这里没有一处是手写摘要 ——与下载页渲染的是同一份数据。</p><div class="rise" style="max-width:520px"><div class="frag" data-ui><div class="frag-head"><span class="frag-title">本次发布</span><span class="frag-sub">GitHub Release 附件</span></div><div class="frag-row"><span class="name">版本</span><span class="val">v2.7.23</span></div><div class="frag-row"><span class="name">发布日</span><span class="val">2026-11-03</span></div><div class="frag-row"><span class="name">安装包</span><span class="val">0-universal-release.apk</span></div><div class="frag-row"><span class="name">体积</span><span class="val">31.6 MB</span></div><div class="frag-row"><span class="name">SHA-256</span><span class="val">c06f3341eae4a3be…</span></div><div class="frag-row"><span class="name">运行要求</span><span class="val">Android 7.0（API 24）</span></div><div class="frag-row"><span class="name">内置引擎</span><span class="val">TurboDL 0.4.1.0</span></div><p class="frag-note">全部字段由 GitHub API 读取，与下载直链同源</p></div></div><div class="rows rise" style="margin-top:1.5rem"><div class="row"><span class="name mono">v2.7.23</span><span class="val">2026-11-03 · 5 个附件</span></div><div class="row"><span class="name mono">v2.7.22</span><span class="val">2026-10-31 · 1 个附件</span></div><div class="row"><span class="name mono">v2.7.21</span><span class="val">2026-10-31 · 1 个附件</span></div><div class="row"><span class="name mono">v2.7.20</span><span class="val">2026-10-29 · 1 个附件</span></div><div class="row"><span class="name mono">v2.7.19</span><span class="val">2026-10-29 · 1 个附件</span></div><div class="row"><span class="name mono">v2.7.18</span><span class="val">2026-10-29 · 1 个附件</span></div><div class="row"><span class="name mono">v2.7.17</span><span class="val">2026-10-28 · 1 个附件</span></div><div class="row"><span class="name mono">v2.7.16</span><span class="val">2026-10-28 · 1 个附件</span></div><div class="row"><span class="name mono">v2.7.14</span><span class="val">2026-10-27 · 1 个附件</span></div><div class="row"><span class="name mono">v2.7.13</span><span class="val">2026-10-26 · 1 个附件</span></div><div class="row"><span class="name mono">v2.7.12</span><span class="val">2026-10-23 · 1 个附件</span></div><div class="row"><span class="name mono">v2.7.11</span><span class="val">2026-10-23 · 1 个附件</span></div></div><div class="rise" style="max-width:680px;margin-top:1.5rem"><div class="frag" data-ui><div class="frag-head"><span class="frag-title">按体量排</span><span class="frag-sub">附件数最多的六次</span></div><div class="frag-row"><span class="name">5 个附件</span><span class="val">v2.7.23 · 2026-11-03</span></div><div class="frag-row"><span class="name">1 个附件</span><span class="val">v2.7.22 · 2026-10-31</span></div><div class="frag-row"><span class="name">1 个附件</span><span class="val">v2.7.21 · 2026-10-31</span></div><div class="frag-row"><span class="name">1 个附件</span><span class="val">v2.7.20 · 2026-10-29</span></div><div class="frag-row"><span class="name">1 个附件</span><span class="val">v2.7.19 · 2026-10-29</span></div><div class="frag-row"><span class="name">1 个附件</span><span class="val">v2.7.18 · 2026-10-29</span></div><p class="frag-note">这里突然多出来，通常意味着构建里新加了一个产物</p></div></div><div class="rise" style="max-width:680px;margin-top:1.25rem"><div class="frag" data-ui><div class="frag-head"><span class="frag-title">更新怎么到达设备</span><span class="frag-sub">应用内「检查更新」</span></div><div class="frag-row"><span class="name">数据来源</span><span class="val">GitHub Release（与本页同一份）</span></div><div class="frag-row"><span class="name">判据</span><span class="val">semver 比大小，不看发布时间</span></div><div class="frag-row"><span class="name">提醒方式</span><span class="val">应用内提示 + 变更说明</span></div><div class="frag-row"><span class="name">下载</span><span class="val">同样从 Release 附件取，可核对 SHA-256</span></div><div class="frag-row"><span class="name">升级</span><span class="val">覆盖安装，登录状态与下载任务保留</span></div><p class="frag-note">改脚本不升版本号的话，用户永远收不到更新 —— 判据是版本号</p></div></div><div class="rise" style="max-width:680px;margin-top:1.25rem"><div class="frag" data-ui><div class="frag-head"><span class="frag-title">版本号怎么读</span><span class="frag-sub">semver</span></div><div class="frag-row"><span class="name">正式版</span><span class="val">修 bug、加功能都会升这个号</span></div><div class="frag-row"><span class="name">pre 标记</span><span class="val">预发布：功能可能还在改，装之前想清楚</span></div><div class="frag-row"><span class="name">判据</span><span class="val">应用内「检查更新」按版本号比大小，不看发布时间</span></div><div class="frag-row"><span class="name">不可改写</span><span class="val">同一版本的字节变了会被索引拒绝</span></div><p class="frag-note">改了东西就必须升版本号 —— 这是本项目的硬规则，不是建议</p></div></div></section><section><div class="cards cols-2"><div class="card"><h3><span class="mono">v2.7.23</span></h3><p class="small">2026-11-03 · 5 个附件</p><p class="muted">云取 YunGet 2.7.23 —— TurboDL 0.4.1.0 可靠性修复 + ABI 分包
+<div class="page-canvas" data-page="changelog"><section class="page-intro"><div class="wrap intro-grid"><h1>更新日志</h1><div class="intro-copy"><p>版本、日期与附件数量来自 GitHub Release 数据；应用内检查更新读取同一来源。</p><div class="page-actions"><a class="button button-primary" href="../download/index.html">下载当前版本<svg class="icon-arrow" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true"><path d="M5 12h14M13 6l6 6-6 6"/></svg></a><a class="button" href="https://github.com/jiayuxuan123/YunGet/releases">GitHub Releases<svg class="icon-arrow" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true"><path d="M5 12h14M13 6l6 6-6 6"/></svg></a></div></div></div></section><section class="section"><div class="wrap"><header class="section-head"><h2>最近发布</h2><p class="section-lead">完整发布说明保留在 GitHub；这里列出便于扫描的版本路线。</p></header><article class="release-row"><div class="release-id"><strong>v2.7.23</strong><span>2026-11-03</span></div><p>云取 YunGet 2.7.23 —— TurboDL 0.4.1.0 可靠性修复 + ABI 分包
 这一版是下一版客户端更新，不会改变已经安装的 2.7.22；请安装本版获得新引擎与修复。
 【更新兼容】
-旧版 2.7.22 更新器只会取 Release 中第一个 APK。
-本 Release 的第一个 APK 固定为 universal 包，确保旧版用户能先升级到 2.7.23；2.7.23 起才按设备 ABI 选择分架构包。
-后续版本也必须保留 universal 包，不能只发三个分架构包。
+· 旧版 2.7.22 更新器只会取 Release 中第一个 APK。
+· 本 Release 的第一个 APK 固定为 universal 包，确保旧版用户能先升级到 2.7.23；2.7.23 起才按设备 ABI 选择分架构包。
+· 后续版本也必须保留 universal 包，不能只发三个分架构包。
 【ABI 分包】
-universal：33.1MB，兼容所有设备与旧版更新桥。
-arm64-v8a：31.9MB，主流 Android 设备。
-armeabi-v7a：23.7MB，32 位 ARM 设备。
-x86_64：23.8MB，模拟器与 x86_64 设备。
-…</p><p class="small"><a href="https://github.com/jiayuxuan123/YunGet/releases/tag/v2.7.23">发布页</a></p></div><div class="card"><h3><span class="mono">v2.7.22</span></h3><p class="small">2026-10-31 · 1 个附件</p><p class="muted">云取 YunGet 2.7.22 更新日志：
+· universal：33.1MB，兼容所有设备与旧版更新桥。
+· arm64-v8a：31.9MB，主流 Android 设备。
+· armeabi-v7a：23.7MB，32 位 ARM 设备。
+· x86_64：23.8MB，模拟器与 x86_64 设备。
+·…</p><a href="https://github.com/jiayuxuan123/YunGet/releases/tag/v2.7.23">发布页</a></article><article class="release-row"><div class="release-id"><strong>v2.7.22</strong><span>2026-10-31</span></div><p>云取 YunGet 2.7.22 更新日志：
 1. 同步 TurboDL 0.3.1.0 核心引擎：
-默认开启 AdaptiveConcurrencyMode.DOWNWARD，先以用户配置线程数满速起跑，平稳后自动按需收敛多余连接，彻底消除小文件启动速度慢的缺陷；
-修复多任务调度与并发分片供给逻辑。
+· 默认开启 AdaptiveConcurrencyMode.DOWNWARD，先以用户配置线程数满速起跑，平稳后自动按需收敛多余连接，彻底消除小文件启动速度慢的缺陷；
+· 修复多任务调度与并发分片供给逻辑。
 2. 修复分享解析与目标文件续传边缘情况。
-3. 纯净 Android 端发布，保持单一框架演进。</p><p class="small"><a href="https://github.com/jiayuxuan123/YunGet/releases/tag/v2.7.22">发布页</a></p></div><div class="card"><h3><span class="mono">v2.7.21</span></h3><p class="small">2026-10-31 · 1 个附件</p><p class="muted">云取 YunGet 2.7.21 把 Android 端内嵌引擎同步到 TurboDL 0.3.0.0。
+3. 纯净 Android 端发布，保持单一框架演进。</p><a href="https://github.com/jiayuxuan123/YunGet/releases/tag/v2.7.22">发布页</a></article><article class="release-row"><div class="release-id"><strong>v2.7.21</strong><span>2026-10-31</span></div><p>云取 YunGet 2.7.21 把 Android 端内嵌引擎同步到 TurboDL 0.3.0.0。
 下载引擎
-同步 0.3.0.0 的调度与资源预算重做：公平任务槽、全局连接预算接口、懒启动 worker、动态分片供给。
-修复目标文件被删除后旧进度复活、收尾托管越界写入、预热误读整文件、暂停后 await 旧结果、暂停/取消竞态、完成 Job 泄漏等隐性缺陷。
-桌面 JVM 使用直接 ByteBuffer；Android/Dalvik 自动回落堆缓冲，手机端内存策略不放宽。
-手机端现有 UI、默认线程数与下载行为不变；全局连接预算暂未在设置页暴露。
+· 同步 0.3.0.0 的调度与资源预算重做：公平任务槽、全局连接预算接口、懒启动 worker、动态分片供给。
+· 修复目标文件被删除后旧进度复活、收尾托管越界写入、预热误读整文件、暂停后 await 旧结果、暂停/取消竞态、完成 Job 泄漏等隐性缺陷。
+· 桌面 JVM 使用直接 ByteBuffer；Android/Dalvik 自动回落堆缓冲，手机端内存策略不放宽。
+· 手机端现有 UI、默认线程数与下载行为不变；全局连接预算暂未在设置页暴露。
 验证
-:app:assembleRelease 成功。
-:app:verifyApkVersion 通过：versionCode 69 / versionName 2.7.21。
-`:app:tes…</p><p class="small"><a href="https://github.com/jiayuxuan123/YunGet/releases/tag/v2.7.21">发布页</a></p></div><div class="card"><h3><span class="mono">v2.7.20</span></h3><p class="small">2026-10-29 · 1 个附件</p><p class="muted">修复
-带提取码的分享解析失败：页面参数里自带一个空的提取码占位（kd 为 0），旧逻辑看到&quot;页面里已经有这个字段&quot;就不再覆盖，把空值提交给服务端，服务端返回&quot;密码错误&quot;。即使用户填对了提取码也进不去。现在只要提供了提取码，就以用户输入的为准。
-文件夹分享的识别：新版分享页没有旧版的分页标记，会被当成单文件分享，结果列表为空。现在同时按分享 id 的前缀（文件夹以 b 开头）判断。
+· :app:assembleRelease 成功。
+· :app:verifyApkVersion 通过：versionCode 69 / versionName 2.7.21。
+· :app:tes…</p><a href="https://github.com/jiayuxuan123/YunGet/releases/tag/v2.7.21">发布页</a></article><article class="release-row"><div class="release-id"><strong>v2.7.20</strong><span>2026-10-29</span></div><p>修复
+· 带提取码的分享解析失败：页面参数里自带一个空的提取码占位（kd 为 0），旧逻辑看到&quot;页面里已经有这个字段&quot;就不再覆盖，把空值提交给服务端，服务端返回&quot;密码错误&quot;。即使用户填对了提取码也进不去。现在只要提供了提取码，就以用户输入的为准。
+· 文件夹分享的识别：新版分享页没有旧版的分页标记，会被当成单文件分享，结果列表为空。现在同时按分享 id 的前缀（文件夹以 b 开头）判断。
 验证
-用真实公开分享链接实测：无提取码的文件分享与带提取码的文件分享都能正常解析、取直链并完整下载（分别为 875 字节与 166789 字节，字节数一致）。</p><p class="small"><a href="https://github.com/jiayuxuan123/YunGet/releases/tag/v2.7.20">发布页</a></p></div><div class="card"><h3><span class="mono">v2.7.19</span></h3><p class="small">2026-10-29 · 1 个附件</p><p class="muted">修复
-连接失效后的等待时间没有按上一版说明生效：应用侧的默认值仍是 60 秒，覆盖了引擎改成 30 秒的新默认值。现在应用默认值与引擎一致。
-这一组默认值原来在设置项、设置页&quot;恢复默认&quot;、以及测试里各写了一份，改引擎时三处不会一起动。现在只有一处来源，测试直接与引擎默认值比对，下次再漂移会立刻被测出来。
+用真实公开分享链接实测：无提取码的文件分享与带提取码的文件分享都能正常解析、取直链并完整下载（分别为 875 字节与 166789 字节，字节数一致）。</p><a href="https://github.com/jiayuxuan123/YunGet/releases/tag/v2.7.20">发布页</a></article><article class="release-row"><div class="release-id"><strong>v2.7.19</strong><span>2026-10-29</span></div><p>修复
+· 连接失效后的等待时间没有按上一版说明生效：应用侧的默认值仍是 60 秒，覆盖了引擎改成 30 秒的新默认值。现在应用默认值与引擎一致。
+· 这一组默认值原来在设置项、设置页&quot;恢复默认&quot;、以及测试里各写了一份，改引擎时三处不会一起动。现在只有一处来源，测试直接与引擎默认值比对，下次再漂移会立刻被测出来。
 说明
-已手动改过&quot;读超时&quot;的用户仍保留自己的设置，不受影响。</p><p class="small"><a href="https://github.com/jiayuxuan123/YunGet/releases/tag/v2.7.19">发布页</a></p></div><div class="card"><h3><span class="mono">v2.7.18</span></h3><p class="small">2026-10-29 · 1 个附件</p><p class="muted">修复
-个人网盘下载文件和文件夹时，取链接前漏掉了一步&quot;提交提取码&quot;，服务端因此返回&quot;请输入密码&quot;，界面上却显示成&quot;提取码错误&quot;——而用户根本没有输入过提取码。现在会按浏览器的方式先提交提取码再取链接。
-分享链接里自带提取码时（链接末尾带 pwd 参数），现在会识别出来。此前这一步被丢掉，只能按&quot;无提取码&quot;流程取链接，必然失败。
-只提交过一次提取码却被拒绝时才提示&quot;提取码错误&quot;；没有提交过提取码则提示&quot;该分享需要提取码，请填写后重试&quot;，不再一律说成提取码错误。
-分享文件夹翻页被拒绝或触发限流时，保留已经加载出来的文件，不再把整个列表判为失败（2.7.17 已包含）。
+· 已手动改过&quot;读超时&quot;的用户仍保留自己的设置，不受影响。</p><a href="https://github.com/jiayuxuan123/YunGet/releases/tag/v2.7.19">发布页</a></article><article class="release-row"><div class="release-id"><strong>v2.7.18</strong><span>2026-10-29</span></div><p>修复
+· 个人网盘下载文件和文件夹时，取链接前漏掉了一步&quot;提交提取码&quot;，服务端因此返回&quot;请输入密码&quot;，界面上却显示成&quot;提取码错误&quot;——而用户根本没有输入过提取码。现在会按浏览器的方式先提交提取码再取链接。
+· 分享链接里自带提取码时（链接末尾带 pwd 参数），现在会识别出来。此前这一步被丢掉，只能按&quot;无提取码&quot;流程取链接，必然失败。
+· 只提交过一次提取码却被拒绝时才提示&quot;提取码错误&quot;；没有提交过提取码则提示&quot;该分享需要提取码，请填写后重试&quot;，不再一律说成提取码错误。
+· 分享文件夹翻页被拒绝或触发限流时，保留已经加载出来的文件，不再把整个列表判为失败（2.7.17 已包含）。
 测试
-新增一条用例，覆盖&quot;分享页是否停在提取码表单&quot;的判定。该判定是解锁流程的入口。</p><p class="small"><a href="https://github.com/jiayuxuan123/YunGet/releases/tag/v2.7.18">发布页</a></p></div><div class="card"><h3><span class="mono">v2.7.17</span></h3><p class="small">2026-10-28 · 1 个附件</p><p class="muted">修复
-修正网盘分享文件夹的翻页请求。分享页已经解锁后，翻页时再带一次提取码会被判为&quot;密码错误&quot;，现在会先去掉提取码重试。
-已经加载出文件列表后，如果后续翻页被拒绝或触发限流，保留已加载的内容，不再把整个列表判为失败并弹出&quot;提取码错误&quot;。
-打开分享的第一页就失败时，仍会给出对应原因：提取码错误、请求过于频繁、或解析失败。</p><p class="small"><a href="https://github.com/jiayuxuan123/YunGet/releases/tag/v2.7.17">发布页</a></p></div><div class="card"><h3><span class="mono">v2.7.16</span></h3><p class="small">2026-10-28 · 1 个附件</p><p class="muted">本次更新含引擎自 0.2.4.0 以来的全部变化，以下按用户能感知的部分列出。
+新增一条用例，覆盖&quot;分享页是否停在提取码表单&quot;的判定。该判定是解锁流程的入口。</p><a href="https://github.com/jiayuxuan123/YunGet/releases/tag/v2.7.18">发布页</a></article><article class="release-row"><div class="release-id"><strong>v2.7.17</strong><span>2026-10-28</span></div><p>修复
+· 修正网盘分享文件夹的翻页请求。分享页已经解锁后，翻页时再带一次提取码会被判为&quot;密码错误&quot;，现在会先去掉提取码重试。
+· 已经加载出文件列表后，如果后续翻页被拒绝或触发限流，保留已加载的内容，不再把整个列表判为失败并弹出&quot;提取码错误&quot;。
+· 打开分享的第一页就失败时，仍会给出对应原因：提取码错误、请求过于频繁、或解析失败。</p><a href="https://github.com/jiayuxuan123/YunGet/releases/tag/v2.7.17">发布页</a></article><article class="release-row"><div class="release-id"><strong>v2.7.16</strong><span>2026-10-28</span></div><p>本次更新含引擎自 0.2.4.0 以来的全部变化，以下按用户能感知的部分列出。
 下载速度
-分片改为直接写入目标文件的对应位置，不再为每个分片创建临时文件、下完再合并。同一块盘、16MB 数据实测：512 个分片时，旧方式创建文件加合并需 728 毫秒，直接写只需 11 毫秒；高并发下吞吐由 20 MB/s 提升到 88 MB/s，且不再随连接数增加而下降。
-每条连接使用独立的写入通道。此前所有连接共用一个通道，16 条连接同时写入会排队，聚合速度被压在单条连接的水平。
-增加域名解析缓存，避免几十条连接各自重复解析、在建立连接阶段白等。解析失败的结果也会短暂缓存，防止大量连接同时打满解析。
-提升启动爬升速度：每档间隔由 250 毫秒缩短为 100 毫秒，从 4 条爬到设定连接数由 500 毫秒降到 200 毫秒。
-实测：本机 256MB、16 连接为 165–200 MB…</p><p class="small"><a href="https://github.com/jiayuxuan123/YunGet/releases/tag/v2.7.16">发布页</a></p></div><div class="card"><h3><span class="mono">v2.7.14</span></h3><p class="small">2026-10-27 · 1 个附件</p><p class="muted">账号管理页现在能加账号了
-上一版把多账号做了，但<strong>账号管理页只能看、切换、删除，加不了新号</strong> ——
+· 分片改为直接写入目标文件的对应位置，不再为每个分片创建临时文件、下完再合并。同一块盘、16MB 数据实测：512 个分片时，旧方式创建文件加合并需 728 毫秒，直接写只需 11 毫秒；高并发下吞吐由 20 MB/s 提升到 88 MB/s，且不再随连接数增加而下降。
+· 每条连接使用独立的写入通道。此前所有连接共用一个通道，16 条连接同时写入会排队，聚合速度被压在单条连接的水平。
+· 增加域名解析缓存，避免几十条连接各自重复解析、在建立连接阶段白等。解析失败的结果也会短暂缓存，防止大量连接同时打满解析。
+· 提升启动爬升速度：每档间隔由 250 毫秒缩短为 100 毫秒，从 4 条爬到设定连接数由 500 毫秒降到 200 毫秒。
+· 实测：本机 256MB、16 连接为 165–200 MB…</p><a href="https://github.com/jiayuxuan123/YunGet/releases/tag/v2.7.16">发布页</a></article><article class="release-row"><div class="release-id"><strong>v2.7.14</strong><span>2026-10-27</span></div><p>账号管理页现在能加账号了
+上一版把多账号做了，但账号管理页只能看、切换、删除，加不了新号 ——
 想再加一个账号得退回「网盘」页重新点那个平台，而那里已经登录过的平台
 显示的是「已登录」，看不出再点一次是新增还是覆盖。
 现在这一页每张平台卡片下面都有「添加账号」；没登录过的平台也列在
 「其他平台」里，点一下就能登。登录页那个「保存为新增账号」开关照常在。
 网站
-版本信息不再滞后：站点上的内置引擎版本、最低安卓版本改为从构建配置读取
-修复文档页在桌面端把目录和正文的列宽弄反了（正文被压成 300px 宽）
-修复移动端横向溢出：宽表格、长 URL、长代码行、卡片网格</p><p class="small"><a href="https://github.com/jiayuxuan123/YunGet/releases/tag/v2.7.14">发布页</a></p></div><div class="card"><h3><span class="mono">v2.7.13</span></h3><p class="small">2026-10-26 · 1 个附件</p><p class="muted">视频链接解析改为插件
-微博、小红书、Pixiv 的分享链接解析，从程序内置挪到了<strong>下载引擎的插件</strong>里。
-<strong>这对你意味着什么</strong>：这三个平台的页面结构以后再变，修复跟着引擎升级走，不用等应用发版。引擎本身对这三个平台一无所知——它只认「把链接变成可下载请求」这件事，具体是哪个平台由插件负责。
-<strong>对你没有任何操作要求</strong>：功能、界面、行为都不变，链接照样粘进解析页就行。内置的抖音、快手、B站、AcFun 解析器保持原样，它们的签名算法和网页交互比较特殊，暂时还留在应用侧。
+· 版本信息不再滞后：站点上的内置引擎版本、最低安卓版本改为从构建配置读取
+· 修复文档页在桌面端把目录和正文的列宽弄反了（正文被压成 300px 宽）
+· 修复移动端横向溢出：宽表格、长 URL、长代码行、卡片网格</p><a href="https://github.com/jiayuxuan123/YunGet/releases/tag/v2.7.14">发布页</a></article><article class="release-row"><div class="release-id"><strong>v2.7.13</strong><span>2026-10-26</span></div><p>视频链接解析改为插件
+微博、小红书、Pixiv 的分享链接解析，从程序内置挪到了下载引擎的插件里。
+这对你意味着什么：这三个平台的页面结构以后再变，修复跟着引擎升级走，不用等应用发版。引擎本身对这三个平台一无所知——它只认「把链接变成可下载请求」这件事，具体是哪个平台由插件负责。
+对你没有任何操作要求：功能、界面、行为都不变，链接照样粘进解析页就行。内置的抖音、快手、B站、AcFun 解析器保持原样，它们的签名算法和网页交互比较特殊，暂时还留在应用侧。
 多账号
-新增「账号管理」页，一个平台登录几个账号都能看
-登录时可以选择「加为新账号」还是「覆盖当前账号」
-可切换主账号、可给账号加备注、可删除（删掉主账号会自动提拔另一个）
-夸克、UC 等平台的取链会优先用刚刷新过的主账号，避免直链签名过期
+· 新增「账号管理」页，一个平台登录几个账号都能看
+· 登录时可以选择「加为新账号」还是「覆盖当前账号」
+· 可切换主账号、可给账号加备注、可删除（删掉主账号会自动提拔另一个）
+· 夸克、UC 等平台的取链会优先用刚刷新过的主账号，避免直链签名过期
 其他
-内置下载引擎升级至 TurboDL 0.2.4.0…</p><p class="small"><a href="https://github.com/jiayuxuan123/YunGet/releases/tag/v2.7.13">发布页</a></p></div><div class="card"><h3><span class="mono">v2.7.12</span></h3><p class="small">2026-10-23 · 1 个附件</p><p class="muted">重要修复
-<strong>修正两个开关同时打开时，下载完成的文件可能是坏的</strong>
+· 内置下载引擎升级至 TurboDL 0.2.4.0…</p><a href="https://github.com/jiayuxuan123/YunGet/releases/tag/v2.7.13">发布页</a></article><article class="release-row"><div class="release-id"><strong>v2.7.12</strong><span>2026-10-23</span></div><p>重要修复
+· 修正两个开关同时打开时，下载完成的文件可能是坏的
   「下载中预先合并」和「收尾托管」是引擎高级参数里的两项。两者同时开启时，同一个文件区间会被两个不同的请求先后写入。如果两个请求恰好落到不同服务器，后写的内容会覆盖先写的。
   表现是：文件大小正确，但内容损坏，且下载过程中不会报任何错。
   现在只要「收尾托管」开着，就会自动停用「预先合并」。
-<strong>修正「HTTP 版本策略」选“自动”却实际走 HTTP/2</strong>
+· 修正「HTTP 版本策略」选“自动”却实际走 HTTP/2
   「HTTP 版本策略」默认就是“自动”，因此程序无法区分“你明确选了自动”和“你没设置过”。它只能用另一个开关——「强制 HTTP/1.1」——来决定，结果是你把这个开关关掉后，策略显示“自动”，实际生效的却是“允许 HTTP/2”。
   HTTP/2 会把多个分片挤进同一条连接，多线程反而可能完全没有加速。
-  现在“自动”就是自动，不再被其他开关…</p><p class="small"><a href="https://github.com/jiayuxuan123/YunGet/releases/tag/v2.7.12">发布页</a></p></div><div class="card"><h3><span class="mono">v2.7.11</span></h3><p class="small">2026-10-23 · 1 个附件</p><p class="muted">云取 YunGet 2.7.11
+  现在“自动”就是自动，不再被其他开关…</p><a href="https://github.com/jiayuxuan123/YunGet/releases/tag/v2.7.12">发布页</a></article><article class="release-row"><div class="release-id"><strong>v2.7.11</strong><span>2026-10-23</span></div><p>云取 YunGet 2.7.11
 这一版把内置下载引擎真正升级到了 0.2.3.0，并把它的可调项补齐。
 引擎其实一直没升上去
-TurboDL 0.2.3.0 做得是网络健壮性：UA 协商、失败快速收敛、错误归因。但那次发版<strong>只上传了 CLI 包</strong>，引擎核心和四个插件模块虽然编译出来了却没发布。
+TurboDL 0.2.3.0 做得是网络健壮性：UA 协商、失败快速收敛、错误归因。但那次发版只上传了 CLI 包，引擎核心和四个插件模块虽然编译出来了却没发布。
 结果就是 App 里声明的依赖一直解析到 0.2.2.0——那三项改进在手机上一次都没生效过。
 这次把缺失的制品补齐并发了出去，依赖也真的指过去了。
 顺带修掉一处死代码
 0.2.3.0 让分片层记录了&quot;真实失败原因&quot;（服务器返回了哪个 HTTP 状态码、连接是不是被重置、body 是不是只回了一半），因为只有分片层拿得到响应信息。但它发失败事件时用的还是异常自带的 message，而那句在往上冒的过程中已经退化成&quot;failed to connect&quot;之类。
-所以那个精心做的错误归因，从来没有人…</p><p class="small"><a href="https://github.com/jiayuxuan123/YunGet/releases/tag/v2.7.11">发布页</a></p></div></div></section><section class="section"><div class="seg-rule" aria-hidden="true"><i class="done" style="width:23.333%"></i><i class="" style="width:10.000%"></i><i class="done" style="width:16.667%"></i><i class="" style="width:6.667%"></i><i class="" style="width:30.000%"></i><i class="done" style="width:13.333%"></i></div><h2>完整历史</h2><div class="btn-row"><a class="btn" href="https://github.com/jiayuxuan123/YunGet/releases">全部发布</a><a class="btn" href="https://github.com/jiayuxuan123/YunGet/commits/main">代码提交</a></div></section></div></main>
-<footer class="site-foot">
-<div class="foot-tear" aria-hidden="true"></div>
-<div class="wrap foot-mast">
-<div class="foot-stamp" aria-hidden="true"><span>云取</span><strong>已封装</strong><small>SEALED</small></div>
-<div class="foot-mark"><span>YUNGET</span><small>把下一条链接，变成文件。</small></div>
-<a class="foot-cta" href="../download/index.html">
-<span><small>OUTBOUND PARCEL</small><strong>下载云取，把链接变成文件</strong></span>
+所以那个精心做的错误归因，从来没有人…</p><a href="https://github.com/jiayuxuan123/YunGet/releases/tag/v2.7.11">发布页</a></article><article class="release-row"><div class="release-id"><strong>v2.7.10</strong><span>2026-10-18</span></div><p>云取 YunGet 2.7.10
+这一版只做一件事：原生插件在手机上暂时停用。
+为什么停用
+原生插件（以前的&quot;L2&quot;）是让插件直接以应用的身份跑在应用进程里的一档。它在手机上一直不稳：Android 10 之后系统不允许加载应用自己写出来的插件文件，最后只能靠&quot;读进内存再加载&quot;绕过，越往后系统限制越严。
+而且实际效果也配不上这份麻烦——此前发布的四个网盘原生插件，做的事情只是把解析请求转回应用内部本来就有的实现，并没有带来应用自己做不到的能力。
+停用之后会怎样
+· 手机版现在只支持脚本插件（JS 插件），装上或更新后立即生效；
+· 插件源里那四个网盘原生插件已经撤下，插件市场不再列出它们；
+· 已经装过原生插件的用户：那几个插件留在手机上但不再参与工作，网盘解析走应用内置实现，功能不受影响；需要的话可以在插件列表里把它们卸载掉。
+之后
+等云推出了 Windows 版，原生插件会在 Wind…</p><a href="https://github.com/jiayuxuan123/YunGet/releases/tag/v2.7.10">发布页</a></article><article class="release-row"><div class="release-id"><strong>v2.7.9</strong><span>2026-10-12</span></div><p>云取 YunGet 2.7.9
+修好两件影响日常使用的事：原生插件真正能加载了，图片终于能显示出来。
+原生插件现在可以正常运行
+上一版换了个目录存放插件包，真机上仍被系统拒绝——原因是 Android 10 之后系统禁止加载&quot;位于可写目录里的插件文件&quot;，换到哪个可写目录都一样。这一版改为把插件包读进内存直接加载，全程不落盘，从机制上绕开了这条限制。
+装过的网盘插件更新到本版并重启后即可正常加载；插件页不再显示&quot;未运行&quot;。
+需要留意：加载原生插件需 Android 8.0 及以上；更低版本会给出明确提示，而不是静默失败。
+图片能显示出来了
+支持页的赞赏码、插件说明里的图片此前一律直连 GitHub，国内基本加载不出来。原因是应用里的&quot;镜像&quot;设置从来没有传给图片加载器——这个开关一直是空的。修复后：
+· 图片与插件源、应用更新走同一套镜像规则（只对 GitHub 地址生效，失败…</p><a href="https://github.com/jiayuxuan123/YunGet/releases/tag/v2.7.9">发布页</a></article><article class="release-row"><div class="release-id"><strong>v2.7.8</strong><span>2026-10-12</span></div><p>云取 YunGet 2.7.8
+修掉一个会让插件装不上的验签缺陷，建议所有用户更新。
+修复
+· 同一批签名的插件，一部分能装、一部分报&quot;签名验证失败&quot;：应用内自带的一套 Ed25519 验签实现里，坐标运算的中间减法没有做取模归一化，导致减法出负数时结果算错——表现为与签名内容相关地随机失败（实测同一批 6 个插件，4 个能装、2 个报错）。这不是发布侧或网络的问题，插件包本身完全正确。修复后所有已发布的插件都能正常校验通过。
+· 顺带修掉同一实现里另一处非规范余数（坐标取反）的隐患。
+· 新增一条回归测试：直接用真实发布的插件文件与索引验证两条验签路径（平台实现与内置实现），防止这类&quot;只有特定输入才触发&quot;的缺陷再次溜过去。
+如果你之前遇到
+升级前若在插件市场看到&quot;签名验证失败&quot;，那 2.7.8 之后重试即可正常安装；不需要重新下载任何插件源数据。</p><a href="https://github.com/jiayuxuan123/YunGet/releases/tag/v2.7.8">发布页</a></article><article class="release-row"><div class="release-id"><strong>v2.7.7</strong><span>2026-10-11</span></div><p>云取 YunGet 2.7.7
+这个版本修复 2.7.6 在真机上的一个关键问题，建议所有安装了网盘插件的用户更新。
+修复
+· 原生插件重启后无法加载：Android 10 及以上系统拒绝从应用数据目录直接加载插件包（系统安全限制，日志表现为 &quot;Writable dex file is not allowed&quot;）。现在加载前会把插件包复制到系统允许的位置，装过的原生插件重启后即可正常生效。2.7.6 里安装成功但一直显示&quot;未运行&quot;的插件，更新到本版并重启后即可使用。
+· 安装失败时日志更具体：签名校验失败时，会把实际收到的文件指纹、索引里的签名字段与公钥来源写进诊断日志，远程排查&quot;签名验证失败&quot;类问题不再需要来回猜。</p><a href="https://github.com/jiayuxuan123/YunGet/releases/tag/v2.7.7">发布页</a></article></div></section></div></main>
+<footer class="site-footer">
+<div class="wrap footer-station">
+<div class="footer-stop"><span class="footer-node" aria-hidden="true"></span>
+<div><strong>下一站：安装 YunGet</strong><p>选择通用 APK，核对摘要后再安装。</p></div></div>
+<a class="button button-primary" href="../download/index.html">
+<span>下载通用 APK</span>
 <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 12h14M13 6l6 6-6 6"/></svg>
 </a>
 </div>
-<div class="wrap foot-ledger">
-<nav class="foot-nav-grid" aria-label="页脚导航"><section class="foot-col"><h2>项目</h2><ul><li><a href="https://github.com/jiayuxuan123/YunGet">GitHub</a></li><li><a href="../download/index.html">下载</a></li><li><a href="index.html">更新日志</a></li><li><a href="https://github.com/jiayuxuan123/YunGet/issues">问题反馈</a></li></ul></section><section class="foot-col"><h2>文档</h2><ul><li><a href="../docs/readme/index.html">项目说明</a></li><li><a href="../docs/guide/index.html">使用说明</a></li><li><a href="../docs/faq/index.html">常见问题</a></li><li><a href="../docs/engines/index.html">下载引擎</a></li><li><a href="../docs/build/index.html">从源码构建</a></li></ul></section><section class="foot-col"><h2>插件</h2><ul><li><a href="../plugins/index.html">插件（市场与安装）</a></li><li><a href="../developers/index.html">开发者（怎么写）</a></li><li><a href="../docs/plugin-dev/index.html">写一个插件</a></li><li><a href="../docs/plugin-api/index.html">插件 ABI 参考</a></li><li><a href="../docs/plugin-publish/index.html">打包与发布</a></li><li><a href="../docs/plugin-security/index.html">插件安全模型</a></li></ul></section><section class="foot-col"><h2>协议与说明</h2><ul><li><a href="../legal/license/index.html">AGPL-3.0 原文</a></li><li><a href="../legal/notice/index.html">署名与致谢</a></li><li><a href="../legal/privacy/index.html">隐私说明</a></li><li><a href="../legal/terms/index.html">使用条款</a></li><li><a href="../support/index.html">支持开发</a></li></ul></section><section class="foot-col"><h2>相关</h2><ul><li><a href="https://github.com/CYQawa/YunX">上游 CYQawa/YunX</a></li><li><a href="https://github.com/jiayuxuan123/TurboDL">下载引擎 TurboDL</a></li><li><a href="https://github.com/jiayuxuan123/YunGet-Plugins">插件源 YunGet-Plugins</a></li><li><a href="../community/index.html">社区</a></li></ul></section></nav>
-<div class="foot-fine">
-<section class="foot-meta"><h2>项目身份 / MANIFEST</h2><p>云取 YunGet v2.7.23 · AGPL-3.0 · 内置 TurboDL 0.4.1.0 · Android 7.0（API 24）</p><p>本项目是 CYQawa/YunX（云析）的二次开发版本，与上游作者无隐性关联。仅供个人学习与技术交流，请勿用于商业用途；下载内容的版权归原作者及相关权利人所有。</p></section>
-<section class="foot-credits"><h2>图片来源</h2><p><a href="https://commons.wikimedia.org/wiki/File:Map_of_the_submarine_telegraph_between_America_%26_Europe,_with_its_various_communications_on_the_two_continents_(7557408938).jpg">Map of the submarine telegraph between America &amp; Europe, with its various communications on the two continents (7557408938)</a>（http://maps.bpl.org，CC BY 2.0，via Wikimedia Commons）；<a href="https://commons.wikimedia.org/wiki/File:Mus%C3%A9e_des_Arts_et_M%C3%A9tiers_-_C%C3%A2bles_sous-marins_(37545950582).jpg">Musée des Arts et Métiers - Câbles sous-marins (37545950582)</a>（Frédéric BISSON from Rouen, France，CC BY 2.0，via Wikimedia Commons）</p></section>
+<div class="wrap footer-grid">
+<section class="footer-brand">
+<a class="brand" href="../index.html" aria-label="云取 YunGet 首页">
+<span class="brand-mark" aria-hidden="true"><svg viewBox="0 0 32 32" fill="none" stroke="currentColor"><path d="M7 6v8.5a5 5 0 0 0 5 5h8a5 5 0 0 1 5 5V26" stroke-width="2"/><circle cx="7" cy="5" r="3" fill="var(--signal)"/><circle cx="25" cy="26" r="3" fill="var(--route)"/></svg></span>
+<span class="brand-copy"><strong>云取 YunGet</strong><small>YUNGET · LOCAL ROUTE</small></span></a>
+<p>网盘分享链接解析与本地下载</p>
+</section>
+<nav class="footer-nav" aria-label="页脚导航"><section class="footer-col"><h2>项目</h2><ul><li><a href="https://github.com/jiayuxuan123/YunGet">GitHub</a></li><li><a href="../download/index.html">下载</a></li><li><a href="index.html">更新日志</a></li><li><a href="https://github.com/jiayuxuan123/YunGet/issues">问题反馈</a></li></ul></section><section class="footer-col"><h2>文档</h2><ul><li><a href="../docs/readme/index.html">项目说明</a></li><li><a href="../docs/guide/index.html">使用说明</a></li><li><a href="../docs/faq/index.html">常见问题</a></li><li><a href="../docs/engines/index.html">下载引擎</a></li><li><a href="../docs/build/index.html">从源码构建</a></li></ul></section><section class="footer-col"><h2>插件</h2><ul><li><a href="../plugins/index.html">插件（市场与安装）</a></li><li><a href="../developers/index.html">开发者（怎么写）</a></li><li><a href="../docs/plugin-dev/index.html">写一个插件</a></li><li><a href="../docs/plugin-api/index.html">插件 ABI 参考</a></li><li><a href="../docs/plugin-publish/index.html">打包与发布</a></li><li><a href="../docs/plugin-security/index.html">插件安全模型</a></li></ul></section><section class="footer-col"><h2>协议与说明</h2><ul><li><a href="../legal/license/index.html">AGPL-3.0 原文</a></li><li><a href="../legal/notice/index.html">署名与致谢</a></li><li><a href="../legal/privacy/index.html">隐私说明</a></li><li><a href="../legal/terms/index.html">使用条款</a></li><li><a href="../support/index.html">支持开发</a></li></ul></section><section class="footer-col"><h2>相关</h2><ul><li><a href="https://github.com/CYQawa/YunX">上游 CYQawa/YunX</a></li><li><a href="https://github.com/jiayuxuan123/TurboDL">下载引擎 TurboDL</a></li><li><a href="https://github.com/jiayuxuan123/YunGet-Plugins">插件源 YunGet-Plugins</a></li><li><a href="../community/index.html">社区</a></li></ul></section></nav>
 </div>
-</div>
-<div class="wrap foot-bottom">
-<span>云取 YunGet · CLOUD COURIER</span>
-<span>OPEN SOURCE / AGPL-3.0</span>
-<a href="https://github.com/jiayuxuan123/YunGet">SOURCE ↗</a>
+<div class="wrap footer-fine">
+<div class="footer-meta"><p>云取 YunGet v2.7.23 · AGPL-3.0 · 内置 TurboDL 0.4.1.0 · Android 7.0（API 24）</p><p>本项目是 CYQawa/YunX（云析）的二次开发版本，与上游作者无隐性关联。仅供个人学习与技术交流，请勿用于商业用途；下载内容的版权归原作者及相关权利人所有。</p></div>
+<div class="footer-bottom">
+<span>云取 YunGet · ANDROID · OPEN SOURCE</span>
+<a href="https://github.com/jiayuxuan123/YunGet">GitHub / Source</a>
 </div>
 </div>
 </footer>
-<script src="../assets/site.8b2ee733.js" defer></script>
+<script src="../assets/site.1eaffe76.js" defer></script>
 </body>
 </html>

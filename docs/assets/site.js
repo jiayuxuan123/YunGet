@@ -1,32 +1,19 @@
 /* ==========================================================================
    YunGet site interactions
-
-   The page remains readable without JavaScript. This file only adds:
-   - theme and mobile-route controls
-   - a local-only share-link recognizer
-   - transform/opacity reveals with reduced-motion support
-   - FAQ, TOC and code-copy conveniences
+   Content stays visible without JavaScript. This file adds theme selection,
+   an accessible mobile route menu, local-only link recognition and small
+   reading conveniences. No network request is made by the page itself.
    ========================================================================== */
 (function () {
   "use strict";
 
   var root = document.documentElement;
-  var body = document.body;
+  var head = document.querySelector("[data-site-head]");
+  var navToggle = document.querySelector(".nav-toggle");
+  var mainNav = document.getElementById("site-nav");
   var reduceMotion = window.matchMedia("(prefers-reduced-motion: reduce)");
   var systemDark = window.matchMedia("(prefers-color-scheme: dark)");
-  var themeButton = document.querySelector("[data-theme-toggle]");
-  var top = document.querySelector(".top");
-  var navToggle = document.querySelector(".nav-toggle");
-  var topNav = document.getElementById("top-nav");
-  var progressBar = document.querySelector(".route-progress i");
-
-  function directChildren(selector, parentSelector) {
-    var scope = document.querySelector(parentSelector);
-    if (!scope) return [];
-    return Array.prototype.filter.call(scope.children, function (node) {
-      return node.matches(selector);
-    });
-  }
+  var themeButtons = Array.prototype.slice.call(document.querySelectorAll("[data-theme-toggle]"));
 
   /* ---------------------------------------------------------------- theme */
 
@@ -37,21 +24,23 @@
     return systemDark.matches;
   }
 
-  function syncThemeControl() {
-    if (!themeButton) return;
+  function syncTheme() {
     var dark = effectiveDark();
-    themeButton.setAttribute("aria-pressed", dark ? "true" : "false");
-    themeButton.setAttribute("aria-label", dark ? "切换到浅色主题" : "切换到深色主题");
-    var label = themeButton.querySelector(".theme-label");
-    if (label) label.textContent = dark ? "日间" : "夜间";
-    var lightMeta = document.querySelector('meta[name="theme-color"][media*="light"]');
-    var darkMeta = document.querySelector('meta[name="theme-color"][media*="dark"]');
-    if (lightMeta) lightMeta.setAttribute("content", dark ? "#171812" : "#f1eadb");
-    if (darkMeta) darkMeta.setAttribute("content", dark ? "#171812" : "#f1eadb");
+    themeButtons.forEach(function (button) {
+      button.setAttribute("aria-pressed", dark ? "true" : "false");
+      button.setAttribute("aria-label", dark ? "切换到浅色主题" : "切换到深色主题");
+    });
+    var value = dark ? "#131C18" : "#F4F0E6";
+    Array.prototype.forEach.call(
+      document.querySelectorAll('meta[name="theme-color"]'),
+      function (meta) {
+        meta.setAttribute("content", value);
+      }
+    );
   }
 
-  if (themeButton) {
-    themeButton.addEventListener("click", function () {
+  themeButtons.forEach(function (button) {
+    button.addEventListener("click", function () {
       var next = effectiveDark() ? "light" : "dark";
       root.setAttribute("data-theme", next);
       try {
@@ -59,358 +48,240 @@
       } catch (error) {
         /* A blocked storage API must not block the control. */
       }
-      syncThemeControl();
+      syncTheme();
     });
+  });
 
-    if (systemDark.addEventListener) {
-      systemDark.addEventListener("change", function () {
-        var chosen = root.getAttribute("data-theme");
-        if (chosen !== "light" && chosen !== "dark") syncThemeControl();
-      });
-    }
-
-    syncThemeControl();
+  if (systemDark.addEventListener) {
+    systemDark.addEventListener("change", function () {
+      var chosen = root.getAttribute("data-theme");
+      if (chosen !== "light" && chosen !== "dark") syncTheme();
+    });
   }
+  syncTheme();
 
   /* ----------------------------------------------------------- mobile nav */
 
-  function setNav(open) {
-    if (!top) return;
-    top.toggleAttribute("data-nav-open", open);
-    if (navToggle) navToggle.setAttribute("aria-expanded", open ? "true" : "false");
-    if (navToggle) navToggle.setAttribute("aria-label", open ? "关闭菜单" : "打开菜单");
+  function setNav(open, restoreFocus) {
+    if (!head || !navToggle) return;
+    head.toggleAttribute("data-nav-open", open);
+    navToggle.setAttribute("aria-expanded", open ? "true" : "false");
+    navToggle.setAttribute("aria-label", open ? "关闭菜单" : "打开菜单");
+    if (open && mainNav) {
+      var firstLink = mainNav.querySelector("a");
+      if (firstLink) firstLink.focus();
+    } else if (restoreFocus) {
+      navToggle.focus();
+    }
   }
 
-  if (navToggle) {
+  if (navToggle && head && mainNav) {
     navToggle.addEventListener("click", function () {
-      setNav(!top.hasAttribute("data-nav-open"));
+      setNav(!head.hasAttribute("data-nav-open"), false);
     });
-  }
 
-  if (top) {
-    top.addEventListener("keydown", function (event) {
-      if (event.key === "Escape" && top.hasAttribute("data-nav-open")) {
-        setNav(false);
-        if (navToggle) navToggle.focus();
+    head.addEventListener("keydown", function (event) {
+      if (event.key === "Escape" && head.hasAttribute("data-nav-open")) {
+        setNav(false, true);
       }
     });
 
     document.addEventListener("click", function (event) {
-      if (!top.hasAttribute("data-nav-open")) return;
-      if (!top.contains(event.target)) setNav(false);
+      if (head.hasAttribute("data-nav-open") && !head.contains(event.target)) {
+        setNav(false, false);
+      }
     });
 
-    if (topNav) {
-      topNav.addEventListener("click", function (event) {
-        if (event.target.closest("a")) setNav(false);
-      });
+    mainNav.addEventListener("click", function (event) {
+      if (event.target.closest("a")) setNav(false, false);
+    });
+
+    function settleNav() {
+      if (window.innerWidth > 860 && head.hasAttribute("data-nav-open")) {
+        setNav(false, false);
+      }
     }
+
+    window.addEventListener("resize", settleNav);
+    settleNav();
   }
 
-  window.addEventListener("resize", function () {
-    if (window.innerWidth > 960 && top && top.hasAttribute("data-nav-open")) setNav(false);
-  });
+  /* -------------------------------------------------------- route drawing */
 
-  /* ------------------------------------------------------ reading progress */
-
-  var progressFrame = 0;
-
-  function updateProgress() {
-    progressFrame = 0;
-    if (!progressBar) return;
-    var max = document.documentElement.scrollHeight - window.innerHeight;
-    var ratio = max > 0 ? Math.min(1, Math.max(0, window.scrollY / max)) : 0;
-    progressBar.style.transform = "scaleX(" + ratio.toFixed(4) + ")";
-  }
-
-  function queueProgress() {
-    if (progressFrame) return;
-    progressFrame = window.requestAnimationFrame(updateProgress);
-  }
-
-  window.addEventListener("scroll", queueProgress, { passive: true });
-  window.addEventListener("resize", queueProgress);
-  updateProgress();
-
-  /* -------------------------------------------------------------- reveals */
-
-  var revealTargets = [];
-
-  function addReveal(node, order) {
-    if (!node || node.hasAttribute("data-reveal") || node.closest(".resolver")) return;
-    node.setAttribute("data-reveal", "");
-    if (typeof order === "number") {
-      node.setAttribute("data-reveal-order", String(Math.min(order, 5)));
-    }
-    revealTargets.push(node);
-  }
-
-  directChildren("h1, h2, .section-lead, .lead, .panel, .cards, .table-wrap, .split, .rows, .btn-row, .version-bar, .platforms, .stat-band, .dl-visual, .notfound-code", ".page-canvas").forEach(function (node) {
-    addReveal(node);
-  });
-
-  Array.prototype.forEach.call(document.querySelectorAll(".section > h2, .section > .section-lead, .section > .lead, .section > .panel, .section > .cards, .section > .table-wrap, .section > .split, .section > .rows, .section > .btn-row"), function (node) {
-    addReveal(node);
-  });
-
-  Array.prototype.forEach.call(document.querySelectorAll(".doc-head, .doc-meta, .doc-aside, .doc-body"), function (node) {
-    addReveal(node);
-  });
-
-  Array.prototype.forEach.call(document.querySelectorAll(".cards > .card, .platforms > .platform"), function (node, index) {
-    addReveal(node, index % 5);
-  });
-
-  Array.prototype.forEach.call(document.querySelectorAll(".rise"), function (node) {
-    if (!revealTargets.includes(node)) revealTargets.push(node);
-  });
-
-  if (!reduceMotion.matches && "IntersectionObserver" in window) {
-    var revealObserver = new IntersectionObserver(
-      function (entries) {
-        entries.forEach(function (entry) {
-          if (!entry.isIntersecting) return;
-          entry.target.classList.add("is-visible");
-          revealObserver.unobserve(entry.target);
-        });
-      },
-      { rootMargin: "0px 0px -8% 0px", threshold: 0.06 }
-    );
-    revealTargets.forEach(function (node) {
-      revealObserver.observe(node);
-    });
-  } else {
-    revealTargets.forEach(function (node) {
-      node.classList.add("is-visible");
+  if (!reduceMotion.matches) {
+    window.requestAnimationFrame(function () {
+      root.classList.add("route-live");
     });
   }
 
-  window.requestAnimationFrame(function () {
-    root.classList.add("hero-ready");
-  });
+  /* ------------------------------------------------------- local recognizer */
 
-  /* ------------------------------------------------------------ local demo */
-
-  var PLATFORMS = [
-    { name: "夸克网盘", host: "pan.quark.cn" },
-    { name: "UC 网盘", host: "drive.uc.cn" },
-    { name: "迅雷网盘", host: "pan.xunlei.com" },
-    { name: "百度网盘", host: "pan.baidu.com" },
-    { name: "139 网盘", host: "caiyun.139.com" },
-    { name: "123 云盘", host: "123pan.com" },
-    { name: "115 网盘", host: "115.com" },
-    { name: "光鸭云盘", host: "guangya.com" },
-    { name: "蓝奏云优享版", host: "ilanzou.com" },
-    { name: "蓝奏云", host: "lanzou.com" }
+  var platforms = [
+    { name: "夸克网盘", hosts: ["pan.quark.cn"] },
+    { name: "UC 网盘", hosts: ["drive.uc.cn"] },
+    { name: "迅雷网盘", hosts: ["pan.xunlei.com"] },
+    { name: "百度网盘", hosts: ["pan.baidu.com"] },
+    { name: "139 网盘", hosts: ["caiyun.139.com"] },
+    { name: "123 云盘", hosts: ["123pan.com", "123684.com"] },
+    { name: "115 网盘", hosts: ["115.com", "115cdn.com"] },
+    { name: "光鸭云盘", hosts: ["guangya.com"] },
+    { name: "蓝奏云", hosts: ["lanzou.com", "lanzoui.com", "lanzoux.com", "lanzouv.com"] },
+    { name: "蓝奏云优享版", hosts: ["ilanzou.com"] }
   ];
-  var SEGMENT_WEIGHTS = [7, 3, 5, 2, 9, 4, 6, 3, 8, 5, 2, 7];
+  var form = document.querySelector("[data-resolver]");
   var input = document.getElementById("share-input");
-  var out = document.getElementById("resolver-out");
-  var segmentBox = document.getElementById("seg");
-  var legend = document.getElementById("seg-legend");
-  var resolver = document.querySelector(".resolver");
-  var INITIAL_MESSAGE =
-    "还没识别到分享链接。把它粘进来，这里会显示识别到的网盘、提取码与分片计划 —— 全部在这台设备上完成，不会联网。";
+  var result = document.querySelector("[data-resolver-result]");
 
-  function detectShare(text) {
-    var value = (text || "").trim();
-    if (!value) return null;
-    var match = value.match(/https?:\/\/[^\s，,、]+/);
+  function ownHost(host, base) {
+    return host === base || host.slice(-(base.length + 1)) === "." + base;
+  }
+
+  function platformFor(host) {
+    for (var i = 0; i < platforms.length; i += 1) {
+      for (var j = 0; j < platforms[i].hosts.length; j += 1) {
+        if (ownHost(host, platforms[i].hosts[j])) return platforms[i];
+      }
+    }
+    return null;
+  }
+
+  function extractLink(text) {
+    var match = String(text || "").match(/https?:\/\/[^\s，,、<>"']+/i);
     if (!match) return null;
-    var link = match[0].replace(/[)）\]]+$/, "");
+    return match[0].replace(/[)）\]】]+$/, "");
+  }
+
+  function extractCode(text) {
+    var match = String(text || "").match(/(?:提取码|密码|code|pwd)\s*[:：=]?\s*([a-zA-Z0-9]{4})/i);
+    if (match) return match[1];
+    match = String(text || "").match(/[（(]\s*([a-zA-Z0-9]{4})\s*[)）]/);
+    return match ? match[1] : "";
+  }
+
+  function showError(message) {
+    if (!result) return;
+    result.replaceChildren();
+    var box = document.createElement("div");
+    box.className = "resolver-idle";
+    var node = document.createElement("span");
+    node.className = "route-node";
+    node.textContent = "!";
+    var copy = document.createElement("p");
+    copy.className = "resolver-error";
+    copy.textContent = message;
+    box.appendChild(node);
+    box.appendChild(copy);
+    result.appendChild(box);
+  }
+
+  function showMatch(info) {
+    if (!result) return;
+    result.replaceChildren();
+    var box = document.createElement("div");
+    box.className = "resolver-hit";
+
+    var node = document.createElement("span");
+    node.className = "route-node";
+    node.textContent = "01";
+
+    var body = document.createElement("div");
+    var summary = document.createElement("p");
+    summary.appendChild(document.createTextNode("已识别为 "));
+    var strong = document.createElement("strong");
+    strong.textContent = info.platform.name;
+    summary.appendChild(strong);
+    summary.appendChild(document.createTextNode("；主机 " + info.host + "。"));
+    body.appendChild(summary);
+
+    var route = document.createElement("div");
+    route.className = "resolver-route";
+    [
+      ["当前页面", "只识别链接结构"],
+      ["提取码", info.code ? "已识别：" + info.code : "未发现"],
+      ["下一步", "在 YunGet 中解析"]
+    ].forEach(function (row) {
+      var cell = document.createElement("div");
+      var label = document.createElement("span");
+      label.textContent = row[0];
+      var value = document.createElement("strong");
+      value.textContent = row[1];
+      cell.appendChild(label);
+      cell.appendChild(value);
+      route.appendChild(cell);
+    });
+    body.appendChild(route);
+    box.appendChild(node);
+    box.appendChild(body);
+    result.appendChild(box);
+  }
+
+  function recognize() {
+    if (!input) return;
+    var text = input.value.trim();
+    var link = extractLink(text);
+    if (!link) {
+      showError("没有找到 http 或 https 分享链接。请粘贴完整分享文案或链接。");
+      return;
+    }
     var host = "";
     try {
       host = new URL(link).hostname.toLowerCase();
     } catch (error) {
-      return null;
-    }
-    var platform = null;
-    for (var i = 0; i < PLATFORMS.length; i += 1) {
-      var candidate = PLATFORMS[i];
-      if (host === candidate.host || host.slice(-(candidate.host.length + 1)) === "." + candidate.host) {
-        platform = candidate;
-        break;
-      }
-    }
-    if (!platform) return null;
-    var code = "";
-    var codeMatch = value.match(/(?:提取码|密码|code|pwd)\s*[:：=]?\s*([a-zA-Z0-9]{4})/i);
-    if (codeMatch) code = codeMatch[1];
-    if (!code) {
-      var tailMatch = value.match(/[（(]\s*([a-zA-Z0-9]{4})\s*[)）]/);
-      if (tailMatch) code = tailMatch[1];
-    }
-    return { platform: platform, link: link, code: code };
-  }
-
-  function formatBytes(bytes) {
-    if (bytes >= 1048576) return (bytes / 1048576).toFixed(1) + " MB";
-    if (bytes >= 1024) return Math.round(bytes / 1024) + " KB";
-    return bytes + " B";
-  }
-
-  function makeLine(parts) {
-    var line = document.createElement("p");
-    line.className = "resolver-line";
-    parts.forEach(function (part) {
-      if (typeof part === "string") {
-        line.appendChild(document.createTextNode(part));
-        return;
-      }
-      var strong = document.createElement("b");
-      strong.textContent = part.bold;
-      line.appendChild(strong);
-    });
-    return line;
-  }
-
-  function renderSegments(doneRatio) {
-    if (!segmentBox) return;
-    segmentBox.replaceChildren();
-    var doneCount = Math.round(SEGMENT_WEIGHTS.length * doneRatio);
-    SEGMENT_WEIGHTS.forEach(function (weight, index) {
-      var segment = document.createElement("i");
-      if (index < doneCount) segment.className = "done";
-      segment.style.flex = weight + " 1 0%";
-      segmentBox.appendChild(segment);
-    });
-  }
-
-  function showInitial() {
-    if (out) {
-      out.replaceChildren();
-      var paragraph = document.createElement("p");
-      paragraph.className = "resolver-empty";
-      paragraph.textContent = INITIAL_MESSAGE;
-      out.appendChild(paragraph);
-    }
-    if (legend) legend.replaceChildren();
-    renderSegments(0);
-    if (resolver) resolver.classList.remove("has-hit");
-  }
-
-  function showShare(info) {
-    if (!out || !info) {
-      showInitial();
+      showError("链接格式无法解析。请检查是否粘贴完整。");
       return;
     }
-    var bytes = 1875000000;
-    var connections = 16;
-    var segments = connections * 4;
-    var each = Math.floor(bytes / segments);
-    out.replaceChildren(
-      makeLine([
-        "识别到 ",
-        { bold: info.platform.name },
-        info.code ? " · 提取码 " : " · 没有提取码",
-        info.code ? { bold: info.code } : "",
-        "。只在当前页面本地识别。"
-      ]),
-      makeLine([
-        "示例文件 1.8 GB，按 ",
-        { bold: String(connections) },
-        " 路连接切成 ",
-        { bold: String(segments) },
-        " 段，每段约 ",
-        { bold: formatBytes(each) },
-        "。"
-      ])
-    );
-    renderSegments(0.34);
-    if (legend) {
-      legend.replaceChildren();
-      [
-        "总大小 " + formatBytes(bytes),
-        "分段 " + segments,
-        "并发 " + connections + " 路",
-        "朱红 = 示例完成段"
-      ].forEach(function (text) {
-        var item = document.createElement("span");
-        item.textContent = text;
-        legend.appendChild(item);
-      });
+    var platform = platformFor(host);
+    if (!platform) {
+      showError("这个主机不在当前页面的识别表中。仍可在 YunGet 中尝试打开，实际支持情况以应用为准。");
+      return;
     }
-    if (resolver) resolver.classList.add("has-hit");
+    showMatch({ platform: platform, host: host, code: extractCode(text) });
   }
 
-  if (input) {
+  if (form && input) {
+    form.addEventListener("submit", function (event) {
+      event.preventDefault();
+      recognize();
+    });
     input.addEventListener("input", function () {
-      showShare(detectShare(input.value));
-    });
-    showInitial();
-  }
-
-  /* ----------------------------------------------------------------- FAQ */
-
-  var questions = Array.prototype.slice.call(document.querySelectorAll(".faq-q"));
-  var answers = Array.prototype.slice.call(document.querySelectorAll(".faq-answer"));
-  var faqPanel = document.querySelector(".faq-panel");
-  var mobileFaq = window.matchMedia("(max-width: 960px)");
-
-  function resetAnswerLocations() {
-    if (!faqPanel) return;
-    answers.forEach(function (answer) {
-      if (answer.parentElement !== faqPanel) faqPanel.appendChild(answer);
-      answer.removeAttribute("data-open");
-    });
-  }
-
-  function selectFaq(id, focusAnswer) {
-    var selected = null;
-    questions.forEach(function (question) {
-      var on = question.getAttribute("data-q") === id;
-      question.setAttribute("aria-expanded", on ? "true" : "false");
-      if (on) selected = question;
-    });
-    answers.forEach(function (answer) {
-      var on = answer.getAttribute("data-a") === id;
-      answer.removeAttribute("data-open");
-      if (!on) return;
-      if (mobileFaq.matches && selected) {
-        selected.insertAdjacentElement("afterend", answer);
-      } else if (faqPanel && answer.parentElement !== faqPanel) {
-        faqPanel.appendChild(answer);
+      if (!input.value.trim() && result) {
+        result.replaceChildren();
+        var idle = document.createElement("div");
+        idle.className = "resolver-idle";
+        var node = document.createElement("span");
+        node.className = "route-node";
+        node.textContent = "00";
+        var copy = document.createElement("p");
+        copy.textContent =
+          "等待输入。这里只判断网盘主机与提取码；真正的目录解析、登录和取直链在 YunGet 应用内完成。";
+        idle.appendChild(node);
+        idle.appendChild(copy);
+        result.appendChild(idle);
       }
-      answer.setAttribute("data-open", "");
-      if (focusAnswer) answer.setAttribute("tabindex", "-1");
     });
-  }
-
-  if (questions.length) {
-    questions.forEach(function (question) {
-      question.addEventListener("click", function () {
-        selectFaq(question.getAttribute("data-q"), false);
-      });
-    });
-
-    var initialFaq = questions[0].getAttribute("data-q");
-    selectFaq(initialFaq, false);
-
-    function onFaqBreakpoint() {
-      resetAnswerLocations();
-      var open = questions.filter(function (question) {
-        return question.getAttribute("aria-expanded") === "true";
-      })[0];
-      selectFaq(open ? open.getAttribute("data-q") : initialFaq, false);
-    }
-
-    if (mobileFaq.addEventListener) mobileFaq.addEventListener("change", onFaqBreakpoint);
   }
 
   /* ------------------------------------------------------------ docs TOC */
 
-  if (mobileFaq.matches) {
-    Array.prototype.forEach.call(document.querySelectorAll(".doc-aside details"), function (details) {
-      details.open = false;
+  var docDetails = Array.prototype.slice.call(document.querySelectorAll(".doc-aside details"));
+  var docsWide = window.matchMedia("(min-width: 861px)");
+
+  function syncDocDetails() {
+    docDetails.forEach(function (details) {
+      details.open = docsWide.matches;
     });
+  }
+
+  if (docDetails.length) {
+    syncDocDetails();
+    if (docsWide.addEventListener) docsWide.addEventListener("change", syncDocDetails);
   }
 
   var tocLinks = Array.prototype.slice.call(document.querySelectorAll('.toc a[href^="#"]'));
   var tocMap = {};
   tocLinks.forEach(function (link) {
     var id = decodeURIComponent(link.getAttribute("href").slice(1));
-    var heading = document.getElementById(id);
-    if (heading) tocMap[id] = link;
+    if (document.getElementById(id)) tocMap[id] = link;
   });
 
   var tocFrame = 0;
@@ -418,15 +289,15 @@
   function updateToc() {
     tocFrame = 0;
     if (!tocLinks.length) return;
-    var activeId = "";
+    var active = "";
     Object.keys(tocMap).forEach(function (id) {
       var heading = document.getElementById(id);
-      if (heading && heading.getBoundingClientRect().top <= 170) activeId = id;
+      if (heading && heading.getBoundingClientRect().top <= 170) active = id;
     });
     tocLinks.forEach(function (link) {
       link.removeAttribute("aria-current");
     });
-    if (activeId && tocMap[activeId]) tocMap[activeId].setAttribute("aria-current", "location");
+    if (active && tocMap[active]) tocMap[active].setAttribute("aria-current", "location");
   }
 
   function queueToc() {
@@ -440,7 +311,7 @@
     updateToc();
   }
 
-  /* ------------------------------------------------------------ code copy */
+  /* ----------------------------------------------------------- code copy */
 
   Array.prototype.forEach.call(document.querySelectorAll("pre"), function (pre) {
     var button = document.createElement("button");

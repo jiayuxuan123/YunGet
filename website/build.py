@@ -187,13 +187,13 @@ class Site:
 <meta property="og:image" content="{esc(og_image)}">
 <meta name="twitter:card" content="summary_large_image">
 <meta name="color-scheme" content="light dark">
-<meta name="theme-color" content="#f1eadb" media="(prefers-color-scheme: light)">
-<meta name="theme-color" content="#171812" media="(prefers-color-scheme: dark)">
+<meta name="theme-color" content="#F4F0E6" media="(prefers-color-scheme: light)">
+<meta name="theme-color" content="#131C18" media="(prefers-color-scheme: dark)">
 <link rel="icon" href="{rel(page["dir"], "assets/favicon.svg")}" type="image/svg+xml">
 <link rel="apple-touch-icon" href="{rel(page["dir"], "assets/apple-touch-icon.png")}">
 <link rel="preload" href="{rel(page["dir"], "assets/fonts/schibsted-grotesk-latin.woff2")}" as="font" type="font/woff2" crossorigin>
-<!-- 主题在样式表之前落地，避免深色偏好下闪白。 -->
-<script>document.documentElement.classList.add("js");try{{var t=localStorage.getItem("theme");if(t==="light"||t==="dark")document.documentElement.setAttribute("data-theme",t)}}catch(e){{}}setTimeout(function(){{document.documentElement.classList.add("motion-fallback")}},1800);</script>
+<!-- 主题在样式表之前落地；内容本身不依赖脚本显隐。 -->
+<script>document.documentElement.classList.add("js");try{{var t=localStorage.getItem("theme");if(t==="light"||t==="dark")document.documentElement.setAttribute("data-theme",t)}}catch(e){{}}</script>
 <link rel="stylesheet" href="{asset(page["dir"], "site.css")}">
 </head>
 <body class="{esc(cfg.get('body_class', ''))}" data-page="{esc(page["key"])}" data-kind="{esc(self.page_kind(page))}">
@@ -210,81 +210,68 @@ class Site:
         return "inner"
 
     def header(self, page: dict) -> str:
-        """顶栏：运单抬头、路线导航、主题开关与快速取件入口。"""
+        """全站交通导向顶栏：站名、线路导航、常驻下载入口。"""
         cfg = self.cfg
         lang = page["lang"]
         brand_href = rel(page["dir"], self.index["home"].get(lang) or self.index["home"][cfg["default_lang"]])
         nav_items = []
-        for i, (key, _labels) in enumerate(cfg["nav"], 1):
+        for key, labels in cfg["nav"]:
             href = self.href(page, key)
             active = ' aria-current="page"' if page["key"] == key else ""
             nav_items.append(
-                f'<a href="{href}"{active}><span class="nav-index" aria-hidden="true">{i:02d}</span>'
-                f'<span>{esc(self.label((key, _labels), lang))}</span></a>'
+                f'<a href="{href}"{active}>{esc(self.label((key, labels), lang))}</a>'
             )
         nav = "".join(nav_items)
 
-        # 语言切换：同一 page key 在另一个语言下的地址；目标语言没有该页时退回其首页（不做死链）
         switcher = ""
         langs = cfg.get("langs") or []
         if len(langs) > 1:
             links = []
-            for code, _lab in langs:
+            for code, labels in langs:
                 if code == lang:
-                    links.append(f'<span class="lang-cur">{esc(self.label((code, _lab), lang))}</span>')
+                    links.append(f'<span class="lang-cur">{esc(self.label((code, labels), lang))}</span>')
                 else:
-                    target = self.index.get(page["key"], {}).get(code)
-                    if target is None:
-                        target = self.index["home"].get(code)
-                    links.append(f'<a href="{rel(page["dir"], target)}">{esc(self.label((code, _lab), lang))}</a>')
+                    target = self.index.get(page["key"], {}).get(code) or self.index["home"].get(code)
+                    links.append(f'<a href="{rel(page["dir"], target)}">{esc(self.label((code, labels), lang))}</a>')
             switcher = '<div class="langs" aria-label="语言">' + "".join(links) + "</div>"
 
         dl_href = self.href(page, "download")
-        nav_titles = {key: labels for key, labels in cfg["nav"]}
-        if page.get("key") in nav_titles:
-            route_title = esc(self.label((page["key"], nav_titles[page["key"]]), lang))
-        else:
-            route_title = esc(page.get("title", cfg["name"]))
         theme_label = esc(self.ui(lang, "theme"))
         menu_label = esc(self.ui(lang, "menu"))
 
-        return f"""<header class="top">
-<div class="top-rule">
-<div class="wrap top-rule-in">
-<span>YUNGET / CLOUD COURIER</span>
-<span class="route-title">{route_title}</span>
-<span>ANDROID · OPEN SOURCE</span>
-</div>
-</div>
-<div class="wrap top-in">
+        return f"""<header class="site-head" data-site-head>
+<div class="wrap head-inner">
 <a class="brand" href="{brand_href}" aria-label="{esc(cfg['name'])} 首页">
-<span class="brand-mark"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32" width="24" height="24" aria-hidden="true"><rect width="32" height="32" fill="#c83f2e"/><rect x="3" y="3" width="26" height="26" fill="#f1eadb"/><path d="M8 8h16v7H8z" fill="none" stroke="#181914" stroke-width="1.8"/><path d="M8 13h16M12 8v5M20 8v5" fill="none" stroke="#181914" stroke-width="1.5"/><path d="M10 18h5l1.5 2 1.5-2h4" fill="none" stroke="#c83f2e" stroke-width="1.8" stroke-linecap="square"/><path d="M16 20v5M12.5 22.5 16 26l3.5-3.5" fill="none" stroke="#181914" stroke-width="1.8" stroke-linecap="square" stroke-linejoin="miter"/></svg></span>
-<span class="brand-copy"><strong>{esc(cfg['name'])}</strong><small>云端包裹 / CLOUD COURIER</small></span>
+<span class="brand-mark" aria-hidden="true">
+<svg viewBox="0 0 32 32" fill="none" stroke="currentColor">
+<path d="M7 6v8.5a5 5 0 0 0 5 5h8a5 5 0 0 1 5 5V26" stroke-width="2"/>
+<circle cx="7" cy="5" r="3" fill="var(--signal)"/>
+<circle cx="25" cy="26" r="3" fill="var(--route)"/>
+</svg>
+</span>
+<span class="brand-copy"><strong>{esc(cfg['name'])}</strong><small>YUNGET · LOCAL ROUTE</small></span>
 </a>
-<nav class="top-nav" id="top-nav" aria-label="主导航">{nav}</nav>
-<div class="top-actions">
+<nav class="main-nav" id="site-nav" aria-label="主导航">{nav}
 {switcher}
 <button class="theme-toggle" type="button" data-theme-toggle aria-label="{theme_label}" aria-pressed="false">
-<svg class="theme-sun" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true"><circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M4.93 4.93l1.42 1.42M17.66 17.66l1.41 1.41M2 12h2M20 12h2M4.93 19.07l1.42-1.42M17.66 6.34l1.41-1.41"/></svg>
+<svg class="theme-sun" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true"><circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M4.9 4.9l1.4 1.4M17.7 17.7l1.4 1.4M2 12h2M20 12h2M4.9 19.1l1.4-1.4M17.7 6.3l1.4-1.4"/></svg>
 <svg class="theme-moon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true"><path d="M20.5 14.2A8.5 8.5 0 0 1 9.8 3.5 8.5 8.5 0 1 0 20.5 14.2Z"/></svg>
-<span class="theme-label">夜间</span>
+<span class="visually-hidden theme-label">夜间</span>
 </button>
-<a class="icon-link" href="https://github.com/jiayuxuan123/YunGet" aria-label="在 GitHub 查看 YunGet">
-<svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M12 .7a11.5 11.5 0 0 0-3.64 22.41c.58.1.79-.25.79-.56v-2.17c-3.22.7-3.9-1.37-3.9-1.37-.53-1.34-1.29-1.7-1.29-1.7-1.05-.72.08-.7.08-.7 1.16.08 1.78 1.2 1.78 1.2 1.03 1.77 2.71 1.26 3.37.96.1-.75.4-1.26.73-1.55-2.57-.29-5.27-1.28-5.27-5.69 0-1.26.45-2.29 1.19-3.1-.12-.29-.52-1.46.11-3.05 0 0 .97-.31 3.16 1.18a10.9 10.9 0 0 1 5.76 0c2.2-1.49 3.16-1.18 3.16-1.18.63 1.59.23 2.76.11 3.05.74.81 1.19 1.84 1.19 3.1 0 4.42-2.71 5.39-5.29 5.68.42.36.78 1.06.78 2.14v3.17c0 .31.21.67.8.56A11.5 11.5 0 0 0 12 .7Z"/></svg>
-</a>
-<a class="top-download" href="{dl_href}">取件<span aria-hidden="true">↘</span></a>
-<button class="nav-toggle" type="button" aria-expanded="false" aria-controls="top-nav" aria-label="{menu_label}">
-<span></span><span></span><span></span>
+</nav>
+<div class="head-actions">
+<a class="head-download" href="{dl_href}">下载 APK</a>
+<button class="nav-toggle" type="button" aria-expanded="false" aria-controls="site-nav" aria-label="{menu_label}">
+<span></span><span></span>
 </button>
 </div>
 </div>
-<div class="route-progress" aria-hidden="true"><i></i></div>
 </header>
 <main id="main">
 """
 
     def footer(self, page: dict) -> str:
-        """页脚：一张完整的出库运单，而不是普通站点地图。"""
+        """页脚沿用同一套线路语言，收束导航、许可与项目身份。"""
         cfg = self.cfg
         lang = page["lang"]
         cols_cfg = cfg["footer"][lang] if lang in cfg["footer"] else cfg["footer"][cfg["default_lang"]]
@@ -294,38 +281,34 @@ class Site:
                 f'<li><a href="{self.href(page, h[1:]) if h.startswith("@") else h}">{esc(t)}</a></li>'
                 for t, h in links
             )
-            cols.append(f'<section class="foot-col"><h2>{esc(title)}</h2><ul>{items}</ul></section>')
+            cols.append(f'<section class="footer-col"><h2>{esc(title)}</h2><ul>{items}</ul></section>')
 
         paras = "".join(f"<p>{p}</p>" for p in cols_cfg["paragraphs"])
-        credits = getattr(self, "foot_credits", "")
-        credits_block = (
-            f'<section class="foot-credits"><h2>{esc(self.ui(lang, "credits"))}</h2><p>{credits}</p></section>'
-            if credits else ""
-        )
-
         dl_href = self.href(page, "download")
         return f"""</main>
-<footer class="site-foot">
-<div class="foot-tear" aria-hidden="true"></div>
-<div class="wrap foot-mast">
-<div class="foot-stamp" aria-hidden="true"><span>云取</span><strong>已封装</strong><small>SEALED</small></div>
-<div class="foot-mark"><span>YUNGET</span><small>把下一条链接，变成文件。</small></div>
-<a class="foot-cta" href="{dl_href}">
-<span><small>OUTBOUND PARCEL</small><strong>{esc(self.ui(lang, "foot_cta"))}</strong></span>
+<footer class="site-footer">
+<div class="wrap footer-station">
+<div class="footer-stop"><span class="footer-node" aria-hidden="true"></span>
+<div><strong>下一站：安装 YunGet</strong><p>选择通用 APK，核对摘要后再安装。</p></div></div>
+<a class="button button-primary" href="{dl_href}">
+<span>{esc(self.ui(lang, "foot_cta"))}</span>
 <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 12h14M13 6l6 6-6 6"/></svg>
 </a>
 </div>
-<div class="wrap foot-ledger">
-<nav class="foot-nav-grid" aria-label="页脚导航">{"".join(cols)}</nav>
-<div class="foot-fine">
-<section class="foot-meta"><h2>项目身份 / MANIFEST</h2>{paras}</section>
-{credits_block}
+<div class="wrap footer-grid">
+<section class="footer-brand">
+<a class="brand" href="{self.href(page, "home")}" aria-label="{esc(cfg['name'])} 首页">
+<span class="brand-mark" aria-hidden="true"><svg viewBox="0 0 32 32" fill="none" stroke="currentColor"><path d="M7 6v8.5a5 5 0 0 0 5 5h8a5 5 0 0 1 5 5V26" stroke-width="2"/><circle cx="7" cy="5" r="3" fill="var(--signal)"/><circle cx="25" cy="26" r="3" fill="var(--route)"/></svg></span>
+<span class="brand-copy"><strong>{esc(cfg['name'])}</strong><small>YUNGET · LOCAL ROUTE</small></span></a>
+<p>{esc(cfg['tagline'])}</p>
+</section>
+<nav class="footer-nav" aria-label="页脚导航">{"".join(cols)}</nav>
 </div>
-</div>
-<div class="wrap foot-bottom">
-<span>{esc(cfg['name'])} · CLOUD COURIER</span>
-<span>OPEN SOURCE / AGPL-3.0</span>
-<a href="https://github.com/jiayuxuan123/YunGet">SOURCE ↗</a>
+<div class="wrap footer-fine">
+<div class="footer-meta">{paras}</div>
+<div class="footer-bottom">
+<span>{esc(cfg['name'])} · ANDROID · OPEN SOURCE</span>
+<a href="https://github.com/jiayuxuan123/YunGet">GitHub / Source</a>
 </div>
 </div>
 </footer>
