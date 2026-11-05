@@ -42,3 +42,4 @@ __pycache__/
 *.pyc
 # taste-skill 的测量产物（截图与 report.json）；方向单与设计笔记要留
 .taste-skill/inspect*/
+output/

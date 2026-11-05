@@ -10,6 +10,14 @@ package com.yunget.app.data.download
  * may discard it.
  */
 internal object DownloadRecoveryPolicy {
+    fun displayFailure(reason: String): String = when {
+        reason.contains("Cannot verify existing download progress", ignoreCase = true) ->
+            "无法验证已保存的下载进度，原数据已保留。请重新解析链接后重试。"
+        reason.contains("LEGACY_STABLE_KEY_AMBIGUOUS") ->
+            "旧下载记录无法安全对应，原数据已保留。请重新创建下载任务。"
+        else -> reason
+    }
+
     fun shouldDiscardPartial(reason: String): Boolean {
         val normalized = reason.lowercase()
         return normalized.contains("sha-256 校验失败") ||

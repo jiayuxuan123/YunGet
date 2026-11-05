@@ -450,6 +450,14 @@ TurboDL 可以独立用于其他项目，而 YunGet 只需要将获取到的下�
 <details>
 <summary>开发路线图：TurboDL 工业级建设与 YunGet 移动端适配</summary>
 
+**2026-11-04 执行入口更新：**完整任务卡、参数契约、网络与竞品验收、低成本模型交接现集中维护在
+TurboDL 仓库的 `engineering/industrial/README.md`。
+本地下一个执行者先读 `../TurboDL/engineering/industrial/HANDOFF.md`，以及执行板中的
+8 GiB 公网预算和风险登记。下文保留 2026-11-03
+历史分析及执行记录；其中已修复前的“观察”不能当作当前缺陷，完成状态以新台账的实际证据为准。
+规划后的第一轮引擎修复和实测已记录在 TurboDL 的
+`engineering/industrial/evidence/2026-11-04-engine-pass1.md`；这只是阶段证据，不代表全部路线图完成。
+
 ## 路线图的使用方法
 
 这是可逐项执行的工程计划，基于 2026-11-03 的本地源码梳理；不是已实现功能清单。

@@ -1339,7 +1339,7 @@ class TurboDownloadManager(
                 metadataAtMs.remove(roomId)
                 lastSeenBytes.remove(roomId)
                 dao.updateStatus(roomId, DownloadTaskEntity.STATUS_FAILED)
-                dao.updateError(roomId, ev.reason)
+                dao.updateError(roomId, DownloadRecoveryPolicy.displayFailure(ev.reason))
                 DiagLog.e(context, DiagLog.Category.DOWNLOAD, "下载失败：id=$roomId 原因=${ev.reason}")
                 if (DownloadRecoveryPolicy.shouldDiscardPartial(ev.reason)) {
                     turboOutputs.remove(roomId)?.delete()

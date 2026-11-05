@@ -205,7 +205,7 @@ fun EngineAdvancedScreen(
                         blockSizeMb = 16
                         minSegmentKb = 64
                         maxSegmentsPerTask = 0
-                        maxSplitsPerSegment = 2
+                        maxSplitsPerSegment = 3
                         connectTimeoutSec = 15
                         readTimeoutSec = 60
                         probeTimeoutSec = 6
@@ -411,7 +411,7 @@ fun EngineAdvancedScreen(
 
             ParamStepper(
                 title = "单分片再切次数",
-                description = "一个分片最多再被切成几份（默认 2）。配合「动态分片」把慢连接的尾巴" +
+                description = "一个分片最多再被切成几份（默认 3）。配合「动态分片」把慢连接的尾巴" +
                     "分给空闲连接；设为 0 等于关闭这项优化。",
                 value = maxSplitsPerSegment,
                 range = 0..16,
