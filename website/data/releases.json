@@ -1,51 +1,110 @@
 {
   "repo": "jiayuxuan123/YunGet",
   "latest": {
-    "tag": "v2.7.24",
-    "name": "YunGet 2.7.24：集成 TurboDL 0.5.0.0 与断点续传安全升级",
-    "published": "2026-11-05T15:40:04Z",
+    "tag": "v2.7.25",
+    "name": "YunGet 2.7.25：上游功能同步与内嵌媒体预览",
+    "published": "2026-11-06T05:09:03Z",
     "prerelease": false,
-    "url": "https://github.com/jiayuxuan123/YunGet/releases/tag/v2.7.24",
-    "summary": "YunGet 2.7.24 —— 集成 TurboDL 0.5.0.0 核心引擎与断点续传安全升级\n【下载引擎升级】\n· 升级至 TurboDL 0.5.0.0：引入目标文件身份感知与严格续传控制；\n· 无法核验断点时，明确给出友好提示并安全保留已下载数据，避免大文件被误删重下；\n· 同步引擎 maxSplitsPerSegment = 3 默认值，优化弱网及慢连接尾段下载速率。\n【安装包说明】\n· 0-universal-release.apk：通用过渡包（优先排在首位，兼容旧版更新器）；\n· app-arm64-v8a-release.apk：针对 64 位主流机型深度优化；\n· app-armeabi-v7a-release.apk：适用于 32 位老旧设备；\n· app-x86_64-release.apk：适用于 64 位模拟器或 x86 架构平板。",
+    "url": "https://github.com/jiayuxuan123/YunGet/releases/tag/v2.7.25",
+    "summary": "YunGet 2.7.25（versionCode 73）\r\n\r\n同步 CYQawa/YunX 上游功能，并保留 YunGet 的 TurboDL 接入及账号凭据加密。\r\n· 十家个人盘上传、上传进度/取消与列表刷新。\r\n· 139 口令解析、提取码及剪贴板识别。\r\n· 文件缩略图与在线图片、视频、音频、文本预览。\r\n· Media3 内嵌播放器，可查看下载完成的本地媒体；使用系统解码器，没有额外 FFmpeg 原生解码包。\r\n· 接入音频提取、分离音轨合并与动图合成的下载后处理。\r\n· 账号排序、隐藏未登录账号；延续现有 Material 风格，补充导航、列表、进度与速度图动效。\r\n· 修复部分网盘登录/分页/请求头问题及多账号 Cookie 更新目标。\r\n\r\n下载说明：不确定架构时安装 universal APK。arm64-v8a 通常适用于近年的 Android 手机。四种应用 A…",
     "assets": [
       {
-        "name": "0-universal-release.apk",
-        "size": 33170340,
-        "url": "https://github.com/jiayuxuan123/YunGet/releases/download/v2.7.24/0-universal-release.apk",
+        "name": "0-YunGet-2.7.25-universal.apk",
+        "size": 28007327,
+        "url": "https://github.com/jiayuxuan123/YunGet/releases/download/v2.7.25/0-YunGet-2.7.25-universal.apk",
         "downloads": 0,
-        "sha256": "e8ad7f9dbe30cec50631d77834c31fbe01508eb9262413d6adc6e385277b9d00"
+        "sha256": "46c9e3bfc536f6159d33fe73bfafe0c64f9919f64cf8e8a5c27c80e2587d77a9"
       },
       {
-        "name": "app-arm64-v8a-release.apk",
-        "size": 31918611,
-        "url": "https://github.com/jiayuxuan123/YunGet/releases/download/v2.7.24/app-arm64-v8a-release.apk",
+        "name": "SHA256SUMS.txt",
+        "size": 482,
+        "url": "https://github.com/jiayuxuan123/YunGet/releases/download/v2.7.25/SHA256SUMS.txt",
         "downloads": 0,
-        "sha256": "b40fd7d94ad1341a4d45fb0c57160d02c5633b9fed905ee3ddf339b7ce7327e9"
+        "sha256": "e647cd079c5076f24815b7676b3fb0af4e14796c931a77bab057b29ab71aa160"
       },
       {
-        "name": "app-armeabi-v7a-release.apk",
-        "size": 23768525,
-        "url": "https://github.com/jiayuxuan123/YunGet/releases/download/v2.7.24/app-armeabi-v7a-release.apk",
+        "name": "YunGet-2.7.25-arm64-v8a.apk",
+        "size": 26755600,
+        "url": "https://github.com/jiayuxuan123/YunGet/releases/download/v2.7.25/YunGet-2.7.25-arm64-v8a.apk",
         "downloads": 0,
-        "sha256": "1ac77774d93c53883923754769ab2c2ab5b029a6e047e677b667390e89fb0ecc"
+        "sha256": "a4c6b022a33e10e1ec160dfff6a2646d4994107f578f62617dae98108b396de7"
       },
       {
-        "name": "app-x86_64-release.apk",
-        "size": 23805953,
-        "url": "https://github.com/jiayuxuan123/YunGet/releases/download/v2.7.24/app-x86_64-release.apk",
+        "name": "YunGet-2.7.25-armeabi-v7a.apk",
+        "size": 26724002,
+        "url": "https://github.com/jiayuxuan123/YunGet/releases/download/v2.7.25/YunGet-2.7.25-armeabi-v7a.apk",
         "downloads": 0,
-        "sha256": "77c03c6b83d080f2809403e995a7d89cc12b86ce3aaf3f66ec33678d3f31981b"
+        "sha256": "b09254e1853b97f32cc3c60e2f62f43b2aeabd5667c56c5003a4631651648262"
       },
       {
-        "name": "YunGet-v2.7.24-SHA256SUMS.txt",
-        "size": 369,
-        "url": "https://github.com/jiayuxuan123/YunGet/releases/download/v2.7.24/YunGet-v2.7.24-SHA256SUMS.txt",
+        "name": "YunGet-2.7.25-x86_64.apk",
+        "size": 26761438,
+        "url": "https://github.com/jiayuxuan123/YunGet/releases/download/v2.7.25/YunGet-2.7.25-x86_64.apk",
         "downloads": 0,
-        "sha256": "db311a4bc5b65482de07b2337f4de165b424ffc4d3c1afca40eb750181c00d7f"
+        "sha256": "654f9312b54d9cb1cfb3bdd430d94e8099b74665cf04413900a42f04333f292f"
+      },
+      {
+        "name": "YunGet-aria2-kernel-arm64-v8a.apk",
+        "size": 8136903,
+        "url": "https://github.com/jiayuxuan123/YunGet/releases/download/v2.7.25/YunGet-aria2-kernel-arm64-v8a.apk",
+        "downloads": 0,
+        "sha256": "5ab894b16dff5bb9b9b1981ba68eb4aad661f8570d0204ea6e2e66e9fa54ff5d"
       }
     ]
   },
   "releases": [
+    {
+      "tag": "v2.7.25",
+      "name": "YunGet 2.7.25：上游功能同步与内嵌媒体预览",
+      "published": "2026-11-06T05:09:03Z",
+      "prerelease": false,
+      "url": "https://github.com/jiayuxuan123/YunGet/releases/tag/v2.7.25",
+      "summary": "YunGet 2.7.25（versionCode 73）\r\n\r\n同步 CYQawa/YunX 上游功能，并保留 YunGet 的 TurboDL 接入及账号凭据加密。\r\n· 十家个人盘上传、上传进度/取消与列表刷新。\r\n· 139 口令解析、提取码及剪贴板识别。\r\n· 文件缩略图与在线图片、视频、音频、文本预览。\r\n· Media3 内嵌播放器，可查看下载完成的本地媒体；使用系统解码器，没有额外 FFmpeg 原生解码包。\r\n· 接入音频提取、分离音轨合并与动图合成的下载后处理。\r\n· 账号排序、隐藏未登录账号；延续现有 Material 风格，补充导航、列表、进度与速度图动效。\r\n· 修复部分网盘登录/分页/请求头问题及多账号 Cookie 更新目标。\r\n\r\n下载说明：不确定架构时安装 universal APK。arm64-v8a 通常适用于近年的 Android 手机。四种应用 A…",
+      "assets": [
+        {
+          "name": "0-YunGet-2.7.25-universal.apk",
+          "size": 28007327,
+          "url": "https://github.com/jiayuxuan123/YunGet/releases/download/v2.7.25/0-YunGet-2.7.25-universal.apk",
+          "downloads": 0,
+          "sha256": "46c9e3bfc536f6159d33fe73bfafe0c64f9919f64cf8e8a5c27c80e2587d77a9"
+        },
+        {
+          "name": "SHA256SUMS.txt",
+          "size": 482,
+          "url": "https://github.com/jiayuxuan123/YunGet/releases/download/v2.7.25/SHA256SUMS.txt",
+          "downloads": 0,
+          "sha256": "e647cd079c5076f24815b7676b3fb0af4e14796c931a77bab057b29ab71aa160"
+        },
+        {
+          "name": "YunGet-2.7.25-arm64-v8a.apk",
+          "size": 26755600,
+          "url": "https://github.com/jiayuxuan123/YunGet/releases/download/v2.7.25/YunGet-2.7.25-arm64-v8a.apk",
+          "downloads": 0,
+          "sha256": "a4c6b022a33e10e1ec160dfff6a2646d4994107f578f62617dae98108b396de7"
+        },
+        {
+          "name": "YunGet-2.7.25-armeabi-v7a.apk",
+          "size": 26724002,
+          "url": "https://github.com/jiayuxuan123/YunGet/releases/download/v2.7.25/YunGet-2.7.25-armeabi-v7a.apk",
+          "downloads": 0,
+          "sha256": "b09254e1853b97f32cc3c60e2f62f43b2aeabd5667c56c5003a4631651648262"
+        },
+        {
+          "name": "YunGet-2.7.25-x86_64.apk",
+          "size": 26761438,
+          "url": "https://github.com/jiayuxuan123/YunGet/releases/download/v2.7.25/YunGet-2.7.25-x86_64.apk",
+          "downloads": 0,
+          "sha256": "654f9312b54d9cb1cfb3bdd430d94e8099b74665cf04413900a42f04333f292f"
+        },
+        {
+          "name": "YunGet-aria2-kernel-arm64-v8a.apk",
+          "size": 8136903,
+          "url": "https://github.com/jiayuxuan123/YunGet/releases/download/v2.7.25/YunGet-aria2-kernel-arm64-v8a.apk",
+          "downloads": 0,
+          "sha256": "5ab894b16dff5bb9b9b1981ba68eb4aad661f8570d0204ea6e2e66e9fa54ff5d"
+        }
+      ]
+    },
     {
       "tag": "v2.7.24",
       "name": "YunGet 2.7.24：集成 TurboDL 0.5.0.0 与断点续传安全升级",
@@ -58,35 +117,35 @@
           "name": "0-universal-release.apk",
           "size": 33170340,
           "url": "https://github.com/jiayuxuan123/YunGet/releases/download/v2.7.24/0-universal-release.apk",
-          "downloads": 0,
+          "downloads": 413,
           "sha256": "e8ad7f9dbe30cec50631d77834c31fbe01508eb9262413d6adc6e385277b9d00"
         },
         {
           "name": "app-arm64-v8a-release.apk",
           "size": 31918611,
           "url": "https://github.com/jiayuxuan123/YunGet/releases/download/v2.7.24/app-arm64-v8a-release.apk",
-          "downloads": 0,
+          "downloads": 445,
           "sha256": "b40fd7d94ad1341a4d45fb0c57160d02c5633b9fed905ee3ddf339b7ce7327e9"
         },
         {
           "name": "app-armeabi-v7a-release.apk",
           "size": 23768525,
           "url": "https://github.com/jiayuxuan123/YunGet/releases/download/v2.7.24/app-armeabi-v7a-release.apk",
-          "downloads": 0,
+          "downloads": 4,
           "sha256": "1ac77774d93c53883923754769ab2c2ab5b029a6e047e677b667390e89fb0ecc"
         },
         {
           "name": "app-x86_64-release.apk",
           "size": 23805953,
           "url": "https://github.com/jiayuxuan123/YunGet/releases/download/v2.7.24/app-x86_64-release.apk",
-          "downloads": 0,
+          "downloads": 5,
           "sha256": "77c03c6b83d080f2809403e995a7d89cc12b86ce3aaf3f66ec33678d3f31981b"
         },
         {
           "name": "YunGet-v2.7.24-SHA256SUMS.txt",
           "size": 369,
           "url": "https://github.com/jiayuxuan123/YunGet/releases/download/v2.7.24/YunGet-v2.7.24-SHA256SUMS.txt",
-          "downloads": 0,
+          "downloads": 1,
           "sha256": "db311a4bc5b65482de07b2337f4de165b424ffc4d3c1afca40eb750181c00d7f"
         }
       ]
@@ -103,14 +162,14 @@
           "name": "0-universal-release.apk",
           "size": 33140146,
           "url": "https://github.com/jiayuxuan123/YunGet/releases/download/v2.7.23/0-universal-release.apk",
-          "downloads": 3183,
+          "downloads": 3194,
           "sha256": "c06f3341eae4a3beb58e1aeac77cb45db06e33fbfc1d9f7ec2c0092af4bbb104"
         },
         {
           "name": "app-arm64-v8a-release.apk",
           "size": 31888418,
           "url": "https://github.com/jiayuxuan123/YunGet/releases/download/v2.7.23/app-arm64-v8a-release.apk",
-          "downloads": 154,
+          "downloads": 162,
           "sha256": "a867b82936909befdfaa078c73c0c5d8382292d81197f4c0e942740f83dd5782"
         },
         {
@@ -301,7 +360,7 @@
           "name": "YunGet-2.7.12-release.apk",
           "size": 32843196,
           "url": "https://github.com/jiayuxuan123/YunGet/releases/download/v2.7.12/YunGet-2.7.12-release.apk",
-          "downloads": 5097,
+          "downloads": 5099,
           "sha256": "3291ae7baf0b373978c4dc849c106baf33d424a1585f37d4c5c424c76beb8ed2"
         }
       ]
@@ -335,7 +394,7 @@
           "name": "YunGet-2.7.10-release.apk",
           "size": 31682190,
           "url": "https://github.com/jiayuxuan123/YunGet/releases/download/v2.7.10/YunGet-2.7.10-release.apk",
-          "downloads": 4542,
+          "downloads": 4543,
           "sha256": "8d1c4662667ba104ae4208a7113c4fd646314508218df021559de1c5dbcc184e"
         }
       ]
@@ -437,7 +496,7 @@
           "name": "YunGet-2.7.4-release.apk",
           "size": 31621011,
           "url": "https://github.com/jiayuxuan123/YunGet/releases/download/v2.7.4/YunGet-2.7.4-release.apk",
-          "downloads": 1413,
+          "downloads": 1414,
           "sha256": "c6921e4d2a11d8e46239c84050c46a8cf9fa3bea45a920825725418f902bd32d"
         }
       ]
@@ -454,7 +513,7 @@
           "name": "YunGet-2.7.3-release.apk",
           "size": 31593625,
           "url": "https://github.com/jiayuxuan123/YunGet/releases/download/v2.7.3/YunGet-2.7.3-release.apk",
-          "downloads": 461,
+          "downloads": 462,
           "sha256": "2affb2e8958b8b147606aacd7c77815d238133c9e820e5110c41aebff8475767"
         }
       ]
@@ -575,23 +634,6 @@
           "url": "https://github.com/jiayuxuan123/YunGet/releases/download/v2.6.18/YunGet-2.6.18-release.apk",
           "downloads": 185,
           "sha256": "12c0e101b075995d546b80323576c4ad586e583f58668cdbb28917b20d45a695"
-        }
-      ]
-    },
-    {
-      "tag": "v2.6.17",
-      "name": "YunGet 2.6.17：全量同步上游（4 个新网盘、内置 Gopeed 引擎、磁力与口令、一批修复）",
-      "published": "2026-10-07T14:34:30Z",
-      "prerelease": false,
-      "url": "https://github.com/jiayuxuan123/YunGet/releases/tag/v2.6.17",
-      "summary": "YunGet 2.6.17：全量同步上游（4 个新网盘、内置 Gopeed 引擎、磁力与口令、一批修复）\n---\n新增：4 个网盘\n本次同步上游一周的更新，一次性接入四个平台，每个都含**登录 / 云盘管理 / 分享解析 / 转存 / 下载**全链路：\n| 平台 | 登录方式 |\n|---|---|\n| **115 网盘** | 网页登录（Cookie 含 UID/CID/SEID/KID 四键） |\n| **光鸭云盘** | 账号密码（换 access/refresh token + 设备标识） |\n| **蓝奏云优享版** | 账号密码或网页登录 |\n| **蓝奏云** | 网页登录（Cookie 需同时含 ylogin 与 phpdisk_info） |\n凭证与既有平台一致：**AES-GCM + Android Keystore 加密**后落库，密钥不可导出。\n数据库版本 11 →…",
-      "assets": [
-        {
-          "name": "YunGet-2.6.17-release.apk",
-          "size": 29247705,
-          "url": "https://github.com/jiayuxuan123/YunGet/releases/download/v2.6.17/YunGet-2.6.17-release.apk",
-          "downloads": 39,
-          "sha256": "0884ced6d4a8de22cc826558349926645dfe216e2b55c4e84648508db4878604"
         }
       ]
     }

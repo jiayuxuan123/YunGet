@@ -4,7 +4,7 @@
 >
 > **本项目是 [CYQawa/YunX（云析）](https://github.com/CYQawa/YunX) 的二次开发版本**，在其协议与架构基础上进行功能扩展，并将下载能力逐步迁移至独立的 [TurboDL](https://github.com/jiayuxuan123/TurboDL) 下载引擎。遵循 GNU AGPL-3.0 协议开源。
 
-当前版本 **2.7.23**（versionCode 71）· Android 7.0+（minSdk 24，targetSdk 34）· 内置 TurboDL 0.4.1.0
+当前版本 **2.7.25**（versionCode 73）· Android 7.0+（minSdk 24，targetSdk 36）· 内置 TurboDL 0.5.0.0
 
 **官网**：[jiayuxuan123.github.io/YunGet](https://jiayuxuan123.github.io/YunGet/) —— 下载、使用说明、常见问题、隐私与条款
 
@@ -19,6 +19,14 @@
 - 本项目在上游协议解析、网盘功能和 Android 应用结构基础上进行了二次开发。
 - 下载能力已迁移到独立的 [TurboDL](https://github.com/jiayuxuan123/TurboDL) SDK：日常的直链下载走它，HLS 通过它的插件机制接入。项目早期自己写的那套下载实现仍留在代码里，作为可选的兜底引擎。
 - **赞赏渠道说明**：应用内「支持开发」页的赞赏码仅面向**本二次开发版本**的维护；若想支持上游原项目作者，请移步 [上游仓库](https://github.com/CYQawa/YunX) 的捐赠渠道，避免权益混淆。
+
+## 2.7.25 更新
+
+同步上游十家个人盘上传、139 口令、缩略图、在线预览与账号排序；新增基于 Media3 的内嵌播放器，可查看在线及已下载的本地媒体。延续现有 Material 风格，补充导航、列表及进度动效。
+
+TurboDL 保持内置，Gopeed 联网获取内核，aria2 拆成独立可选 ARM64 内核 APK。普通使用只需安装应用 APK；不确定设备架构时选择 universal。应用更新器与官网下载入口均排除可选内核包。Release 提供四种应用包、一个可选内核和 SHA-256 校验文件。
+
+真实账号上传、真机播放及不同 OEM 的可选内核运行仍待设备验收。完整变更与验证范围见 [迁入记录](engineering/upstream-sync-2026-11-06.md)。
 
 ## 支持平台
 
