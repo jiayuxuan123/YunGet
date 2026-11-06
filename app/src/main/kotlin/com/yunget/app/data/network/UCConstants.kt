@@ -1,3 +1,21 @@
+/*
+ * YunX (云析) - A network drive share-link parser and high-speed downloader for Android.
+ * Copyright (C) 2026 CYQawa
+ *
+ * This program is free software: you can redistribute it and/or modify
+ * it under the terms of the GNU Affero General Public License as published by
+ * the Free Software Foundation, either version 3 of the License, or
+ * (at your option) any later version.
+ *
+ * This program is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+ * GNU Affero General Public License for more details.
+ *
+ * You should have received a copy of the GNU Affero General Public License
+ * along with this program.  If not, see <https://www.gnu.org/licenses/>.
+ */
+
 package com.yunget.app.data.network
 
 /**
@@ -23,6 +41,9 @@ object UCConstants {
 
     /** 业务 API 基础域名 */
     const val API_BASE = "https://pc-api.uc.cn"
+
+    /** 列表缩略图接口所在域名（只有它需要账号 Cookie，见 QuarkConstants.THUMBNAIL_HOST 的说明） */
+    const val THUMBNAIL_HOST = "pc-api.uc.cn"
 
     /** 获取分享 Token（与夸克路径相同，仅域名/pr 不同） */
     const val SHARE_TOKEN_URL = "$API_BASE/1/clouddrive/share/sharepage/token?pr=UCBrowser&fr=pc"
@@ -78,6 +99,19 @@ object UCConstants {
         "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) " +
             "uc-cloud-drive/1.6.1 Chrome/100.0.4896.160 Electron/18.3.5.16-b62cf9c50d Safari/537.36 Channel/ucpan_other_ch"
 
+    /**
+     * 游客（未登录）链路专用 UA：uc-cloud-drive Electron 客户端。
+     * 取链与下字节都用它 —— 依据两个参考实现的一致取值（LinkSwift 分享页匿名链路的
+     * `config.$uc.api.ua.main`、panweb-parser 的 `UC_DOWNLOAD_HEADERS`），游客链路的风控比登录态严。
+     * 登录态仍用 [USER_AGENT]，不动既有链路。
+     */
+    const val GUEST_UA =
+        "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) " +
+            "uc-cloud-drive/2.5.20 Chrome/100.0.4896.160 Electron/18.3.5.4-b478491100 Safari/537.36 Channel/pckk_other_ch"
+
+    /** 与 [GUEST_UA] 配套的 Sec-Ch-Ua（LinkSwift 分享页匿名链路同款头） */
+    const val GUEST_SEC_CH_UA = "\"Not=A?Brand\";v=\"99\", \"Chromium\";v=\"100\", \"Google Chrome\";v=\"100\""
+
     /** 云盘下载直链（抓包：?pr=UCBrowser&fr=pc&sys=win32&ve=1.6.1；个人云盘文件用，非 entry=ft 分享通道） */
     const val CLOUD_DOWNLOAD_URL = "$API_BASE/1/clouddrive/file/download"
 
@@ -85,7 +119,7 @@ object UCConstants {
     const val DELETE_URL = "$API_BASE/1/clouddrive/file/delete?pr=UCBrowser&fr=pc"
 
     /** 临时转存目录名 */
-    const val TEMP_DIR_NAME = "YunGet临时转存"
+    const val TEMP_DIR_NAME = "YunX临时转存"
 
     /** 会话刷新探测接口：任意接口均可，用于重新下发 __puus（AList quark_uc util.go:224 用 /config，UC/夸克通用） */
     const val CONFIG_URL = "$API_BASE/1/clouddrive/config?pr=UCBrowser&fr=pc"

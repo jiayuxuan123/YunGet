@@ -34,7 +34,8 @@ internal data class MultiSelectAction(
 @Composable
 internal fun MultiSelectBar(
     count: Int,
-    actions: List<MultiSelectAction>
+    actions: List<MultiSelectAction>,
+    busy: Boolean = false,
 ) {
     Box(modifier = Modifier.fillMaxSize()) {
         Surface(
@@ -55,7 +56,7 @@ internal fun MultiSelectBar(
                     Column(
                         horizontalAlignment = Alignment.CenterHorizontally,
                         modifier = Modifier
-                            .clickable(onClick = action.onClick)
+                            .clickable(enabled = !busy, onClick = action.onClick)
                             .padding(horizontal = 8.dp, vertical = 4.dp)
                     ) {
                         Icon(

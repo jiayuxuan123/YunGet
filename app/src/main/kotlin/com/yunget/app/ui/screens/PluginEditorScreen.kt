@@ -68,7 +68,7 @@ import com.yunget.app.data.plugin.PluginIds
 import com.yunget.app.data.plugin.PluginRepository
 import com.yunget.app.data.plugin.sharedPluginRuntime
 import com.yunget.app.ui.SnackbarController
-import com.yunget.app.ui.components.YunGetWavyLoading
+import com.yunget.app.ui.components.YunGetLoading
 import com.yunget.app.ui.theme.effectsDefault
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
@@ -216,7 +216,7 @@ fun PluginEditorScreen(
                     .background(MaterialTheme.colorScheme.surfaceContainerLowest, RoundedCornerShape(10.dp))
             ) {
                 if (!loaded) {
-                    Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) { YunGetWavyLoading() }
+                    Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) { YunGetLoading() }
                 } else {
                     Row(
                         modifier = Modifier
@@ -310,7 +310,7 @@ fun PluginEditorScreen(
                 modifier = Modifier.fillMaxWidth()
             ) {
                 if (busy) {
-                    YunGetWavyLoading(modifier = Modifier.height(18.dp))
+                    YunGetLoading(modifier = Modifier.height(18.dp))
                 } else {
                     Icon(Icons.Outlined.Save, contentDescription = null, modifier = Modifier.height(18.dp))
                     Spacer(Modifier.width(6.dp))

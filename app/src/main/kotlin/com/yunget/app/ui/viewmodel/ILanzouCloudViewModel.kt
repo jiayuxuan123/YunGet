@@ -19,6 +19,18 @@
 
 package com.yunget.app.ui.viewmodel
 
+
+
+import android.content.ContentResolver
+
+import android.net.Uri
+
+import com.yunget.app.data.network.HttpClients
+
+import com.yunget.app.data.upload.UploadProgress
+
+import com.yunget.app.data.upload.UploadRunner
+
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateListOf
 import androidx.compose.runtime.mutableStateOf
@@ -32,6 +44,9 @@ import com.yunget.app.data.network.ILanzouConstants
 import com.yunget.app.data.network.model.DownloadLink
 import com.yunget.app.data.network.model.ShareFile
 import com.yunget.app.data.repository.ILanzouAccountRepository
+
+import com.yunget.app.ui.preview.CloudPreview
+
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -338,103 +353,226 @@ class ILanzouCloudViewModel(
         }
     }
 
-    fun startDownload() {
-        val pd = pendingDownload ?: return
-        downloadLink = null
-        pendingDownload = null
+
+
+    /**
+
+     * 在线预览（云盘文件）：优享版取链要 appToken + uuid + userId（[credential] 会补全缺失的 userId），
+
+     * 请求头与下载共用 [downloadHeaders]，否则直链 403。
+
+     */
+
+    fun openPreview() {
+
+        val file = actionFile ?: return
+
+        if (!CloudPreview.canPreview(file)) return
+
         viewModelScope.launch {
             isOperating = true
             try {
-                // 本项目未移植 DownloadManager 的 platform 参数，此处省略
-                downloadManager.enqueue(
-                    url = pd.url,
-                    fileName = pd.fileName,
-                    size = pd.size,
-                    headers = pd.headers
-                )
-                cloudMessage = "已加入下载：${pd.fileName}"
+
+                val link = fetchLink(credential(), file)
+
+                    ?: throw IllegalStateException("获取下载链接失败")
+
+                // 先清 actionFile 再开预览：否则关掉预览时文件操作弹窗会重新弹出来
+
                 actionFile = null
-                downloadTriggered++
+
+                CloudPreview.open(file, link.downloadUrl, downloadHeaders(), isHls = link.isHls)
+
             } catch (e: Exception) {
-                cloudMessage = e.message ?: "下载失败"
+
+                cloudMessage = e.message ?: "预览失败"
+
             } finally {
                 isOperating = false
             }
         }
     }
+
+
+
+    fun startDownload() {
+
+        val pd = pendingDownload ?: return
+
+        downloadLink = null
+        pendingDownload = null
+
+        viewModelScope.launch {
+
+            isOperating = true
+
+            try {
+
+                // 本项目未移植 DownloadManager 的 platform 参数，此处省略
+
+                downloadManager.enqueue(
+
+                    url = pd.url,
+
+                    fileName = pd.fileName,
+
+                    size = pd.size,
+
+                    headers = pd.headers
+
+                )
+
+                cloudMessage = "已加入下载：${pd.fileName}"
+
+                actionFile = null
+
+                downloadTriggered++
+
+            } catch (e: Exception) {
+
+                cloudMessage = e.message ?: "下载失败"
+
+            } finally {
+
+                isOperating = false
+
+            }
+
+        }
+
+    }
+
+
 
     fun dismissDownloadDialog() {
+
         downloadLink = null
+
         pendingDownload = null
+
     }
+
+
 
     fun renameFile(newName: String) {
+
         val file = actionFile ?: return
+
         viewModelScope.launch {
             isOperating = true
             try {
                 val cred = credential()
+
                 if (file.isdir) {
+
                     api.renameFolder(cred.appToken, cred.uuid, folderNumeric(file.fid), newName)
+
                 } else {
+
                     api.renameFile(cred.appToken, cred.uuid, fileNumeric(file.fid), newName)
+
                 }
+
                 cloudMessage = "已重命名"
+
                 actionFile = null
+
                 reloadCurrent()
             } catch (e: Exception) {
+
                 cloudMessage = e.message ?: "重命名失败"
+
             } finally {
                 isOperating = false
             }
         }
     }
+
+
 
     fun createFolder(name: String) {
+
         val newName = name.trim()
+
         if (newName.isEmpty()) return
+
         val parentId = (uiState.value as? ILanzouCloudUiState.Loaded)?.dirId ?: ILanzouConstants.ROOT_FOLDER_ID
+
         viewModelScope.launch {
             isOperating = true
             try {
                 val cred = credential()
+
                 api.createDir(cred.appToken, cred.uuid, parentId, newName)
+
                 cloudMessage = "已创建文件夹「$newName」"
+
                 reloadCurrent()
             } catch (e: Exception) {
+
                 cloudMessage = e.message ?: "新建文件夹失败"
+
             } finally {
                 isOperating = false
             }
         }
     }
+
+
 
     fun moveFile(toDirId: String) {
+
         val file = actionFile ?: return
+
         viewModelScope.launch {
+
             isOperating = true
+
             try {
+
                 val cred = credential()
+
                 if (file.isdir) {
+
                     api.moveEntries(cred.appToken, cred.uuid, listOf(folderNumeric(file.fid)), emptyList(), toDirId)
+
                 } else {
+
                     api.moveEntries(cred.appToken, cred.uuid, emptyList(), listOf(fileNumeric(file.fid)), toDirId)
+
                 }
+
                 cloudMessage = "已移动到目标目录"
+
                 actionFile = null
+
                 reloadCurrent()
+
             } catch (e: Exception) {
+
                 cloudMessage = e.message ?: "移动失败"
+
             } finally {
+
                 isOperating = false
+
             }
+
         }
+
     }
 
+
+
     /** 蓝奏云优享版暂不提供创建分享接口。 */
+
     fun shareFile() {
+
         cloudMessage = "蓝奏云优享版暂不支持创建分享"
+
     }
+
+
 
     fun deleteFile() {
         val file = actionFile ?: return
@@ -605,6 +743,72 @@ class ILanzouCloudViewModel(
             }
         }
     }
+
+
+
+    // ---------- 上传（蓝奏优享 七牛直传） ----------
+
+
+
+    /** 上传进度（null 表示没有任务）；上传弹窗直接读这里 */
+
+    val uploadProgress: UploadProgress? get() = uploadRunner.progress
+
+
+
+    private val uploadRunner = UploadRunner(viewModelScope, { HttpClients.apiClient() }) { outcome ->
+
+        // 传成功过就刷新列表（失败也刷：已经落库的文件要立刻可见）
+
+        if (outcome.uploaded > 0 || outcome.failed > 0) reloadCurrent()
+
+        cloudMessage = when {
+
+            outcome.error != null -> outcome.error
+
+            outcome.cancelled -> "已取消上传"
+
+            else -> "已上传 ${outcome.uploaded} 个文件"
+
+        }
+
+    }
+
+
+
+    /**
+
+     * 上传选中的本地文件到**当前目录**。
+
+     *
+
+     * 目标目录在这里就先固定下来（上传期间用户可能切目录、返回上级），
+
+     * 凭据留到 IO 线程现取，避免拿着已过期的 Cookie 一路失败。
+
+     */
+
+    fun uploadFiles(resolver: ContentResolver, uris: List<Uri>) {
+
+        val dir = (uiState.value as? ILanzouCloudUiState.Loaded)?.dirId ?: ILanzouConstants.ROOT_FOLDER_ID
+
+        uploadRunner.start(resolver, uris) { io, source ->
+
+            val cred = credential()
+
+            api.upload(io, source, dir, cred.appToken, cred.uuid)
+
+        }
+
+    }
+
+
+
+    /** 取消当前上传（正在发的那一段会立刻被打断） */
+
+    fun cancelUpload() = uploadRunner.cancel()
+
+
 
     class Factory(
         private val api: ILanzouApi,

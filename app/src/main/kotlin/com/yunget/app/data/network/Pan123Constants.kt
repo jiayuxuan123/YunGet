@@ -1,20 +1,26 @@
+/*
+ * YunX (云析) - A network drive share-link parser and high-speed downloader for Android.
+ * Copyright (C) 2026 CYQawa
+ *
+ * This program is free software: you can redistribute it and/or modify
+ * it under the terms of the GNU Affero General Public License as published by
+ * the Free Software Foundation, either version 3 of the License, or
+ * (at your option) any later version.
+ *
+ * This program is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+ * GNU Affero General Public License for more details.
+ *
+ * You should have received a copy of the GNU Affero General Public License
+ * along with this program.  If not, see <https://www.gnu.org/licenses/>.
+ */
+
 package com.yunget.app.data.network
 
-/**
- * 123 云盘（123pan / 123865）常量（依据《123网盘API文档_面向Agent.md》）。
- * 两类主域名：
- * - 分享解析域：mshare.123pan.cn（匿名分享读取）、www.123865.com（分享下载信息）、www.123pan.com / yun.123pan.cn（业务 API）；
- * - 登录 / 个人盘域：user.123pan.cn（登录）、yun.123pan.cn（个人盘 API）。
- *
- * 鉴权：所有 yun.123pan.cn / www.123865.com 的鉴权请求带 `auth-key` / `auth-value` 签名头（第 6 节），
- * 登录接口与匿名分享列表无需签名。
- */
 object Pan123Constants {
 
     // ---------- BaseURL（按用途，文档 §3.1） ----------
-
-    /** 登录 */
-    const val LOGIN_BASE = "https://user.123pan.cn"
 
     /** 个人盘业务 API / 分享列表（主域式） */
     const val API_BASE = "https://yun.123pan.cn"
@@ -24,8 +30,24 @@ object Pan123Constants {
 
     // ---------- API 路径（严格按文档 §5，不要自行加/去 /b） ----------
 
-    /** 登录（POST /api/user/sign_in，无签名） */
-    const val LOGIN_URL = "$LOGIN_BASE/api/user/sign_in"
+    /** 网页登录页：官网个人盘主页（未登录自动进入登录流程；登录后 localStorage 写入 authorToken） */
+    const val WEB_LOGIN_URL = "https://yun.123pan.cn/"
+
+    /**
+     * 账号密码登录（原生接口，与网页登录并列的第二条路）。
+     * 注意域名是 user.123pan.cn，与个人盘 API 的 yun.123pan.cn 不是同一个站。
+     */
+    const val SIGN_IN_URL = "https://user.123pan.cn/api/user/sign_in"
+
+    /** 账号密码登录的 Origin / Referer（缺了会被风控拒绝） */
+    const val SIGN_IN_ORIGIN = "https://user.123pan.cn"
+    const val SIGN_IN_REFERER = "https://user.123pan.cn/"
+
+    /** 账号密码登录专用 app-version（网页端是 3，登录接口要 132，两者不能混用） */
+    const val APP_VERSION_SIGN_IN = "132"
+
+    /** 网页登录态在 localStorage 中的键名：值即 Bearer JWT（与旧 sign_in 返回的 data.token 同源同形） */
+    const val LOCAL_STORAGE_TOKEN_KEY = "authorToken"
 
     /** 分享文件列表（GET /b/api/share/get，匿名、无签名） */
     const val SHARE_GET_URL = "$API_BASE/b/api/share/get"
@@ -51,6 +73,24 @@ object Pan123Constants {
     /** 移动（POST /b/api/file/mod_pid） */
     const val FILE_MOD_PID_URL = "$API_BASE/b/api/file/mod_pid"
 
+    /**
+     * 新建文件夹 / 上传预创建（POST /b/api/file/upload_request）：
+     * 123 没有独立的建目录端点，靠同一个接口的 `type` 区分（1 = 建目录、0 = 文件；文档 §2/§8）。
+     */
+    const val FILE_UPLOAD_REQUEST_URL = "$API_BASE/b/api/file/upload_request"
+
+    /**
+     * 上传：预签名分片地址。
+     * - 单分片走 `s3_upload_object/auth`；
+     * - 多分片走 `s3_repare_upload_parts_batch`（批量取，`partNumberStart/End` 控制范围）。
+     */
+    const val FILE_S3_UPLOAD_AUTH_URL = "$API_BASE/b/api/file/s3_upload_object/auth"
+    const val FILE_S3_REPARE_PARTS_URL = "$API_BASE/b/api/file/s3_repare_upload_parts_batch"
+
+    /** 上传：合并（S3 直传凭据路径用 `upload_complete`，预签名分片路径用 `upload_complete/v2`） */
+    const val FILE_UPLOAD_COMPLETE_URL = "$API_BASE/b/api/file/upload_complete"
+    const val FILE_UPLOAD_COMPLETE_V2_URL = "$API_BASE/b/api/file/upload_complete/v2"
+
     /** 创建分享（POST /b/api/share/create） */
     const val SHARE_CREATE_URL = "$API_BASE/b/api/share/create"
 
@@ -72,32 +112,11 @@ object Pan123Constants {
     /** platform：android（分享下载信息 www.123865.com） */
     const val PLATFORM_ANDROID = "android"
 
-    // ---------- 网页登录（避免账号密码接口触发风控） ----------
-
-    /**
-     * 网页登录入口：123 云盘个人盘主页。
-     *
-     * 用**桌面版**地址（`yun.123pan.cn`）：个人盘是桌面 SPA，
-     * 移动 UA 会被重定向到功能不完整的移动版页面，且登录态写入位置不同。
-     */
-    const val WEB_LOGIN_URL = "https://yun.123pan.cn/"
-
-    /**
-     * 网页登录态在 localStorage 中的键名（值为裸 Bearer JWT）。
-     *
-     * ⚠️ 依赖 123 站点的私有实现，官网改版可能失效。
-     * 故登录页保留「粘贴 Token」手动兜底入口，失效时用户仍可登录。
-     */
-    const val LOCAL_STORAGE_TOKEN_KEY = "authorToken"
-
     /** app-version：web 系 */
     const val APP_VERSION_WEB = "3"
 
     /** app-version：android 系（仅分享下载） */
     const val APP_VERSION_ANDROID = "39"
-
-    /** 登录接口 app-version（抓包「登陆/成功登录」） */
-    const val APP_VERSION_LOGIN = "132"
 
     /** 分享下载真实 CDN 直链下载时必须携带的 Referer（文档 §5.3.1） */
     const val DOWNLOAD_REFERER = "https://yun.123pan.cn/"

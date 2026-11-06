@@ -1,11 +1,32 @@
+/*
+ * YunX (云析) - A network drive share-link parser and high-speed downloader for Android.
+ * Copyright (C) 2026 CYQawa
+ *
+ * This program is free software: you can redistribute it and/or modify
+ * it under the terms of the GNU Affero General Public License as published by
+ * the Free Software Foundation, either version 3 of the License, or
+ * (at your option) any later version.
+ *
+ * This program is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+ * GNU Affero General Public License for more details.
+ *
+ * You should have received a copy of the GNU Affero General Public License
+ * along with this program.  If not, see <https://www.gnu.org/licenses/>.
+ */
+
 package com.yunget.app.data.network
 
 import com.yunget.app.data.network.model.DownloadLink
+import com.yunget.app.data.network.model.FileThumbnail
 import com.yunget.app.data.network.model.PlayLink
 import com.yunget.app.data.network.model.QuotaInfo
 import com.yunget.app.data.network.model.ShareFile
 import com.yunget.app.data.network.model.ShareInfo
 import com.yunget.app.data.network.model.ShareToken
+import com.yunget.app.data.upload.UploadIo
+import com.yunget.app.data.upload.UploadSource
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.withContext
@@ -65,8 +86,20 @@ class UCApi(
     /**
      * Cookie 回写接收器（推荐由 UCAccountRepository 注入并落库）：
      * 每次响应把 Set-Cookie 合并后的最新 Cookie 回调，保持 __puus/__pus 始终新鲜。
+     *
+     * ★ 回调同时带上「本次请求用的那份 Cookie」：多账号下载（实验性）会用**别的账号**取链，
+     *   只有按请求 Cookie 找到对应那一行回写，才不会把别的账号的 __puus 混进主账号那一行。
      */
-    var cookieSink: ((String) -> Unit)? = null
+    var cookieSink: ((merged: String, requestCookie: String) -> Unit)? = null
+
+    /**
+     * 游客态令牌 `__pugs`（未登录取链响应 Set-Cookie 下发，3 小时有效）。
+     * UC 下载层只认这一个 cookie：缺它 OSS 直链直接 403（RequestDeniedByCallback）。
+     * 进程内复用，登录态路径完全不受影响（只在 [getGuestShareDownloadLink] 里读写）。
+     */
+    @Volatile
+    var guestPugs: String = ""
+        private set
 
     private val jsonMediaType = "application/json; charset=utf-8".toMediaType()
 
@@ -339,7 +372,7 @@ class UCApi(
         runCatching {
             client.newCall(request).execute().use { resp ->
                 val merged = UCCookieUtil.mergeFromSetCookies(cookie, resp.headers("Set-Cookie"))
-                if (merged != cookie) cookieSink?.invoke(merged)
+                if (merged != cookie) cookieSink?.invoke(merged, cookie)
                 merged
             }
         }.getOrNull()
@@ -383,6 +416,83 @@ class UCApi(
             size = item.optLong("size")
         )
     }
+
+    /**
+     * 游客分享取链（未登录直链）：与 [getShareDownloadLink] 同一个端点、同一个 body
+     * （对齐 LinkSwift 分享页匿名链路：不带账号 Cookie，只带分享参数 + uc-cloud-drive 客户端 UA）。
+     *
+     * 下载层只认一个 cookie —— 服务端随本次响应 Set-Cookie 下发的游客态 `__pugs`
+     * （3 小时有效，且与本次直链同响应绑定；缺它 CDN 直接 403 RequestDeniedByCallback）。
+     * 这里捕获后写进 [DownloadLink.guestCookie]，同时缓存到 [guestPugs] 供后续文件复用。
+     *
+     * @throws QuarkApiException 需登录（31001）、超出游客大小上限（23018）、令牌失效（14001/41020）等
+     */
+    suspend fun getGuestShareDownloadLink(
+        fid: String,
+        fidToken: String,
+        stoken: String,
+        pwdId: String
+    ): DownloadLink? = withContext(Dispatchers.IO) {
+        val body = JSONObject()
+            .put("fids", JSONArray().put(fid))
+            .put("pwd_id", pwdId)
+            .put("stoken", stoken)
+            .put("fids_token", JSONArray().put(fidToken))
+            .toString()
+        val request = postJsonGuest(UCConstants.DOWNLOAD_URL, guestPugs, body)
+        val response = client.newCall(request).execute()
+        // 先取本次响应的 __pugs（与本次直链同响应绑定，不能用别的响应/上一次的值）
+        val responsePugs = pugsFromSetCookies(response.headers("Set-Cookie"))
+        val bodyStr = response.use {
+            it.body?.string() ?: throw QuarkApiException("获取下载链接失败：响应为空")
+        }
+        if (responsePugs != null) guestPugs = responsePugs
+        val json = runCatching { JSONObject(bodyStr) }.getOrElse {
+            // 非 JSON（风控页/HTML 错误页）时带上 HTTP 状态码，便于分辨 401/403 与分享失效
+            throw QuarkApiException("响应解析失败（HTTP ${response.code}）")
+        }
+        val code = json.optInt("code")
+        if (json.optInt("status") != 200 && code != 0) {
+            throw QuarkApiException(guestErrorMessage(code, json.optString("message")), code)
+        }
+        val array = json.optJSONArray("data") ?: throw QuarkApiException("响应缺少 data")
+        if (array.length() == 0) throw QuarkApiException("未返回下载链接")
+        val item = array.optJSONObject(0) ?: throw QuarkApiException("未返回下载链接")
+        DownloadLink(
+            fid = item.optString("fid"),
+            filename = item.optString("file_name").ifEmpty { item.optString("filename") },
+            downloadUrl = item.optString("download_url"),
+            size = item.optLong("size"),
+            guestCookie = responsePugs ?: guestPugs
+        )
+    }
+
+    /** 游客取链的服务端错误码 → 中文提示（错误码表对齐 panweb-parser 的 UC 适配器） */
+    private fun guestErrorMessage(code: Int, message: String): String = when (code) {
+        31001 -> "该分享需要登录 UC 网盘后才能下载"
+        23018 -> "该文件超出游客可获取的大小上限，请先登录 UC 网盘再下载"
+        14001 -> "分享已失效或提取码有误，请重新解析"
+        41020 -> "文件令牌已过期，请重新解析分享"
+        else -> message.ifBlank { "获取下载链接失败" }
+    }
+
+    /** 从响应 Set-Cookie 里取出游客态令牌，返回可直接当 Cookie 头用的 `__pugs=值`；没有则 null */
+    private fun pugsFromSetCookies(setCookies: List<String>): String? =
+        setCookies.asSequence()
+            .map { it.substringBefore(';').trim() }
+            .firstOrNull { it.startsWith("__pugs=") && it.length > "__pugs=".length }
+
+    /** 游客请求构造：Cookie 为空时不发该头；UA/Sec-Ch-Ua 用 uc-cloud-drive 客户端（游客链路风控更严） */
+    private fun postJsonGuest(url: String, cookie: String, body: String): Request =
+        Request.Builder()
+            .url(url)
+            .apply { if (cookie.isNotBlank()) header("Cookie", cookie) }
+            .header("User-Agent", UCConstants.GUEST_UA)
+            .header("Sec-Ch-Ua", UCConstants.GUEST_SEC_CH_UA)
+            .header("Content-Type", "application/json")
+            .post(body.toRequestBody(jsonMediaType))
+            .build()
+
 suspend fun getDownloadLink(fid: String, cookie: String): DownloadLink? = withContext(Dispatchers.IO) {
         val body = JSONObject().put("fids", JSONArray().put(fid)).toString()
         val request = postJson(UCConstants.DOWNLOAD_URL, cookie, body)
@@ -573,49 +683,79 @@ suspend fun getDownloadLink(fid: String, cookie: String): DownloadLink? = withCo
             parseData(request) { data -> data.optString("task_id").takeIf { it.isNotBlank() } }
         }
 
-    /** 云盘文件列表（抓包 /1/clouddrive/file/sort，pdir_fid=0 根目录） */
+    /** 云盘文件列表（抓包 /1/clouddrive/file/sort，pdir_fid=0 根目录）
+     *  自动翻页：单页满 size 继续，封顶 100 页防异常死循环；默认单页 100（接口支持）。
+     */
     suspend fun listCloudFiles(
         pdirFid: String,
         cookie: String,
         page: Int = 1,
-        size: Int = 50
+        size: Int = 100
     ): List<ShareFile>? = withContext(Dispatchers.IO) {
-        val url = buildString {
-            append(UCConstants.CLOUD_FILE_SORT_URL)
-            append("&pdir_fid=").append(pdirFid)
-            append("&_page=").append(page)
-            append("&_size=").append(size)
-            append("&_fetch_total=1")
-            append("&_fetch_sub_dirs=0")
-            append("&_sort=file_type%3Aasc%2Cupdated_at%3Adesc")
-        }
-        val request = Request.Builder()
-            .url(url)
-            .header("Cookie", cookie)
-            .header("User-Agent", UCConstants.CLOUD_UA)
-            .header("Origin", "https://drive.uc.cn")
-            .header("Referer", "https://drive.uc.cn/")
-            .get()
-            .build()
-        parseData(request) { data ->
-            val array = data.optJSONArray("list") ?: JSONArray()
-            buildList {
-                for (i in 0 until array.length()) {
-                    val item = array.optJSONObject(i) ?: continue
-                    add(
-                        ShareFile(
-                            fid = item.optString("fid"),
-                            fname = item.optString("file_name").ifEmpty { item.optString("fname") },
-                            fsize = item.optLong("size"),
-                            isdir = item.optBoolean("dir", false),
-                            pdirFid = item.optString("pdir_fid"),
-                            fidToken = "",
-                            modifyTime = item.optString("updated_at")
+        val all = mutableListOf<ShareFile>()
+        var p = page
+        // 同夸克：thumbnail 指向 pc-api.uc.cn 的自家接口，必须带账号 Cookie + 官方 Referer/Origin；
+        // 落在其它域名时只带 UA/Referer，Cookie 不发给平台之外的域名
+        val thumbnailAuthHeaders = mapOf(
+            "Cookie" to cookie,
+            "User-Agent" to UCConstants.CLOUD_UA,
+            "Referer" to "https://drive.uc.cn/",
+            "Origin" to "https://drive.uc.cn"
+        )
+        val thumbnailHeaders = mapOf(
+            "User-Agent" to UCConstants.CLOUD_UA,
+            "Referer" to "https://drive.uc.cn/",
+            "Origin" to "https://drive.uc.cn"
+        )
+        while (true) {
+            val url = buildString {
+                append(UCConstants.CLOUD_FILE_SORT_URL)
+                append("&pdir_fid=").append(pdirFid)
+                append("&_page=").append(p)
+                append("&_size=").append(size)
+                append("&_fetch_total=1")
+                append("&_fetch_sub_dirs=0")
+                append("&_sort=file_type%3Aasc%2Cupdated_at%3Adesc")
+            }
+            val request = Request.Builder()
+                .url(url)
+                .header("Cookie", cookie)
+                .header("User-Agent", UCConstants.CLOUD_UA)
+                .header("Origin", "https://drive.uc.cn")
+                .header("Referer", "https://drive.uc.cn/")
+                .get()
+                .build()
+            val files = parseData(request) { data ->
+                val array = data.optJSONArray("list") ?: JSONArray()
+                buildList {
+                    for (i in 0 until array.length()) {
+                        val item = array.optJSONObject(i) ?: continue
+                        add(
+                            ShareFile(
+                                fid = item.optString("fid"),
+                                fname = item.optString("file_name").ifEmpty { item.optString("fname") },
+                                fsize = item.optLong("size"),
+                                isdir = item.optBoolean("dir", false),
+                                pdirFid = item.optString("pdir_fid"),
+                                fidToken = "",
+                                modifyTime = item.optString("updated_at"),
+                                thumbnail = FileThumbnail.of(
+                                    url = item.optString("thumbnail"),
+                                    headers = thumbnailHeaders,
+                                    authHost = UCConstants.THUMBNAIL_HOST,
+                                    authHeaders = thumbnailAuthHeaders
+                                )
+                            )
                         )
-                    )
+                    }
                 }
             }
+            all += files
+            // 本页未满 size → 已是最后一页；封顶 100 页防止异常死循环
+            if (files.size < size || p >= 100) break
+            p++
         }
+        all.ifEmpty { null }
     }
 
     /** 重命名（抓包：POST file/rename） */
@@ -646,8 +786,9 @@ suspend fun getDownloadLink(fid: String, cookie: String): DownloadLink? = withCo
             parseData(request) { data -> data.optString("task_id").takeIf { it.isNotBlank() } }
         }
 
-    /** 创建分享（抓包：POST /1/clouddrive/share，url_type 1=无提取码 2=带提取码，expired_type 1永久/2一天/3七天/4三十天）。
- * 注意：分享创建是**异步任务**——响应只有 data.task_id，必须轮询 /1/clouddrive/task 直到完成拿到 share_id。 */
+    /** 创建分享（抓包：POST /1/clouddrive/share，url_type 1=无提取码 2=带提取码，
+     *  expired_type 1永久/2一天/3七天/4三十天，**取值域与 UI 中性码一致**（[com.yunget.app.data.network.model.ShareExpire]），无需转换，Agent.md §3.20；调用方只能传 1..4）。
+     *  注意：分享创建是**异步任务**——响应只有 data.task_id，必须轮询 /1/clouddrive/task 直到完成拿到 share_id。 */
     suspend fun createShare(
         fidList: List<String>,
         title: String,
@@ -710,6 +851,41 @@ suspend fun getDownloadLink(fid: String, cookie: String): DownloadLink? = withCo
     }
     // ---------- 请求构造与响应解析 ----------
 
+    // ---------- 上传 ----------
+
+    /** 上传文件到 [parentFid] 目录（与夸克同一套 OSS 协议，仅域名/`pr` 不同）。 */
+    suspend fun upload(
+        io: UploadIo,
+        file: UploadSource,
+        parentFid: String,
+        cookie: String
+    ): String? = withContext(Dispatchers.IO) {
+        QuarkUpload(
+            apiBase = UCConstants.API_BASE,
+            product = "UCBrowser",
+            origin = UCConstants.WEB_ORIGIN,
+            userAgent = UCConstants.USER_AGENT,
+            post = { url, body -> postJsonRaw(url, cookie, body) }
+        ).upload(io, file, parentFid)
+    }
+
+    /** 上传链路专用：同 [parseData] 的 status 校验，但允许响应没有 data。 */
+    private fun postJsonRaw(url: String, cookie: String, body: JSONObject): JSONObject {
+        val request = postJson(url, cookie, body.toString())
+        val response = client.newCall(request).execute()
+        val text = response.use {
+            mergeCookieFromResponse(request, it)
+            it.body?.string() ?: throw QuarkApiException("请求失败：响应为空")
+        }
+        val json = runCatching { JSONObject(text) }.getOrElse {
+            throw QuarkApiException("响应解析失败（HTTP ${response.code}）")
+        }
+        if (json.optInt("status") != 200) {
+            throw QuarkApiException(json.optString("message").ifBlank { "上传请求失败" })
+        }
+        return json.optJSONObject("data") ?: JSONObject()
+    }
+
     private fun get(url: String, cookie: String): Request =
         Request.Builder()
             .url(url)
@@ -734,9 +910,12 @@ suspend fun getDownloadLink(fid: String, cookie: String): DownloadLink? = withCo
             it.body?.string() ?: throw QuarkApiException("请求失败：响应为空")
         }
         val json = runCatching { JSONObject(body) }.getOrElse {
-            throw QuarkApiException("响应解析失败")
+            // 服务端返回非 JSON（多半是 HTML 错误页/风控页）时带上 HTTP 状态码，
+            // 便于分辨「未登录被拒（401/403）」与「分享已失效」
+            throw QuarkApiException("响应解析失败（HTTP ${response.code}）")
         }
         if (json.optInt("status") != 200) {
+            // 透传服务端 message，如「提取码错误」「分享已失效」等
             throw QuarkApiException(json.optString("message").ifBlank { "请求失败" })
         }
         return parser(json.optJSONObject("data") ?: throw QuarkApiException("响应缺少 data"))
@@ -749,6 +928,6 @@ suspend fun getDownloadLink(fid: String, cookie: String): DownloadLink? = withCo
         val original = request.header("Cookie").orEmpty()
         if (original.isBlank()) return
         val merged = UCCookieUtil.mergeFromSetCookies(original, setCookies)
-        if (merged != original) cookieSink?.invoke(merged)
+        if (merged != original) cookieSink?.invoke(merged, original)
     }
 }

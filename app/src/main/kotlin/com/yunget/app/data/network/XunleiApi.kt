@@ -1,9 +1,30 @@
+/*
+ * YunX (云析) - A network drive share-link parser and high-speed downloader for Android.
+ * Copyright (C) 2026 CYQawa
+ *
+ * This program is free software: you can redistribute it and/or modify
+ * it under the terms of the GNU Affero General Public License as published by
+ * the Free Software Foundation, either version 3 of the License, or
+ * (at your option) any later version.
+ *
+ * This program is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+ * GNU Affero General Public License for more details.
+ *
+ * You should have received a copy of the GNU Affero General Public License
+ * along with this program.  If not, see <https://www.gnu.org/licenses/>.
+ */
+
 package com.yunget.app.data.network
 
 import com.yunget.app.data.network.model.DownloadLink
+import com.yunget.app.data.network.model.FileThumbnail
 import com.yunget.app.data.network.model.QuotaInfo
+import com.yunget.app.data.network.model.ShareExpire
 import com.yunget.app.data.network.model.ShareFile
 import com.yunget.app.data.network.model.ShareInfo
+import com.yunget.app.util.DiagnosticLog
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.withContext
@@ -12,6 +33,10 @@ import okhttp3.OkHttpClient
 import okhttp3.Request
 import okhttp3.RequestBody.Companion.toRequestBody
 import org.json.JSONArray
+import com.yunget.app.data.upload.UploadIo
+import com.yunget.app.data.upload.UploadPhase
+import com.yunget.app.data.upload.UploadSigning
+import com.yunget.app.data.upload.UploadSource
 import org.json.JSONObject
 import java.security.MessageDigest
 import kotlin.random.Random
@@ -41,6 +66,28 @@ data class XunleiLoginStep(
 )
 
 /**
+ * 一次 captcha/init 的结果：token + 过期时间。
+ *
+ * ★ 必须带过期时间：网页 token 只有 300s，缓存里拿死 token 去请求会先吃一次 `captcha_invalid`，
+ * 等于每次解析都先失败一次再重试。
+ */
+data class PanCaptcha(val token: String, val expiresAtMs: Long) {
+    fun isValid(now: Long = System.currentTimeMillis()): Boolean = token.isNotBlank() && expiresAtMs > now
+}
+
+/**
+ * 网页签名换 captcha 的结果。
+ *
+ * ★ 必须区分「签名被拒（盐/版本轮换）」与「client_id 配错」：后者回退隐藏 WebView 也救不回来
+ * （网页会话同样只认网页 client_id），只会白等十几秒再失败。
+ */
+sealed interface WebCaptchaInit {
+    data class Ok(val captcha: PanCaptcha) : WebCaptchaInit
+    data object ClientIdMismatch : WebCaptchaInit
+    data object Failed : WebCaptchaInit
+}
+
+/**
  * 迅雷 API 封装（OkHttp）：
  * - 登录：captcha/init → v3/login（密码，可能触发短信）→ sendsms → smslogin → v1/auth/token
  * - Pan：文件列表 / 分享解析 / 转存 / 直链（Bearer 认证，无需 x-signature，抓包确认）
@@ -54,9 +101,9 @@ class XunleiApi(
     private val jsonMediaType = "application/json; charset=utf-8".toMediaType()
     private val formMediaType = "application/x-www-form-urlencoded".toMediaType()
 
-    /** captcha_invalid 时刷新出的新 captcha_token（后续请求优先使用） */
-    @Volatile
-    private var refreshedCaptcha: String? = null
+    /** 刷新出的 captcha（按设备号缓存：不同账号的 captcha 不能串用，App 通道与网页通道的
+     *  client_id 也不同，串用会直接得到 client_id not match）。带过期时间，过期的不会被再用 */
+    private val refreshedCaptchas = java.util.concurrent.ConcurrentHashMap<String, PanCaptcha>()
 
     /** 当前有效 access_token（401 自动刷新后更新；pan 请求优先使用，避免刷新后闭包仍用旧值） */
     @Volatile
@@ -65,19 +112,35 @@ class XunleiApi(
     /** 401/unauthenticated 时自动刷新：提供 refresh_token 换新 token（由调用方注入并持久化） */
     var refreshTokenProvider: suspend (deviceId: String) -> Pair<String, String>? = { null }
 
+    /**
+     * 网页登录（webToken）captcha 的刷新入口（非网页账号返回 null，调用方走 App 通道重签）。
+     *
+     * 由 `XunleiAccountRepository.refreshWebCaptcha` 实现：本地 9 盐签名优先，被拒才回退网页会话。
+     * 返回值必须带 `expiresAtMs`，调用方据此判断能否复用。
+     */
+    var webCaptchaRefresher: suspend (deviceId: String, action: String) -> PanCaptcha? = { _, _ -> null }
+
     /** 当前用户 ID（从 access_token JWT 解析，captcha init 的 meta 需要） */
     @Volatile
     private var currentUserId: String = ""
 
     // ---------- 登录 ----------
 
-    /** 1. 验证码盾初始化，返回 captcha_token（换 token 与 pan 请求需带 X-Captcha-Token）。
+    /**
+     * 1. 验证码盾初始化，返回 captcha_token（换 token 与 pan 请求需带 X-Captcha-Token）。
      * 官方抓包：client_id 用 app 凭据 Xp6vsxz_7IYVw2BB。
-     * 按文档 §9.5：meta 必须带 captcha_sign（10-salt 算法），否则拿到降级 token（POST 类接口可能拒绝）。 */
+     * 按文档 §9.5：meta 必须带 captcha_sign（10-salt 算法），否则拿到降级 token（POST 类接口可能拒绝）。
+     *
+     * @param userId 本次登录的迅雷用户 ID（v3/login、v3/smslogin 响应里的 userID）。
+     *   ★ 必须由调用方显式传：升级/首次登录时 [currentUserId] 还是空的，meta.user_id 空着
+     *   会拿到降级 captcha_token，`signin/token` 换 token 时被拒（表现为「短信验证通过但拿不到登录态」）。
+     *   [currentUserId] 只作为「同一进程里已经登录过、调用方没传」时的兜底。
+     */
     suspend fun initCaptcha(
         deviceId: String,
         username: String,
-        action: String = "POST:/auth/signin/token"
+        action: String = "POST:/auth/signin/token",
+        userId: String = ""
     ): String? = withContext(Dispatchers.IO) {
         val ts = System.currentTimeMillis().toString()
         val sign = buildCaptchaSign(deviceId, ts)
@@ -92,7 +155,7 @@ class XunleiApi(
                 .put("package_name", XunleiConstants.APP_PACKAGE_NAME)
                 .put("timestamp", ts)
                 .put("captcha_sign", sign)
-                .put("user_id", currentUserId)) // 真实 user_id，空会得到降级 token
+                .put("user_id", userId.ifBlank { currentUserId })) // 真实 user_id，空会得到降级 token
             .put("redirect_uri", "xlaccsdk01://xunlei.com/callback?state=harbor")
             .toString()
         val request = Request.Builder()
@@ -243,20 +306,52 @@ class XunleiApi(
     /**
      * 用 refresh_token 刷新 access_token（OAuth2 refresh_token）。
      * 导入恢复后旧 token 可能已过期（12h），刷新后立即有效。
+     *
+     * @param authType 登录方式：网页登录（[XunleiWebCredential.AUTH_TYPE]）的 token 与 App token
+     *   **不是同一套 OAuth 客户端**——网页 token 只能用网页 client_id 刷新，请求形态也不同
+     *   （JSON + 桌面 UA + Origin/Referer，且必须**不带** client_secret）；带错了会被直接拒绝，
+     *   表现为「登录才没多久就提示过期」。
      * @return 新 (access_token, refresh_token)；失败返回 null
      */
-    suspend fun refreshToken(refreshToken: String, deviceId: String): Pair<String, String>? =
+    suspend fun refreshToken(
+        refreshToken: String,
+        deviceId: String,
+        authType: String = ""
+    ): Pair<String, String>? =
         withContext(Dispatchers.IO) {
-            val body = "grant_type=refresh_token" +
-                "&client_id=${XunleiConstants.APP_CLIENT_ID}" +
-                "&client_secret=${XunleiConstants.APP_CLIENT_SECRET}" +
-                "&refresh_token=${java.net.URLEncoder.encode(refreshToken, "UTF-8")}"
-            val request = Request.Builder()
-                .url(XunleiConstants.REFRESH_URL)
-                .header("Content-Type", "application/x-www-form-urlencoded")
-                .header("X-Device-Id", deviceId)
-                .post(body.toRequestBody(formMediaType))
-                .build()
+            val web = authType == XunleiWebCredential.AUTH_TYPE
+            val request = if (web) {
+                val body = JSONObject()
+                    .put("grant_type", "refresh_token")
+                    .put("client_id", XunleiWebCredential.CLIENT_ID)
+                    .put("refresh_token", refreshToken)
+                    .toString()
+                Request.Builder()
+                    .url(XunleiConstants.REFRESH_URL)
+                    .header("Content-Type", "application/json")
+                    .header("X-Device-Id", deviceId)
+                    .header("X-Client-Id", XunleiWebCredential.CLIENT_ID)
+                    .header("Origin", "https://pan.xunlei.com")
+                    .header("Referer", "https://pan.xunlei.com/")
+                    .header("User-Agent", XunleiWebCredential.DESKTOP_UA)
+                    // 桌面 UA 必须同步这套 client hints：只改 UA 不同步 Sec-CH-UA 会被判成移动端而冲突
+                    .header("Sec-Ch-Ua", XunleiWebCredential.DESKTOP_SEC_CH_UA)
+                    .header("Sec-Ch-Ua-Mobile", XunleiWebCredential.DESKTOP_SEC_CH_UA_MOBILE)
+                    .header("Sec-Ch-Ua-Platform", XunleiWebCredential.DESKTOP_SEC_CH_UA_PLATFORM)
+                    .post(body.toRequestBody(jsonMediaType))
+                    .build()
+            } else {
+                val body = "grant_type=refresh_token" +
+                    "&client_id=${XunleiConstants.APP_CLIENT_ID}" +
+                    "&client_secret=${XunleiConstants.APP_CLIENT_SECRET}" +
+                    "&refresh_token=${java.net.URLEncoder.encode(refreshToken, "UTF-8")}"
+                Request.Builder()
+                    .url(XunleiConstants.REFRESH_URL)
+                    .header("Content-Type", "application/x-www-form-urlencoded")
+                    .header("X-Device-Id", deviceId)
+                    .post(body.toRequestBody(formMediaType))
+                    .build()
+            }
             runCatching {
                 client.newCall(request).execute().use { resp ->
                     val json = JSONObject(resp.body?.string() ?: "{}")
@@ -270,6 +365,39 @@ class XunleiApi(
                 }
             }.getOrNull()
         }
+
+    /**
+     * 校验一个 access_token 是否真的能用（网页登录落库前调用）。
+     *
+     * 只用网页 localStorage 里读到的东西无法判断登录是否已完成——页面在登录过程中会把
+     * 中间态写进去，所以这里打一次真实的云盘接口（GET /drive/v1/about）再决定要不要落库；
+     * 网络异常也返回 false，交给上层的自动检测继续轮询重试，不会误判成「登录成功」。
+     *
+     * **必须校验传入的这个 token**（`preferCachedToken = false`）：实例上缓存的 currentAccessToken
+     * 属于上一次（可能是另一个账号）的登录，拿它去校验会把「有效」判在错误的账号头上。
+     */
+    suspend fun verifyAccessToken(
+        accessToken: String,
+        deviceId: String,
+        captchaToken: String
+    ): Boolean = withContext(Dispatchers.IO) {
+        if (accessToken.isBlank()) return@withContext false
+        runCatching {
+            val request = panRequest(
+                "${XunleiConstants.PAN_BASE}/drive/v1/about",
+                accessToken, deviceId, captchaToken,
+                preferCachedToken = false
+            )
+            client.newCall(request).execute().use { resp ->
+                if (!resp.isSuccessful) return@use false
+                val json = JSONObject(resp.body?.string() ?: "{}")
+                // 该接口的返回结构随通道不同：App 通道包在 data 里，网页（webToken）通道是**顶层**
+                // kind/quota（没有 data 包裹，实测 `{kind:"drive#about",quota:{...}}`）。只判 data 会把
+                // 网页登录的合法 token 误判成无效 →「登录后提示未检测到登录态」。两种结构都接受。
+                json.optJSONObject("data") != null || json.optString("kind") == "drive#about"
+            }
+        }.getOrDefault(false)
+    }
 
     /** 解析 JWT 的 exp（秒）；解析失败返回 0 */
     fun jwtExp(token: String): Long = runCatching {
@@ -340,24 +468,49 @@ class XunleiApi(
 
     // ---------- Pan ----------
 
-    /** 文件列表（个人网盘，parent_id 为空=根目录） */
+    /** 单页文件列表（个人网盘，parent_id 为空=根目录），返回 (文件, 下一页游标 or 空串=末页) */
+    private suspend fun getFilesPage(
+        parentId: String,
+        accessToken: String,
+        deviceId: String,
+        captchaToken: String,
+        pageToken: String
+    ): Pair<List<ShareFile>, String> = withContext(Dispatchers.IO) {
+        val filters = java.net.URLEncoder.encode("""{"trashed":{"eq":false}}""", "UTF-8")
+        val url = buildString {
+            append(XunleiConstants.FILES_URL)
+            append("?parent_id=").append(parentId)
+            append("&page_token=").append(java.net.URLEncoder.encode(pageToken, "UTF-8"))
+            append("&limit=100&with_audit=true&filters=").append(filters)
+            // 列表行缩略图：不请求这个尺寸的话响应里没有 thumbnail_link（SIZE_SMALL 够 40dp 列表用）
+            append("&thumbnail_size=SIZE_SMALL")
+        }
+        panCall(captchaToken, deviceId, "GET:/drive/v1/files", { t ->
+            panRequest(url, accessToken, deviceId, t)
+        }) { data ->
+            val files = data.optJSONArray("files")?.let(::parseFileArray) ?: emptyList()
+            // 解析 next_page_token 作为下一页游标；空串表示已到末页
+            val next = data.optString("next_page_token").takeIf { it.isNotBlank() } ?: ""
+            files to next
+        }
+    }
+
+    /** 文件列表（个人网盘，parent_id 为空=根目录；自动翻页，返回该目录下全部文件） */
     suspend fun getFiles(
         parentId: String,
         accessToken: String,
         deviceId: String,
         captchaToken: String
-    ): List<ShareFile>? = withContext(Dispatchers.IO) {
-        val filters = java.net.URLEncoder.encode("""{"trashed":{"eq":false}}""", "UTF-8")
-        val url = buildString {
-            append(XunleiConstants.FILES_URL)
-            append("?parent_id=").append(parentId)
-            append("&page_token=&limit=50&with_audit=true&filters=").append(filters)
+    ): List<ShareFile>? {
+        val all = mutableListOf<ShareFile>()
+        var token = ""
+        repeat(100) {            // 封顶 100 页，防异常死循环
+            val (files, next) = getFilesPage(parentId, accessToken, deviceId, captchaToken, token)
+            all += files
+            if (next.isBlank()) return all.ifEmpty { null }
+            token = next
         }
-        panCall(captchaToken, deviceId, "GET:/drive/v1/files", { t ->
-            panRequest(url, accessToken, deviceId, t)
-        }) { data ->
-            data.optJSONArray("files")?.let(::parseFileArray) ?: emptyList()
-        }
+        return all.ifEmpty { null }
     }
 
     /** 创建文件夹（个人网盘），返回新文件夹 id */
@@ -377,6 +530,65 @@ class XunleiApi(
         panCall(captchaToken, deviceId, "POST:/drive/v1/files", { t ->
             panRequest(XunleiConstants.FILES_URL, accessToken, deviceId, t, body)
         }) { data -> data.optString("id").takeIf { it.isNotBlank() } }
+    }
+
+    // ---------- 上传 ----------
+
+    /**
+     * 上传一个文件到 [parentId] 目录，返回 fileId。
+     *
+     * 迅雷用「gcid」做秒传判定：把文件按 256 KiB 起、随文件大小指数放大（上限 2 MiB）分块，
+     * 每块算 SHA1，再把**这些 SHA1 的原始字节**拼起来整体算一次 SHA1，转大写十六进制。
+     * 服务端命中就返回 `UPLOAD_TYPE_INSTANT`（不用传）；否则回 `resumable.params` 的
+     * S3 临时凭据，直接分片 PUT 到对象存储（region 固定 `xunlei`）。
+     */
+    suspend fun upload(
+        io: UploadIo,
+        file: UploadSource,
+        parentId: String,
+        accessToken: String,
+        deviceId: String,
+        captchaToken: String
+    ): String? = withContext(Dispatchers.IO) {
+        require(file.size > 0L) { "迅雷云盘不支持上传空文件" }
+        io.progress(UploadPhase.PREPARING)
+        var blockSize = 0x40000L
+        while (file.size / blockSize > 0x200 && blockSize < 0x200000L) blockSize *= 2
+        val count = maxOf(1L, (file.size + blockSize - 1) / blockSize)
+        val blockDigests = (0 until count).map { index ->
+            val start = index * blockSize
+            io.digestBytes("SHA-1", start, minOf(file.size, start + blockSize))
+        }
+        val gcid = UploadSigning.gcid(blockDigests)
+        val body = JSONObject()
+            .put("kind", "drive#file")
+            .put("parent_id", parentId)
+            .put("name", file.name)
+            .put("size", file.size)
+            .put("hash", gcid)
+            .put("upload_type", "UPLOAD_TYPE_RESUMABLE")
+            .put("space", "")
+            .toString()
+        val task = panCall(captchaToken, deviceId, "POST:/drive/v1/files", { token ->
+            panRequest(XunleiConstants.FILES_URL, accessToken, deviceId, token, body)
+        }) { data -> data }
+        val params = task.optJSONObject("resumable")?.optJSONObject("params")
+        val fileId = task.optJSONObject("file")?.optString("id").orEmpty()
+            .ifBlank { task.optString("id") }
+            .takeIf { it.isNotBlank() }
+        if (params != null && params.length() > 0) {
+            io.s3Multipart(
+                endpoint = params.optString("endpoint"),
+                bucket = params.optString("bucket"),
+                objectKey = params.optString("key"),
+                accessKey = params.optString("access_key_id"),
+                secretKey = params.optString("access_key_secret"),
+                region = "xunlei",
+                securityToken = params.optString("security_token")
+            )
+        }
+        io.progress(UploadPhase.FINISHING, file.size)
+        fileId
     }
 
     /** 文件详情（返回下载直链 links.application/octet-stream.url） */
@@ -421,9 +633,8 @@ class XunleiApi(
                 .append(java.net.URLEncoder.encode(pageToken, "UTF-8"))
                 .append("&thumbnail_size=SIZE_SMALL")
         }
-        panCall(captchaToken, deviceId, "GET:/drive/v1/share", { t ->
-            panRequest(url, accessToken, deviceId, t)
-        }) { data ->
+        val build: (String) -> Request = { t -> panRequest(url, accessToken, deviceId, t) }
+        val parse: (JSONObject) -> XunleiShareResult = { data ->
             // 提取码状态检查：PASS_CODE_EMPTY（没填）/ PASS_CODE_ERROR（错误）/ PASS_CODE_NEED（需要）
             // 这三种情况 files 为空数组且 HTTP 200，若不识别会被误判为「此目录为空」
             when (data.optString("share_status")) {
@@ -439,6 +650,12 @@ class XunleiApi(
                 shareId = shareId,
                 nextPageToken = data.optString("next_page_token")
             )
+        }
+        // 游客模式（无 access_token）走匿名调用：不带验证码、也不刷新 token（见 Agent.md §3.19）
+        if (accessToken.isBlank()) {
+            panCallAnonymous(captchaToken, deviceId, "GET:/drive/v1/share", build, parse)
+        } else {
+            panCall(captchaToken, deviceId, "GET:/drive/v1/share", build, parse)
         }
     }
 
@@ -461,13 +678,18 @@ class XunleiApi(
                 .append(java.net.URLEncoder.encode(pageToken, "UTF-8"))
                 .append("&thumbnail_size=SIZE_SMALL")
         }
-        panCall(captchaToken, deviceId, "GET:/drive/v1/share/detail", { t ->
-            panRequest(url, accessToken, deviceId, t)
-        }) { data ->
+        val build: (String) -> Request = { t -> panRequest(url, accessToken, deviceId, t) }
+        val parse: (JSONObject) -> XunleiFilePage = { data ->
             XunleiFilePage(
                 files = data.optJSONArray("files")?.let(::parseFileArray) ?: emptyList(),
                 nextPageToken = data.optString("next_page_token")
             )
+        }
+        // 游客模式（无 access_token）走匿名调用：不带验证码、也不刷新 token（见 Agent.md §3.19）
+        if (accessToken.isBlank()) {
+            panCallAnonymous(captchaToken, deviceId, "GET:/drive/v1/share/detail", build, parse)
+        } else {
+            panCall(captchaToken, deviceId, "GET:/drive/v1/share/detail", build, parse)
         }
     }
 
@@ -539,7 +761,7 @@ class XunleiApi(
             false
         }
 
-    /** 确保「YunGet临时转存」目录存在，返回其 id */
+    /** 确保「YunX临时转存」目录存在，返回其 id */
     suspend fun ensureTempDir(
         accessToken: String,
         deviceId: String,
@@ -611,9 +833,11 @@ class XunleiApi(
     }
 
     /** 创建分享（POST /drive/v1/share，迅雷分享带提取码；官方默认自动生成，可自定义 4 位）
-     *  @param expirationDays "-1"=永久 "1"/"7"/"30"=天数
+     *  @param expirationDays "-1"=永久 "1"/"7"/"30"=天数（用 [com.yunget.app.data.network.model.ShareExpire.xunleiDays]
+     *    从中性码转换，别直接下发中性码，Agent.md §3.20）
      *  @param passCode 自定义提取码（4 位字母数字，留空则服务端自动生成）
-     *  @return 分享信息（share_url/pass_code 直接返回，无需二次查询）
+     *  @return 分享信息（share_url/pass_code 直接返回，无需二次查询）；接口不返回有效期，
+     *    `expiredType` 填 [com.yunget.app.data.network.model.ShareExpire.UNKNOWN]，由调用方用用户所选值覆盖
      */
     suspend fun createShare(
         fileIds: List<String>,
@@ -647,7 +871,8 @@ class XunleiApi(
                 passcode = data.optString("pass_code"),
                 pwdId = data.optString("share_id"),
                 title = data.optString("title").ifBlank { title },
-                expiredType = 1
+                // 响应的 data 里没有有效期字段，中性码由调用方（XunleiCloudViewModel）覆盖
+                expiredType = ShareExpire.UNKNOWN
             )
         }
     }
@@ -674,6 +899,8 @@ class XunleiApi(
     // ---------- 请求构造 ----------
 
     private fun parseFileArray(array: JSONArray): List<ShareFile> = buildList {
+        // 迅雷缩略图落在自家 CDN：只认客户端 UA（浏览器 UA 会被降级成错误图/403）
+        val thumbnailHeaders = mapOf("User-Agent" to XunleiConstants.APP_UA)
         for (i in 0 until array.length()) {
             val item = array.optJSONObject(i) ?: continue
             add(
@@ -684,35 +911,46 @@ class XunleiApi(
                     isdir = item.optString("kind") == "drive#folder",
                     pdirFid = item.optString("parent_id"),
                     fidToken = "",
-                    modifyTime = item.optString("modified_time")
+                    modifyTime = item.optString("modified_time"),
+                    thumbnail = FileThumbnail.of(item.optString("thumbnail_link"), thumbnailHeaders)
                 )
             )
         }
     }
 
-    /** pan 请求（Bearer + 设备 + captcha 头，抓包确认无 x-signature） */
+    /**
+     * pan 请求（Bearer + 设备 + captcha 头，抓包确认无 x-signature）。
+     * accessToken 为空 = 游客模式：**不写 Authorization 头** —— 迅雷分享接口允许匿名访问，
+     * 但带上失效的 `Bearer ` 反而会被服务端判成 unauthenticated（见 Agent.md §3.19）。
+     */
     private fun panRequest(
         url: String,
         accessToken: String,
         deviceId: String,
         captchaToken: String,
-        body: String? = null
+        body: String? = null,
+        preferCachedToken: Boolean = true
     ): Request {
         val builder = Request.Builder()
             .url(url)
             .header("User-Agent", XunleiConstants.WEB_UA)
-            .header("Authorization", "Bearer ${currentAccessToken.ifBlank { accessToken }}")
             .header("X-Device-Id", deviceId)
             .header("X-Client-Version", "8.31.0.9726")
             .header("Content-Type", "application/json")
             .header("Origin", "https://pan.xunlei.com")
             .header("Referer", "https://pan.xunlei.com/")
+            if (accessToken.isNotBlank()) {
+                // 登录态优先用刷新后的 currentAccessToken，避免闭包里的旧值。
+                // preferCachedToken=false 时只认传进来的 token（校验「另一份还没落库的凭据」时必须这样）
+                val bearer = if (preferCachedToken) currentAccessToken.ifBlank { accessToken } else accessToken
+                builder.header("Authorization", "Bearer $bearer")
+            }
             if (captchaToken.isNotBlank()) builder.header("X-Captcha-Token", captchaToken)
         return if (body != null) builder.post(body.toRequestBody(jsonMediaType)).build()
         else builder.get().build()
     }
 
-    /** pan 请求（支持 PATCH 等动词，云盘重命名用） */
+    /** pan 请求（支持 PATCH 等动词，云盘重命名用）；accessToken 为空同 [panRequest]：游客模式不写 Authorization */
     private fun panRequestM(
         url: String,
         accessToken: String,
@@ -724,12 +962,14 @@ class XunleiApi(
         val builder = Request.Builder()
             .url(url)
             .header("User-Agent", XunleiConstants.WEB_UA)
-            .header("Authorization", "Bearer ${currentAccessToken.ifBlank { accessToken }}")
             .header("X-Device-Id", deviceId)
             .header("X-Client-Version", "8.31.0.9726")
             .header("Content-Type", "application/json")
             .header("Origin", "https://pan.xunlei.com")
             .header("Referer", "https://pan.xunlei.com/")
+            if (accessToken.isNotBlank()) {
+                builder.header("Authorization", "Bearer ${currentAccessToken.ifBlank { accessToken }}")
+            }
             if (captchaToken.isNotBlank()) builder.header("X-Captcha-Token", captchaToken)
         val rb = body?.toRequestBody(jsonMediaType) ?: "{}".toRequestBody(jsonMediaType)
         return when (method) {
@@ -739,42 +979,84 @@ class XunleiApi(
         }
     }
 
-    /** pan 请求带验证码自动刷新重试：失败 captcha_invalid → 用旧 token 换新 token → 重试一次（对齐官方） */
+    /**
+     * pan 请求带验证码自动刷新重试：失败 captcha_invalid → 用旧 token 换新 token → 重试一次（对齐官方）。
+     */
     private suspend fun <T> panCall(
         captchaToken: String,
         deviceId: String,
         action: String,
         build: (String) -> Request,
         parse: (JSONObject) -> T
+    ): T = panCallInternal(captchaToken, deviceId, action, false, build, parse)
+
+    /**
+     * 游客模式的 pan 调用（没有 access_token）：既不带验证码、也不尝试刷新 token / 重试验证码，
+     * 把服务端真实错误直接抛给上层 —— 迅雷分享列表接口允许匿名，
+     * 带上失效的 `Bearer ` 反而会被判成 unauthenticated（见 Agent.md §3.19）。
+     */
+    private suspend fun <T> panCallAnonymous(
+        captchaToken: String,
+        deviceId: String,
+        action: String,
+        build: (String) -> Request,
+        parse: (JSONObject) -> T
+    ): T = panCallInternal(captchaToken, deviceId, action, true, build, parse)
+
+    private suspend fun <T> panCallInternal(
+        captchaToken: String,
+        deviceId: String,
+        action: String,
+        anonymous: Boolean,
+        build: (String) -> Request,
+        parse: (JSONObject) -> T
     ): T {
-        var token = refreshedCaptcha ?: captchaToken
+        // 网页账号的 captcha 只有 300s：缓存里过期的绝不再用，直接换新的（本地签名，几百毫秒）。
+        // 不这么做的话，每次解析都会先拿死 token 撞一次 captcha_invalid 再重试。
+        var token = if (anonymous) {
+            captchaToken
+        } else {
+            val cached = refreshedCaptchas[deviceId]?.takeIf { it.isValid() }
+            (cached ?: webCaptchaRefresher(deviceId, action)?.also { refreshedCaptchas[deviceId] = it })
+                ?.token ?: captchaToken
+        }
         repeat(2) { attempt ->
             val response = client.newCall(build(token)).execute()
             val body = response.use { it.body?.string() ?: throw QuarkApiException("请求失败：响应为空") }
             val json = runCatching { JSONObject(body) }.getOrElse {
-                throw QuarkApiException("响应解析失败")
+                throw QuarkApiException("响应解析失败（HTTP ${response.code}）")
             }
             if (!response.isSuccessful || json.has("error")) {
                 val err = json.optString("error")
                 // access_token 过期（401/unauthenticated）：refresh_token 换新 → 重新 init captcha → 重试（对齐官方抓包）
-                if ((response.code == 401 || err == "unauthenticated") && attempt == 0) {
+                if (!anonymous && (response.code == 401 || err == "unauthenticated") && attempt == 0) {
                     val refreshed = refreshTokenProvider(deviceId)
                     if (refreshed != null) {
                         currentAccessToken = refreshed.first
-                        val newCaptcha = initPanCaptcha(deviceId, action, token)
-                        if (!newCaptcha.isNullOrBlank()) {
-                            refreshedCaptcha = newCaptcha
-                            token = newCaptcha
+                        val newCaptcha = webCaptchaRefresher(deviceId, action)
+                            ?: initPanCaptcha(deviceId, action, token)
+                                ?.let { PanCaptcha(it, Long.MAX_VALUE) }
+                        if (newCaptcha != null) {
+                            refreshedCaptchas[deviceId] = newCaptcha
+                            token = newCaptcha.token
                         }
                         return@repeat
                     }
                 }
-                if (err == "captcha_invalid" && attempt == 0) {
-                    // 用正确 action + captcha_sign 重新 init（携带旧 token），拿 723 长度有效 token 后重试
-                    val newToken = initPanCaptcha(deviceId, action, token)
-                    if (!newToken.isNullOrBlank()) {
-                        refreshedCaptcha = newToken
-                        token = newToken
+                if (!anonymous && err == "captcha_invalid" && attempt == 0) {
+                    // client_id 配错：回退网页会话也救不回来（网页会话同样只认网页 client_id），
+                    // 只会白等十几秒再失败，所以直接报错。
+                    if (isClientIdMismatch(json)) {
+                        throw QuarkApiException("验证码与当前登录方式不匹配，请重新登录迅雷网页版")
+                    }
+                    // 网页账号：本地 9 盐签名换 token（被拒时由实现内部回退网页会话）；
+                    // 非网页账号返回 null，继续走原来的 App 通道 captcha_sign 重签。
+                    val newCaptcha = webCaptchaRefresher(deviceId, action)
+                        ?: initPanCaptcha(deviceId, action, token)
+                            ?.let { PanCaptcha(it, Long.MAX_VALUE) }
+                    if (newCaptcha != null) {
+                        refreshedCaptchas[deviceId] = newCaptcha
+                        token = newCaptcha.token
                         return@repeat
                     }
                 }
@@ -786,6 +1068,10 @@ class XunleiApi(
         }
         throw QuarkApiException("验证码刷新后仍失败")
     }
+
+    /** 服务端是否明确回了 client_id 配错（`error_details[].detail = "client_id not match"`） */
+    private fun isClientIdMismatch(json: JSONObject): Boolean =
+        json.toString().contains("client_id not match")
 
     /** 用请求对应 action + 正确 captcha_sign 初始化 captcha（pan 专用，alist 算法已验证）。
      * 算法：raw = client_id+client_version+package_name+device_id+timestamp_ms，10 层 md5(raw+salt)，sign="1."+结果 */
@@ -827,6 +1113,73 @@ class XunleiApi(
             }.getOrNull()
         }
 
+    /**
+     * 网页通道 captcha/init：本地用网页 9 盐签名换 token（不依赖隐藏 WebView）。
+     *
+     * 网页的 `captcha_sign` 约一天有效（每天 00:00 失效），换来的 token 只有 300s，
+     * 所以这里每次需要 token 就现签一次；签名被服务端拒绝（盐/版本轮换）返回 [WebCaptchaInit.Failed]，
+     * 由调用方回退网页会话。`client_id not match` 单独返回：那种情况换谁都救不回来，不能回退。
+     */
+    suspend fun initWebCaptcha(deviceId: String, action: String): WebCaptchaInit =
+        withContext(Dispatchers.IO) {
+            val ts = System.currentTimeMillis()
+            val sign = XunleiWebCredential.computeCaptchaSign(deviceId, ts)
+            val body = JSONObject()
+                .put("client_id", XunleiWebCredential.CLIENT_ID)
+                .put("action", action)
+                .put("device_id", deviceId)
+                .put(
+                    "meta",
+                    JSONObject()
+                        .put("username", "")
+                        .put("phone_number", "")
+                        .put("email", "")
+                        .put("package_name", XunleiWebCredential.WEB_PACKAGE_NAME)
+                        .put("client_version", XunleiWebCredential.WEB_CLIENT_VERSION)
+                        .put("captcha_sign", sign)
+                        .put("timestamp", ts.toString())
+                        .put("user_id", currentUserId)
+                )
+                .toString()
+            val request = Request.Builder()
+                .url(XunleiConstants.CAPTCHA_INIT_URL)
+                .header("Accept", "*/*")
+                .header("Content-Type", "text/plain;charset=UTF-8")
+                .header("Origin", "https://pan.xunlei.com")
+                .header("Referer", "https://pan.xunlei.com/")
+                .header("User-Agent", XunleiConstants.WEB_UA)
+                .post(body.toRequestBody(jsonMediaType))
+                .build()
+            runCatching {
+                client.newCall(request).execute().use { resp ->
+                    val text = resp.body?.string().orEmpty()
+                    val json = runCatching { JSONObject(text) }.getOrNull()
+                    if (json == null) return@use WebCaptchaInit.Failed
+                    val token = json.optString("captcha_token")
+                    if (resp.isSuccessful && token.isNotBlank()) {
+                        // 与网页一致：提前 30s 视为过期，避免踩在边界上刚好失效
+                        val ttl = json.optLong("expires_in", 300L).coerceAtLeast(1L)
+                        val expiresAt = System.currentTimeMillis() + ttl * 1000L - 30_000L
+                        WebCaptchaInit.Ok(PanCaptcha(token, expiresAt))
+                    } else {
+                        DiagnosticLog.warn(
+                            DiagnosticLog.NETWORK,
+                            "xunlei_web_captcha_init_failed",
+                            "status=${resp.code} err=${json.optString("error")} " +
+                                "desc=${json.optString("error_description")} " +
+                                "details=${json.optString("error_details")}"
+                        )
+                        val detail = json.toString()
+                        if (detail.contains("client_id not match")) {
+                            WebCaptchaInit.ClientIdMismatch
+                        } else {
+                            WebCaptchaInit.Failed
+                        }
+                    }
+                }
+            }.getOrElse { WebCaptchaInit.Failed }
+        }
+
     /** captcha_sign：client_id+client_version+package_name+device_id+timestamp_ms → 10 层 md5(raw+salt)，前缀 "1." */
     private fun buildCaptchaSign(deviceId: String, tsMs: String): String {
         var h = XunleiConstants.APP_CLIENT_ID + XunleiConstants.APP_CLIENT_VERSION +
@@ -843,13 +1196,12 @@ class XunleiApi(
     }
 
     /**
-     * 中文口令 → 分享链接（如「张三丰资源」→ `https://pan.xunlei.com/s/xxx?pwd=yyyy`）。
+     * 迅雷中文口令（如「张三丰资源」）→ 带提取码的分享链接（免登录）。
      *
-     * 打的是迅雷客户端在用的搜索跳转接口：响应 `ext.kouling_type == "share_page"` 时
-     * `location` 就是带提取码的分享页地址（提取码明文给出，无需再调别的接口）；
-     * 没有对应资源时只返回 `search_url`（搜索引擎结果页），此时按失败处理并给出可读原因。
-     * UA 必须带 Thunder/TBC 标识、且带 Origin/Referer —— 否则服务端会当成浏览器，
-     * 一律回落到搜索页（表现为"口令明明有效却解析不出"）。
+     * 口令是「分享链接 + 提取码」的打包形式：把口令当关键词打 shoulei 的搜索跳转接口，
+     * `ext.kouling_type == "share_page"` 时 `location` 就是带 `pwd` 的分享页地址（明文，无需解密）；
+     * 没有对应资源时只返回 `search_url`，这里按「口令无效」抛出。
+     * 纯逻辑（判定 / 拼 URL / 解 location）在 [XunleiKouling]，便于单测。
      */
     suspend fun parseKouling(keyword: String): String = withContext(Dispatchers.IO) {
         val request = Request.Builder()

@@ -37,6 +37,18 @@ import org.junit.Test
  */
 class LanzouShareParseTest {
 
+    @Test
+    fun lanznDomainsRecognizeFilesAndFolders() {
+        for (shareId in listOf("iXnuF4c8sqmb", "b0shared")) {
+            val parsed = ShareLinkParser.parse("https://wow2333.lanzn.com/$shareId?pwd=abcd")
+            assertEquals(SharePlatform.LANZOU, parsed?.platform)
+            assertEquals(shareId, parsed?.shareId)
+            assertEquals("abcd", parsed?.pwd)
+        }
+        assertTrue(LanzouConstants.isLanzouHost("wow2333.lanzn.com"))
+        assertFalse(LanzouConstants.isLanzouHost("lanzn.com.example.org"))
+    }
+
     private val api = LanzouApi { OkHttpClient() }
 
     private fun page(isFolder: Boolean, base: String = "https://wwa.lanzouj.com") = LanzouSharePage(

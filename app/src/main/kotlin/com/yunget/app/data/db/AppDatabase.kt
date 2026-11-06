@@ -11,7 +11,7 @@ import com.yunget.app.data.security.CredentialCipher
 
 @Database(
     entities = [QuarkAccountEntity::class, DownloadTaskEntity::class, UCAccountEntity::class, XunleiAccountEntity::class, BaiduAccountEntity::class, C139AccountEntity::class, Pan123AccountEntity::class, BookmarkEntity::class, Pan115AccountEntity::class, GuangYaAccountEntity::class, ILanzouAccountEntity::class, LanzouAccountEntity::class, PluginInstalledEntity::class, PluginSourceEntity::class],
-    version = 23,
+    version = 24,
     exportSchema = false
 )
 abstract class AppDatabase : RoomDatabase() {
@@ -107,7 +107,7 @@ abstract class AppDatabase : RoomDatabase() {
                         MIGRATION_19_20,
                         MIGRATION_20_21,
                         MIGRATION_21_22,
-                        MIGRATION_22_23,
+                        MIGRATION_22_23, MIGRATION_23_24,
                     )
                     // 早期开发版（1-8）无可靠 schema；从 v9 起必须保留凭证和下载任务
                     .fallbackToDestructiveMigrationFrom(1, 2, 3, 4, 5, 6, 7, 8)
@@ -305,6 +305,18 @@ abstract class AppDatabase : RoomDatabase() {
          * `isPrimary` 默认 1：现有每一行就是该平台唯一的账号，理应是主账号。
          * 若默认 0，升级后所有平台的"需要单一身份的操作"都会找不到主账号。
          */
+        private val MIGRATION_23_24 = object : Migration(23, 24) {
+            override fun migrate(db: SupportSQLiteDatabase) {
+                db.execSQL("ALTER TABLE download_task ADD COLUMN platform TEXT NOT NULL DEFAULT ''")
+                db.execSQL("ALTER TABLE download_task ADD COLUMN fallbackUrl TEXT NOT NULL DEFAULT ''")
+                db.execSQL("ALTER TABLE download_task ADD COLUMN altSourcesJson TEXT NOT NULL DEFAULT '[]'")
+                db.execSQL("ALTER TABLE download_task ADD COLUMN mergeAudioUrl TEXT NOT NULL DEFAULT ''")
+                db.execSQL("ALTER TABLE download_task ADD COLUMN mergeAudioHeadersJson TEXT NOT NULL DEFAULT '{}'")
+                db.execSQL("ALTER TABLE download_task ADD COLUMN motionUrl TEXT NOT NULL DEFAULT ''")
+                db.execSQL("ALTER TABLE download_task ADD COLUMN audioOnly INTEGER NOT NULL DEFAULT 0")
+            }
+        }
+
         private val MIGRATION_22_23 = object : Migration(22, 23) {
             override fun migrate(db: SupportSQLiteDatabase) {
                 if (!db.hasColumn("quark_account", "remark")) {

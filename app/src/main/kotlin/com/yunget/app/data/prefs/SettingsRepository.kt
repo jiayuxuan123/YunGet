@@ -231,16 +231,48 @@ class SettingsRepository(context: Context) {
         }
 
     /**
-     * 颜色对比度档位：0=标准，1=中等对比，2=高对比。
+     * 账号页网盘列表的顺序（平台 id 的列表），空 = 默认顺序。
      *
-     * 这三档不是"更好看/更难看"的区别，而是无障碍设置：视力不佳或强光下使用时，
-     * Material 的标准配色对比度可能不够。`Theme.kt` 里四套对比度方案本来就存在
-     * （中等/高 × 浅色/深色），但此前没有任何入口能选中它们 —— 等于白写。
+     * ★ 只存「用户排过的相对顺序」：以后新增平台不在这个列表里，由账号页按默认顺序补在末尾
+     *   （见 `DriveScreen` 的排序归一化），所以加新网盘不需要迁移这个设置。
      */
-    var contrastLevel: Int
-        get() = prefs.getInt("contrast_level", 0)
+    var driveAccountOrder: List<String>
+        get() = prefs.getString("drive_account_order", "")
+            .orEmpty()
+            .split(',')
+            .filter { it.isNotBlank() }
         set(value) {
-            prefs.edit().putInt("contrast_level", value.coerceIn(0, 2)).apply()
+            prefs.edit().putString("drive_account_order", value.joinToString(",")).apply()
+        }
+
+    /**
+     * 账号页隐藏未登录的网盘（默认关）：开启后列表只保留已登录的账号。
+     * 未登录的平台仍能在「排序」弹窗里看到并取消隐藏；GitHub 卡片不受影响
+     * （它不是网盘，且是配置 Token 的唯一入口，见 `DriveScreen`）。
+     */
+    var hideUnloggedDrives: Boolean
+        get() = prefs.getBoolean("hide_unlogged_drives", false)
+        set(value) {
+            prefs.edit().putBoolean("hide_unlogged_drives", value).apply()
+        }
+
+    /**
+     * 列表缩略图：在网盘/分享文件列表里给图片显示小图（默认开启）。
+     *
+     * 关掉后**一个取图请求都不发**（不是加载完再隐藏）：缩略图要走各网盘接口或图床，
+     * 流量与请求数都不该在用户不想看时白花。运行态见 `ThemeController.cloudThumbnails`。
+     */
+    var cloudThumbnails: Boolean
+        get() = prefs.getBoolean("cloud_thumbnails", true)
+        set(value) {
+            prefs.edit().putBoolean("cloud_thumbnails", value).apply()
+        }
+
+    /** 自动识别剪贴板分享链接：关闭后完全不读取剪贴板（默认开启） */
+    var clipboardSuggestEnabled: Boolean
+        get() = prefs.getBoolean("clipboard_suggest_enabled", true)
+        set(value) {
+            prefs.edit().putBoolean("clipboard_suggest_enabled", value).apply()
         }
 
     // ====================================================================
@@ -530,4 +562,13 @@ class SettingsRepository(context: Context) {
         /** 默认主题种子色：Material Blue（与内置默认方案一致） */
         const val DEFAULT_SEED_COLOR = 0xFF415F91L
     }
+    var contrastLevel: Int
+        get() = prefs.getInt("contrast_level", 0)
+        set(value) { prefs.edit().putInt("contrast_level", value.coerceIn(0, 2)).apply() }
+    var acceptPrereleaseUpdate: Boolean
+        get() = prefs.getBoolean("accept_prerelease_update", false)
+        set(value) { prefs.edit().putBoolean("accept_prerelease_update", value).apply() }
+    var downloadDebug: Boolean
+        get() = prefs.getBoolean("download_debug", false)
+        set(value) { prefs.edit().putBoolean("download_debug", value).apply() }
 }

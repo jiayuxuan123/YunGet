@@ -1,6 +1,7 @@
 <?xml version="1.0" encoding="utf-8"?>
 <!-- FileProvider 共享路径：导出日志、打开/安装已下载文件等场景使用 -->
 <paths>
+    <cache-path name="kernel_install" path="kernels/" />
     <!-- 内部缓存目录：cacheDir/logs -->
     <cache-path name="cache_logs" path="logs/" />
     <!-- 崩溃日志目录：filesDir/crash -->

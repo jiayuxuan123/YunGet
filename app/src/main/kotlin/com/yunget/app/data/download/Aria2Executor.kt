@@ -45,9 +45,7 @@ object Aria2Executor {
      */
     fun binaryPath(context: Context): File? {
         if (!isSupportedAbi()) return null
-        val dir = context.applicationInfo.nativeLibraryDir ?: return null
-        val f = File(dir, LIB_NAME)
-        return f.takeIf { it.isFile }
+        return Aria2KernelProvisioner.installedBinary(context)
     }
 
     /** 当前设备 ABI 是否能跑官方 aria2（只提供 aarch64）。 */
@@ -96,9 +94,7 @@ object Aria2Executor {
         val bin = binaryPath(context)
             ?: return Aria2ProbeResult(
                 available = false,
-                detail = "未找到 $LIB_NAME（nativeLibraryDir=" +
-                    "${context.applicationInfo.nativeLibraryDir}）；" +
-                    "若 APK 是用 useLegacyPackaging=false 打包的，该目录为空 → 必然 ENOENT"
+                detail = "未安装可信的 aria2 可选内核，请在下载引擎页联网下载并完成系统安装"
             )
 
         // 先尝试补可执行位（部分设备安装后 lib 无 x 位）。
@@ -110,8 +106,12 @@ object Aria2Executor {
             // HOME 未定义时 aria2 会尝试读 ~/.aria2/aria2.conf；用应用私有目录兜底。
             pb.environment()["HOME"] = context.filesDir.absolutePath
             val proc = pb.start()
-            val out = proc.inputStream.bufferedReader().use { it.readText() }
             val finished = proc.waitFor(12, TimeUnit.SECONDS)
+            val out = if (finished) proc.inputStream.bufferedReader().use { reader ->
+                val buffer = CharArray(8192)
+                val count = reader.read(buffer)
+                if (count > 0) String(buffer, 0, count) else ""
+            } else ""
             if (!finished) {
                 proc.destroyForcibly()
                 Aria2ProbeResult(false, "aria2c --version 超时（12s），已强制结束")
@@ -131,7 +131,7 @@ object Aria2Executor {
             val msg = e.message ?: e.javaClass.simpleName
             val hint = when {
                 msg.contains("ENOENT", true) || msg.contains("No such file", true) ->
-                    "文件不存在（大概率是 useLegacyPackaging=false 导致 so 未落盘）"
+                    "可选内核不存在或安装不完整，请重新安装 aria2 内核"
                 msg.contains("EACCES", true) || msg.contains("Permission denied", true) ||
                     msg.contains("error=13", true) ->
                     "无执行权限（Android 10+ 对私有目录禁 exec；nativeLibraryDir 理论允许，" +

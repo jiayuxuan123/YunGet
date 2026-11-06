@@ -96,7 +96,7 @@ import com.yunget.app.data.download.DownloadEngineRegistry
 import com.yunget.app.data.gopeed.GopeedEngine
 import com.yunget.app.data.gopeed.KernelProvisioner
 import com.yunget.app.data.prefs.SettingsRepository
-import com.yunget.app.ui.components.YunGetWavyLoading
+import com.yunget.app.ui.components.YunGetLoading
 import com.yunget.app.ui.components.YunGetWavyProgress
 import com.yunget.app.ui.resolve.formatSize
 import com.yunget.app.ui.theme.effectsDefault
@@ -166,6 +166,7 @@ fun DownloadEngineScreen(onBack: () -> Unit, modifier: Modifier = Modifier) {
     ) }
     var aria2Result by remember { mutableStateOf<Aria2ProbeResult?>(null) }
     var aria2Checking by remember { mutableStateOf(false) }
+    var aria2Installer by remember { mutableStateOf<java.io.File?>(null) }
     var busy by remember { mutableStateOf(false) }
     var soBytes by remember { mutableStateOf(0L) }
     var engineVersion by remember { mutableStateOf("") }
@@ -471,6 +472,27 @@ fun DownloadEngineScreen(onBack: () -> Unit, modifier: Modifier = Modifier) {
                                         }
                                     }
                                 }
+
+                                Button(
+                                    onClick = {
+                                        busy = true
+                                        scope.launch {
+                                            try {
+                                                val apk = aria2Installer ?: com.yunget.app.data.download.Aria2KernelProvisioner.download(context) { done, total ->
+                                                    notice = "aria2 内核下载：${done * 100 / total}%"
+                                                }
+                                                aria2Installer = apk
+                                                com.yunget.app.data.download.Aria2KernelProvisioner.install(context, apk)
+                                                notice = "请完成系统安装，返回后检测 aria2 是否可用"
+                                            } catch (error: Exception) {
+                                                if (error is kotlinx.coroutines.CancellationException) throw error
+                                                failure = error.message ?: "内核安装失败"
+                                            } finally { busy = false }
+                                        }
+                                    },
+                                    enabled = !busy && Aria2Executor.isSupportedAbi(),
+                                    modifier = Modifier.fillMaxWidth()
+                                ) { Text(if (busy) "正在获取内核…" else if (aria2Installer != null) "安装已下载的 aria2 内核" else "下载 / 更新 aria2 可选内核") }
 
                                 // aria2 可用性检测：先确认"这台设备能不能跑"再切过去，
                                 // 结果含确切失败原因（ENOENT / EACCES / ENOEXEC 语义完全不同）。
@@ -1109,7 +1131,7 @@ private fun KernelProgressDialog(
                                 trackColor = MaterialTheme.colorScheme.surfaceContainerHighest
                             )
                         } else {
-                            YunGetWavyLoading(modifier = Modifier.fillMaxWidth())
+                            YunGetLoading(modifier = Modifier.fillMaxWidth())
                         }
                         Text(
                             text = buildString {
@@ -1142,10 +1164,10 @@ private fun KernelProgressDialog(
                         )
                     }
                     phase is KernelProvisioner.Phase.Importing -> {
-                        YunGetWavyLoading(modifier = Modifier.fillMaxWidth())
+                        YunGetLoading(modifier = Modifier.fillMaxWidth())
                     }
                     !finished -> {
-                        YunGetWavyLoading(modifier = Modifier.fillMaxWidth())
+                        YunGetLoading(modifier = Modifier.fillMaxWidth())
                     }
                 }
 

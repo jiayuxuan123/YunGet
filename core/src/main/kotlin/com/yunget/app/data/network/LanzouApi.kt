@@ -315,6 +315,22 @@ class LanzouApi(
             text
         }
 
+
+
+    /**
+
+     * B12：个人盘上传。蓝奏只有这一条上传通道——整个文件走一次 multipart POST，
+
+     * **没有分片、没有秒传、没有预上传/合并**，所以大文件体验取决于网络稳定性。
+
+     *
+
+     * 成功判定看响应 `zt`：1 成功；4 请求频繁；9 登录过期。
+
+     * 文件 id 取 `text[0].id`，与列表里的 `f:<id>` 前缀保持一致。
+
+     */
+
     /** B5：重命名文件夹。 */
     suspend fun renameFolder(cookie: String, uid: String, vei: String, folderId: String, newName: String) =
         withContext(Dispatchers.IO) {
@@ -486,34 +502,64 @@ class LanzouApi(
                         delay(300)
                         null
                     }
+
                 }
+
                 val body = json ?: break
+
                 val zt = body.optInt("zt", 0)
+
                 // 决策抽成纯函数（folderPageAction）：这些组合是用户实际踩到的那几种，
+
                 // 放在 HTTP 循环里既难读也难测。这里只负责把决策落成动作。
+
                 when (folderPageAction(zt, firstPageDone = pg > 1, pwdPresent = pwdToSend.isNotEmpty())) {
+
                     FolderPageAction.NEXT -> {}
+
                     FolderPageAction.DONE -> {
+
                         if (zt == 2) return@withContext all
+
                         break
+
                     }
+
                     FolderPageAction.RETRY_WITHOUT_PWD -> {
+
                         // 已解锁的分享再带提取码会被判"密码错误"（见 pwdToSend 的说明）。
+
                         pwdToSend = ""
+
                         continue
+
                     }
+
                     FolderPageAction.RETRY_LATER -> {
+
                         rateLimitRetries++
+
                         if (rateLimitRetries > 2) throw IllegalStateException("蓝奏请求过于频繁，请稍后再试")
+
                         delay(800)
+
                     }
+
                     FolderPageAction.FAIL_PWD ->
+
                         throw IllegalStateException("蓝奏提取码错误，请检查后重新解析")
+
                     FolderPageAction.FAIL_BUSY ->
+
                         throw IllegalStateException("蓝奏请求过于频繁，请稍后再试")
+
                     FolderPageAction.FAIL_OTHER ->
+
                         throw IllegalStateException("蓝奏解析失败，请确认分享链接和提取码后重试")
+
                 }
+
+
 
                 LanzouLog.note("分页 pg=$pg zt=$zt 项目=${body.optJSONArray("text")?.length() ?: -1} 子目录=${all.size}")
                 val arr = body.optJSONArray("text")

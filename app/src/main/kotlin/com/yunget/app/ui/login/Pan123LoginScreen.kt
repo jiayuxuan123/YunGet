@@ -60,7 +60,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.viewinterop.AndroidView
 import com.yunget.app.data.network.Pan123Constants
 import com.yunget.app.ui.viewmodel.Pan123AccountViewModel
-import com.yunget.app.ui.components.YunGetWavyLoading
+import com.yunget.app.ui.components.YunGetLoading
 import kotlin.coroutines.resume
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.suspendCancellableCoroutine
@@ -221,7 +221,7 @@ fun Pan123LoginScreen(
                 modifier = Modifier.fillMaxSize()
             )
             if (isLoading) {
-                YunGetWavyLoading(modifier = Modifier.fillMaxWidth())
+                YunGetLoading(modifier = Modifier.fillMaxWidth())
             }
         }
     }

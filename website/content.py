@@ -96,7 +96,7 @@ def _download_edge_url(url: str) -> str:
             return f"{DOWNLOAD_EDGE}/{project}/releases/download/{url[len(prefix):]}"
     return url
 
-APKS = [a for a in LATEST["assets"] if a["name"].lower().endswith(".apk")]
+APKS = [a for a in LATEST["assets"] if a["name"].lower().endswith(".apk") and "kernel" not in a["name"].lower()]
 APK = next((a for a in APKS if "universal" in a["name"].lower()), None) or next(iter(APKS), None)
 
 #: 文档里的占位符 → 实际值。文档里写 `{{引擎版本}}` 而不是手写版本号：

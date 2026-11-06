@@ -18,6 +18,10 @@
 
 package com.yunget.app.data.repository
 
+import kotlinx.coroutines.flow.first
+
+
+
 import com.yunget.app.data.db.XunleiAccountDao
 import com.yunget.app.data.db.XunleiAccountEntity
 import com.yunget.app.data.network.XunleiApi
@@ -93,8 +97,13 @@ class XunleiAccountRepository(
         val deviceId = XunleiApi.newDeviceId()
         val step = api.smsLogin(mobile, smsCode, creditKey, smsToken, deviceId)
         if (step.sessionId.isBlank()) return false
-        // 换 token 前先 initCaptcha 拿 captcha_token（官方时序：smslogin → captcha/init → signin/token）
-        val captchaToken = api.initCaptcha(deviceId, mobile) ?: ""
+
+        // 换 token 前先 initCaptcha 拿 captcha_token（官方时序：smslogin → captcha/init → signin/token）。
+
+        // userID 取 smslogin 响应里的真实值：首次登录时进程里没有已缓存的用户 ID，传空会拿降级 token
+
+        val captchaToken = api.initCaptcha(deviceId, mobile, userId = step.userID) ?: ""
+
         val tokens = api.exchangeToken(step.sessionId, deviceId, captchaToken) ?: return false
         dao.upsert(
             XunleiAccountEntity(
@@ -116,7 +125,11 @@ class XunleiAccountRepository(
     ): Boolean {
         if (step.sessionId.isBlank()) return false
         val deviceId = XunleiApi.newDeviceId()
-        val captchaToken = api.initCaptcha(deviceId, username) ?: ""
+
+        // 同 loginWithSms：meta.user_id 用 v3/login 响应里的 userID，不能等 currentUserId 缓存
+
+        val captchaToken = api.initCaptcha(deviceId, username, userId = step.userID) ?: ""
+
         val tokens = api.exchangeToken(step.sessionId, deviceId, captchaToken) ?: return false
         dao.upsert(
             XunleiAccountEntity(
@@ -140,4 +153,6 @@ class XunleiAccountRepository(
     suspend fun logout() {
         dao.clear()
     }
+
+    suspend fun allCredentials(): List<String> = dao.observeAll().first().map { it.accessToken }
 }

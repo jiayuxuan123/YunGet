@@ -51,6 +51,20 @@ data class DownloadTaskEntity(
      */
     @ColumnInfo(defaultValue = "0")
     val avgSpeed: Long = 0,
+    @ColumnInfo(defaultValue = "''")
+    val platform: String = "",
+    @ColumnInfo(defaultValue = "''")
+    val fallbackUrl: String = "",
+    @ColumnInfo(defaultValue = "'[]'")
+    val altSourcesJson: String = "[]",
+    @ColumnInfo(defaultValue = "''")
+    val mergeAudioUrl: String = "",
+    @ColumnInfo(defaultValue = "'{}'")
+    val mergeAudioHeadersJson: String = "{}",
+    @ColumnInfo(defaultValue = "''")
+    val motionUrl: String = "",
+    @ColumnInfo(defaultValue = "0")
+    val audioOnly: Boolean = false,
     val createTime: Long = System.currentTimeMillis()
 ) {
     companion object {

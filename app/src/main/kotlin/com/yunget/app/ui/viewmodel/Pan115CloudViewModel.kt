@@ -19,6 +19,18 @@
 
 package com.yunget.app.ui.viewmodel
 
+
+
+import android.content.ContentResolver
+
+import android.net.Uri
+
+import com.yunget.app.data.network.HttpClients
+
+import com.yunget.app.data.upload.UploadProgress
+
+import com.yunget.app.data.upload.UploadRunner
+
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateListOf
 import androidx.compose.runtime.mutableStateOf
@@ -33,6 +45,9 @@ import com.yunget.app.data.network.model.DownloadLink
 import com.yunget.app.data.network.model.ShareExpire
 import com.yunget.app.data.network.model.ShareFile
 import com.yunget.app.data.network.model.ShareInfo
+
+import com.yunget.app.ui.preview.CloudPreview
+
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -366,120 +381,257 @@ class Pan115CloudViewModel(
         }
     }
 
-    /** 下载弹窗确认：用已生成的直链入队 */
-    fun startDownload() {
-        val pd = pendingDownload ?: return
-        downloadLink = null
-        pendingDownload = null
-        viewModelScope.launch {
-            isOperating = true
-            try {
-                downloadManager.enqueue(
-                    url = pd.url,
-                    fileName = pd.fileName,
-                    size = pd.size,
-                    headers = pd.headers
-                )
-                cloudMessage = "已加入下载：${pd.fileName}"
-                actionFile = null
-                downloadTriggered++
-            } catch (e: Exception) {
-                cloudMessage = e.message ?: "下载失败"
-            } finally {
-                isOperating = false
-            }
-        }
-    }
 
-    /** 关闭下载弹窗（放弃下载） */
-    fun dismissDownloadDialog() {
-        downloadLink = null
-        pendingDownload = null
-    }
-
-    /** 重命名 */
-    fun renameFile(newName: String) {
-        val file = actionFile ?: return
-        viewModelScope.launch {
-            isOperating = true
-            try {
-                api.rename(file.fid, newName, cookie())
-                cloudMessage = "已重命名"
-                actionFile = null
-                reloadCurrent()
-            } catch (e: Exception) {
-                cloudMessage = e.message ?: "重命名失败"
-            } finally {
-                isOperating = false
-            }
-        }
-    }
-
-    /** 新建文件夹（当前目录下） */
-    fun createFolder(name: String) {
-        val newName = name.trim()
-        if (newName.isEmpty()) return
-        viewModelScope.launch {
-            isOperating = true
-            try {
-                api.createDir(currentDirId(), newName, cookie())
-                cloudMessage = "已创建文件夹「$newName」"
-                reloadCurrent()
-            } catch (e: Exception) {
-                cloudMessage = e.message ?: "新建文件夹失败"
-            } finally {
-                isOperating = false
-            }
-        }
-    }
-
-    /** 移动 */
-    fun moveFile(toDirId: String) {
-        val file = actionFile ?: return
-        viewModelScope.launch {
-            isOperating = true
-            try {
-                api.move(listOf(file.fid), toDirId, cookie())
-                cloudMessage = "已移动到目标目录"
-                actionFile = null
-                reloadCurrent()
-            } catch (e: Exception) {
-                cloudMessage = e.message ?: "移动失败"
-            } finally {
-                isOperating = false
-            }
-        }
-    }
 
     /**
-     * 创建分享：有效期必须走 `share/updateshare` 的 `share_duration`
-     * （创建请求里没有有效期字段，缺这一步「永久」会落成默认 15 天）。
-     * 访问码由服务端生成且不可自定义/取消，结果回读到 [shareResult] 后展示。
-     *
-     * @param expiredType 115 专属有效期码（[ShareExpire.PAN115_OPTIONS]），转字符串见 [ShareExpire.pan115Duration]
+
+     * 在线预览（云盘文件）：115 直链是 pickcode 换来的 CDN 地址，CDN 同时校验登录 Cookie 与
+
+     * 取链响应下发的 900 秒 CDN Cookie（[downloadHeaders] 负责拼接）—— 缺任一直接 403。
+
      */
-    fun shareFile(expiredType: Int) {
+
+    fun openPreview() {
+
         val file = actionFile ?: return
+
+        if (!CloudPreview.canPreview(file)) return
+
         viewModelScope.launch {
             isOperating = true
             try {
-                val info = api.createShare(
-                    fileIds = listOf(file.fid),
-                    duration = ShareExpire.pan115Duration(expiredType),
-                    cookie = cookie()
-                )
-                // 有效期以接口回填的真实档位为准（改有效期失败时不会谎报用户所选值），
-                // 同时把接口带回的非致命提示（如「已创建但有效期没改成」）用 Snackbar 告知
-                shareResult = info
-                info.warning?.let { cloudMessage = it }
+
+                val ck = cookie()
+
+                val link = api.getDownloadLink(file, ck)
+
+                    ?: throw IllegalStateException("获取下载链接失败")
+
+                // 先清 actionFile 再开预览：否则关掉预览时文件操作弹窗会重新弹出来
+
                 actionFile = null
+
+                CloudPreview.open(file, link.downloadUrl, downloadHeaders(ck, link), isHls = link.isHls)
+
             } catch (e: Exception) {
-                cloudMessage = e.message ?: "分享失败"
+
+                cloudMessage = e.message ?: "预览失败"
+
             } finally {
                 isOperating = false
             }
         }
     }
+
+
+
+    /** 下载弹窗确认：用已生成的直链入队 */
+
+    fun startDownload() {
+
+        val pd = pendingDownload ?: return
+
+        downloadLink = null
+        pendingDownload = null
+
+        viewModelScope.launch {
+
+            isOperating = true
+
+            try {
+
+                downloadManager.enqueue(
+
+                    url = pd.url,
+
+                    fileName = pd.fileName,
+
+                    size = pd.size,
+
+                    headers = pd.headers
+
+                )
+
+                cloudMessage = "已加入下载：${pd.fileName}"
+
+                actionFile = null
+
+                downloadTriggered++
+
+            } catch (e: Exception) {
+
+                cloudMessage = e.message ?: "下载失败"
+
+            } finally {
+
+                isOperating = false
+
+            }
+
+        }
+
+    }
+
+
+
+    /** 关闭下载弹窗（放弃下载） */
+
+    fun dismissDownloadDialog() {
+
+        downloadLink = null
+
+        pendingDownload = null
+
+    }
+
+
+
+    /** 重命名 */
+
+    fun renameFile(newName: String) {
+
+        val file = actionFile ?: return
+
+        viewModelScope.launch {
+            isOperating = true
+            try {
+
+                api.rename(file.fid, newName, cookie())
+
+                cloudMessage = "已重命名"
+
+                actionFile = null
+
+                reloadCurrent()
+            } catch (e: Exception) {
+
+                cloudMessage = e.message ?: "重命名失败"
+
+            } finally {
+                isOperating = false
+            }
+        }
+    }
+
+
+
+    /** 新建文件夹（当前目录下） */
+
+    fun createFolder(name: String) {
+
+        val newName = name.trim()
+
+        if (newName.isEmpty()) return
+
+        viewModelScope.launch {
+            isOperating = true
+            try {
+
+                api.createDir(currentDirId(), newName, cookie())
+
+                cloudMessage = "已创建文件夹「$newName」"
+
+                reloadCurrent()
+            } catch (e: Exception) {
+
+                cloudMessage = e.message ?: "新建文件夹失败"
+
+            } finally {
+                isOperating = false
+            }
+        }
+    }
+
+
+
+    /** 移动 */
+
+    fun moveFile(toDirId: String) {
+
+        val file = actionFile ?: return
+        viewModelScope.launch {
+            isOperating = true
+            try {
+
+                api.move(listOf(file.fid), toDirId, cookie())
+
+                cloudMessage = "已移动到目标目录"
+
+                actionFile = null
+
+                reloadCurrent()
+
+            } catch (e: Exception) {
+
+                cloudMessage = e.message ?: "移动失败"
+
+            } finally {
+                isOperating = false
+            }
+        }
+    }
+
+
+
+    /**
+
+     * 创建分享：有效期必须走 `share/updateshare` 的 `share_duration`
+
+     * （创建请求里没有有效期字段，缺这一步「永久」会落成默认 15 天）。
+
+     * 访问码由服务端生成且不可自定义/取消，结果回读到 [shareResult] 后展示。
+
+     *
+
+     * @param expiredType 115 专属有效期码（[ShareExpire.PAN115_OPTIONS]），转字符串见 [ShareExpire.pan115Duration]
+
+     */
+
+    fun shareFile(expiredType: Int) {
+
+        val file = actionFile ?: return
+
+        viewModelScope.launch {
+
+            isOperating = true
+
+            try {
+
+                val info = api.createShare(
+
+                    fileIds = listOf(file.fid),
+
+                    duration = ShareExpire.pan115Duration(expiredType),
+
+                    cookie = cookie()
+
+                )
+
+                // 有效期以接口回填的真实档位为准（改有效期失败时不会谎报用户所选值），
+
+                // 同时把接口带回的非致命提示（如「已创建但有效期没改成」）用 Snackbar 告知
+
+                shareResult = info
+
+                info.warning?.let { cloudMessage = it }
+
+                actionFile = null
+
+            } catch (e: Exception) {
+
+                cloudMessage = e.message ?: "分享失败"
+
+            } finally {
+
+                isOperating = false
+
+            }
+
+        }
+
+    }
+
+
 
     /** 删除（移入回收站；115 删除要带父目录 pid） */
     fun deleteFile() {
@@ -660,6 +812,72 @@ class Pan115CloudViewModel(
             }
         }
     }
+
+
+
+    // ---------- 上传（115 OSS 单次表单（≤5 GB）） ----------
+
+
+
+    /** 上传进度（null 表示没有任务）；上传弹窗直接读这里 */
+
+    val uploadProgress: UploadProgress? get() = uploadRunner.progress
+
+
+
+    private val uploadRunner = UploadRunner(viewModelScope, { HttpClients.apiClient() }) { outcome ->
+
+        // 传成功过就刷新列表（失败也刷：已经落库的文件要立刻可见）
+
+        if (outcome.uploaded > 0 || outcome.failed > 0) reloadCurrent()
+
+        cloudMessage = when {
+
+            outcome.error != null -> outcome.error
+
+            outcome.cancelled -> "已取消上传"
+
+            else -> "已上传 ${outcome.uploaded} 个文件"
+
+        }
+
+    }
+
+
+
+    /**
+
+     * 上传选中的本地文件到**当前目录**。
+
+     *
+
+     * 目标目录在这里就先固定下来（上传期间用户可能切目录、返回上级），
+
+     * 凭据留到 IO 线程现取，避免拿着已过期的 Cookie 一路失败。
+
+     */
+
+    fun uploadFiles(resolver: ContentResolver, uris: List<Uri>) {
+
+        val dir = (uiState.value as? Pan115CloudUiState.Loaded)?.dirId ?: Pan115Constants.ROOT_CID
+
+        uploadRunner.start(resolver, uris) { io, source ->
+
+            val cookie = cookieProvider() ?: throw IllegalStateException("请先登录115网盘")
+
+            api.upload(io, source, dir, cookie)
+
+        }
+
+    }
+
+
+
+    /** 取消当前上传（正在发的那一段会立刻被打断） */
+
+    fun cancelUpload() = uploadRunner.cancel()
+
+
 
     class Factory(
         private val api: Pan115Api,

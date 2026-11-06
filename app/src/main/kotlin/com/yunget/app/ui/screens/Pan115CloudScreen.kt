@@ -145,6 +145,11 @@ fun Pan115CloudScreen(
     var showSearch by rememberSaveable { mutableStateOf(false) }
     // 各目录滚动位置记忆：进入文件夹/返回时按目录路径恢复，避免返回后列表回到顶部
     val scrollPositions = remember { mutableStateMapOf<String, Int>() }
+
+    // 已应用滚动位置的目录：从在线预览返回时这一项随保存态恢复，同目录不再强制回顶
+
+    var appliedDirKey by rememberSaveable { mutableStateOf<String?>(null) }
+
     val loadedState = state as? Pan115CloudUiState.Loaded
     val displayFiles = remember(loadedState?.files, searchQuery) {
         val files = loadedState?.files ?: emptyList()
@@ -159,31 +164,78 @@ fun Pan115CloudScreen(
     var showBatchActions by remember { mutableStateOf(false) }
     var batchInitial by remember { mutableStateOf(BatchStep.MENU) }
     var showDeleteConfirm by remember { mutableStateOf(false) }
-    // 「+」菜单的「创建文件夹」弹窗（「上传文件」项目前是占位，见 CloudAddMenu）
+
+    // 「+」菜单的「创建文件夹」弹窗（上传项由下面的 pickUpload 直接拉起选文件器）
+
     var showCreateFolder by remember { mutableStateOf(false) }
 
-    LaunchedEffect(viewModel.cloudMessage) {
-        viewModel.cloudMessage?.let {
-            SnackbarController.show(it)
-            viewModel.consumeMessage()
-        }
+
+
+    // 「+」菜单的上传：系统多选文件 → 交给 ViewModel 依次上传到当前目录
+
+    val pickUpload = rememberUploadPicker { uris ->
+
+        viewModel.uploadFiles(context.contentResolver, uris)
+
     }
+
+
+
+    // 上传进度弹窗：点外部不关闭，「取消」会打断正在发的那一段
+
+    viewModel.uploadProgress?.let { progress ->
+
+        UploadProgressDialog(progress = progress, onCancel = { viewModel.cancelUpload() })
+
+    }
+
+
+
+    LaunchedEffect(viewModel.cloudMessage) {
+
+        viewModel.cloudMessage?.let {
+
+            SnackbarController.show(it)
+
+            viewModel.consumeMessage()
+
+        }
+
+    }
+
+
 
     LaunchedEffect(viewModel.downloadTriggered) {
+
         if (viewModel.downloadTriggered > 0) {
+
             viewModel.consumeDownloadTriggered()
+
             onDownloadStarted()
+
         }
+
     }
 
+
+
     // 单文件下载确认弹窗（对齐解析页：展示直链，长按可复制）
+
     viewModel.downloadLink?.let { link ->
+
         DownloadLinkDialog(
+
             link = link,
+
             onDownload = { viewModel.startDownload() },
+
             onDismiss = { viewModel.dismissDownloadDialog() }
+
         )
+
     }
+
+
 
     Surface(
         modifier = modifier.fillMaxSize(),
@@ -226,6 +278,13 @@ fun Pan115CloudScreen(
                     // 目录加载完成、列表挂载后恢复该目录上次滚动位置（避免 Loading 阶段误触发）
                     val loadedKey = remember(s.pathNames) { s.pathNames.joinToString("/") }
                     LaunchedEffect(loadedKey) {
+
+                        // 切换目录才重置滚动；同目录的重组（如从预览页返回）交给 listState 自己的保存态恢复
+
+                        if (appliedDirKey == loadedKey) return@LaunchedEffect
+
+                        appliedDirKey = loadedKey
+
                         listState.scrollToItem(scrollPositions[loadedKey] ?: 0)
                     }
                     PullToRefreshBox(
@@ -299,7 +358,15 @@ fun Pan115CloudScreen(
                                                 )
                                             }
                                             // 「+」新建菜单（创建文件夹 / 上传文件，Agent.md §3.26）
-                                            CloudAddMenu(onCreateFolder = { showCreateFolder = true })
+
+                                                                                        CloudAddMenu(
+
+                                                                                            onCreateFolder = { showCreateFolder = true },
+
+                                                                                            onUploadFile = pickUpload
+
+                                                                                        )
+
                                         }
                                     }
                                     if (!viewModel.multiSelectMode) {
@@ -452,36 +519,69 @@ fun Pan115CloudScreen(
         !showDeleteConfirm -> null
         viewModel.multiSelectMode -> "选中的 ${viewModel.selected.size} 项"
         else -> viewModel.actionFile?.let { "「${it.fname}」" }
+
     }
+
     if (pendingDeleteTarget != null) {
+
         ConfirmDeleteSheet(
+
             target = pendingDeleteTarget,
+
             operating = viewModel.isOperating,
+
             onDismiss = {
+
                 showDeleteConfirm = false
+
                 viewModel.dismissActions()
+
             },
+
             onConfirm = { if (viewModel.multiSelectMode) viewModel.deleteSelected() else viewModel.deleteFile() }
+
         )
+
     } else if (showActionSheet && viewModel.actionFile != null) {
+
         FileActionSheet(
+
             file = viewModel.actionFile!!,
+
             operating = viewModel.isOperating,
+
             onDownload = { viewModel.downloadFile() },
+
             onDownloadFolder = { viewModel.downloadFolder() },
+
+            // 在线预览（图片）：取链成功后 ViewModel 清空 actionFile，弹窗随之消失；失败则留在弹窗里报错
+
+            onPreview = { viewModel.openPreview() },
+
             // 115 的访问码由服务端生成（不可自定义/取消），有效期是 115 专属档位
+
             onShare = { _, _, expiredType -> viewModel.shareFile(expiredType) },
+
             onRename = { viewModel.renameFile(it) },
+
             onConfirmDelete = { viewModel.deleteFile() },
+
             onDismiss = {
+
                 showActionSheet = false
+
                 viewModel.dismissActions()
+
             },
+
             passcodeMode = PasscodeMode.SERVER_GENERATED,
             expireOptions = ShareExpire.PAN115_OPTIONS,
+
             moveStep = { onBack, onDone ->
                 Pan115MoveStep(
+
                     subtitle = viewModel.actionFile?.fname ?: "",
+
                     viewModel = viewModel,
                     onBack = onBack,
                     onDone = onDone
@@ -489,50 +589,93 @@ fun Pan115CloudScreen(
             }
         )
     }
+
+
 
     // 批量操作弹窗（多选底部栏的分享/移动/删除）
+
     if (showBatchActions) {
+
         BatchActionSheet(
+
             count = viewModel.selected.size,
+
             operating = viewModel.isOperating,
+
             onDownload = { viewModel.downloadSelected() },
+
             onShare = { _, _, expiredType -> viewModel.shareSelected(expiredType) },
+
             onDelete = {
+
                 showBatchActions = false
+
                 showDeleteConfirm = true
+
             },
+
             onDismiss = { showBatchActions = false },
+
             passcodeMode = PasscodeMode.SERVER_GENERATED,
+
             expireOptions = ShareExpire.PAN115_OPTIONS,
+
             initialStep = batchInitial,
+
             moveStep = { onBack, onDone ->
+
                 Pan115MoveStep(
+
                     subtitle = "已选 ${viewModel.selected.size} 项",
+
                     viewModel = viewModel,
+
                     onBack = onBack,
+
                     onDone = onDone
+
                 )
+
             }
         )
     }
+
+
 
     // 新建文件夹：名称校验在弹窗内完成，创建请求交给各页 ViewModel
+
     if (showCreateFolder) {
+
         CreateFolderDialog(
+
             onDismiss = { showCreateFolder = false },
+
             onConfirm = { name ->
+
                 showCreateFolder = false
+
                 viewModel.createFolder(name)
+
             }
+
         )
     }
 
+
+
     viewModel.shareResult?.let { info ->
+
         ShareResultDialog(
+
             info = info,
+
             onDismiss = { viewModel.dismissShareResult() }
+
         )
+
     }
+
+
 
     // 操作执行中加载弹窗（下载文件夹/批量下载显示进度）
     if (viewModel.isOperating) {

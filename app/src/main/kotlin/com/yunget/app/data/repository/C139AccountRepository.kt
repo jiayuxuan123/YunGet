@@ -18,6 +18,8 @@
 
 package com.yunget.app.data.repository
 
+import kotlinx.coroutines.flow.first
+
 import android.webkit.CookieManager
 import com.yunget.app.data.db.C139AccountDao
 import com.yunget.app.data.db.C139AccountEntity
@@ -94,4 +96,5 @@ class C139AccountRepository(
         )
         return true
     }
+    suspend fun allCredentials(): List<String> = dao.observeAll().first().map { it.cookie }
 }

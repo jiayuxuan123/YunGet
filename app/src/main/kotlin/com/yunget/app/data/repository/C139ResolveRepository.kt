@@ -20,7 +20,13 @@ package com.yunget.app.data.repository
 
 import com.yunget.app.data.network.C139Api
 import com.yunget.app.data.network.C139Constants
+
+import com.yunget.app.data.network.C139Kouling
+
 import com.yunget.app.data.network.ShareLinkParser
+
+import com.yunget.app.data.network.SharePlatform
+
 import com.yunget.app.data.network.model.DownloadLink
 import com.yunget.app.data.network.model.ShareFile
 import com.yunget.app.data.network.model.ShareSession
@@ -32,45 +38,122 @@ import com.yunget.app.data.network.model.ShareSession
  */
 class C139ResolveRepository(private val api: C139Api) : ShareResolveRepository {
 
-    override suspend fun createSession(link: String, pwd: String?, cookie: String): Result<ShareSession> {
-        val parsed = ShareLinkParser.parse(link)
-            ?: return Result.failure(IllegalArgumentException("无法识别分享链接"))
-        if (C139Constants.extractAccountFull(cookie).isNullOrBlank()) {
-            return Result.failure(IllegalStateException("登录态缺少账号信息，请重新登录"))
+
+
+    /**
+
+     * 139 个人云盘口令 → 官方分享链接。
+
+     *
+
+     * 后续列目录、提取码补齐、取直链全部复用既有分享链路；这里只做“口令换链接”这一段，
+
+     * 避免把反序列化后的真实 linkID 直接散落到 UI 层。
+
+     */
+
+    suspend fun resolveKouling(
+
+        command: C139Kouling,
+
+        cookie: String = "",
+
+        authorization: String? = null
+
+    ): Result<String> = runCatching {
+
+        val resolved = api.resolveKouling(command, cookie, authorization)
+
+        val parsed = ShareLinkParser.parse(resolved.shareUrl)
+
+        if (parsed?.platform != SharePlatform.C139) {
+
+            throw IllegalStateException("139 云盘口令解析失败：返回的分享链接无效")
+
         }
-        return runCatching {
-            // 139 分享无 token：shareId 即 linkID，stoken 暂存提取码
-            // 密码优先级：用户手输 > 139 getOutLinkGeneral 明文回吐的 passwd（避免下载因缺密码报 9188）
-            val leakedPwd = api.getOutLinkPassword(parsed.shareId)
-            val passwd = pwd?.takeIf { it.isNotBlank() } ?: leakedPwd.orEmpty()
-            // 标题从 getOutLinkGeneral 拿（失败回退短链 ID）
-            val title = api.getOutLinkTitle(parsed.shareId)
-                ?.takeIf { it.isNotBlank() } ?: parsed.shareId
-            ShareSession(parsed.shareId, passwd, title)
-        }.fold(
-            onSuccess = { Result.success(it) },
-            onFailure = { Result.failure(it) }
-        )
+
+        resolved.shareUrl
+
     }
 
-    override suspend fun listFiles(session: ShareSession, dirFid: String, cookie: String): Result<List<ShareFile>> =
-        runCatching {
-            // 列表端点为匿名调用（§9530修复文档 §3）：无需 authorization/account，Api 内部走匿名请求
-            // pCaID 根目录必须传 "root"（§16.2：空串会报 pCaID不能为空），子目录传父 caID / coID
-            val pcaId = if (dirFid == "0" || dirFid.isBlank()) "root" else dirFid
-            // passwd = 分享提取码（createSession 时存入 stoken；无则空串）
-            val all = mutableListOf<ShareFile>()
-            var begin = 1
-            do {
-                val batch = api.getShareFiles(session.shareId, pcaId, session.stoken, begin, begin + 199)
-                all += batch
-                begin += 200
-            } while (batch.size == 200 && begin <= 20_000)
-            all
+
+
+    override suspend fun createSession(link: String, pwd: String?, cookie: String): Result<ShareSession> {
+
+        val parsed = ShareLinkParser.parse(link)
+
+            ?: return Result.failure(IllegalArgumentException("无法识别分享链接"))
+
+        if (C139Constants.extractAccountFull(cookie).isNullOrBlank()) {
+
+            return Result.failure(IllegalStateException("登录态缺少账号信息，请重新登录"))
+
+        }
+
+        return runCatching {
+
+            // 139 分享无 token：shareId 即 linkID，stoken 暂存提取码
+
+            // 密码优先级：用户手输 > 139 getOutLinkGeneral 明文回吐的 passwd（避免下载因缺密码报 9188）
+
+            val leakedPwd = api.getOutLinkPassword(parsed.shareId)
+
+            val passwd = pwd?.takeIf { it.isNotBlank() } ?: leakedPwd.orEmpty()
+
+            // 标题从 getOutLinkGeneral 拿（失败回退短链 ID）
+
+            val title = api.getOutLinkTitle(parsed.shareId)
+
+                ?.takeIf { it.isNotBlank() } ?: parsed.shareId
+
+            ShareSession(parsed.shareId, passwd, title)
+
         }.fold(
             onSuccess = { Result.success(it) },
             onFailure = { Result.failure(it) }
         )
+
+    }
+
+
+
+    override suspend fun listFiles(session: ShareSession, dirFid: String, cookie: String): Result<List<ShareFile>> =
+
+        runCatching {
+
+            // 列表端点为匿名调用（§9530修复文档 §3）：无需 authorization/account，Api 内部走匿名请求
+
+            // pCaID 根目录必须传 "root"（§16.2：空串会报 pCaID不能为空），子目录传父 caID / coID
+
+            val pcaId = if (dirFid == "0" || dirFid.isBlank()) "root" else dirFid
+
+            // passwd = 分享提取码（createSession 时存入 stoken；无则空串）
+
+            val all = mutableListOf<ShareFile>()
+
+            var begin = 1
+
+            do {
+
+                val batch = api.getShareFiles(session.shareId, pcaId, session.stoken, begin, begin + 199)
+
+                all += batch
+
+                begin += 200
+
+            } while (batch.size == 200 && begin <= 20_000)
+
+            all
+
+        }.fold(
+
+            onSuccess = { Result.success(it) },
+
+            onFailure = { Result.failure(it) }
+
+        )
+
+
 
     /** 139 分享不需要转存/个人网盘直链，保留空实现避免误用 */
     override suspend fun ensureTempDir(cookie: String): Result<String> =

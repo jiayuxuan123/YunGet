@@ -19,6 +19,10 @@
 
 package com.yunget.app.ui.screens
 
+
+
+import androidx.compose.ui.platform.LocalContext
+
 import com.yunget.app.ui.SnackbarController
 import androidx.activity.compose.BackHandler
 import androidx.compose.animation.AnimatedContent
@@ -126,6 +130,11 @@ fun ILanzouCloudScreen(
     var searchQuery by rememberSaveable { mutableStateOf("") }
     var showSearch by rememberSaveable { mutableStateOf(false) }
     val scrollPositions = remember { mutableStateMapOf<String, Int>() }
+
+    // 已应用滚动位置的目录：从在线预览返回时这一项随保存态恢复，同目录不再强制回顶
+
+    var appliedDirKey by rememberSaveable { mutableStateOf<String?>(null) }
+
     val loadedState = state as? ILanzouCloudUiState.Loaded
     val displayFiles = remember(loadedState?.files, searchQuery) {
         val files = loadedState?.files ?: emptyList()
@@ -139,26 +148,71 @@ fun ILanzouCloudScreen(
     var showDeleteConfirm by remember { mutableStateOf(false) }
     var showCreateFolder by remember { mutableStateOf(false) }
 
-    LaunchedEffect(viewModel.cloudMessage) {
-        viewModel.cloudMessage?.let {
-            SnackbarController.show(it)
-            viewModel.consumeMessage()
-        }
-    }
-    LaunchedEffect(viewModel.downloadTriggered) {
-        if (viewModel.downloadTriggered > 0) {
-            viewModel.consumeDownloadTriggered()
-            onDownloadStarted()
-        }
+    val context = LocalContext.current
+
+
+
+    // 「+」菜单的上传：系统多选文件 → 交给 ViewModel 依次上传到当前目录
+
+    val pickUpload = rememberUploadPicker { uris ->
+
+        viewModel.uploadFiles(context.contentResolver, uris)
+
     }
 
-    viewModel.downloadLink?.let { link ->
-        DownloadLinkDialog(
-            link = link,
-            onDownload = { viewModel.startDownload() },
-            onDismiss = { viewModel.dismissDownloadDialog() }
-        )
+
+
+    // 上传进度弹窗：点外部不关闭，「取消」会打断正在发的那一段
+
+    viewModel.uploadProgress?.let { progress ->
+
+        UploadProgressDialog(progress = progress, onCancel = { viewModel.cancelUpload() })
+
     }
+
+
+
+    LaunchedEffect(viewModel.cloudMessage) {
+
+        viewModel.cloudMessage?.let {
+
+            SnackbarController.show(it)
+
+            viewModel.consumeMessage()
+
+        }
+
+    }
+
+    LaunchedEffect(viewModel.downloadTriggered) {
+
+        if (viewModel.downloadTriggered > 0) {
+
+            viewModel.consumeDownloadTriggered()
+
+            onDownloadStarted()
+
+        }
+
+    }
+
+
+
+    viewModel.downloadLink?.let { link ->
+
+        DownloadLinkDialog(
+
+            link = link,
+
+            onDownload = { viewModel.startDownload() },
+
+            onDismiss = { viewModel.dismissDownloadDialog() }
+
+        )
+
+    }
+
+
 
     Surface(
         modifier = modifier.fillMaxSize(),
@@ -198,6 +252,13 @@ fun ILanzouCloudScreen(
                 is ILanzouCloudUiState.Loaded -> Box(modifier = Modifier.fillMaxSize()) {
                     val loadedKey = remember(s.pathNames) { s.pathNames.joinToString("/") }
                     LaunchedEffect(loadedKey) {
+
+                        // 切换目录才重置滚动；同目录的重组（如从预览页返回）交给 listState 自己的保存态恢复
+
+                        if (appliedDirKey == loadedKey) return@LaunchedEffect
+
+                        appliedDirKey = loadedKey
+
                         listState.scrollToItem(scrollPositions[loadedKey] ?: 0)
                     }
                     PullToRefreshBox(
@@ -265,7 +326,15 @@ fun ILanzouCloudScreen(
                                                     else MaterialTheme.colorScheme.onSurfaceVariant
                                                 )
                                             }
-                                            CloudAddMenu(onCreateFolder = { showCreateFolder = true })
+
+                                                                                        CloudAddMenu(
+
+                                                                                            onCreateFolder = { showCreateFolder = true },
+
+                                                                                            onUploadFile = pickUpload
+
+                                                                                        )
+
                                         }
                                     }
                                     if (!viewModel.multiSelectMode) {
@@ -398,33 +467,64 @@ fun ILanzouCloudScreen(
         !showDeleteConfirm -> null
         viewModel.multiSelectMode -> "选中的 ${viewModel.selected.size} 项"
         else -> viewModel.actionFile?.let { "「${it.fname}」" }
+
     }
+
     if (pendingDeleteTarget != null) {
+
         ConfirmDeleteSheet(
+
             target = pendingDeleteTarget,
+
             operating = viewModel.isOperating,
+
             onDismiss = {
+
                 showDeleteConfirm = false
+
                 viewModel.dismissActions()
+
             },
+
             onConfirm = { if (viewModel.multiSelectMode) viewModel.deleteSelected() else viewModel.deleteFile() }
+
         )
+
     } else if (showActionSheet && viewModel.actionFile != null) {
+
         FileActionSheet(
+
             file = viewModel.actionFile!!,
+
             operating = viewModel.isOperating,
+
             onDownload = { viewModel.downloadFile() },
+
             onDownloadFolder = { viewModel.downloadFolder() },
+
+            // 在线预览（图片）：取链成功后 ViewModel 清空 actionFile，弹窗随之消失；失败则留在弹窗里报错
+
+            onPreview = { viewModel.openPreview() },
+
             onShare = { _, _, _ -> viewModel.shareFile() },
+
             onRename = { viewModel.renameFile(it) },
+
             onConfirmDelete = { viewModel.deleteFile() },
+
             onDismiss = {
+
                 showActionSheet = false
+
                 viewModel.dismissActions()
+
             },
+
             moveStep = { onBack, onDone ->
                 ILanzouMoveStep(
+
                     subtitle = viewModel.actionFile?.fname ?: "",
+
                     viewModel = viewModel,
                     onBack = onBack,
                     onDone = onDone
@@ -432,39 +532,72 @@ fun ILanzouCloudScreen(
             }
         )
     }
+
+
 
     if (showBatchActions) {
+
         BatchActionSheet(
+
             count = viewModel.selected.size,
+
             operating = viewModel.isOperating,
+
             onDownload = { viewModel.downloadSelected() },
+
             onShare = { _, _, _ -> viewModel.shareSelected() },
+
             onDelete = {
+
                 showBatchActions = false
+
                 showDeleteConfirm = true
+
             },
+
             onDismiss = { showBatchActions = false },
+
             initialStep = batchInitial,
+
             moveStep = { onBack, onDone ->
+
                 ILanzouMoveStep(
+
                     subtitle = "已选 ${viewModel.selected.size} 项",
+
                     viewModel = viewModel,
+
                     onBack = onBack,
+
                     onDone = onDone
+
                 )
+
             }
         )
     }
 
+
+
     if (showCreateFolder) {
+
         CreateFolderDialog(
+
             onDismiss = { showCreateFolder = false },
+
             onConfirm = { name ->
+
                 showCreateFolder = false
+
                 viewModel.createFolder(name)
+
             }
+
         )
+
     }
+
+
 
     if (viewModel.isOperating) {
         AlertDialog(

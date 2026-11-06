@@ -19,6 +19,18 @@
 
 package com.yunget.app.ui.viewmodel
 
+
+
+import android.content.ContentResolver
+
+import android.net.Uri
+
+import com.yunget.app.data.network.HttpClients
+
+import com.yunget.app.data.upload.UploadProgress
+
+import com.yunget.app.data.upload.UploadRunner
+
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateListOf
 import androidx.compose.runtime.mutableStateOf
@@ -34,6 +46,9 @@ import com.yunget.app.data.network.model.ShareExpire
 import com.yunget.app.data.network.model.ShareFile
 import com.yunget.app.data.network.model.ShareInfo
 import com.yunget.app.data.repository.GuangYaAccountRepository
+
+import com.yunget.app.ui.preview.CloudPreview
+
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -328,109 +343,233 @@ class GuangYaCloudViewModel(
         }
     }
 
-    fun startDownload() {
-        val pd = pendingDownload ?: return
-        downloadLink = null
-        pendingDownload = null
+
+
+    /**
+
+     * 在线预览（云盘文件）：光鸭直链要配网页端 UA + 官方 Referer（[downloadHeaders]），
+
+     * 访问令牌会过期，[token] 每次取链前都会重新确保 —— 别把上一次的直链缓存到预览页。
+
+     */
+
+    fun openPreview() {
+
+        val file = actionFile ?: return
+
+        if (!CloudPreview.canPreview(file)) return
+
         viewModelScope.launch {
             isOperating = true
             try {
-                // 本项目未移植 DownloadManager 的 platform 参数，此处省略
-                downloadManager.enqueue(
-                    url = pd.url,
-                    fileName = pd.fileName,
-                    size = pd.size,
-                    headers = pd.headers
-                )
-                cloudMessage = "已加入下载：${pd.fileName}"
+
+                val link = api.getDownloadLink(token(), file)
+
+                    ?: throw IllegalStateException("获取下载链接失败")
+
+                // 先清 actionFile 再开预览：否则关掉预览时文件操作弹窗会重新弹出来
+
                 actionFile = null
-                downloadTriggered++
+
+                CloudPreview.open(file, link.downloadUrl, downloadHeaders(), isHls = link.isHls)
+
             } catch (e: Exception) {
-                cloudMessage = e.message ?: "下载失败"
+
+                cloudMessage = e.message ?: "预览失败"
+
             } finally {
                 isOperating = false
             }
         }
     }
+
+
+
+    fun startDownload() {
+
+        val pd = pendingDownload ?: return
+
+        downloadLink = null
+        pendingDownload = null
+
+        viewModelScope.launch {
+
+            isOperating = true
+
+            try {
+
+                // 本项目未移植 DownloadManager 的 platform 参数，此处省略
+
+                downloadManager.enqueue(
+
+                    url = pd.url,
+
+                    fileName = pd.fileName,
+
+                    size = pd.size,
+
+                    headers = pd.headers
+
+                )
+
+                cloudMessage = "已加入下载：${pd.fileName}"
+
+                actionFile = null
+
+                downloadTriggered++
+
+            } catch (e: Exception) {
+
+                cloudMessage = e.message ?: "下载失败"
+
+            } finally {
+
+                isOperating = false
+
+            }
+
+        }
+
+    }
+
+
 
     fun dismissDownloadDialog() {
+
         downloadLink = null
+
         pendingDownload = null
+
     }
+
+
 
     fun renameFile(newName: String) {
+
         val file = actionFile ?: return
+
         viewModelScope.launch {
             isOperating = true
             try {
+
                 api.renameFile(token(), file.fid, newName)
+
                 cloudMessage = "已重命名"
+
                 actionFile = null
+
                 reloadCurrent()
             } catch (e: Exception) {
+
                 cloudMessage = e.message ?: "重命名失败"
+
             } finally {
                 isOperating = false
             }
         }
     }
+
+
 
     fun createFolder(name: String) {
+
         val newName = name.trim()
+
         if (newName.isEmpty()) return
+
         val parentId = (uiState.value as? GuangYaCloudUiState.Loaded)?.dirId ?: GuangYaConstants.ROOT_PARENT_ID
+
         viewModelScope.launch {
             isOperating = true
             try {
+
                 api.createDir(token(), parentId, newName)
+
                 cloudMessage = "已创建文件夹「$newName」"
+
                 reloadCurrent()
             } catch (e: Exception) {
+
                 cloudMessage = e.message ?: "新建文件夹失败"
+
             } finally {
                 isOperating = false
             }
         }
     }
+
+
 
     fun moveFile(toDirId: String) {
+
         val file = actionFile ?: return
         viewModelScope.launch {
             isOperating = true
             try {
+
                 api.moveFiles(token(), listOf(file.fid), toDirId)
+
                 cloudMessage = "已移动到目标目录"
+
                 actionFile = null
+
                 reloadCurrent()
+
             } catch (e: Exception) {
+
                 cloudMessage = e.message ?: "移动失败"
+
             } finally {
                 isOperating = false
             }
         }
     }
 
+
+
     /** 创建分享（expiredType 为 [ShareExpire] 中性码，内部转天数）。 */
+
     fun shareFile(expiredType: Int, sharePwd: String?) {
+
         val file = actionFile ?: return
+
         viewModelScope.launch {
+
             isOperating = true
+
             try {
+
                 val info = api.createShare(
+
                     accessToken = token(),
+
                     fileIds = listOf(file.fid),
+
                     title = file.fname,
+
                     expireDays = ShareExpire.daysOrNull(expiredType),
+
                     passcode = sharePwd
+
                 )
+
                 shareResult = info.copy(expiredType = expiredType)
+
             } catch (e: Exception) {
+
                 cloudMessage = e.message ?: "分享失败"
+
             } finally {
+
                 isOperating = false
+
             }
+
         }
+
     }
+
+
 
     fun deleteFile() {
         val file = actionFile ?: return
@@ -607,6 +746,72 @@ class GuangYaCloudViewModel(
             }
         }
     }
+
+
+
+    // ---------- 上传（光鸭 OSS 直传 + 任务轮询） ----------
+
+
+
+    /** 上传进度（null 表示没有任务）；上传弹窗直接读这里 */
+
+    val uploadProgress: UploadProgress? get() = uploadRunner.progress
+
+
+
+    private val uploadRunner = UploadRunner(viewModelScope, { HttpClients.apiClient() }) { outcome ->
+
+        // 传成功过就刷新列表（失败也刷：已经落库的文件要立刻可见）
+
+        if (outcome.uploaded > 0 || outcome.failed > 0) reloadCurrent()
+
+        cloudMessage = when {
+
+            outcome.error != null -> outcome.error
+
+            outcome.cancelled -> "已取消上传"
+
+            else -> "已上传 ${outcome.uploaded} 个文件"
+
+        }
+
+    }
+
+
+
+    /**
+
+     * 上传选中的本地文件到**当前目录**。
+
+     *
+
+     * 目标目录在这里就先固定下来（上传期间用户可能切目录、返回上级），
+
+     * 凭据留到 IO 线程现取，避免拿着已过期的 Cookie 一路失败。
+
+     */
+
+    fun uploadFiles(resolver: ContentResolver, uris: List<Uri>) {
+
+        val dir = (uiState.value as? GuangYaCloudUiState.Loaded)?.dirId ?: GuangYaConstants.ROOT_PARENT_ID
+
+        uploadRunner.start(resolver, uris) { io, source ->
+
+            val token = token()
+
+            api.upload(io, source, dir, token)
+
+        }
+
+    }
+
+
+
+    /** 取消当前上传（正在发的那一段会立刻被打断） */
+
+    fun cancelUpload() = uploadRunner.cancel()
+
+
 
     class Factory(
         private val api: GuangYaApi,

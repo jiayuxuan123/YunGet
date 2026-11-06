@@ -1,5 +1,28 @@
+/*
+ * YunX (云析) - A network drive share-link parser and high-speed downloader for Android.
+ * Copyright (C) 2026 CYQawa
+ *
+ * This program is free software: you can redistribute it and/or modify
+ * it under the terms of the GNU Affero General Public License as published by
+ * the Free Software Foundation, either version 3 of the License, or
+ * (at your option) any later version.
+ *
+ * This program is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+ * GNU Affero General Public License for more details.
+ *
+ * You should have received a copy of the GNU Affero General Public License
+ * along with this program.  If not, see <https://www.gnu.org/licenses/>.
+ */
+
 package com.yunget.app.ui.viewmodel
 
+import android.content.ContentResolver
+import android.net.Uri
+import com.yunget.app.data.network.HttpClients
+import com.yunget.app.data.upload.UploadProgress
+import com.yunget.app.data.upload.UploadRunner
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateListOf
 import androidx.compose.runtime.mutableStateOf
@@ -8,16 +31,20 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.ViewModelProvider
 import androidx.lifecycle.viewModelScope
 import com.yunget.app.data.download.DownloadManager
+import com.yunget.app.data.download.DownloadPlatform
 import com.yunget.app.data.network.Pan123Api
 import com.yunget.app.data.network.Pan123Constants
+import com.yunget.app.data.network.model.DownloadLink
+import com.yunget.app.data.network.model.ShareExpire
 import com.yunget.app.data.network.model.ShareFile
 import com.yunget.app.data.network.model.ShareInfo
-import kotlinx.coroutines.flow.Flow
-import kotlinx.coroutines.flow.drop
-import kotlinx.coroutines.flow.distinctUntilChanged
+import com.yunget.app.ui.preview.CloudPreview
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.distinctUntilChanged
+import kotlinx.coroutines.flow.drop
 import kotlinx.coroutines.launch
 import java.text.SimpleDateFormat
 import java.util.Calendar
@@ -47,7 +74,6 @@ class Pan123CloudViewModel(
     private val api: Pan123Api,
     private val tokenProvider: suspend () -> String?,
     private val downloadManager: DownloadManager,
-    /** 登录态（true=已登录）。登录成功后自动重载根目录，避免停在「请先登录」错误页。 */
     private val loginState: Flow<Boolean>
 ) : ViewModel() {
 
@@ -84,12 +110,9 @@ class Pan123CloudViewModel(
 
     init {
         loadRoot()
-        // 登录成功后自动重载根目录。
-        // 【为什么需要】本 VM 在未登录时也会被创建并执行 init{loadRoot()}，那时拿到的是
-        // Error("请先登录…")。用户随后登录成功，但没有任何机制触发重载 →
-        // 网盘页一直停在「请先登录」，必须手动点「重试」才恢复。
-        // drop(1) 跳过 VM 创建时的登录态快照（init 已加载过一次，避免冷启动重复请求）；
-        // distinctUntilChanged 过滤登录后凭证刷新等重复 upsert。
+        // 启动期未登录时上面的 loadRoot 会残留「请先登录…」错误态；登录态从无到有后自动重载根目录，
+        // 进网盘列表无需再手动点「重试」。drop(1) 跳过 VM 创建时的登录态快照（init 已加载，避免冷启动重复），
+        // distinctUntilChanged 过滤登录后 Cookie/Token 刷新等重复 upsert。
         viewModelScope.launch {
             loginState
                 .drop(1)
@@ -216,7 +239,7 @@ class Pan123CloudViewModel(
         _moveUiState.value = Pan123CloudUiState.Loading
         viewModelScope.launch {
             try {
-                val files = api.listCloudFiles(dirId, token()).first.filter { it.isdir }
+                val files = api.listCloudFiles(dirId, token()).filter { it.isdir }
                 _moveUiState.value = Pan123CloudUiState.Loaded(files, pathNames, dirId)
             } catch (e: Exception) {
                 _moveUiState.value = Pan123CloudUiState.Error(e.message ?: "加载失败")
@@ -241,7 +264,7 @@ class Pan123CloudViewModel(
         depth: Int
     ) {
         if (depth > 12) return
-        val list = runCatching { api.listCloudFiles(dirId, token).first }.getOrDefault(emptyList())
+        val list = runCatching { api.listCloudFiles(dirId, token) }.getOrDefault(emptyList())
         list.filter { !it.isdir }.forEach { result.add(it to "$prefix/${it.fname}") }
         list.filter { it.isdir }.forEach {
             collectFolderFiles(it.fid, "$prefix/${it.fname}", token, result, depth + 1)
@@ -276,6 +299,7 @@ class Pan123CloudViewModel(
                             url = link.downloadUrl,
                             fileName = relPath,
                             size = link.size,
+                            platform = DownloadPlatform.PAN123,
                             headers = downloadHeaders()
                         )
                         okCount++
@@ -299,6 +323,14 @@ class Pan123CloudViewModel(
     }
 
     /** 下载：getDownloadLink 取直链（CDN 直链，Referer 即可）→ 内置下载队列 */
+    /** 待确认的下载直链（单文件下载弹窗展示用，长按链接可复制） */
+    var downloadLink by mutableStateOf<DownloadLink?>(null)
+        private set
+
+    /** 与 downloadLink 配套的入队参数（弹窗确认后直接入队） */
+    private var pendingDownload: PendingDownload? = null
+
+    /** 下载文件：取直链 → 弹出下载确认弹窗（对齐解析页行为，确认后入队） */
     fun downloadFile() {
         val file = actionFile ?: return
         viewModelScope.launch {
@@ -306,13 +338,60 @@ class Pan123CloudViewModel(
             try {
                 val link = api.getDownloadLink(file, token())
                     ?: throw IllegalStateException("获取下载链接失败")
-                downloadManager.enqueue(
+                pendingDownload = PendingDownload(
                     url = link.downloadUrl,
                     fileName = file.fname.ifBlank { link.filename },
                     size = link.size,
                     headers = downloadHeaders()
                 )
-                cloudMessage = "已加入下载：${file.fname}"
+                downloadLink = link // 弹下载确认弹窗（长按直链可复制）
+            } catch (e: Exception) {
+                cloudMessage = e.message ?: "下载失败"
+            } finally {
+                isOperating = false
+            }
+        }
+    }
+
+    /**
+     * 在线预览（云盘文件）：123 的直链按 UA/Referer 放行，与下载共用 [downloadHeaders]。
+     * 直链有有效期，必须现取，不能在列表里预存。
+     */
+    fun openPreview() {
+        val file = actionFile ?: return
+        if (!CloudPreview.canPreview(file)) return
+        viewModelScope.launch {
+            isOperating = true
+            try {
+                val link = api.getDownloadLink(file, token())
+                    ?: throw IllegalStateException("获取下载链接失败")
+                // 先清 actionFile 再开预览：否则关掉预览时文件操作弹窗会重新弹出来
+                actionFile = null
+                CloudPreview.open(file, link.downloadUrl, downloadHeaders(), isHls = link.isHls)
+            } catch (e: Exception) {
+                cloudMessage = e.message ?: "预览失败"
+            } finally {
+                isOperating = false
+            }
+        }
+    }
+
+    /** 下载弹窗确认：用已生成的直链入队 */
+    fun startDownload() {
+        val pd = pendingDownload ?: return
+        downloadLink = null
+        pendingDownload = null
+        viewModelScope.launch {
+            isOperating = true
+            try {
+                downloadManager.enqueue(
+                    url = pd.url,
+                    fileName = pd.fileName,
+                    size = pd.size,
+                    platform = DownloadPlatform.PAN123,
+                    headers = pd.headers
+                )
+                cloudMessage = "已加入下载：${pd.fileName}"
                 actionFile = null
                 downloadTriggered++
             } catch (e: Exception) {
@@ -321,6 +400,12 @@ class Pan123CloudViewModel(
                 isOperating = false
             }
         }
+    }
+
+    /** 关闭下载弹窗（放弃下载） */
+    fun dismissDownloadDialog() {
+        downloadLink = null
+        pendingDownload = null
     }
 
     /** 重命名 */
@@ -335,6 +420,25 @@ class Pan123CloudViewModel(
                 reloadCurrent()
             } catch (e: Exception) {
                 cloudMessage = e.message ?: "重命名失败"
+            } finally {
+                isOperating = false
+            }
+        }
+    }
+
+    /** 新建文件夹（当前目录下）；123 用文件 id，根目录 "0" */
+    fun createFolder(name: String) {
+        val newName = name.trim()
+        if (newName.isEmpty()) return
+        val parentId = (uiState.value as? Pan123CloudUiState.Loaded)?.dirId ?: "0"
+        viewModelScope.launch {
+            isOperating = true
+            try {
+                api.createDir(parentId, newName, token())
+                cloudMessage = "已创建文件夹「$newName」"
+                reloadCurrent()
+            } catch (e: Exception) {
+                cloudMessage = e.message ?: "新建文件夹失败"
             } finally {
                 isOperating = false
             }
@@ -359,8 +463,13 @@ class Pan123CloudViewModel(
         }
     }
 
-    /** 创建分享（有效期选择，可带提取码） */
-    fun shareFile(expirationDays: Int?, sharePwd: String?) {
+    /**
+     * 创建分享（有效期选择，可带提取码）。
+     *
+     * @param expiredType UI 中性码（[ShareExpire]），**必须转成天数**再算 ISO 过期时间：
+     *   直接把中性码当天数会让「永久」变成 now+1 天、「7 天」变成 now+3 天（Agent.md §3.20）。
+     */
+    fun shareFile(expiredType: Int, sharePwd: String?) {
         val file = actionFile ?: return
         viewModelScope.launch {
             isOperating = true
@@ -368,11 +477,11 @@ class Pan123CloudViewModel(
                 val info = api.createShare(
                     fileIds = listOf(file.fid),
                     shareName = file.fname,
-                    expiration = expiration(expirationDays),
+                    expiration = expiration(ShareExpire.daysOrNull(expiredType)),
                     sharePwd = sharePwd,
                     token = token()
                 )
-                shareResult = info.copy(expiredType = expireType(expirationDays))
+                shareResult = info.copy(expiredType = expiredType)
             } catch (e: Exception) {
                 cloudMessage = e.message ?: "分享失败"
             } finally {
@@ -435,6 +544,7 @@ class Pan123CloudViewModel(
                             url = link.downloadUrl,
                             fileName = if (relPath.contains('/')) relPath else file.fname.ifBlank { link.filename },
                             size = link.size,
+                            platform = DownloadPlatform.PAN123,
                             headers = downloadHeaders()
                         )
                         okCount++
@@ -457,8 +567,8 @@ class Pan123CloudViewModel(
         }
     }
 
-    /** 批量分享 */
-    fun shareSelected(expirationDays: Int?, sharePwd: String?) {
+    /** 批量分享（@param expiredType UI 中性码，转换见 [shareFile]） */
+    fun shareSelected(expiredType: Int, sharePwd: String?) {
         val files = _selected.toList()
         if (files.isEmpty()) return
         viewModelScope.launch {
@@ -468,11 +578,11 @@ class Pan123CloudViewModel(
                 val info = api.createShare(
                     fileIds = files.map { it.fid },
                     shareName = title,
-                    expiration = expiration(expirationDays),
+                    expiration = expiration(ShareExpire.daysOrNull(expiredType)),
                     sharePwd = sharePwd,
                     token = token()
                 )
-                shareResult = info.copy(expiredType = expireType(expirationDays))
+                shareResult = info.copy(expiredType = expiredType)
                 exitMultiSelect()
             } catch (e: Exception) {
                 cloudMessage = e.message ?: "分享失败"
@@ -532,7 +642,7 @@ class Pan123CloudViewModel(
         refreshing = true
         viewModelScope.launch {
             try {
-                val files = api.listCloudFiles(current.dirId, token()).first
+                val files = api.listCloudFiles(current.dirId, token())
                 _uiState.value = Pan123CloudUiState.Loaded(files, current.pathNames, current.dirId)
             } catch (e: Exception) {
                 cloudMessage = e.message ?: "刷新失败"
@@ -555,7 +665,7 @@ class Pan123CloudViewModel(
         _uiState.value = Pan123CloudUiState.Loading
         viewModelScope.launch {
             try {
-                val files = api.listCloudFiles(dirId, token()).first
+                val files = api.listCloudFiles(dirId, token())
                 _uiState.value = Pan123CloudUiState.Loaded(files, pathNames, dirId)
             } catch (e: Exception) {
                 _uiState.value = Pan123CloudUiState.Error(e.message ?: "加载失败")
@@ -563,7 +673,7 @@ class Pan123CloudViewModel(
         }
     }
 
-    /** 分享有效期 → ISO 过期时间（永久固定 2099，其他 = now + days，+08:00 格式，文档 §5.10） */
+    /** 分享有效期**天数** → ISO 过期时间（null=永久固定 2099，其他 = now + days，+08:00 格式，文档 §5.10） */
     private fun expiration(days: Int?): String {
         if (days == null) return Pan123Constants.EXPIRATION_FOREVER
         val cal = Calendar.getInstance().apply { add(Calendar.DAY_OF_YEAR, days) }
@@ -576,13 +686,37 @@ class Pan123CloudViewModel(
             String.format("%s%02d:%02d", sign, abs / 60, abs % 60)
     }
 
-    /** 有效期天数 → ShareResultDialog 的 expiredType（1=永久 2=1天 3=7天 4=30天） */
-    private fun expireType(days: Int?): Int = when (days) {
-        null -> 1
-        1 -> 2
-        7 -> 3
-        else -> 4
+    // ---------- 上传（123 预签名/S3 分片） ----------
+
+    /** 上传进度（null 表示没有任务）；上传弹窗直接读这里 */
+    val uploadProgress: UploadProgress? get() = uploadRunner.progress
+
+    private val uploadRunner = UploadRunner(viewModelScope, { HttpClients.apiClient() }) { outcome ->
+        // 传成功过就刷新列表（失败也刷：已经落库的文件要立刻可见）
+        if (outcome.uploaded > 0 || outcome.failed > 0) reloadCurrent()
+        cloudMessage = when {
+            outcome.error != null -> outcome.error
+            outcome.cancelled -> "已取消上传"
+            else -> "已上传 ${outcome.uploaded} 个文件"
+        }
     }
+
+    /**
+     * 上传选中的本地文件到**当前目录**。
+     *
+     * 目标目录在这里就先固定下来（上传期间用户可能切目录、返回上级），
+     * 凭据留到 IO 线程现取，避免拿着已过期的 Cookie 一路失败。
+     */
+    fun uploadFiles(resolver: ContentResolver, uris: List<Uri>) {
+        val dir = (uiState.value as? Pan123CloudUiState.Loaded)?.dirId ?: "0"
+        uploadRunner.start(resolver, uris) { io, source ->
+            val token = tokenProvider() ?: throw IllegalStateException("请先登录 123 云盘")
+            api.upload(io, source, dir, token)
+        }
+    }
+
+    /** 取消当前上传（正在发的那一段会立刻被打断） */
+    fun cancelUpload() = uploadRunner.cancel()
 
     class Factory(
         private val api: Pan123Api,

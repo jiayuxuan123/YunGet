@@ -1,10 +1,34 @@
+/*
+ * YunX (云析) - A network drive share-link parser and high-speed downloader for Android.
+ * Copyright (C) 2026 CYQawa
+ *
+ * This program is free software: you can redistribute it and/or modify
+ * it under the terms of the GNU Affero General Public License as published by
+ * the Free Software Foundation, either version 3 of the License, or
+ * (at your option) any later version.
+ *
+ * This program is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+ * GNU Affero General Public License for more details.
+ *
+ * You should have received a copy of the GNU Affero General Public License
+ * along with this program.  If not, see <https://www.gnu.org/licenses/>.
+ */
+
 package com.yunget.app.data.network
 
 import android.util.Base64
 import com.yunget.app.data.network.model.DownloadLink
+import com.yunget.app.data.network.model.FileThumbnail
 import com.yunget.app.data.network.model.QuotaInfo
+import com.yunget.app.data.network.model.ShareExpire
 import com.yunget.app.data.network.model.ShareFile
 import com.yunget.app.data.network.model.ShareInfo
+import com.yunget.app.data.upload.UploadIo
+import com.yunget.app.data.upload.UploadPhase
+import com.yunget.app.data.upload.UploadSource
+import com.yunget.app.util.DiagnosticLog
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import okhttp3.MediaType.Companion.toMediaType
@@ -20,17 +44,15 @@ import java.util.concurrent.ThreadLocalRandom
 import java.util.zip.CRC32
 
 /**
- * 123 云盘 API 封装（OkHttp，依据《123网盘API文档_面向Agent.md》）。
- *
- * 鉴权体系（文档 §3.2 / §6）：
- * - 登录 `user.123pan.cn/api/user/sign_in`：无需签名，返回 JWT（data.token）；
- * - 分享列表 `yun.123pan.cn/b/api/share/get`：匿名、无需签名；
- * - 其余 yun.123pan.cn / www.123865.com 鉴权请求：必须带 `auth-key` / `auth-value` 签名头
- *   （CRC32 派生，算法已抓包实证 + 实时验证，见 [makeSign]）。
- *
- * 下载流程（文档 §4.2）：分享文件无需转存——直接拿 ShareKey + FileID + S3KeyFlag + Etag + Size
- * 换 `DownloadURL`（download-v2 包装），对 params 做 Base64 解码得真实 CDN 直链，下载带 Referer。
+ * 123 账号密码登录结果。
+ * 成功时拿到的是 authorToken（与网页登录从 localStorage 读到的同源同形，可直接替换使用）；
+ * 失败时带上可以直接展示给用户的文案（不包含服务端原文）。
  */
+sealed interface Pan123LoginResult {
+    data class Success(val token: String) : Pan123LoginResult
+    data class Failure(val message: String) : Pan123LoginResult
+}
+
 class Pan123Api(
     private val clientProvider: () -> OkHttpClient = { HttpClients.apiClient() }
 ) {
@@ -39,8 +61,8 @@ class Pan123Api(
 
     private val jsonMediaType = "application/json;charset=UTF-8".toMediaType()
 
-    /** 设备标识（文档 §3.2：同一会话内不变、不参与签名；进程级固定即可） */
-    private val loginuuid: String = Pan123Constants.newLoginUuid()
+    /** 设备标识（文档 §3.2：同一设备长期不变、不参与签名；由 [Pan123DeviceId] 持久化） */
+    private val loginuuid: String = Pan123DeviceId.value()
 
     // ---------- 签名算法（文档 §6，已抓包逐字还原 + 实时验证） ----------
 
@@ -81,37 +103,69 @@ class Pan123Api(
         return authKey to authValue
     }
 
-    // ---------- 登录（文档 §5.1，无签名） ----------
+    // ---------- 账号密码登录（文档 §3.1，与网页登录并列的另一条路） ----------
 
     /**
-     * 账号密码登录 → data.token（JWT，Bearer）。
-     * 成功判定：`code == 200`（注意不是 0）。
+     * 账号密码登录：`POST https://user.123pan.cn/api/user/sign_in` → `data.token`（authorToken）。
+     *
+     * 三点容易踩：
+     * 1. 这是**另一个站**（user.123pan.cn），个人盘 API 在 yun.123pan.cn，不能混用 host；
+     * 2. 成功判定是 `code == 200`，**不是**其它接口的 `code == 0`；
+     * 3. 密码按原值提交（不 trim——trim 会把「密码里有空格」的用户直接挡在门外），账号才 trim。
+     *
+     * 失败一律返回 [Pan123LoginResult.Failure]，文案由 [Pan123LoginSupport] 生成、绝不复述服务端原文。
      */
-    suspend fun login(passport: String, password: String): String = withContext(Dispatchers.IO) {
-        val body = JSONObject()
-            .put("passport", passport)
-            .put("password", password)
-            .put("remember", false)
-        val request = Request.Builder()
-            .url(Pan123Constants.LOGIN_URL)
-            .header("Content-Type", "application/json;charset=UTF-8")
-            .header("platform", Pan123Constants.PLATFORM_WEB)
-            .header("app-version", Pan123Constants.APP_VERSION_LOGIN)
-            .header("loginuuid", loginuuid)
-            .header("Origin", Pan123Constants.LOGIN_BASE)
-            .header("Referer", "${Pan123Constants.LOGIN_BASE}/centerlogin?redirect_url=&source_page=website")
-            .header("User-Agent", Pan123Constants.WEB_UA)
-            .post(body.toString().toRequestBody(jsonMediaType))
-            .build()
-        val json = executeJson(request)
-        val code = json.optInt("code", -1)
-        if (code != 200) {
-            throw IllegalStateException(json.optString("message").ifBlank { "登录失败（code=$code）" })
+    suspend fun login(account: String, password: String): String =
+        (passwordLogin(account, password) as? Pan123LoginResult.Success)?.token.orEmpty()
+
+    suspend fun passwordLogin(account: String, password: String): Pan123LoginResult =
+        withContext(Dispatchers.IO) {
+            val passport = account.trim()
+            if (passport.isEmpty() || password.isEmpty()) {
+                return@withContext Pan123LoginResult.Failure("请输入账号和密码")
+            }
+            if (passport.length > 254 || password.length > 256) {
+                return@withContext Pan123LoginResult.Failure("账号或密码过长")
+            }
+            val body = JSONObject()
+                .put("passport", passport)
+                .put("password", password)
+                .put("remember", false)
+                .toString()
+            val request = Request.Builder()
+                .url(Pan123Constants.SIGN_IN_URL)
+                .header("platform", Pan123Constants.PLATFORM_WEB)
+                .header("app-version", Pan123Constants.APP_VERSION_SIGN_IN)
+                .header("loginuuid", loginuuid)
+                .header("Origin", Pan123Constants.SIGN_IN_ORIGIN)
+                .header("Referer", Pan123Constants.SIGN_IN_REFERER)
+                .header("User-Agent", Pan123Constants.WEB_UA)
+                .header("Content-Type", "application/json; charset=utf-8")
+                .post(body.toRequestBody(jsonMediaType))
+                .build()
+            runCatching {
+                client.newCall(request).execute().use { resp ->
+                    val text = resp.body?.string().orEmpty()
+                    val json = runCatching { JSONObject(text) }.getOrNull()
+                    val code = json?.optInt("code", -1) ?: -1
+                    val token = json?.optJSONObject("data")?.optString("token").orEmpty()
+                    when {
+                        resp.isSuccessful && code == 200 && Pan123LoginSupport.isValidToken(token) ->
+                            Pan123LoginResult.Success(token)
+                        // 响应不是 JSON（比如被重定向到 HTML 页）时 message 为空，走兜底文案
+                        else -> Pan123LoginResult.Failure(
+                            Pan123LoginSupport.describeFailure(
+                                httpStatus = resp.code,
+                                code = code,
+                                serverMessage = json?.optString("message").orEmpty()
+                            )
+                        )
+                    }
+                }
+            }.getOrElse {
+                Pan123LoginResult.Failure("网络异常，无法连接 123 登录服务，请稍后重试")
+            }
         }
-        val token = json.optJSONObject("data")?.optString("token").orEmpty()
-        if (token.isBlank()) throw IllegalStateException("登录失败：未返回 token")
-        token
-    }
 
     // ---------- 用户信息（文档 §5.11） ----------
 
@@ -228,23 +282,40 @@ class Pan123Api(
 
     // ---------- 个人盘（网盘页，需登录+签名） ----------
 
-    /** 个人盘文件列表：GET /b/api/file/list/new（文档 §5.4）。返回 (文件列表, 下一页游标 or null) */
-    suspend fun listCloudFiles(parentFileId: String, token: String): Pair<List<ShareFile>, String?> =
-        withContext(Dispatchers.IO) {
-            val url = buildString {
-                append(Pan123Constants.FILE_LIST_URL)
-                append("?driveId=0&limit=100&next=0&orderBy=update_time&orderDirection=desc")
-                append("&parentFileId=").append(parentFileId)
-                append("&trashed=false&SearchData=&Page=1&OnlyLookAbnormalFile=0")
-                append("&event=homeListFile&operateType=1&inDirectSpace=false")
-            }
-            val json = getAuth(url, "/b/api/file/list/new", token)
-            checkOk(json, "获取文件列表失败")
-            val data = json.optJSONObject("data") ?: return@withContext Pair(emptyList(), null)
-            val files = parseInfoList(data)
-            val next = data.optString("Next").takeIf { it != "-1" }
-            Pair(files, next)
+    /** 单页个人盘文件：GET /b/api/file/list/new（文档 §5.4）。返回 (文件列表, 下一页游标 or null=末页) */
+    private suspend fun fetchCloudPage(
+        parentFileId: String,
+        token: String,
+        next: String
+    ): Pair<List<ShareFile>, String?>? = withContext(Dispatchers.IO) {
+        val url = buildString {
+            append(Pan123Constants.FILE_LIST_URL)
+            append("?driveId=0&limit=100&next=").append(next)
+            append("&orderBy=update_time&orderDirection=desc")
+            append("&parentFileId=").append(parentFileId)
+            append("&trashed=false&SearchData=&Page=1&OnlyLookAbnormalFile=0")
+            append("&event=homeListFile&operateType=1&inDirectSpace=false")
         }
+        val json = getAuth(url, "/b/api/file/list/new", token)
+        checkOk(json, "获取文件列表失败")
+        val data = json.optJSONObject("data") ?: return@withContext null
+        val files = parseInfoList(data)
+        // 文档 §5.4：Next=="-1" 表示末页（游标取 null 结束翻页）；空串 ""/数字表示还有下一页
+        val nextCursor = data.optString("Next").takeIf { it != "-1" }
+        Pair(files, nextCursor)
+    }
+
+    /** 个人盘文件列表：GET /b/api/file/list/new（文档 §5.4）。自动翻页，返回该目录下全部文件 */
+    suspend fun listCloudFiles(parentFileId: String, token: String): List<ShareFile> {
+        val all = mutableListOf<ShareFile>()
+        var next = "0"
+        repeat(200) {            // 封顶 200 页，防异常死循环
+            val (files, cursor) = fetchCloudPage(parentFileId, token, next) ?: return all
+            all += files
+            next = cursor ?: return all   // Next=="-1" 时 cursor 为 null，结束
+        }
+        return all
+    }
 
     /** 个人盘下载信息：POST /api/file/download_info（注意无 /b/，文档 §5.5）。返回真实直链 */
     suspend fun getDownloadLink(file: ShareFile, token: String): DownloadLink? = withContext(Dispatchers.IO) {
@@ -430,6 +501,182 @@ class Pan123Api(
         checkOk(json, "重命名失败")
     }
 
+    /**
+     * 新建文件夹：复用上传预创建接口（`type=1`），123 没有独立的建目录端点（文档 §2/§8）。
+     * 签名 path 必须与请求 path 逐字一致，所以这里把 `/b/api/file/upload_request` 写死传进 [postAuth]。
+     *
+     * @param parentFileId 父目录 id（根目录 "0"）
+     * @return 新文件夹 id
+     */
+    suspend fun createDir(parentFileId: String, name: String, token: String): String =
+        withContext(Dispatchers.IO) {
+            val body = JSONObject()
+                .put("driveId", 0)
+                .put("parentFileId", parentFileId.toLongOrNull() ?: 0L)
+                .put("fileName", name)
+                .put("size", 0)
+                .put("type", 1)
+                .put("etag", "")
+                .put("duplicate", 1)
+                .put("NotReuse", true)
+                .put("RequestSource", JSONObject.NULL)
+            val json = postAuth(
+                Pan123Constants.FILE_UPLOAD_REQUEST_URL,
+                "/b/api/file/upload_request",
+                body.toString(),
+                token
+            )
+            checkOk(json, "新建文件夹失败")
+            val data = json.optJSONObject("data") ?: throw IllegalStateException("123 未返回文件夹编号")
+            // 文档给的取法：data.Info.FileId → data.FileId → data.fileId（大小写三种都出现过）
+            val id = data.optJSONObject("Info")?.optString("FileId").orEmpty()
+                .ifBlank { data.optString("FileId") }
+                .ifBlank { data.optString("fileId") }
+            id.takeIf { it.isNotBlank() && it != "0" }
+                ?: throw IllegalStateException("123 未返回文件夹编号")
+        }
+
+    // ---------- 上传 ----------
+
+    /**
+     * 上传一个文件到 [parentFileId] 目录，返回新文件 id。
+     *
+     * 流程：`upload_request`（带整文件 MD5 作 etag，命中 Reuse 即秒传）→
+     * 两条上传路径二选一 → 合并 → 返回 fileId：
+     * - 服务端给 `AccessKeyId/SecretAccessKey` 时走标准 S3 直传（pathStyle + region=123pan）；
+     * - 否则按 16 MiB 分片向服务端换预签名地址，逐片 PUT 后 `upload_complete/v2` 合并。
+     *
+     * ★ 合并请求可能已经生效但响应丢了：这里不做二次合并（重复合并会报错），
+     *   失败交给上层重试——重试会重新走 pre 拿新的 uploadId。
+     */
+    suspend fun upload(
+        io: UploadIo,
+        file: UploadSource,
+        parentFileId: String,
+        token: String
+    ): String = withContext(Dispatchers.IO) {
+        io.progress(UploadPhase.PREPARING)
+        val etag = io.digest("MD5")
+        val preBody = JSONObject()
+            .put("driveId", 0)
+            .put("duplicate", 1)
+            .put("etag", etag)
+            .put("fileName", file.name)
+            .put("parentFileId", parentFileId.toLongOrNull() ?: 0L)
+            .put("size", file.size)
+            .put("type", 0)
+        val pre = postAuth(
+            Pan123Constants.FILE_UPLOAD_REQUEST_URL,
+            "/b/api/file/upload_request",
+            preBody.toString(),
+            token
+        )
+        checkOk(pre, "创建上传任务失败")
+        val data = pre.optJSONObject("data")
+            ?: throw IllegalStateException("123 未返回上传任务")
+        val info = data.optJSONObject("Info")
+        val fileId = info?.optString("FileId").orEmpty()
+            .ifBlank { data.optString("FileId") }
+            .ifBlank { data.optString("fileId") }
+        if (fileId.isBlank() || fileId == "0") throw IllegalStateException("123 未返回上传文件标识")
+        if (data.optBoolean("Reuse")) {
+            // 秒传：服务端已有同内容文件，一步到位
+            io.progress(UploadPhase.FINISHING, file.size)
+            return@withContext fileId
+        }
+        if (data.optString("Key").isBlank()) throw IllegalStateException("123 未创建上传任务")
+
+        val accessKey = data.optString("AccessKeyId")
+        val secretKey = data.optString("SecretAccessKey")
+        val uploadId = data.optString("UploadId")
+        // 服务端只要给了 uploadId，就优先走「预签名分片」：分片地址由服务端签好，客户端不参与签名，
+        // 不会因为 region / 寻址方式（path-style）猜错而 403。S3 直传是拿不到 uploadId 时的兜底。
+        val direct = uploadId.isBlank() && accessKey.isNotBlank() && secretKey.isNotBlank()
+        DiagnosticLog.event(
+            DiagnosticLog.NETWORK,
+            "upload_123_plan",
+            summary = "direct=$direct | uploadId=${uploadId.take(24)} | endpoint=${data.optString("EndPoint")}" +
+                " | bucket=${data.optString("Bucket")} | key=${data.optString("Key").take(48)}" +
+                " | accessKey=${if (accessKey.isBlank()) "none" else "present"}" +
+                " | sessionToken=${if (data.optString("SessionToken").isBlank()) "none" else "present"}" +
+                " | size=${file.size}"
+        )
+        if (direct) {
+            io.s3Multipart(
+                endpoint = data.optString("EndPoint"),
+                bucket = data.optString("Bucket"),
+                objectKey = data.optString("Key"),
+                accessKey = accessKey,
+                secretKey = secretKey,
+                region = "123pan",
+                securityToken = data.optString("SessionToken"),
+                pathStyle = true
+            )
+            io.progress(UploadPhase.FINISHING, file.size)
+            val completed = postAuth(
+                Pan123Constants.FILE_UPLOAD_COMPLETE_URL,
+                "/b/api/file/upload_complete",
+                JSONObject().put("fileId", fileId.toLongOrNull() ?: 0L).toString(),
+                token
+            )
+            checkOk(completed, "合并上传分段失败")
+            return@withContext fileId
+        }
+        if (uploadId.isBlank()) throw IllegalStateException("123 未返回上传凭据")
+
+        val common = JSONObject()
+            // 字段必须存在（服务端按 key 判断），缺失时给显式 null 而不是删掉这一项
+            .put("StorageNode", data.opt("StorageNode") ?: JSONObject.NULL)
+            .put("bucket", data.optString("Bucket"))
+            .put("key", data.optString("Key"))
+            .put("uploadId", data.optString("UploadId"))
+        val chunkSize = 16L * 1024 * 1024
+        val count = maxOf(1L, (file.size + chunkSize - 1) / chunkSize)
+        for (index in 0 until count) {
+            val body = JSONObject(common.toString())
+                .put("partNumberStart", (index + 1).toInt())
+                .put("partNumberEnd", (index + 2).toInt())
+            val single = count == 1L
+            val response = postAuth(
+                if (single) Pan123Constants.FILE_S3_UPLOAD_AUTH_URL else Pan123Constants.FILE_S3_REPARE_PARTS_URL,
+                if (single) "/b/api/file/s3_upload_object/auth" else "/b/api/file/s3_repare_upload_parts_batch",
+                body.toString(),
+                token
+            )
+            checkOk(response, "获取上传地址失败")
+            val urls = response.optJSONObject("data")?.optJSONObject("presignedUrls")
+                ?: throw IllegalStateException("123 未返回上传地址")
+            val url = urls.optString((index + 1).toString())
+            if (url.isBlank()) throw IllegalStateException("123 未返回上传地址")
+            val start = index * chunkSize
+            val uploaded = io.send(
+                url = url,
+                method = "PUT",
+                start = start,
+                end = minOf(file.size, start + chunkSize),
+                retries = 1
+            )
+            if (!uploaded.isSuccessful) {
+                throw IllegalStateException("文件上传失败（HTTP ${uploaded.code}）")
+            }
+        }
+        io.progress(UploadPhase.FINISHING, file.size)
+        val completeBody = JSONObject(common.toString())
+            .put("fileId", fileId.toLongOrNull() ?: 0L)
+            .put("fileSize", file.size)
+            .put("isMultipart", count > 1L)
+        val completed = postAuth(
+            Pan123Constants.FILE_UPLOAD_COMPLETE_V2_URL,
+            "/b/api/file/upload_complete/v2",
+            completeBody.toString(),
+            token
+        )
+        checkOk(completed, "合并上传分段失败")
+        completed.optJSONObject("data")?.optJSONObject("file_info")?.optString("FileId")
+            ?.takeIf { it.isNotBlank() && it != "0" }
+            ?: fileId
+    }
+
     /** 移动：POST /b/api/file/mod_pid */
     suspend fun moveFiles(fileIds: List<String>, toParentFileId: String, token: String) = withContext(Dispatchers.IO) {
         val list = JSONArray()
@@ -447,7 +694,9 @@ class Pan123Api(
     /**
      * 创建分享：POST /b/api/share/create（文档 §5.10）。
      * @param fileIds 文件/目录 ID 列表（单文件抓包为标量 int，多文件用数组）
-     * @param expiration 过期时间 ISO（永久用 Pan123Constants.EXPIRATION_FOREVER）
+     * @param expiration 过期时间 ISO**绝对时间**（永久用 Pan123Constants.EXPIRATION_FOREVER，其余 =
+     *   now + 天数）。⚠️ 必须先用 [com.yunget.app.data.network.model.ShareExpire.daysOrNull] 把 UI
+     *   中性码转成天数——直接把中性码当天数会让「永久」变成 now+1 天、「7 天」变成 now+3 天（Agent.md §3.20）。
      * @param sharePwd 提取码（null/空 = 无提取码）
      */
     suspend fun createShare(
@@ -493,7 +742,9 @@ class Pan123Api(
             passcode = sharePwd.orEmpty(),
             pwdId = shareKey,
             title = shareName,
-            expiredType = if (expiration == Pan123Constants.EXPIRATION_FOREVER) 1 else 4
+            // 123 响应不返回有效期；调用方（Pan123CloudViewModel）会用用户所选中性码覆盖此处，
+            // 未覆盖时显示「未知」比硬猜「30 天」更安全（原实现 else -> 4 是错的）
+            expiredType = ShareExpire.UNKNOWN
         )
     }
 
@@ -515,7 +766,15 @@ class Pan123Api(
                         pdirFid = item.optString("ParentFileId"),
                         // 123 下载/转存需要 S3KeyFlag + Etag + StorageNode，编码进 fidToken："S3KeyFlag|Etag|StorageNode"
                         fidToken = "${item.optString("S3KeyFlag")}|${item.optString("Etag")}|${item.optString("StorageNode")}",
-                        modifyTime = item.optString("UpdateAt")
+                        modifyTime = item.optString("UpdateAt"),
+                        // DownloadUrl 是原图直链，补上 w/h 与单个 trade_key 后 CDN 才回缩略图（见 pan123ThumbnailUrl）；
+                        // 列表项自带的 Thumbnail 字段优先
+                        thumbnail = FileThumbnail.of(
+                            pan123ThumbnailUrl(
+                                downloadUrl = item.optString("DownloadUrl"),
+                                platformThumbnail = item.optString("Thumbnail")
+                            )
+                        )
                     )
                 )
             }
@@ -654,4 +913,47 @@ class Pan123Api(
             return JSONObject(body)
         }
     }
+}
+
+/** 123 列表缩略图的目标边长（40dp 的列表行，3x 屏 120px 也够，再大只是白花流量） */
+private const val PAN123_THUMB_SIZE = 120
+
+/**
+ * 123 列表缩略图地址（个人盘列表用）。
+ *
+ * ★ `DownloadUrl` 是**原图直链**（`download-cdn.cjjd19.com/.../c-m8007?<签名参数>`，带一周有效期），
+ *   直接当列表小图用等于每行下载一张原图。实测（2026-10-31 用真实列表响应验证）：
+ *   在同一台 CDN 的地址上追加 `w/h` + **单个** `trade_key=123pan-thumbnail`，服务端就返回压缩过的
+ *   JPEG（120×120 约 7KB），路径里的 `_70_70` / `_24_24` 后缀对结果**没有影响**，不用改写路径。
+ *   两个反例都是实测：
+ *   - 少 `trade_key` → 403；
+ *   - `trade_key` 出现两次（重复参数）→ 直接回原图（105KB 的 octet-stream）。
+ *   所以这里先把原有的 `w/h/trade_key` 去掉，再各追加一次，保证参数不重复。
+ *
+ * 列表项自带 https 的 `Thumbnail` 字段时优先用平台的（省一次拼装，也不依赖上面这条实测结论）。
+ */
+internal fun pan123ThumbnailUrl(downloadUrl: String, platformThumbnail: String = ""): String {
+    // 平台自带字段只在「确实是 https 地址」时采信：JSON null 在这里会变成字符串 "null"，
+    // 直接返回会让后面本可用的 DownloadUrl 拼装被跳过
+    val provided = platformThumbnail.trim()
+    if (provided.startsWith("https://", ignoreCase = true)) return provided
+    val trimmed = downloadUrl.trim()
+    if (!trimmed.startsWith("https://", ignoreCase = true)) return ""
+    // 片段只在末尾，先摘掉，参数要拼在 # 之前
+    val fragmentIndex = trimmed.indexOf('#')
+    val body = if (fragmentIndex >= 0) trimmed.substring(0, fragmentIndex) else trimmed
+    val fragment = if (fragmentIndex >= 0) trimmed.substring(fragmentIndex) else ""
+    val queryIndex = body.indexOf('?')
+    val path = if (queryIndex >= 0) body.substring(0, queryIndex) else body
+    val query = if (queryIndex >= 0) body.substring(queryIndex + 1) else ""
+    val params = query.split('&')
+        .filter { it.isNotBlank() }
+        .filterNot {
+            it.startsWith("w=") || it.startsWith("h=") || it.startsWith("trade_key=")
+        }
+        .toMutableList()
+    params += "w=$PAN123_THUMB_SIZE"
+    params += "h=$PAN123_THUMB_SIZE"
+    params += "trade_key=123pan-thumbnail"
+    return "$path?${params.joinToString("&")}$fragment"
 }

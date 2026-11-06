@@ -1,5 +1,7 @@
 package com.yunget.app.data.repository
 
+import kotlinx.coroutines.flow.first
+
 import com.yunget.app.data.db.Pan123AccountDao
 import com.yunget.app.data.db.Pan123AccountEntity
 import com.yunget.app.data.network.Pan123Api
@@ -120,4 +122,5 @@ class Pan123AccountRepository(
         runCatching { android.webkit.WebStorage.getInstance().deleteAllData() }
         dao.clear()
     }
+    suspend fun allCredentials(): List<String> = dao.observeAll().first().map { it.accessToken }
 }

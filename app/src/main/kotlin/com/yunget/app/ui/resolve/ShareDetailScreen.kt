@@ -22,6 +22,8 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.material.icons.outlined.Visibility
+import com.yunget.app.ui.preview.CloudPreview
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.outlined.ArrowUpward
@@ -242,6 +244,7 @@ fun ShareDetailScreen(
                             checkBaiduLimit(file) { viewModel.fetchDownloadLink(file) }
                         }
                     },
+                    onPreview = if (!file.isdir && CloudPreview.canPreview(file)) ({ viewModel.openPreview(file) }) else null,
                     // 仅夸克分享显示转存按钮（多选时隐藏）
                     onSave = if (!viewModel.multiSelectMode && viewModel.canSave) {
                         { viewModel.requestSave(file) }
@@ -521,6 +524,7 @@ internal fun ShareFileRow(
     onSave: (() -> Unit)? = null,
     /** 非空时行尾显示「更多」按钮（打开文件操作菜单） */
     onMore: (() -> Unit)? = null,
+    onPreview: (() -> Unit)? = null,
     /** 长按进入多选（多选模式下为 null） */
     onLongClick: (() -> Unit)? = null,
     /** 多选模式：是否选中 */
@@ -567,28 +571,7 @@ internal fun ShareFileRow(
                 )
                 Spacer(modifier = Modifier.width(4.dp))
             }
-            Surface(
-                modifier = Modifier.size(40.dp),
-                shape = CircleShape,
-                color = if (file.isdir) {
-                    MaterialTheme.colorScheme.secondaryContainer
-                } else {
-                    MaterialTheme.colorScheme.surfaceContainerHighest
-                }
-            ) {
-                Box(contentAlignment = Alignment.Center) {
-                    Icon(
-                        imageVector = if (file.isdir) Icons.Outlined.Folder else Icons.Outlined.InsertDriveFile,
-                        contentDescription = null,
-                        modifier = Modifier.size(20.dp),
-                        tint = if (file.isdir) {
-                            MaterialTheme.colorScheme.onSecondaryContainer
-                        } else {
-                            MaterialTheme.colorScheme.onSurfaceVariant
-                        }
-                    )
-                }
-            }
+            FileLeadingIcon(file)
             Spacer(modifier = Modifier.width(12.dp))
             Column(modifier = Modifier.weight(1f)) {
                 // 文件名过长时滚动播放显示
@@ -604,6 +587,11 @@ internal fun ShareFileRow(
                     style = MaterialTheme.typography.bodyMedium,
                     color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
+            }
+            if (onPreview != null) {
+                IconButton(onClick = onPreview) {
+                    Icon(Icons.Outlined.Visibility, contentDescription = "预览${file.fname}")
+                }
             }
             if (onSave != null) {
                 IconButton(onClick = onSave, modifier = Modifier.size(36.dp)) {

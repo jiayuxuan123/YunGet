@@ -48,8 +48,10 @@ class GuangYaAccountViewModel(
         if (account.isBlank() || password.isBlank()) {
             false to "请输入光鸭账号和密码"
         } else {
-            repository.login(account, password)
-            true to "登录成功"
+            repository.login(account, password).fold(
+                onSuccess = { true to "登录成功" },
+                onFailure = { false to (it.message ?: "光鸭登录失败，请检查账号密码") },
+            )
         }
     } catch (e: Exception) {
         false to (e.message ?: "光鸭登录失败，请检查账号密码，或切换网页登录")
@@ -87,8 +89,10 @@ class GuangYaAccountViewModel(
         } else if (code.isBlank()) {
             false to "请输入验证码"
         } else {
-            repository.smsLogin(phoneNumber, verificationId, code, isUser)
-            true to "登录成功"
+            repository.smsLogin(phoneNumber, verificationId, code, isUser).fold(
+                onSuccess = { true to "登录成功" },
+                onFailure = { false to (it.message ?: "短信验证码错误或已过期，请重新获取") },
+            )
         }
     } catch (e: Exception) {
         false to (e.message ?: "短信验证码错误或已过期，请重新获取")

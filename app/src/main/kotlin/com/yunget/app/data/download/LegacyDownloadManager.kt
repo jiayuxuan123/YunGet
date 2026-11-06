@@ -158,6 +158,13 @@ class LegacyDownloadManager(
         /** 已知文件大小（字节）；-1 表示未知，需探测 */
         size: Long,
         /** 下载成功完成后的清理回调（如删除网盘临时转存文件）；失败/取消不触发 */
+        platform: String,
+        fallbackUrl: String,
+        altSources: List<DownloadSource>,
+        mergeAudioUrl: String,
+        mergeAudioHeaders: Map<String, String>,
+        motionUrl: String,
+        audioOnly: Boolean,
         onComplete: suspend () -> Unit,
     ): Long {
         // 文件名兜底：空白时从 URL 推导，避免保存时变成时间戳
@@ -169,7 +176,16 @@ class LegacyDownloadManager(
         val id = dao.insert(
             DownloadTaskEntity(
                 url = url,
-                fileName = safeName
+                fileName = safeName,
+                requestHeadersJson = org.json.JSONObject(headers as Map<*, *>).toString(),
+                platform = platform,
+                fallbackUrl = fallbackUrl,
+                altSourcesJson = DownloadPostProcessor.encodeSources(altSources),
+                mergeAudioUrl = mergeAudioUrl,
+                mergeAudioHeadersJson = org.json.JSONObject(mergeAudioHeaders as Map<*, *>).toString(),
+                motionUrl = motionUrl,
+                audioOnly = audioOnly,
+
             )
         )
         // 保存请求头（Cookie/UA），暂停后恢复仍需携带
@@ -663,12 +679,14 @@ class LegacyDownloadManager(
             hlsFile.delete()
             throw IllegalStateException("未授予存储权限，无法保存到下载目录")
         }
+        val product = DownloadPostProcessor.process(context, task, hlsFile)
         val savedPath = withContext(Dispatchers.IO) {
-            DownloadSaver.save(context, task.fileName, hlsFile, saveDirProvider())
+            DownloadSaver.save(context, task.fileName, product, saveDirProvider())
         }
             ?: throw IllegalStateException("保存到下载目录失败")
         // 完成时以实际落盘大小修正进度（进度写库是节流的，末段增量可能没写进去）。
-        val hlsSize = hlsFile.length()
+        val hlsSize = product.length()
+        if (product != hlsFile) product.delete()
         dao.complete(id, DownloadTaskEntity.STATUS_COMPLETED, savedPath, hlsSize, hlsSize)
         Log.d(TAG, "hlsDownload: id=$id 下载完成 savedPath=$savedPath size=$hlsSize")
         taskCallbacks.remove(id)?.let { cb -> runCatching { cb() } }
@@ -716,12 +734,14 @@ class LegacyDownloadManager(
         // 5) 保存（自定义目录经 SAF 写入；默认目录走 MediaStore/传统路径）
         // ★ 同步阻塞拷贝必须切 IO 线程：任务跑在 Dispatchers.Default（CPU 池），
         //   大文件保存若占满 Default 线程会让整个下载器协程饿死（"100% 卡死保存不了"）
+        val product = DownloadPostProcessor.process(context, dao.get(id) ?: throw IllegalStateException("任务已删除"), merged)
         val savedPath = withContext(Dispatchers.IO) {
-            DownloadSaver.save(context, fileName, merged, saveDirProvider())
+            DownloadSaver.save(context, fileName, product, saveDirProvider())
         }
             ?: throw IllegalStateException("保存到下载目录失败")
         // 完成时以实际落盘大小修正进度（进度写库是节流的，末段增量可能没写进去）。
-        val mergedSize = merged.length()
+        val mergedSize = product.length()
+        if (product != merged) product.delete()
         dao.complete(id, DownloadTaskEntity.STATUS_COMPLETED, savedPath, mergedSize, mergedSize)
         Log.d(TAG, "finishDownload: id=$id 下载完成 savedPath=$savedPath size=$mergedSize")
         taskCallbacks.remove(id)?.let { cb ->

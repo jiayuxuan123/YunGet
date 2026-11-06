@@ -68,7 +68,7 @@ object ShareLinkParser {
     // 前置边界 (?:^|[/.]) 参照 wenxi 的 lanzouHostPattern（带 subdomainHostPattern）——
     // 否则 “www.ilanzou.com”（蓝奏云优享版）里的 “lanzou.com” 会被误判为蓝奏云。
     private val lanzouShareIdRegex =
-        Regex("""(?:^|[/.])(?:lanzou[a-z0-9-]*|lan[zs]o[ux])\.(?:com|net|org|cn)/([A-Za-z0-9]+)""", RegexOption.IGNORE_CASE)
+        Regex("""(?:^|[/.])(?:lanzou[a-z0-9-]*|lan[zs]o[ux]|lanzn)\.(?:com|net|org|cn)/([A-Za-z0-9]+)""", RegexOption.IGNORE_CASE)
     // 蓝奏云提取码参数：?pwd= / ?pass= / ?passcode= / ?password=
     private val pwdInLanzouUrlRegex = Regex("""[?&](?:pwd|pass|passcode|password)=([A-Za-z0-9]+)""", RegexOption.IGNORE_CASE)
     private val pwdInUrlRegex = Regex("""[?&]pwd=([A-Za-z0-9]+)""")

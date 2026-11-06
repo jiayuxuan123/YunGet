@@ -64,7 +64,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.viewinterop.AndroidView
 import com.yunget.app.data.network.Pan115Constants
 import com.yunget.app.ui.viewmodel.Pan115AccountViewModel
-import com.yunget.app.ui.components.YunGetWavyLoading
+import com.yunget.app.ui.components.YunGetLoading
 import kotlinx.coroutines.launch
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
@@ -248,7 +248,7 @@ fun Pan115LoginScreen(
                 modifier = Modifier.fillMaxSize()
             )
             if (isLoading) {
-                YunGetWavyLoading(modifier = Modifier.fillMaxWidth())
+                YunGetLoading(modifier = Modifier.fillMaxWidth())
             }
         }
     }

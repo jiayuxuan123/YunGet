@@ -1,5 +1,28 @@
+/*
+ * YunX (云析) - A network drive share-link parser and high-speed downloader for Android.
+ * Copyright (C) 2026 CYQawa
+ *
+ * This program is free software: you can redistribute it and/or modify
+ * it under the terms of the GNU Affero General Public License as published by
+ * the Free Software Foundation, either version 3 of the License, or
+ * (at your option) any later version.
+ *
+ * This program is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+ * GNU Affero General Public License for more details.
+ *
+ * You should have received a copy of the GNU Affero General Public License
+ * along with this program.  If not, see <https://www.gnu.org/licenses/>.
+ */
+
 package com.yunget.app.ui.viewmodel
 
+import android.content.ContentResolver
+import android.net.Uri
+import com.yunget.app.data.network.HttpClients
+import com.yunget.app.data.upload.UploadProgress
+import com.yunget.app.data.upload.UploadRunner
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateListOf
 import androidx.compose.runtime.mutableStateOf
@@ -8,17 +31,21 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.ViewModelProvider
 import androidx.lifecycle.viewModelScope
 import com.yunget.app.data.download.DownloadManager
+import com.yunget.app.data.download.DownloadPlatform
 import com.yunget.app.data.network.C139Api
 import com.yunget.app.data.network.C139Constants
+import com.yunget.app.data.network.model.ShareExpire
 import com.yunget.app.data.network.model.ShareFile
+import com.yunget.app.data.network.model.DownloadLink
 import com.yunget.app.data.network.model.ShareInfo
+import com.yunget.app.ui.preview.CloudPreview
 import kotlinx.coroutines.delay
-import kotlinx.coroutines.flow.Flow
-import kotlinx.coroutines.flow.drop
-import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.distinctUntilChanged
+import kotlinx.coroutines.flow.drop
 import kotlinx.coroutines.launch
 
 /** 139 网盘云盘浏览 UI 状态 */
@@ -43,7 +70,6 @@ class C139CloudViewModel(
     private val api: C139Api,
     private val cookieProvider: suspend () -> String?,
     private val downloadManager: DownloadManager,
-    /** 登录态（true=已登录）。登录成功后自动重载根目录，避免停在「请先登录」错误页。 */
     private val loginState: Flow<Boolean>
 ) : ViewModel() {
 
@@ -80,12 +106,9 @@ class C139CloudViewModel(
 
     init {
         loadRoot()
-        // 登录成功后自动重载根目录。
-        // 【为什么需要】本 VM 在未登录时也会被创建并执行 init{loadRoot()}，那时拿到的是
-        // Error("请先登录…")。用户随后登录成功，但没有任何机制触发重载 →
-        // 网盘页一直停在「请先登录」，必须手动点「重试」才恢复。
-        // drop(1) 跳过 VM 创建时的登录态快照（init 已加载过一次，避免冷启动重复请求）；
-        // distinctUntilChanged 过滤登录后凭证刷新等重复 upsert。
+        // 启动期未登录时上面的 loadRoot 会残留「请先登录…」错误态；登录态从无到有后自动重载根目录，
+        // 进网盘列表无需再手动点「重试」。drop(1) 跳过 VM 创建时的登录态快照（init 已加载，避免冷启动重复），
+        // distinctUntilChanged 过滤登录后 Cookie/Token 刷新等重复 upsert。
         viewModelScope.launch {
             loginState
                 .drop(1)
@@ -239,7 +262,7 @@ class C139CloudViewModel(
         depth: Int
     ) {
         if (depth > 12) return
-        val list = runCatching { api.listCloudFiles(dirId, cookie).first }.getOrDefault(emptyList())
+        val list = runCatching { api.listCloudFiles(dirId, cookie) }.getOrDefault(emptyList())
         list.filter { !it.isdir }.forEach { result.add(it to "$prefix/${it.fname}") }
         list.filter { it.isdir }.forEach {
             collectFolderFiles(it.fid, "$prefix/${it.fname}", cookie, result, depth + 1)
@@ -274,6 +297,7 @@ class C139CloudViewModel(
                             url = link.downloadUrl,
                             fileName = relPath, // 相对路径：Download/文件夹A/子目录/文件.mp4
                             size = link.size,
+                            platform = DownloadPlatform.C139,
                             headers = downloadHeaders()
                         )
                         okCount++
@@ -297,6 +321,14 @@ class C139CloudViewModel(
     }
 
     /** 下载：getDownloadUrl 取 OBS 直链（900s 有效，UA + Referer 即可）→ 内置下载队列 */
+    /** 待确认的下载直链（单文件下载弹窗展示用，长按链接可复制） */
+    var downloadLink by mutableStateOf<DownloadLink?>(null)
+        private set
+
+    /** 与 downloadLink 配套的入队参数（弹窗确认后直接入队） */
+    private var pendingDownload: PendingDownload? = null
+
+    /** 下载文件：取直链 → 弹出下载确认弹窗（对齐解析页行为，确认后入队） */
     fun downloadFile() {
         val file = actionFile ?: return
         viewModelScope.launch {
@@ -304,7 +336,7 @@ class C139CloudViewModel(
             try {
                 val link = api.getDownloadUrl(file.fid, cookie())
                     ?: throw IllegalStateException("获取下载链接失败")
-                downloadManager.enqueue(
+                pendingDownload = PendingDownload(
                     url = link.downloadUrl,
                     // 139 getDownloadUrl 响应不含 name → 用列表里的文件名（与分享链接下载一致，避免 fileId 乱码）
                     fileName = file.fname.ifBlank { link.filename },
@@ -314,7 +346,54 @@ class C139CloudViewModel(
                         "Referer" to "https://yun.139.com/"
                     )
                 )
-                cloudMessage = "已加入下载：${file.fname}"
+                downloadLink = link // 弹下载确认弹窗（长按直链可复制）
+            } catch (e: Exception) {
+                cloudMessage = e.message ?: "下载失败"
+            } finally {
+                isOperating = false
+            }
+        }
+    }
+
+    /**
+     * 在线预览（云盘文件）：139 直链要求 PC UA + 官方 Referer，与下载共用 [downloadHeaders]。
+     * 少一个头不会返回 403，而是回一段 HTML/JSON 错误页 —— 图片加载器那边只会显示「加载失败」，看不出原因。
+     */
+    fun openPreview() {
+        val file = actionFile ?: return
+        if (!CloudPreview.canPreview(file)) return
+        viewModelScope.launch {
+            isOperating = true
+            try {
+                val link = api.getDownloadUrl(file.fid, cookie())
+                    ?: throw IllegalStateException("获取下载链接失败")
+                // 先清 actionFile 再开预览：否则关掉预览时文件操作弹窗会重新弹出来
+                actionFile = null
+                CloudPreview.open(file, link.downloadUrl, downloadHeaders(), isHls = link.isHls)
+            } catch (e: Exception) {
+                cloudMessage = e.message ?: "预览失败"
+            } finally {
+                isOperating = false
+            }
+        }
+    }
+
+    /** 下载弹窗确认：用已生成的直链入队 */
+    fun startDownload() {
+        val pd = pendingDownload ?: return
+        downloadLink = null
+        pendingDownload = null
+        viewModelScope.launch {
+            isOperating = true
+            try {
+                downloadManager.enqueue(
+                    url = pd.url,
+                    fileName = pd.fileName,
+                    size = pd.size,
+                    platform = DownloadPlatform.C139,
+                    headers = pd.headers
+                )
+                cloudMessage = "已加入下载：${pd.fileName}"
                 actionFile = null
                 downloadTriggered++
             } catch (e: Exception) {
@@ -323,6 +402,12 @@ class C139CloudViewModel(
                 isOperating = false
             }
         }
+    }
+
+    /** 关闭下载弹窗（放弃下载） */
+    fun dismissDownloadDialog() {
+        downloadLink = null
+        pendingDownload = null
     }
 
     /** 重命名 */
@@ -337,6 +422,25 @@ class C139CloudViewModel(
                 reloadCurrent()
             } catch (e: Exception) {
                 cloudMessage = e.message ?: "重命名失败"
+            } finally {
+                isOperating = false
+            }
+        }
+    }
+
+    /** 新建文件夹（当前目录下）；139 用 fileId，根目录沿用列目录/移动的 "/" 约定 */
+    fun createFolder(name: String) {
+        val newName = name.trim()
+        if (newName.isEmpty()) return
+        val parentId = (uiState.value as? C139CloudUiState.Loaded)?.dirId ?: "/"
+        viewModelScope.launch {
+            isOperating = true
+            try {
+                api.createDir(parentId, newName, cookie())
+                cloudMessage = "已创建文件夹「$newName」"
+                reloadCurrent()
+            } catch (e: Exception) {
+                cloudMessage = e.message ?: "新建文件夹失败"
             } finally {
                 isOperating = false
             }
@@ -364,15 +468,20 @@ class C139CloudViewModel(
         }
     }
 
-    /** 创建分享（139 提取码系统自动生成，仅选有效期） */
-    fun shareFile(period: Int?) {
+    /**
+     * 创建分享（139 提取码系统自动生成，仅选有效期）。
+     *
+     * @param expiredType UI 中性码（[ShareExpire]），**必须转成天数**：139 的 `period` 语义是
+     *   天数，永久有效则完全不传该字段（见 `C139Api.createShare`）。
+     */
+    fun shareFile(expiredType: Int) {
         val file = actionFile ?: return
         viewModelScope.launch {
             isOperating = true
             try {
                 val coLst = if (file.isdir) emptyList() else listOf(file.fid)
                 val caLst = if (file.isdir) listOf(file.fid) else emptyList()
-                val info = api.createShare(coLst, caLst, period, file.fname, cookie())
+                val info = api.createShare(coLst, caLst, ShareExpire.daysOrNull(expiredType), file.fname, cookie())
                 shareResult = info
             } catch (e: Exception) {
                 cloudMessage = e.message ?: "分享失败"
@@ -442,6 +551,7 @@ class C139CloudViewModel(
                             // 文件夹内文件用相对路径；根目录文件用列表文件名（139 取链响应不含 name）
                             fileName = if (relPath.contains('/')) relPath else file.fname.ifBlank { link.filename },
                             size = link.size,
+                            platform = DownloadPlatform.C139,
                             headers = downloadHeaders()
                         )
                         okCount++
@@ -469,7 +579,8 @@ class C139CloudViewModel(
     }
 
     /** 批量分享 */
-    fun shareSelected(period: Int?) {
+    /** 批量分享（@param expiredType UI 中性码，转天数见 [shareFile]） */
+    fun shareSelected(expiredType: Int) {
         val files = _selected.toList()
         if (files.isEmpty()) return
         viewModelScope.launch {
@@ -478,7 +589,7 @@ class C139CloudViewModel(
                 val coLst = files.filter { !it.isdir }.map { it.fid }
                 val caLst = files.filter { it.isdir }.map { it.fid }
                 val title = if (files.size == 1) files[0].fname else "分享 ${files.size} 个文件"
-                val info = api.createShare(coLst, caLst, period, title, cookie())
+                val info = api.createShare(coLst, caLst, ShareExpire.daysOrNull(expiredType), title, cookie())
                 shareResult = info
                 exitMultiSelect()
             } catch (e: Exception) {
@@ -545,7 +656,7 @@ class C139CloudViewModel(
         refreshing = true
         viewModelScope.launch {
             try {
-                val files = api.listCloudFiles(current.dirId, cookie()).first
+                val files = api.listCloudFiles(current.dirId, cookie())
                 _uiState.value = C139CloudUiState.Loaded(files, current.pathNames, current.dirId)
             } catch (e: Exception) {
                 cloudMessage = e.message ?: "刷新失败"
@@ -568,7 +679,7 @@ class C139CloudViewModel(
         _uiState.value = C139CloudUiState.Loading
         viewModelScope.launch {
             try {
-                val files = api.listCloudFiles(dirId, cookie()).first
+                val files = api.listCloudFiles(dirId, cookie())
                 _uiState.value = C139CloudUiState.Loaded(files, pathNames, dirId)
             } catch (e: Exception) {
                 _uiState.value = C139CloudUiState.Error(e.message ?: "加载失败")
@@ -589,6 +700,38 @@ class C139CloudViewModel(
         }
         throw IllegalStateException("任务超时")
     }
+
+    // ---------- 上传（139 分片直传） ----------
+
+    /** 上传进度（null 表示没有任务）；上传弹窗直接读这里 */
+    val uploadProgress: UploadProgress? get() = uploadRunner.progress
+
+    private val uploadRunner = UploadRunner(viewModelScope, { HttpClients.apiClient() }) { outcome ->
+        // 传成功过就刷新列表（失败也刷：已经落库的文件要立刻可见）
+        if (outcome.uploaded > 0 || outcome.failed > 0) reloadCurrent()
+        cloudMessage = when {
+            outcome.error != null -> outcome.error
+            outcome.cancelled -> "已取消上传"
+            else -> "已上传 ${outcome.uploaded} 个文件"
+        }
+    }
+
+    /**
+     * 上传选中的本地文件到**当前目录**。
+     *
+     * 目标目录在这里就先固定下来（上传期间用户可能切目录、返回上级），
+     * 凭据留到 IO 线程现取，避免拿着已过期的 Cookie 一路失败。
+     */
+    fun uploadFiles(resolver: ContentResolver, uris: List<Uri>) {
+        val dir = (uiState.value as? C139CloudUiState.Loaded)?.dirId ?: "/"
+        uploadRunner.start(resolver, uris) { io, source ->
+            val cookie = cookieProvider() ?: throw IllegalStateException("请先登录移动云盘")
+            api.upload(io, source, dir, cookie)
+        }
+    }
+
+    /** 取消当前上传（正在发的那一段会立刻被打断） */
+    fun cancelUpload() = uploadRunner.cancel()
 
     class Factory(
         private val api: C139Api,

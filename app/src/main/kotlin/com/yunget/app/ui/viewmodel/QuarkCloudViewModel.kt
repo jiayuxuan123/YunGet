@@ -1,5 +1,28 @@
+/*
+ * YunX (云析) - A network drive share-link parser and high-speed downloader for Android.
+ * Copyright (C) 2026 CYQawa
+ *
+ * This program is free software: you can redistribute it and/or modify
+ * it under the terms of the GNU Affero General Public License as published by
+ * the Free Software Foundation, either version 3 of the License, or
+ * (at your option) any later version.
+ *
+ * This program is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+ * GNU Affero General Public License for more details.
+ *
+ * You should have received a copy of the GNU Affero General Public License
+ * along with this program.  If not, see <https://www.gnu.org/licenses/>.
+ */
+
 package com.yunget.app.ui.viewmodel
 
+import android.content.ContentResolver
+import android.net.Uri
+import com.yunget.app.data.network.HttpClients
+import com.yunget.app.data.upload.UploadProgress
+import com.yunget.app.data.upload.UploadRunner
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateListOf
 import androidx.compose.runtime.mutableStateOf
@@ -8,16 +31,18 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.ViewModelProvider
 import androidx.lifecycle.viewModelScope
 import com.yunget.app.data.download.DownloadManager
+import com.yunget.app.data.download.DownloadPlatform
 import com.yunget.app.data.network.QuarkApi
 import com.yunget.app.data.network.model.DownloadLink
 import com.yunget.app.data.network.model.ShareFile
 import com.yunget.app.data.network.model.ShareInfo
-import kotlinx.coroutines.flow.Flow
-import kotlinx.coroutines.flow.drop
-import kotlinx.coroutines.flow.distinctUntilChanged
+import com.yunget.app.ui.preview.CloudPreview
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.distinctUntilChanged
+import kotlinx.coroutines.flow.drop
 import kotlinx.coroutines.launch
 
 /** 夸克云盘浏览 UI 状态 */
@@ -41,7 +66,6 @@ class QuarkCloudViewModel(
     private val api: QuarkApi,
     private val cookieProvider: suspend () -> String?,
     private val downloadManager: DownloadManager,
-    /** 登录态（true=已登录）。登录成功后自动重载根目录，避免停在「请先登录」错误页。 */
     private val loginState: Flow<Boolean>
 ) : ViewModel() {
 
@@ -151,12 +175,9 @@ class QuarkCloudViewModel(
 
     init {
         loadRoot()
-        // 登录成功后自动重载根目录。
-        // 【为什么需要】本 VM 在未登录时也会被创建并执行 init{loadRoot()}，那时拿到的是
-        // Error("请先登录…")。用户随后登录成功，但没有任何机制触发重载 →
-        // 网盘页一直停在「请先登录」，必须手动点「重试」才恢复。
-        // drop(1) 跳过 VM 创建时的登录态快照（init 已加载过一次，避免冷启动重复请求）；
-        // distinctUntilChanged 过滤登录后凭证刷新等重复 upsert。
+        // 启动期未登录时上面的 loadRoot 会残留「请先登录…」错误态；登录态从无到有后自动重载根目录，
+        // 进网盘列表无需再手动点「重试」。drop(1) 跳过 VM 创建时的登录态快照（init 已加载，避免冷启动重复），
+        // distinctUntilChanged 过滤登录后 Cookie/Token 刷新等重复 upsert。
         viewModelScope.launch {
             loginState
                 .drop(1)
@@ -309,6 +330,7 @@ class QuarkCloudViewModel(
                             url = effectiveUrl,
                             fileName = relPath, // 相对路径：Download/文件夹A/子目录/文件.mp4
                             size = link.size,
+                            platform = DownloadPlatform.QUARK,
                             headers = downloadHeaders(cookie)
                         )
                         okCount++
@@ -372,6 +394,44 @@ class QuarkCloudViewModel(
         }
     }
 
+    /**
+     * 在线预览（云盘文件）：与 [downloadFile] 取同一条直链、同一份请求头，只是不弹下载确认弹窗。
+     *
+     * ★ 必须现取直链：夸克直链带签名且有时效，预览页的图片加载器需要的是「此刻能读」的地址。
+     *   取链失败（未登录 / 文件已删 / 直链额度用尽）把原因交给页面 Snackbar，不静默。
+     */
+    fun openPreview() {
+        val file = actionFile ?: return
+        if (!CloudPreview.canPreview(file)) return
+        viewModelScope.launch {
+            isOperating = true
+            try {
+                val cookie = cookieProvider()
+                if (cookie.isNullOrBlank()) {
+                    cloudMessage = "请先登录夸克网盘"
+                    return@launch
+                }
+                val link = api.getDownloadLink(file.fid, cookie)
+                    ?: throw IllegalStateException("获取下载链接失败")
+                // 先清 actionFile 再开预览：预览页是全屏覆盖，不清理的话关掉预览时文件操作弹窗会重新弹出来
+                actionFile = null
+                CloudPreview.open(
+                    file = file,
+                    // 与 downloadFile 走同一个出口：QuarkCdn.fastest 现在是原样返回，将来若真做节点改写，
+                    // 预览与下载的直链也必须同步，否则会出现「能下载、预览白屏」这类只在一侧复现的问题
+                    url = com.yunget.app.data.network.QuarkCdn.fastest(link.downloadUrl, cookie),
+                    headers = downloadHeaders(cookie),
+                    // 视频预览：m3u8 直链在播放端要显式当 HLS 处理（见 CloudPreview.open 的说明）
+                    isHls = link.isHls
+                )
+            } catch (e: Exception) {
+                cloudMessage = e.message ?: "预览失败"
+            } finally {
+                isOperating = false
+            }
+        }
+    }
+
     /** 下载弹窗确认：用已生成的直链入队 */
     fun startDownload() {
         val pd = pendingDownload ?: return
@@ -384,6 +444,7 @@ class QuarkCloudViewModel(
                     url = pd.url,
                     fileName = pd.fileName,
                     size = pd.size,
+                    platform = DownloadPlatform.QUARK,
                     headers = pd.headers
                 )
                 cloudMessage = "已加入下载：${pd.fileName}"
@@ -429,6 +490,30 @@ class QuarkCloudViewModel(
         }
     }
 
+    /** 新建文件夹（当前目录下） */
+    fun createFolder(name: String) {
+        val newName = name.trim()
+        if (newName.isEmpty()) return
+        val parentFid = (uiState.value as? QuarkCloudUiState.Loaded)?.dirFid ?: "0"
+        viewModelScope.launch {
+            isOperating = true
+            try {
+                val cookie = cookieProvider()
+                if (cookie.isNullOrBlank()) {
+                    cloudMessage = "请先登录夸克网盘"
+                    return@launch
+                }
+                api.createFolder(newName, parentFid, cookie)
+                cloudMessage = "已创建文件夹「$newName」"
+                reloadCurrent()
+            } catch (e: Exception) {
+                cloudMessage = e.message ?: "新建文件夹失败"
+            } finally {
+                isOperating = false
+            }
+        }
+    }
+
     /** 移动文件到指定目录 */
     fun moveFile(toDirFid: String) {
         val file = actionFile ?: return
@@ -449,30 +534,6 @@ class QuarkCloudViewModel(
                 reloadCurrent()
             } catch (e: Exception) {
                 cloudMessage = e.message ?: "移动失败"
-            } finally {
-                isOperating = false
-            }
-        }
-    }
-
-    /** 新建文件夹（当前目录下） */
-    fun createFolder(name: String) {
-        val newName = name.trim()
-        if (newName.isEmpty()) return
-        val parentFid = (uiState.value as? QuarkCloudUiState.Loaded)?.dirFid ?: "0"
-        viewModelScope.launch {
-            isOperating = true
-            try {
-                val cookie = cookieProvider()
-                if (cookie.isNullOrBlank()) {
-                    cloudMessage = "请先登录夸克网盘"
-                    return@launch
-                }
-                api.createFolder(newName, parentFid, cookie)
-                cloudMessage = "已创建文件夹「$newName」"
-                reloadCurrent()
-            } catch (e: Exception) {
-                cloudMessage = e.message ?: "新建文件夹失败"
             } finally {
                 isOperating = false
             }
@@ -578,6 +639,7 @@ class QuarkCloudViewModel(
                             url = effectiveUrl,
                             fileName = if (relPath.contains('/')) relPath else link.filename.ifBlank { relPath },
                             size = link.size,
+                            platform = DownloadPlatform.QUARK,
                             headers = downloadHeaders(cookie)
                         )
                         okCount++
@@ -743,6 +805,38 @@ class QuarkCloudViewModel(
             }
         }
     }
+
+    // ---------- 上传（夸克 OSS 分片） ----------
+
+    /** 上传进度（null 表示没有任务）；上传弹窗直接读这里 */
+    val uploadProgress: UploadProgress? get() = uploadRunner.progress
+
+    private val uploadRunner = UploadRunner(viewModelScope, { HttpClients.apiClient() }) { outcome ->
+        // 传成功过就刷新列表（失败也刷：已经落库的文件要立刻可见）
+        if (outcome.uploaded > 0 || outcome.failed > 0) reloadCurrent()
+        cloudMessage = when {
+            outcome.error != null -> outcome.error
+            outcome.cancelled -> "已取消上传"
+            else -> "已上传 ${outcome.uploaded} 个文件"
+        }
+    }
+
+    /**
+     * 上传选中的本地文件到**当前目录**。
+     *
+     * 目标目录在这里就先固定下来（上传期间用户可能切目录、返回上级），
+     * 凭据留到 IO 线程现取，避免拿着已过期的 Cookie 一路失败。
+     */
+    fun uploadFiles(resolver: ContentResolver, uris: List<Uri>) {
+        val dir = (uiState.value as? QuarkCloudUiState.Loaded)?.dirFid ?: "0"
+        uploadRunner.start(resolver, uris) { io, source ->
+            val cookie = cookieProvider() ?: throw IllegalStateException("请先登录夸克网盘")
+            api.upload(io, source, dir, cookie)
+        }
+    }
+
+    /** 取消当前上传（正在发的那一段会立刻被打断） */
+    fun cancelUpload() = uploadRunner.cancel()
 
     class Factory(
         private val api: QuarkApi,

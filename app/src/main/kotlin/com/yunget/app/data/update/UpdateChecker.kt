@@ -97,7 +97,7 @@ object UpdateChecker {
      * compatible 32-bit fallback or the universal asset when needed.
      */
     fun selectApk(release: Release, supportedAbis: List<String>): Asset? {
-        val apks = release.assets.filter { it.name.endsWith(".apk", ignoreCase = true) }
+        val apks = release.assets.filter { it.name.endsWith(".apk", ignoreCase = true) && !it.name.contains("kernel", ignoreCase = true) }
         if (apks.isEmpty()) return null
         if (apks.size == 1) return apks.first()
 

@@ -75,80 +75,163 @@ fun UCAccountSheet(
     else account.cookie.take(cookiePreviewLimit) + "…"
     val loginTime = remember(account.updatedAt) {
         SimpleDateFormat("yyyy-MM-dd HH:mm", Locale.getDefault()).format(Date(account.updatedAt))
+
     }
+
     // ModalBottomSheet 为独立窗口，需自带 Snackbar 宿主
+
     val snackbarHostState = rememberGlobalSnackbarHostState()
+
     val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
+
     val scrollState = rememberScrollState()
+
     val sheetNestedScroll = remember(scrollState) {
+
         object : NestedScrollConnection {
+
             override fun onPostScroll(consumed: Offset, available: Offset, source: NestedScrollSource): Offset {
+
                 val dy = available.y
+
                 if (dy > 0 && scrollState.value >= scrollState.maxValue) return Offset(0f, dy)
+
                 return Offset.Zero
+
             }
+
         }
     }
+
+
 
     ModalBottomSheet(onDismissRequest = onDismiss, sheetState = sheetState, containerColor = MaterialTheme.colorScheme.surface) {
+
         Column(
+
             modifier = Modifier.fillMaxWidth()
-                .then(if (showFullCookie) Modifier.fillMaxHeight().verticalScroll(scrollState).nestedScroll(sheetNestedScroll) else Modifier)
+
+                .then(if (showFullCookie) Modifier.fillMaxHeight() else Modifier)
+
+                // ★ 纵向滚动无条件挂上：原来只在「展开全部」时才挂，横屏等高度不足时整张弹窗会卡死
+
+                //   （下方内容在屏幕外又滑不动）；内容不足一屏时 verticalScroll 仍按内容包裹，外观不变
+
+                .verticalScroll(scrollState)
+
+                .nestedScroll(sheetNestedScroll)
+
                 .padding(start = 24.dp, end = 24.dp, top = 4.dp, bottom = 32.dp)
+
         ) {
+
             Row(verticalAlignment = Alignment.CenterVertically) {
+
                 Surface(modifier = Modifier.size(52.dp), shape = CircleShape, color = MaterialTheme.colorScheme.primaryContainer) {
+
                     Box(contentAlignment = Alignment.Center) {
+
                         Text(account.nickname.take(1), style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold,
+
                             color = MaterialTheme.colorScheme.onPrimaryContainer)
+
                     }
+
                 }
+
                 Spacer(modifier = Modifier.width(16.dp))
+
                 Column {
+
                     Text(account.nickname, style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Medium)
+
                     Spacer(modifier = Modifier.height(4.dp))
+
                     Row(verticalAlignment = Alignment.CenterVertically) {
+
                         Box(modifier = Modifier.size(8.dp).background(MaterialTheme.colorScheme.primary, CircleShape))
+
                         Spacer(modifier = Modifier.width(6.dp))
+
                         Text("UC网盘 · 已登录", style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
+
                     }
+
                 }
-            }
-            Spacer(modifier = Modifier.height(24.dp))
-            Text("登录信息", style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
-            Spacer(modifier = Modifier.height(8.dp))
-            Card(modifier = Modifier.fillMaxWidth(), shape = MaterialTheme.shapes.large,
-                colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceContainerLow)) {
-                Column(modifier = Modifier.padding(16.dp)) {
-                    InfoRow(label = "登录时间", value = loginTime)
-                    Spacer(modifier = Modifier.height(12.dp))
-                    Text("Cookie", style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                    Spacer(modifier = Modifier.height(4.dp))
-                    Text(displayCookie, style = MaterialTheme.typography.labelSmall.copy(fontFamily = FontFamily.Monospace, fontSize = 11.sp, lineHeight = 15.sp),
-                        color = MaterialTheme.colorScheme.onSurfaceVariant)
-                    Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.End) {
-                        if (cookieTruncated) TextButton(onClick = { showFullCookie = !showFullCookie }) { Text(if (showFullCookie) "收起" else "展开全部") }
-                        TextButton(onClick = {
-                            copyToClipboard(context, account.cookie)
-                            SnackbarController.show("Cookie 已复制")
-                        }) {
-                            Icon(Icons.Outlined.ContentCopy, contentDescription = null, modifier = Modifier.size(16.dp))
-                            Spacer(modifier = Modifier.width(4.dp)); Text("复制")
-                        }
-                    }
-                }
-            }
-            Spacer(modifier = Modifier.height(24.dp))
-            Button(onClick = { showLogoutConfirm = true }, modifier = Modifier.fillMaxWidth().height(48.dp),
-                colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.error, contentColor = MaterialTheme.colorScheme.onError)) {
-                Icon(Icons.Outlined.Logout, contentDescription = null, modifier = Modifier.size(18.dp))
-                Spacer(modifier = Modifier.width(8.dp)); Text("退出登录")
+
             }
 
+            Spacer(modifier = Modifier.height(24.dp))
+
+            Text("登录信息", style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
+
+            Spacer(modifier = Modifier.height(8.dp))
+
+            Card(modifier = Modifier.fillMaxWidth(), shape = MaterialTheme.shapes.large,
+
+                colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceContainerLow)) {
+
+                Column(modifier = Modifier.padding(16.dp)) {
+
+                    InfoRow(label = "登录时间", value = loginTime)
+
+                    Spacer(modifier = Modifier.height(12.dp))
+
+                    Text("Cookie", style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
+
+                    Spacer(modifier = Modifier.height(4.dp))
+
+                    Text(displayCookie, style = MaterialTheme.typography.labelSmall.copy(fontFamily = FontFamily.Monospace, fontSize = 11.sp, lineHeight = 15.sp),
+
+                        color = MaterialTheme.colorScheme.onSurfaceVariant)
+
+                    Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.End) {
+
+                        if (cookieTruncated) TextButton(onClick = { showFullCookie = !showFullCookie }) { Text(if (showFullCookie) "收起" else "展开全部") }
+
+                        TextButton(onClick = {
+
+                            copyToClipboard(context, account.cookie)
+
+                            SnackbarController.show("Cookie 已复制")
+
+                        }) {
+
+                            Icon(Icons.Outlined.ContentCopy, contentDescription = null, modifier = Modifier.size(16.dp))
+
+                            Spacer(modifier = Modifier.width(4.dp)); Text("复制")
+
+                        }
+
+                    }
+
+                }
+
+            }
+
+            Spacer(modifier = Modifier.height(24.dp))
+
+            Button(onClick = { showLogoutConfirm = true }, modifier = Modifier.fillMaxWidth().height(48.dp),
+
+                colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.error, contentColor = MaterialTheme.colorScheme.onError)) {
+
+                Icon(Icons.Outlined.Logout, contentDescription = null, modifier = Modifier.size(18.dp))
+
+                Spacer(modifier = Modifier.width(8.dp)); Text("退出登录")
+
+            }
+
+
+
             // 复制提示（ModalBottomSheet 为独立窗口，需自带 Snackbar 宿主）
+
             SnackbarHost(hostState = snackbarHostState)
+
         }
+
     }
+
+
 
     if (showLogoutConfirm) {
         AlertDialog(

@@ -3,6 +3,8 @@ package com.yunget.app.ui
 import androidx.compose.animation.AnimatedContent
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.core.tween
+import androidx.compose.animation.core.animateFloatAsState
+import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
 import androidx.compose.animation.scaleIn
@@ -573,7 +575,8 @@ fun MainScreen(
             ilanzouResolveRepository,
             lanzouRepository,
             lanzouResolveRepository,
-            downloadManager
+            downloadManager,
+            bookmarkDao = db.bookmarkDao(),
         )
     )
     val downloadViewModel: DownloadViewModel = viewModel(
@@ -672,6 +675,15 @@ fun MainScreen(
                     .apply()
                 showOnboarding = false
             }
+        )
+        return
+    }
+
+    val previewRequest by com.yunget.app.ui.preview.PreviewLauncher.request.collectAsState()
+    previewRequest?.let { request ->
+        com.yunget.app.ui.preview.MediaPreviewScreen(
+            request = request,
+            onClose = { com.yunget.app.ui.preview.PreviewLauncher.dismiss() }
         )
         return
     }
@@ -1338,13 +1350,18 @@ private fun MainBottomBar(
 ) {
     NavigationBar {
         MainTab.values().forEach { tab ->
+            val iconScale by animateFloatAsState(
+                targetValue = if (currentTab == tab) 1.08f else 1f,
+                animationSpec = spatialFast(), label = "bottomNavigationSelection",
+            )
             NavigationBarItem(
                 selected = currentTab == tab,
                 onClick = { onTabSelected(tab) },
                 icon = {
                     Icon(
                         imageVector = if (currentTab == tab) tab.selectedIcon else tab.unselectedIcon,
-                        contentDescription = tab.title
+                        contentDescription = tab.title,
+                        modifier = Modifier.graphicsLayer { scaleX = iconScale; scaleY = iconScale },
                     )
                 },
                 label = { Text(tab.title) }
@@ -1363,13 +1380,18 @@ private fun MainNavigationRail(
 ) {
     NavigationRail {
         MainTab.values().forEach { tab ->
+            val iconScale by animateFloatAsState(
+                targetValue = if (currentTab == tab) 1.08f else 1f,
+                animationSpec = spatialFast(), label = "railNavigationSelection",
+            )
             NavigationRailItem(
                 selected = currentTab == tab,
                 onClick = { onTabSelected(tab) },
                 icon = {
                     Icon(
                         imageVector = if (currentTab == tab) tab.selectedIcon else tab.unselectedIcon,
-                        contentDescription = tab.title
+                        contentDescription = tab.title,
+                        modifier = Modifier.graphicsLayer { scaleX = iconScale; scaleY = iconScale },
                     )
                 },
                 label = { Text(tab.title) },

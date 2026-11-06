@@ -19,6 +19,18 @@
 
 package com.yunget.app.ui.viewmodel
 
+
+
+import android.content.ContentResolver
+
+import android.net.Uri
+
+import com.yunget.app.data.network.HttpClients
+
+import com.yunget.app.data.upload.UploadProgress
+
+import com.yunget.app.data.upload.UploadRunner
+
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateListOf
 import androidx.compose.runtime.mutableStateOf
@@ -27,12 +39,17 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.ViewModelProvider
 import androidx.lifecycle.viewModelScope
 import com.yunget.app.data.download.DownloadManager
+
+import com.yunget.app.data.network.upload
 import com.yunget.app.data.network.LanzouApi
 import com.yunget.app.data.network.LanzouConstants
 import com.yunget.app.data.network.model.DownloadLink
 import com.yunget.app.data.network.model.ShareFile
 import com.yunget.app.data.network.model.ShareInfo
 import com.yunget.app.data.repository.LanzouAccountRepository
+
+import com.yunget.app.ui.preview.CloudPreview
+
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -349,30 +366,97 @@ class LanzouCloudViewModel(
         }
     }
 
-    fun startDownload() {
-        val pd = pendingDownload ?: return
-        downloadLink = null
-        pendingDownload = null
+
+
+    /**
+
+     * 在线预览（云盘文件）：个人盘直链要登录 Cookie + uid/vei（[creds]），
+
+     * 且 Referer 必须落在直链自己的域名上 —— [downloadHeaders] 按直链域名现算，下载与预览共用。
+
+     */
+
+    fun openPreview() {
+
+        val file = actionFile ?: return
+
+        if (!CloudPreview.canPreview(file)) return
+
         viewModelScope.launch {
             isOperating = true
             try {
-                // 本项目未移植 DownloadManager 的 platform 参数，此处省略
-                downloadManager.enqueue(
-                    url = pd.url,
-                    fileName = pd.fileName,
-                    size = pd.size,
-                    headers = pd.headers
-                )
-                cloudMessage = "已加入下载：${pd.fileName}"
+
+                val cred = creds()
+
+                val link = api.getPersonalDownloadLink(cred.cookie, cred.uid, cred.vei, fileNumeric(file.fid), file.fname)
+
+                // 先清 actionFile 再开预览：否则关掉预览时文件操作弹窗会重新弹出来
+
                 actionFile = null
-                downloadTriggered++
+
+                CloudPreview.open(file, link.downloadUrl, downloadHeaders(link.downloadUrl), isHls = link.isHls)
+
             } catch (e: Exception) {
-                cloudMessage = e.message ?: "下载失败"
+
+                cloudMessage = e.message ?: "预览失败"
+
             } finally {
                 isOperating = false
             }
         }
     }
+
+
+
+    fun startDownload() {
+
+        val pd = pendingDownload ?: return
+
+        downloadLink = null
+
+        pendingDownload = null
+
+        viewModelScope.launch {
+
+            isOperating = true
+
+            try {
+
+                // 本项目未移植 DownloadManager 的 platform 参数，此处省略
+
+                downloadManager.enqueue(
+
+                    url = pd.url,
+
+                    fileName = pd.fileName,
+
+                    size = pd.size,
+
+                    headers = pd.headers
+
+                )
+
+                cloudMessage = "已加入下载：${pd.fileName}"
+
+                actionFile = null
+
+                downloadTriggered++
+
+            } catch (e: Exception) {
+
+                cloudMessage = e.message ?: "下载失败"
+
+            } finally {
+
+                isOperating = false
+
+            }
+
+        }
+
+    }
+
+
 
     fun dismissDownloadDialog() {
         downloadLink = null
@@ -667,6 +751,72 @@ class LanzouCloudViewModel(
             }
         }
     }
+
+
+
+    // ---------- 上传（蓝奏单次 multipart） ----------
+
+
+
+    /** 上传进度（null 表示没有任务）；上传弹窗直接读这里 */
+
+    val uploadProgress: UploadProgress? get() = uploadRunner.progress
+
+
+
+    private val uploadRunner = UploadRunner(viewModelScope, { HttpClients.apiClient() }) { outcome ->
+
+        // 传成功过就刷新列表（失败也刷：已经落库的文件要立刻可见）
+
+        if (outcome.uploaded > 0 || outcome.failed > 0) reloadCurrent()
+
+        cloudMessage = when {
+
+            outcome.error != null -> outcome.error
+
+            outcome.cancelled -> "已取消上传"
+
+            else -> "已上传 ${outcome.uploaded} 个文件"
+
+        }
+
+    }
+
+
+
+    /**
+
+     * 上传选中的本地文件到**当前目录**。
+
+     *
+
+     * 目标目录在这里就先固定下来（上传期间用户可能切目录、返回上级），
+
+     * 凭据留到 IO 线程现取，避免拿着已过期的 Cookie 一路失败。
+
+     */
+
+    fun uploadFiles(resolver: ContentResolver, uris: List<Uri>) {
+
+        val dir = (uiState.value as? LanzouCloudUiState.Loaded)?.dirId ?: LanzouConstants.ROOT_FOLDER_ID
+
+        uploadRunner.start(resolver, uris) { io, source ->
+
+            val cred = creds()
+
+            api.upload(io, source, dir, cred.cookie, cred.uid, cred.vei)
+
+        }
+
+    }
+
+
+
+    /** 取消当前上传（正在发的那一段会立刻被打断） */
+
+    fun cancelUpload() = uploadRunner.cancel()
+
+
 
     class Factory(
         private val api: LanzouApi,

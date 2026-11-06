@@ -116,4 +116,5 @@ class LanzouAccountRepository(
     suspend fun logout() {
         dao.clear()
     }
+    suspend fun allCredentials(): List<String> = listOfNotNull(getAccount()?.cookie)
 }

@@ -101,33 +101,62 @@ fun QuarkAccountSheet(
     val context = LocalContext.current
     var showFullCookie by rememberSaveable { mutableStateOf(false) }
     var showRemarkDialog by remember { mutableStateOf(false) }
+
     // 退出登录二次确认
+
     var showLogoutConfirm by remember { mutableStateOf(false) }
 
+
+
     // 备注编辑
+
     if (showRemarkDialog && onUpdateRemark != null) {
+
         RemarkDialog(
+
             current = account.remark,
+
             onConfirm = { r ->
+
                 onUpdateRemark(r)
+
                 showRemarkDialog = false
+
             },
+
             onDismiss = { showRemarkDialog = false },
+
         )
+
     }
+
+
 
     // 退出登录二次确认
 
+
+
     val cookiePreviewLimit = 200
+
     val cookieTruncated = account.cookie.length > cookiePreviewLimit
+
     val displayCookie = if (showFullCookie || !cookieTruncated) {
+
         account.cookie
+
     } else {
+
         account.cookie.take(cookiePreviewLimit) + "…"
+
     }
+
     val loginTime = remember(account.updatedAt) {
+
         SimpleDateFormat("yyyy-MM-dd HH:mm", Locale.getDefault()).format(Date(account.updatedAt))
+
     }
+
+
 
     // 打开即完全展开，跳过半折叠状态
     // ModalBottomSheet 为独立窗口，需自带 Snackbar 宿主
@@ -160,58 +189,95 @@ fun QuarkAccountSheet(
         Column(
             modifier = Modifier
                 .fillMaxWidth()
-                .then(
-                    if (showFullCookie) {
-                        // 展开 Cookie：占满全屏并允许内部滚动
-                        Modifier
-                            .fillMaxHeight()
-                            .verticalScroll(scrollState)
-                            .nestedScroll(sheetNestedScroll)
-                    } else {
-                        // 未展开：自适应内容高度，不滚动
-                        Modifier
-                    }
-                )
+
+                .then(if (showFullCookie) Modifier.fillMaxHeight() else Modifier)
+
+                // ★ 纵向滚动无条件挂上：原来只在「展开全部」时才挂，横屏等高度不足时整张弹窗会卡死
+
+                //   （下方内容在屏幕外又滑不动）；内容不足一屏时 verticalScroll 仍按内容包裹，外观不变
+
+                .verticalScroll(scrollState)
+
+                .nestedScroll(sheetNestedScroll)
+
                 .padding(start = 24.dp, end = 24.dp, top = 4.dp, bottom = 32.dp)
+
         ) {
+
             // 用户信息
+
             Row(verticalAlignment = Alignment.CenterVertically) {
+
                 Surface(
+
                     modifier = Modifier.size(52.dp),
+
                     shape = CircleShape,
+
                     color = MaterialTheme.colorScheme.primaryContainer
+
                 ) {
+
                     Box(contentAlignment = Alignment.Center) {
+
                         Text(
+
                             text = account.nickname.take(1),
+
                             style = MaterialTheme.typography.titleMedium,
+
                             fontWeight = FontWeight.SemiBold,
+
                             color = MaterialTheme.colorScheme.onPrimaryContainer
+
                         )
+
                     }
+
                 }
+
                 Spacer(modifier = Modifier.width(16.dp))
+
                 Column {
+
                     Text(
+
                         text = account.nickname,
+
                         style = MaterialTheme.typography.titleMedium,
+
                         fontWeight = FontWeight.Medium
+
                     )
+
                     Spacer(modifier = Modifier.height(4.dp))
+
                     Row(verticalAlignment = Alignment.CenterVertically) {
+
                         Box(
+
                             modifier = Modifier
+
                                 .size(8.dp)
+
                                 .background(MaterialTheme.colorScheme.primary, CircleShape)
+
                         )
+
                         Spacer(modifier = Modifier.width(6.dp))
+
                         Text(
+
                             text = "夸克网盘 · 已登录",
+
                             style = MaterialTheme.typography.labelMedium,
+
                             color = MaterialTheme.colorScheme.onSurfaceVariant
+
                         )
                     }
                 }
+
             }
 
             Spacer(modifier = Modifier.height(24.dp))

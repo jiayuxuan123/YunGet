@@ -137,13 +137,13 @@ fun ResolveScreen(
     // 检测函数：读取剪贴板，满足条件则设置提示（三重触发：组合时 / ON_RESUME / 剪贴板变化）
     // 网盘分享链接、普通 http(s) 直链均提示（后者粘贴后直接走多线程下载）
     val maybeSuggestClipboard: () -> Unit = {
-        val text = readClipboardSafely(context)
+        val text = if (com.yunget.app.ui.theme.ThemeController.clipboardSuggestEnabled) readClipboardSafely(context) else null
         if (text != null &&
             state is ResolveUiState.Idle &&
             text.isNotBlank() &&
             text != link &&
             text != ignoredClipboard &&
-            (ShareLinkParser.parse(text) != null || looksLikeDirectUrl(text))
+            (ShareLinkParser.parse(text) != null || com.yunget.app.data.network.C139KoulingParser.parse(text) != null || looksLikeDirectUrl(text))
         ) {
             clipboardSuggestion = text
         }
@@ -233,8 +233,11 @@ fun ResolveScreen(
                 is ResolveUiState.Video -> VideoResultSection(
                     result = s.result,
                     modifier = Modifier.fillMaxSize(),
-                    onDownload = { media -> viewModel.downloadVideoMedia(media) },
-                    onDownloadAll = { medias -> viewModel.downloadVideoMedia(medias) },
+                    onDownloadMedia = { media -> viewModel.downloadVideoMedia(media) },
+                    onDownloadAudio = { viewModel.downloadVideoAudio(it) },
+                    onDownloadSelected = { viewModel.downloadVideoMedias(it) },
+                    onBack = { viewModel.backToInput() },
+                    onDownloadAll = { viewModel.downloadAllVideoMedia() },
                 )
 
                 else -> ResolveInputContent(
@@ -263,7 +266,10 @@ fun ResolveScreen(
         // 剪贴板分享链接提示卡片（仅输入页、有待提示内容时显示，带弹出动画）
         // animatedSuggestion 保留最后提示内容，保证退出动画期间卡片不消失
         var animatedSuggestion by remember { mutableStateOf<String?>(null) }
-        LaunchedEffect(clipboardSuggestion) {
+        LaunchedEffect(com.yunget.app.ui.theme.ThemeController.clipboardSuggestEnabled) {
+        if (!com.yunget.app.ui.theme.ThemeController.clipboardSuggestEnabled) clipboardSuggestion = null
+    }
+    LaunchedEffect(clipboardSuggestion) {
             clipboardSuggestion?.let { animatedSuggestion = it }
         }
         AnimatedVisibility(
@@ -281,12 +287,13 @@ fun ResolveScreen(
         ) {
             animatedSuggestion?.let { suggestion ->
                 val parsed = ShareLinkParser.parse(suggestion)
+                val command = com.yunget.app.data.network.C139KoulingParser.parse(suggestion)
                 ClipboardSuggestCard(
-                    platformName = parsed?.platform?.let { platformLabel(it) } ?: "下载",
-                    isDirectLink = parsed == null,
+                    platformName = parsed?.platform?.let { platformLabel(it) } ?: if (command != null) "139 网盘口令" else "下载",
+                    isDirectLink = parsed == null && command == null,
                     onPaste = {
                         link = suggestion
-                        pwd = parsed?.pwd.orEmpty()
+                        pwd = parsed?.pwd ?: command?.password.orEmpty()
                         pwdEdited = true
                         clipboardSuggestion = null
                         // 网盘链接 → 解析；非网盘直链 → ViewModel 内部自动转为多线程下载

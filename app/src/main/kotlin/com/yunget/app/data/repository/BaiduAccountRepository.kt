@@ -18,6 +18,8 @@
 
 package com.yunget.app.data.repository
 
+import kotlinx.coroutines.flow.first
+
 import android.webkit.CookieManager
 import com.yunget.app.data.db.BaiduAccountDao
 import com.yunget.app.data.db.BaiduAccountEntity
@@ -92,4 +94,5 @@ class BaiduAccountRepository(
         )
         return true
     }
+    suspend fun allCredentials(): List<String> = dao.observeAll().first().map { it.cookie }
 }

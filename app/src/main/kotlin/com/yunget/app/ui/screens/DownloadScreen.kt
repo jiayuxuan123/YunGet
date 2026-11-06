@@ -10,6 +10,7 @@ import android.provider.Settings
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.expandVertically
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
@@ -185,6 +186,7 @@ fun DownloadScreen(
                     verticalArrangement = Arrangement.spacedBy(10.dp)
                 ) {
                     items(rootTasks, key = { it.id }) { task ->
+                        Box(Modifier.animateItem()) {
                         DownloadTaskCard(
                             task = task,
                             stats = stats[task.id],
@@ -193,10 +195,12 @@ fun DownloadScreen(
                             onResume = { viewModel.resume(task.id) },
                             onRemove = { pendingDelete = task }
                         )
+                        }
                     }
 
                     folderGroups.forEach { (folder, groupTasks) ->
                         item(key = "folder_$folder") {
+                            Box(Modifier.animateItem()) {
                             FolderDownloadGroup(
                                 folder = folder,
                                 tasks = groupTasks,
@@ -205,6 +209,7 @@ fun DownloadScreen(
                                 onResume = { viewModel.resume(it) },
                                 onRemove = { pendingDelete = it }
                             )
+                            }
                         }
                     }
                 }
@@ -640,6 +645,10 @@ private fun DownloadSubTaskRow(
     } else 0f
     // 显示相对路径（去掉顶级目录前缀，如 "A/B/b.mp4" → "B/b.mp4"）
     val displayName = task.fileName.substringAfter('/')
+    val animatedFraction by animateFloatAsState(
+        targetValue = if (task.status == DownloadTaskEntity.STATUS_COMPLETED) 1f else fraction,
+        animationSpec = effectsDefault(), label = "childDownloadProgress",
+    )
 
     Surface(
         modifier = Modifier.fillMaxWidth(),
@@ -709,7 +718,7 @@ private fun DownloadSubTaskRow(
                     }
                     DownloadTaskEntity.STATUS_COMPLETED -> {
                         if (task.savePath.isNotBlank()) {
-                            IconButton(onClick = { openSavedFile(context, task.savePath) }) {
+                            IconButton(onClick = { openSavedFile(context, task.savePath, task.fileName) }) {
                                 Icon(
                                     Icons.Outlined.OpenInNew, contentDescription = "打开",
                                     tint = MaterialTheme.colorScheme.primary, modifier = Modifier.size(18.dp)
@@ -728,7 +737,7 @@ private fun DownloadSubTaskRow(
             }
             // 细进度条
             LinearProgressIndicator(
-                progress = { if (task.status == DownloadTaskEntity.STATUS_COMPLETED) 1f else fraction },
+                progress = { animatedFraction },
                 modifier = Modifier
                     .fillMaxWidth()
                     .padding(top = 6.dp)
@@ -761,6 +770,10 @@ private fun DownloadTaskCard(
     val fraction = if (task.totalSize > 0) {
         (task.downloadedSize.toFloat() / task.totalSize).coerceIn(0f, 1f)
     } else 0f
+    val animatedFraction by animateFloatAsState(
+        targetValue = if (task.status == DownloadTaskEntity.STATUS_COMPLETED) 1f else fraction,
+        animationSpec = effectsDefault(), label = "downloadProgress",
+    )
 
     Card(
         modifier = Modifier.fillMaxWidth(),
@@ -831,7 +844,7 @@ private fun DownloadTaskCard(
                                         )
                                     }
                                 }
-                                IconButton(onClick = { openSavedFile(context, task.savePath) }) {
+                                IconButton(onClick = { openSavedFile(context, task.savePath, task.fileName) }) {
                                     Icon(
                                         Icons.Outlined.OpenInNew,
                                         contentDescription = "打开",
@@ -858,7 +871,12 @@ private fun DownloadTaskCard(
 
             // ---- 速度曲线：只在真正下载中且攒够两个点时出现 ----
             // 暂停/失败/完成都不显示：那几秒的曲线没有信息量，留着只会让卡片高度跳来跳去。
-            if (isActive && speedSamples.size >= 2) {
+            AnimatedVisibility(
+                visible = isActive && speedSamples.size >= 2,
+                enter = fadeIn(effectsDefault()) + expandVertically(spatialDefault()),
+                exit = fadeOut(effectsFast()) + shrinkVertically(spatialFast()),
+            ) {
+                Column {
                 Spacer(modifier = Modifier.height(10.dp))
                 SpeedChart(
                     samples = speedSamples,
@@ -866,6 +884,7 @@ private fun DownloadTaskCard(
                         .fillMaxWidth()
                         .height(CHART_AREA_HEIGHT)
                 )
+                }
             }
 
             Spacer(modifier = Modifier.height(12.dp))
@@ -882,7 +901,7 @@ private fun DownloadTaskCard(
 
             // ---- 进度条 ----
             LinearProgressIndicator(
-                progress = { if (task.status == DownloadTaskEntity.STATUS_COMPLETED) 1f else fraction },
+                progress = { animatedFraction },
                 modifier = Modifier.fillMaxWidth(),
                 color = when (task.status) {
                     DownloadTaskEntity.STATUS_FAILED -> MaterialTheme.colorScheme.error
@@ -974,7 +993,7 @@ private fun formatRemain(millis: Long): String {
     }
 }
 
-private fun openSavedFile(context: android.content.Context, savePath: String) {
+private fun openSavedFile(context: android.content.Context, savePath: String, fileName: String) {
     if (savePath.isBlank()) {
         SnackbarController.show("文件不存在或已被删除")
         return
@@ -987,6 +1006,19 @@ private fun openSavedFile(context: android.content.Context, savePath: String) {
             check(file.isFile) { "文件不存在或已被删除" }
             // Android 7.0+ 禁止暴露 file:// URI，必须经 FileProvider 转 content://
             FileProvider.getUriForFile(context, "${context.packageName}.fileprovider", file)
+        }
+        val mime = context.contentResolver.getType(uri).orEmpty()
+        val kind = com.yunget.app.ui.preview.PreviewTypes.kindOf(fileName) ?: when {
+            mime.startsWith("video/") -> com.yunget.app.ui.preview.PreviewKind.VIDEO
+            mime.startsWith("audio/") -> com.yunget.app.ui.preview.PreviewKind.AUDIO
+            mime.startsWith("image/") -> com.yunget.app.ui.preview.PreviewKind.IMAGE
+            else -> null
+        }
+        if (kind != null && kind != com.yunget.app.ui.preview.PreviewKind.TEXT) {
+            com.yunget.app.ui.preview.PreviewLauncher.openMedia(listOf(
+                com.yunget.app.ui.preview.PreviewMedia(uri.toString(), kind, title = fileName)
+            ), title = fileName)
+            return
         }
         val intent = Intent(Intent.ACTION_VIEW).apply {
             setDataAndType(uri, "*/*")

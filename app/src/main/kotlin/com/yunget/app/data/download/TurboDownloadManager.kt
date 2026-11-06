@@ -856,6 +856,13 @@ class TurboDownloadManager(
         fileName: String,
         headers: Map<String, String>,
         size: Long,
+        platform: String,
+        fallbackUrl: String,
+        altSources: List<DownloadSource>,
+        mergeAudioUrl: String,
+        mergeAudioHeaders: Map<String, String>,
+        motionUrl: String,
+        audioOnly: Boolean,
         onComplete: suspend () -> Unit,
     ): Long {
         val safeName = fileName.ifBlank {
@@ -869,6 +876,14 @@ class TurboDownloadManager(
             DownloadTaskEntity(
                 url = url,
                 fileName = safeName,
+                platform = platform,
+                fallbackUrl = fallbackUrl,
+                altSourcesJson = DownloadPostProcessor.encodeSources(altSources),
+                mergeAudioUrl = mergeAudioUrl,
+                mergeAudioHeadersJson = org.json.JSONObject(mergeAudioHeaders as Map<*, *>).toString(),
+                motionUrl = motionUrl,
+                audioOnly = audioOnly,
+
                 requestHeadersJson = headersJson,
                 totalSize = if (size > 0) size else 0L,
             )
@@ -879,7 +894,7 @@ class TurboDownloadManager(
         taskCallbacks[id] = onComplete
         // 引擎路由：选了 Gopeed 且内核已导入 → 「执行」交给引擎，任务登记/写库/回调与内置路径一致；
         // 否则一行不改地走原来的 TurboDL 路径。
-        if (shouldUseEngine()) {
+        if (shouldUseEngine() && mergeAudioUrl.isBlank() && motionUrl.isBlank() && !audioOnly) {
             startViaEngine(id, url, safeName, headers)
         } else {
             start(id, headers)
@@ -928,6 +943,7 @@ class TurboDownloadManager(
                 // 稳定键 = Room 任务 id：使同一任务多次 submit 复用同一分片目录，
                 // 真正实现断点续传（暂停恢复 / 进程重启都从断点继续，而非从头下）。
                 stableKey = "room-$id",
+                mirrors = DownloadPostProcessor.mirrors(task, restoredHeaders),
             )
             dao.updateStatus(id, DownloadTaskEntity.STATUS_DOWNLOADING)
             val turboId = client.submit(request)
@@ -1499,8 +1515,12 @@ class TurboDownloadManager(
     }
 
     /** TurboDL 下载完成：保存到公共目录（MediaStore/SAF）→ 更新状态 → 完成回调 → 清理。 */
-    private suspend fun onTurboCompleted(roomId: Long, file: File, total: Long) {        val task = dao.get(roomId) ?: return
+    private suspend fun onTurboCompleted(roomId: Long, downloadedFile: File, total: Long) {
+        val task = dao.get(roomId) ?: return
+        if (task.status != DownloadTaskEntity.STATUS_DOWNLOADING) return
         try {
+            val file = DownloadPostProcessor.process(context, task, downloadedFile)
+            if (dao.get(roomId)?.status != DownloadTaskEntity.STATUS_DOWNLOADING) return
             if (!storagePermissionProvider()) {
                 // 未授权：保留临时文件，标为失败供重试保存（不删）。
                 turboIds.remove(roomId)?.let { turboIdToRoomId.remove(it) }
@@ -1522,7 +1542,7 @@ class TurboDownloadManager(
             // 状态说完成、百分比说没完成，自相矛盾。以实际文件为准，
             // 并让 totalSize 不小于它，保证完成后恒为 100%。
             val actualSize = file.length()
-            val finalTotal = maxOf(if (total > 0) total else 0L, actualSize)
+            val finalTotal = if (file != downloadedFile) actualSize else maxOf(if (total > 0) total else 0L, actualSize)
             dao.complete(roomId, DownloadTaskEntity.STATUS_COMPLETED, savedPath, actualSize, finalTotal)
             Log.d(TAG, "onTurboCompleted: id=$roomId saved=$savedPath size=$actualSize total=$finalTotal")
             // 完成也要落盘：用户说"文件不对"时，这行给出落盘路径与实际字节数，

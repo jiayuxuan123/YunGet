@@ -100,10 +100,16 @@ fun Pan115AccountSheet(
         account.cookie
     } else {
         account.cookie.take(cookiePreviewLimit) + "…"
+
     }
+
     val loginTime = remember(account.updatedAt) {
+
         SimpleDateFormat("yyyy-MM-dd HH:mm", Locale.getDefault()).format(Date(account.updatedAt))
+
     }
+
+
 
     val snackbarHostState = rememberGlobalSnackbarHostState()
     val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
@@ -133,56 +139,95 @@ fun Pan115AccountSheet(
         Column(
             modifier = Modifier
                 .fillMaxWidth()
-                .then(
-                    if (showFullCookie) {
-                        Modifier
-                            .fillMaxHeight()
-                            .verticalScroll(scrollState)
-                            .nestedScroll(sheetNestedScroll)
-                    } else {
-                        Modifier
-                    }
-                )
+
+                .then(if (showFullCookie) Modifier.fillMaxHeight() else Modifier)
+
+                // ★ 纵向滚动无条件挂上：原来只在「展开全部」时才挂，横屏等高度不足时整张弹窗会卡死
+
+                //   （下方内容在屏幕外又滑不动）；内容不足一屏时 verticalScroll 仍按内容包裹，外观不变
+
+                .verticalScroll(scrollState)
+
+                .nestedScroll(sheetNestedScroll)
+
                 .padding(start = 24.dp, end = 24.dp, top = 4.dp, bottom = 32.dp)
+
         ) {
+
             // 用户信息
+
             Row(verticalAlignment = Alignment.CenterVertically) {
+
                 Surface(
+
                     modifier = Modifier.size(52.dp),
+
                     shape = CircleShape,
+
                     color = MaterialTheme.colorScheme.primaryContainer
+
                 ) {
+
                     Box(contentAlignment = Alignment.Center) {
+
                         Text(
+
                             text = account.nickname.take(1),
+
                             style = MaterialTheme.typography.titleMedium,
+
                             fontWeight = FontWeight.SemiBold,
+
                             color = MaterialTheme.colorScheme.onPrimaryContainer
+
                         )
+
                     }
+
                 }
+
                 Spacer(modifier = Modifier.width(16.dp))
+
                 Column {
+
                     Text(
+
                         text = account.nickname,
+
                         style = MaterialTheme.typography.titleMedium,
+
                         fontWeight = FontWeight.Medium
+
                     )
+
                     Spacer(modifier = Modifier.height(4.dp))
+
                     Row(verticalAlignment = Alignment.CenterVertically) {
+
                         Box(
+
                             modifier = Modifier
+
                                 .size(8.dp)
+
                                 .background(MaterialTheme.colorScheme.primary, CircleShape)
+
                         )
+
                         Spacer(modifier = Modifier.width(6.dp))
+
                         Text(
+
                             text = "115网盘 · 已登录",
+
                             style = MaterialTheme.typography.labelMedium,
+
                             color = MaterialTheme.colorScheme.onSurfaceVariant
+
                         )
                     }
                 }
+
             }
 
             Spacer(modifier = Modifier.height(24.dp))

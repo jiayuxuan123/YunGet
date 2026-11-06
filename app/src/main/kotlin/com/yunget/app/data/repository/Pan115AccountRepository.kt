@@ -19,6 +19,8 @@
 
 package com.yunget.app.data.repository
 
+import kotlinx.coroutines.flow.first
+
 import android.webkit.CookieManager
 import android.webkit.WebStorage
 import com.yunget.app.data.db.Pan115AccountDao
@@ -111,4 +113,5 @@ class Pan115AccountRepository(
         runCatching { WebStorage.getInstance().deleteAllData() }
         dao.clear()
     }
+    suspend fun allCredentials(): List<String> = dao.observeAll().first().map { it.cookie }
 }

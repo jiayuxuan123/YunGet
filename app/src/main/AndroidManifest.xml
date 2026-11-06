@@ -2,6 +2,8 @@
 <manifest xmlns:android="http://schemas.android.com/apk/res/android"
     xmlns:tools="http://schemas.android.com/tools">
 
+    <queries><package android:name="com.yunget.kernel.aria2" /></queries>
+
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE_DATA_SYNC" />
     <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
@@ -246,6 +248,8 @@
                 <category android:name="android.intent.category.DEFAULT" />
                 <category android:name="android.intent.category.BROWSABLE" />
                 <data android:scheme="https" android:host="lanzou.com" android:pathPrefix="/" />
+                <data android:scheme="https" android:host="lanzn.com" android:pathPrefix="/" />
+                <data android:scheme="https" android:host="*.lanzn.com" android:pathPrefix="/" />
             </intent-filter>
         </activity-alias>
 

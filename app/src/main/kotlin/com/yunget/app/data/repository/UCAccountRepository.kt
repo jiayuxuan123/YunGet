@@ -18,6 +18,8 @@
 
 package com.yunget.app.data.repository
 
+import kotlinx.coroutines.flow.first
+
 import android.webkit.CookieManager
 import com.yunget.app.data.db.UCAccountDao
 import com.yunget.app.data.db.UCAccountEntity
@@ -48,9 +50,9 @@ class UCAccountRepository(
 
     init {
         // 每次 API 响应若带 Set-Cookie（__puus/__pus），自动合并并落库，保持会话始终新鲜
-        api.cookieSink = { merged ->
+        api.cookieSink = { merged, requestCookie ->
             sinkScope.launch {
-                dao.getAccount()?.let { acc ->
+                dao.observeAll().first().firstOrNull { it.cookie == requestCookie }?.let { acc ->
                     if (acc.cookie != merged) {
                         dao.upsert(acc.copy(cookie = merged, updatedAt = System.currentTimeMillis()))
                     }
@@ -133,4 +135,7 @@ class UCAccountRepository(
         lastRefreshTs = System.currentTimeMillis()
         return true
     }
+    suspend fun refreshIfPrimary(credential: String): String =
+        if (dao.getAccount()?.cookie == credential) getFreshCookie() ?: credential else credential
+    suspend fun allCredentials(): List<String> = dao.observeAll().first().map { it.cookie }
 }

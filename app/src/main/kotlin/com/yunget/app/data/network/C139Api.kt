@@ -1,10 +1,33 @@
+/*
+ * YunX (云析) - A network drive share-link parser and high-speed downloader for Android.
+ * Copyright (C) 2026 CYQawa
+ *
+ * This program is free software: you can redistribute it and/or modify
+ * it under the terms of the GNU Affero General Public License as published by
+ * the Free Software Foundation, either version 3 of the License, or
+ * (at your option) any later version.
+ *
+ * This program is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+ * GNU Affero General Public License for more details.
+ *
+ * You should have received a copy of the GNU Affero General Public License
+ * along with this program.  If not, see <https://www.gnu.org/licenses/>.
+ */
+
 package com.yunget.app.data.network
 
 import android.util.Base64
 import com.yunget.app.data.network.model.DownloadLink
+import com.yunget.app.data.network.model.FileThumbnail
 import com.yunget.app.data.network.model.QuotaInfo
+import com.yunget.app.data.network.model.ShareExpire
 import com.yunget.app.data.network.model.ShareFile
 import com.yunget.app.data.network.model.ShareInfo
+import com.yunget.app.data.upload.UploadIo
+import com.yunget.app.data.upload.UploadPhase
+import com.yunget.app.data.upload.UploadSource
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import okhttp3.MediaType.Companion.toMediaType
@@ -30,12 +53,16 @@ import java.util.zip.GZIPInputStream
  * 登录态：cookie（含账号信息，authorization 可选）。
  * 分享解析（§15，7.13+）：share-kd-njs.yun.139.com
  *   - 列目录 getOutLinkInfoV6（pCaID:"root"/父coID，passwd 提取码）
- *   - 下载 dlFromOutLinkV3（coIDLst.item:[coID] → data.redrUrl OBS 直链，900s）
- * 分享接口请求/响应均经 AES-CBC 加密（§14）：base64(IV(16B) ‖ AES_CBC(KEY=PVGDwmcvfs1uV3d1, IV, 明文))；
- * mcloud-sign 按「明文 body」计算（§4），加密只是传输包装；mcloud-skey 可省略。
+ *   - 下载 dlFromOutLinkV3（coIDLst.item:`coID` → data.redrUrl OBS 直链，900s）
+ *   - 个人云盘口令通过 XML 端点换成官方分享链接，再复用上面的加密 JSON 链路
+ * 普通分享 JSON 接口使用 16 字节密钥 PVGDwmcvfs1uV3d1；口令 XML 接口使用 App release 的
+ * 24 字节密钥 2olBaQGYnEKoStYomsd1n7ax。两者都是 base64(IV(16B) ‖ AES_CBC(key, IV, 明文))，
+ * 不能串用。mcloud-sign 按「明文 body」计算（§4），加密只是传输包装；mcloud-skey 可省略。
  */
 class C139Api(
-    private val clientProvider: () -> OkHttpClient = { HttpClients.apiClient() }
+    private val clientProvider: () -> OkHttpClient = { HttpClients.apiClient() },
+    /** 设备信息由系统 API 生成；未注入 Context 的测试路径使用无隐私占位值。 */
+    private val deviceInfoProvider: () -> C139DeviceInfo = { C139DeviceInfo.fallback() }
 ) {
     /** 每次请求动态获取全局客户端（忽略 SSL 开关切换即时生效） */
     private val client get() = clientProvider()
@@ -44,6 +71,10 @@ class C139Api(
 
     private val shareAesKey: SecretKeySpec =
         SecretKeySpec(C139Constants.SHARE_AES_KEY.toByteArray(Charsets.UTF_8), "AES")
+
+    /** 口令 XML 接口使用 App release 的 24 字节密钥（AES-192），不能复用上面的 16 字节 key。 */
+    private val shareCodeAesKey: SecretKeySpec =
+        SecretKeySpec(C139Constants.SHARE_CODE_AES_KEY.toByteArray(Charsets.UTF_8), "AES")
 
     // ---------- mcloud-sign 签名（§4） ----------
 
@@ -98,21 +129,21 @@ class C139Api(
     // ---------- §14 分享接口 AES-CBC 加解密（固定密钥 + IV 前置） ----------
 
     /** 明文 JSON → 加密 base64（IV(16B) 前置） */
-    private fun encryptBody(plaintext: String): String {
+    private fun encryptBody(plaintext: String, key: SecretKeySpec = shareAesKey): String {
         val iv = ByteArray(16).also { SecureRandom().nextBytes(it) }
         val cipher = Cipher.getInstance("AES/CBC/PKCS5Padding")
-        cipher.init(Cipher.ENCRYPT_MODE, shareAesKey, IvParameterSpec(iv))
+        cipher.init(Cipher.ENCRYPT_MODE, key, IvParameterSpec(iv))
         val ct = cipher.doFinal(plaintext.toByteArray(Charsets.UTF_8))
         return Base64.encodeToString(iv + ct, Base64.NO_WRAP)
     }
 
     /** 加密 base64 → 明文 JSON；解密后若为 gzip（首 2 字节 0x1f 0x8b）先解压（alist YunCrypto 同款） */
-    private fun decryptBody(b64: String): String {
+    private fun decryptBody(b64: String, key: SecretKeySpec = shareAesKey): String {
         val raw = Base64.decode(b64, Base64.NO_WRAP)
         val iv = raw.copyOfRange(0, 16)
         val ct = raw.copyOfRange(16, raw.size)
         val cipher = Cipher.getInstance("AES/CBC/PKCS5Padding")
-        cipher.init(Cipher.DECRYPT_MODE, shareAesKey, IvParameterSpec(iv))
+        cipher.init(Cipher.DECRYPT_MODE, key, IvParameterSpec(iv))
         var d = cipher.doFinal(ct)  // PKCS5Padding 自动去填充
         // alist YunCrypto 同款：解密后若为 gzip 则解压（首 2 字节 0x1f 0x8b）
         if (d.size > 2 && d[0] == 0x1f.toByte() && d[1] == 0x8b.toByte()) {
@@ -122,6 +153,99 @@ class C139Api(
     }
 
     // ---------- 分享解析（§15，7.13+ 加密） ----------
+
+    /**
+     * 个人云盘口令 → 真实分享链接。
+     *
+     * 第一段必须把用户提供的提取码一起发给服务端；缺密码时受保护分享会直接报 9188。
+     * 两段请求都使用 App release 的 AES-192-CBC 加密，并尽量携带已登录 139 账号的
+     * Authorization/account 上下文。拿到服务端回吐的提取码后，再查询官方分享地址。
+     */
+    suspend fun resolveKouling(
+        command: C139Kouling,
+        cookie: String = "",
+        authorization: String? = null
+    ): C139ResolvedKouling = withContext(Dispatchers.IO) {
+        val effectiveAuthorization =
+            authorization?.takeIf { it.isNotBlank() } ?: C139Constants.extractAuthorization(cookie)
+        val account = C139Constants.extractAccountFull(cookie)
+            ?: effectiveAuthorization?.let(::accountFromAuthorization).orEmpty()
+        val infoXml = postShareCodeXml(
+            C139Constants.SHARE_CODE_INFO_URL,
+            buildC139KoulingInfoRequest(command, account, command.password),
+            effectiveAuthorization
+        )
+        val info = parseC139KoulingInfo(infoXml)
+        val password = command.password.ifBlank { info.password }
+        val generalXml = postShareCodeXml(
+            C139Constants.SHARE_CODE_GENERAL_URL,
+            buildC139KoulingGeneralRequest(command, account, password),
+            effectiveAuthorization
+        )
+        val general = parseC139KoulingGeneral(generalXml)
+        general.copy(
+            title = general.title.ifBlank { info.title },
+            password = password
+        )
+    }
+
+    /**
+     * 口令 XML 接口专用 POST：请求和响应均按 AES-192-CBC 处理。
+     *
+     * 为什么不复用 [sharePostAnonymous] / [sharePostEncrypted]：
+     * - 普通分享 JSON 接口使用 16 字节 [C139Constants.SHARE_AES_KEY]；口令 XML 接口必须使用
+     *   App release 的 24 字节 [C139Constants.SHARE_CODE_AES_KEY]，混用会得到 `01000019` 解密错误。
+     * - `hcy-cool-flag: 1` 让网关按密文处理请求，`type-factory: 0` 与 App 渠道头参与选择密钥和路由；
+     *   缺少这些头时，同一密文请求可能直接返回 HTTP 500。
+     * - 请求体是加密后的 XML，不是 JSON；Content-Type 必须保持 `text/xml`，否则服务端无法识别协议。
+     * - 正常情况下响应也是同密钥加密的 Base64；少数网关配置会直接透传明文 XML，因此解密失败后
+     *   仅在响应确实以 `<` 开头时回退明文，不能把任意错误响应当作 XML 继续解析。
+     * - [authorization] 只在已登录时附加。公开分享可以匿名查询，但与分享者账号绑定的口令仍需要
+     *   正确的 `Authorization` / `account` 上下文；该上下文由调用方从 139 账号仓库传入。
+     *
+     * @param url 固定的 139 口令 HTTPS 端点
+     * @param body 明文 XML；第一段查询的 `passwd` / `isPasswd` 必须由调用方提前填好
+     * @param authorization 可选的 `Basic ...` 登录态，空白时不附加该请求头
+     * @return 解密后的 UTF-8 XML；空响应、HTTP 失败或无法解密时抛异常
+     */
+    private fun postShareCodeXml(url: String, body: String, authorization: String?): String {
+        val mediaType = "text/xml; charset=UTF-8".toMediaType()
+        val deviceInfo = deviceInfoProvider()
+        val builder = Request.Builder()
+            .url(url)
+            .header("hcy-cool-flag", "1")
+            .header("type-factory", "0")
+            .header("Accept-Charset", "UTF-8")
+            .header("Accept-Language", "zh-CN")
+            .header("x-DeviceInfo", deviceInfo.appDeviceInfo())
+            .header("x-yun-client-info", deviceInfo.appDeviceInfo())
+            .header("x-yun-app-channel", C139Constants.SHARE_CODE_APP_CHANNEL)
+            .header("x-huawei-channelSrc", C139Constants.SHARE_CODE_APP_CHANNEL)
+            .header("x-MM-Source", C139Constants.SHARE_CODE_MM_SOURCE)
+            .header("x-SvcType", "1")
+            .header("x-NetType", "1")
+            .header("x-yun-user-agent", deviceInfo.appUserAgent())
+            .header("User-Agent", C139Constants.SHARE_MOBILE_UA)
+            .header("Origin", "https://yun.139.com")
+            .header("Referer", "https://yun.139.com/")
+        if (!authorization.isNullOrBlank()) builder.header("Authorization", authorization)
+        val request = builder
+            .post(encryptBody(body, shareCodeAesKey).toRequestBody(mediaType))
+            .build()
+        val response = client.newCall(request).execute()
+        val responseText = response.use {
+            it.body?.string() ?: throw IllegalStateException("139 云盘口令解析失败：响应为空")
+        }
+        if (!response.isSuccessful) {
+            throw IllegalStateException("139 云盘口令解析失败（HTTP ${response.code}）")
+        }
+        return runCatching { decryptBody(responseText, shareCodeAesKey) }
+            .getOrElse {
+                // 兼容网关未触发加密而直接透传 XML 的情况。
+                if (responseText.trimStart().startsWith("<")) responseText
+                else throw IllegalStateException("139 云盘口令解析失败：响应解密失败", it)
+            }
+    }
 
     /**
      * 分享标题：getOutLinkGeneral（匿名，§2.3）→ data.getOutLinkGeneralResp.outLinkGeneral[].lkName；
@@ -296,23 +420,61 @@ class C139Api(
         val mapping: Map<String, String>
     )
 
-    /** 列目录（含翻页游标）；返回 (文件列表, 下一页游标 or null) */
-    suspend fun listCloudFiles(
+    /** 缩略图请求头：139 的图床同样校验 PC UA 与官方 Referer，缺一个就 403 */
+    private fun thumbnailHeaders(): Map<String, String> = mapOf(
+        "User-Agent" to C139Constants.PC_UA,
+        "Referer" to "https://yun.139.com/"
+    )
+
+    /**
+     * 139 列表项的缩略图：优先 `thumbnailUrls[]` 里 style=Large 的那张，其次任意一张，
+     * 最后回退 big/mid/thumbnailURL 三个平铺字段（老接口只在这三个字段里给图）。
+     *
+     * ★ 逐档校验 https：字段为 JSON null 时 `optString` 给出的是字符串 "null"，
+     *   先挑「非空」再校验会让大图字段被 null 占位、反而丢掉后面本可用的地址。
+     */
+    private fun thumbnailOf(item: JSONObject, headers: Map<String, String>): FileThumbnail? {
+        val urls = item.optJSONArray("thumbnailUrls")
+        if (urls != null) {
+            var first: FileThumbnail? = null
+            var large: FileThumbnail? = null
+            for (i in 0 until urls.length()) {
+                val entry = urls.optJSONObject(i) ?: continue
+                val thumbnail = FileThumbnail.of(entry.optString("url"), headers) ?: continue
+                if (first == null) first = thumbnail
+                if (large == null && entry.optString("style").equals("large", ignoreCase = true)) {
+                    large = thumbnail
+                }
+            }
+            (large ?: first)?.let { return it }
+        }
+        return FileThumbnail.of(item.optString("bigthumbnailURL"), headers)
+            ?: FileThumbnail.of(item.optString("midthumbnailURL"), headers)
+            ?: FileThumbnail.of(item.optString("thumbnailURL"), headers)
+    }
+
+    /** 单页列目录（含翻页游标）；返回 (文件列表, 下一页游标 or null=末页) */
+    private suspend fun fetchCloudPage(
         parentFileId: String,
         cookie: String,
-        pageCursor: String? = null
-    ): Pair<List<ShareFile>, String?> = withContext(Dispatchers.IO) {
+        pageCursor: String?
+    ): Pair<List<ShareFile>, String?>? = withContext(Dispatchers.IO) {
         val authorization = C139Constants.extractAuthorization(cookie)
             ?: throw IllegalStateException("登录态缺少 authorization，请重新登录")
+        // ⚠️ pageCursor 必须是真正的 JSON null；若误传字符串 "null"，服务端会当作无效游标忽略
+        //    并回吐第一页，导致翻页原地打转（抓包表现为重复发同一个请求直到封顶）
+        val cursorValue: Any =
+            pageCursor?.takeIf { it.isNotBlank() && it != "null" } ?: JSONObject.NULL
         val req = JSONObject()
-            .put("pageInfo", JSONObject().put("pageSize", 100).put("pageCursor", pageCursor ?: JSONObject.NULL))
+            .put("pageInfo", JSONObject().put("pageSize", 100).put("pageCursor", cursorValue))
             .put("orderBy", "updated_at")
             .put("orderDirection", "DESC")
             .put("parentFileId", parentFileId)
             .put("imageThumbnailStyleList", JSONArray().put("Small").put("Large"))
         val resp = cloudPost(C139Constants.FILE_LIST_URL, req.toString(), authorization)
         checkCloud(resp, "获取文件列表失败")
-        val data = resp.optJSONObject("data") ?: return@withContext Pair(emptyList(), null)
+        val data = resp.optJSONObject("data") ?: return@withContext null
+        val thumbHeaders = thumbnailHeaders()
         val files = buildList {
             data.optJSONArray("items")?.let { arr ->
                 for (i in 0 until arr.length()) {
@@ -325,14 +487,48 @@ class C139Api(
                             isdir = item.optString("type") == "folder",
                             pdirFid = parentFileId,
                             fidToken = item.optString("fileId"),
-                            modifyTime = item.optString("updatedAt")
+                            modifyTime = item.optString("updatedAt"),
+                            thumbnail = thumbnailOf(item, thumbHeaders)
                         )
                     )
                 }
             }
         }
-        val next = data.optString("nextPageCursor").takeIf { it.isNotBlank() }
+        // ⚠️ Android org.json 陷阱：响应中 "nextPageCursor": null 时，optString 返回的是
+        //    字符串 "null"（JSONObject.NULL.toString()）而非空串，isNotBlank 判定为「还有下一页」，
+        //    于是带着 "null" 游标反复请求首页 → 200 次重复请求、列表加载极慢。
+        //    必须先用 isNull() 判断真 JSON null，并额外过滤字符串 "null"。
+        val next = if (data.isNull("nextPageCursor")) {
+            null
+        } else {
+            data.optString("nextPageCursor").takeIf { it.isNotBlank() && it != "null" }
+        }
         Pair(files, next)
+    }
+
+    /** 列目录（自动翻页，返回该目录下全部文件）；pageCursor 为起始游标（一般传 null=从头） */
+    suspend fun listCloudFiles(
+        parentFileId: String,
+        cookie: String,
+        pageCursor: String? = null
+    ): List<ShareFile> {
+        val all = mutableListOf<ShareFile>()
+        val seen = HashSet<String>()
+        var cursor = pageCursor
+        repeat(200) {            // 封顶 200 页，防异常死循环
+            val (files, next) = fetchCloudPage(parentFileId, cookie, cursor) ?: return all
+            // 139 按 updated_at 排序翻页，大量文件时间相同时游标可能重复返回边界项，
+            // 按 fid 去重，避免同一 fid 重复导致 LazyColumn key 冲突崩溃
+            for (f in files) {
+                if (f.fid.isNotBlank() && seen.add(f.fid)) all.add(f)
+            }
+            // 末页：nextPageCursor 为 JSON null
+            if (next == null) return all
+            // 游标未推进（服务端异常回吐同一游标）→ 立即终止，避免重复请求同一页
+            if (next == cursor) return all
+            cursor = next
+        }
+        return all
     }
 
     /** 仅列文件夹（移动到…目标选择） */
@@ -367,6 +563,150 @@ class C139Api(
                 }
             }
         }
+    }
+
+    /**
+     * 新建文件夹（个人盘）：`POST /hcy/file/create`（文档 §3.13，靠 `type='folder'` 与上传预创建共用端点）。
+     * `fileRenameMode='force_rename'`：重名由服务端自动改名（文档只列了这个取值，具体后缀格式未写）。
+     *
+     * @param parentFileId 父目录 fileId；本项目的根目录沿用列目录/移动的约定传 `"/"`
+     * @return 新文件夹的 fileId
+     */
+    suspend fun createDir(parentFileId: String, name: String, cookie: String): String =
+        withContext(Dispatchers.IO) {
+            val authorization = C139Constants.extractAuthorization(cookie)
+                ?: throw IllegalStateException("登录态缺少 authorization，请重新登录")
+            val req = JSONObject()
+                .put("parentFileId", parentFileId)
+                .put("name", name)
+                .put("description", "")
+                .put("type", "folder")
+                .put("fileRenameMode", "force_rename")
+            val resp = cloudPost(C139Constants.FILE_CREATE_URL, req.toString(), authorization)
+            checkCloud(resp, "新建文件夹失败")
+            resp.optJSONObject("data")?.optString("fileId")?.takeIf { it.isNotBlank() }
+                ?: throw IllegalStateException("移动云盘未返回文件夹编号")
+        }
+
+    // ---------- 上传 ----------
+
+    /**
+     * 上传一个文件到 [parentFileId] 目录，返回新文件的 fileId。
+     *
+     * 流程：`/hcy/file/create` 建任务（带整文件 SHA256，服务端已存在同内容文件时直接秒传）→
+     * 对服务端签发的每个 uploadUrl 发一次 PUT（100 MiB 分片；单文件超过 30 GB 时用 512 MiB）→
+     * `/hcy/file/complete` 合并。
+     *
+     * ★ 分片 PUT 打到对象存储，**不能带 Authorization / 网关渠道头**：地址本身已签名，
+     *   多带账号凭证反而会被拒；但 Origin/Referer 是必需的。
+     */
+    suspend fun upload(
+        io: UploadIo,
+        file: UploadSource,
+        parentFileId: String,
+        cookie: String
+    ): String = withContext(Dispatchers.IO) {
+        val authorization = C139Constants.extractAuthorization(cookie)
+            ?: throw IllegalStateException("登录态缺少 authorization，请重新登录")
+        io.progress(UploadPhase.PREPARING)
+        val hash = io.digest("SHA-256")
+        val partSize = if (file.size > 30L * 1024 * 1024 * 1024) {
+            512L * 1024 * 1024
+        } else {
+            100L * 1024 * 1024
+        }
+        val count = maxOf(1L, (file.size + partSize - 1) / partSize)
+        val parts = (0 until count).map { index ->
+            JSONObject()
+                .put("partNumber", (index + 1).toInt())
+                .put("partSize", minOf(file.size - index * partSize, partSize))
+                .put("parallelHashCtx", JSONObject().put("partOffset", index * partSize))
+        }
+        val createBody = JSONObject()
+            .put("contentHash", hash)
+            .put("contentHashAlgorithm", "SHA256")
+            .put("contentType", "application/octet-stream")
+            .put("parallelUpload", false)
+            .put("partInfos", JSONArray().apply { parts.take(100).forEach { put(it) } })
+            .put("size", file.size)
+            .put("parentFileId", parentFileId)
+            .put("name", file.name)
+            .put("type", "file")
+            .put("fileRenameMode", "auto_rename")
+        val created = cloudPost(C139Constants.FILE_UPLOAD_CREATE_URL, createBody.toString(), authorization)
+        checkCloud(created, "创建上传任务失败")
+        val created1 = created.optJSONObject("data")
+            ?: throw IllegalStateException("移动云盘未返回上传任务")
+        if (created1.optBoolean("exist")) {
+            throw IllegalStateException("移动云盘已有同名文件，请重新命名后上传")
+        }
+        val fileId = created1.optString("fileId").takeIf { it.isNotBlank() }
+            ?: throw IllegalStateException("移动云盘未创建上传任务")
+        if (created1.optBoolean("rapidUpload")) {
+            io.progress(UploadPhase.FINISHING, file.size)
+            return@withContext fileId
+        }
+        val uploadId = created1.optString("uploadId").takeIf { it.isNotBlank() }
+            ?: throw IllegalStateException("移动云盘未返回上传标识")
+        var batch = created1
+        var first = 0L
+        while (first < count) {
+            if (first > 0L) {
+                val body = JSONObject()
+                    .put("fileId", fileId)
+                    .put("uploadId", uploadId)
+                    .put(
+                        "partInfos",
+                        JSONArray().apply {
+                            parts.drop(first.toInt()).take(100).forEach { put(it) }
+                        }
+                    )
+                val resp = cloudPost(C139Constants.FILE_UPLOAD_URL_URL, body.toString(), authorization)
+                checkCloud(resp, "获取上传地址失败")
+                batch = resp.optJSONObject("data")
+                    ?: throw IllegalStateException("移动云盘未返回上传地址")
+            }
+            val addresses = batch.optJSONArray("partInfos")
+                ?: throw IllegalStateException("移动云盘未返回完整上传分段")
+            if (addresses.length() != minOf(100L, count - first).toInt()) {
+                throw IllegalStateException("移动云盘未返回完整上传分段")
+            }
+            for (i in 0 until addresses.length()) {
+                val part = addresses.optJSONObject(i) ?: continue
+                val index = part.optInt("partNumber") - 1
+                if (index.toLong() != first + i) {
+                    throw IllegalStateException("移动云盘上传分段序号无效")
+                }
+                val url = part.optString("uploadUrl")
+                if (url.isBlank()) throw IllegalStateException("移动云盘未返回上传地址")
+                val start = index * partSize
+                val response = io.send(
+                    url = url,
+                    method = "PUT",
+                    start = start,
+                    end = minOf(file.size, start + partSize),
+                    headers = mapOf(
+                        "Content-Type" to "application/octet-stream",
+                        "Origin" to "https://yun.139.com",
+                        "Referer" to "https://yun.139.com/"
+                    ),
+                    retries = 1
+                )
+                if (!response.isSuccessful) {
+                    throw IllegalStateException("文件上传失败（HTTP ${response.code}）")
+                }
+            }
+            first += addresses.length()
+        }
+        io.progress(UploadPhase.FINISHING, file.size)
+        val completeBody = JSONObject()
+            .put("contentHash", hash)
+            .put("contentHashAlgorithm", "SHA256")
+            .put("fileId", fileId)
+            .put("uploadId", uploadId)
+        val completed = cloudPost(C139Constants.FILE_UPLOAD_COMPLETE_URL, completeBody.toString(), authorization)
+        checkCloud(completed, "合并上传分段失败")
+        fileId
     }
 
     /** 重命名 */
@@ -446,7 +786,10 @@ class C139Api(
     }
 
     /** 创建分享（getOutLink，需 Cookie + mcloud-skey；提取码系统自动生成）
-     *  @param period 有效期：null=永久 1/7/30=天数
+     *
+     *  @param period 有效期**天数**：null=永久（不传 period 字段）、1/7/30=天数。
+     *    ⚠️ 这里不是 UI 中性码（1/2/3/4），调用方必须先用 [com.yunget.app.data.network.model.ShareExpire.daysOrNull]
+     *    转换——否则「永久」会变成 1 天、「7 天」会变成 3 天（Agent.md §3.20）。
      */
     suspend fun createShare(
         coIDLst: List<String>,
@@ -489,11 +832,13 @@ class C139Api(
             passcode = set.optString("passwd"),
             pwdId = set.optString("linkID"),
             title = dedicatedName,
+            // 139 响应不返回有效期，只能按请求时用的天数回填中性码；未知取值显示「未知」而不是猜「永久」
             expiredType = when (period) {
-                1 -> 2
-                7 -> 3
-                30 -> 4
-                else -> 1
+                null -> ShareExpire.FOREVER
+                1 -> ShareExpire.ONE_DAY
+                7 -> ShareExpire.SEVEN_DAYS
+                30 -> ShareExpire.THIRTY_DAYS
+                else -> ShareExpire.UNKNOWN
             }
         )
     }

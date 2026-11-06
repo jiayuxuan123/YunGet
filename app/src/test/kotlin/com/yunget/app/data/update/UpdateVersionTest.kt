@@ -141,6 +141,19 @@ class UpdateVersionTest {
     )
 
     @Test
+    fun updaterNeverSelectsOptionalKernelApk() {
+        val release = release(
+            "YunGet-aria2-kernel-arm64-v8a.apk",
+            "YunGet-2.7.25-universal.apk",
+            "YunGet-2.7.25-arm64-v8a.apk",
+        )
+        assertEquals("YunGet-2.7.25-arm64-v8a.apk",
+            UpdateChecker.selectApk(release, listOf("arm64-v8a"))?.name)
+        assertNull(UpdateChecker.selectApk(
+            release("YunGet-aria2-kernel-arm64-v8a.apk"), listOf("arm64-v8a")))
+    }
+
+    @Test
     fun deviceChoosesExactAbiBeforeUniversalPackage() {
         val release = release(
             "YunGet-2.7.24-universal.apk",

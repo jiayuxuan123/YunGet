@@ -41,6 +41,8 @@ import androidx.compose.material.icons.outlined.Bolt
 import androidx.compose.material.icons.outlined.Dns
 import androidx.compose.material.icons.outlined.Extension
 import androidx.compose.material.icons.outlined.FolderOpen
+import androidx.compose.material.icons.outlined.Groups
+import androidx.compose.material.icons.outlined.Image
 import androidx.compose.material.icons.outlined.Info
 import androidx.compose.material.icons.outlined.Layers
 import androidx.compose.material.icons.outlined.Notifications
@@ -587,6 +589,45 @@ fun SettingsScreen(
         Spacer(modifier = Modifier.height(24.dp))
 
         SectionLabel("通用")
+        SettingsItem(
+            icon = Icons.Outlined.Image,
+            title = "列表缩略图",
+            description = if (ThemeController.cloudThumbnails) {
+                "图片文件在列表里显示小图（需要向网盘取图，会多花一点流量）"
+            } else {
+                "已关闭，列表只显示文件图标（不发取图请求）"
+            },
+            onClick = {
+                ThemeController.setCloudThumbnails(context, !ThemeController.cloudThumbnails)
+            },
+            trailing = {
+                Switch(checked = ThemeController.cloudThumbnails, onCheckedChange = null)
+            }
+        )
+
+        Spacer(modifier = Modifier.height(8.dp))
+
+        SettingsItem(
+            icon = Icons.Outlined.Groups,
+            title = "自动识别剪贴板",
+            description = if (ThemeController.clipboardSuggestEnabled) {
+                "复制分享链接后自动提示解析"
+            } else {
+                "已关闭，应用不再读取剪贴板"
+            },
+            onClick = {
+                ThemeController.setClipboardSuggestEnabled(
+                    context,
+                    !ThemeController.clipboardSuggestEnabled
+                )
+            },
+            trailing = {
+                Switch(checked = ThemeController.clipboardSuggestEnabled, onCheckedChange = null)
+            }
+        )
+
+        Spacer(modifier = Modifier.height(8.dp))
+
         SettingsItem(
             icon = Icons.Outlined.SystemUpdate,
             title = "检查更新",

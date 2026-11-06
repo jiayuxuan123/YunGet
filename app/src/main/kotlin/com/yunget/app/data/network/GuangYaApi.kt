@@ -20,10 +20,20 @@
 package com.yunget.app.data.network
 
 import com.yunget.app.data.network.model.DownloadLink
+
+import com.yunget.app.data.network.model.FileThumbnail
+
 import com.yunget.app.data.network.model.QuotaInfo
 import com.yunget.app.data.network.model.ShareExpire
 import com.yunget.app.data.network.model.ShareFile
 import com.yunget.app.data.network.model.ShareInfo
+
+import com.yunget.app.data.upload.UploadIo
+
+import com.yunget.app.data.upload.UploadPhase
+
+import com.yunget.app.data.upload.UploadSource
+
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.withContext
@@ -356,16 +366,23 @@ class GuangYaApi(
             .put("orderBy", 0)
             .put("sortType", 0)
             .put("accessToken", accessToken)
-            .apply { if (!cursor.isNullOrBlank()) put("cursor", cursor) }
+            .apply { if (!cursor.isNullOrBlank()) put("cursor", cursor.toLongOrNull() ?: cursor) }
         val json = executeJson(
             businessRequest(GuangYaConstants.SHARE_FILES, body.toString(), device = null, token = null).build()
         )
         checkBusiness(json, "获取分享文件列表失败")
         val data = dataOf(json) ?: return@withContext Pair(emptyList(), null)
         val list = parseFileList(listArray(data))
-        val hasMore = data.optBoolean("hasMore", false)
         val next = data.optString("cursor").takeIf { it.isNotBlank() }
-        val effectiveNext = if (hasMore && next != null) next else if (!hasMore) null else next
+        val hasMore = when {
+            data.has("hasMore") -> data.optBoolean("hasMore")
+            data.has("total") -> {
+                val offset = next?.toLongOrNull() ?: list.size.toLong()
+                offset < data.optLong("total", 0L)
+            }
+            else -> list.size >= GuangYaConstants.PAGE_SIZE && next != null
+        }
+        val effectiveNext = next?.takeIf { hasMore && it != cursor }
         Pair(list, effectiveNext)
     }
 
@@ -497,66 +514,259 @@ class GuangYaApi(
         id
     }
 
+
+
+    // ---------- 上传 ----------
+
+
+
+    /**
+
+     * 上传一个文件到 [parentId] 目录，返回新文件的 fileId。
+
+     *
+
+     * 流程：`get_res_center_token` 用整文件 MD5 建任务（`code == 156` 即秒传）→
+
+     * 用返回的 OSS 临时凭据直传（`fullEndPoint`/`bucketName`/`objectPath` + STS token）→
+
+     * 轮询 `get_info_by_task_id` 直到拿到 fileId（光鸭是异步校验，不轮询列表里看不到文件）。
+
+     */
+
+    suspend fun upload(
+
+        io: UploadIo,
+
+        file: UploadSource,
+
+        parentId: String,
+
+        accessToken: String
+
+    ): String = withContext(Dispatchers.IO) {
+
+        io.progress(UploadPhase.PREPARING)
+
+        val md5 = io.digest("MD5")
+
+        val body = JSONObject()
+
+            .put("capacity", 2)
+
+            .put("name", file.name)
+
+            .put("parentId", parentId)
+
+            .put(
+
+                "res",
+
+                JSONObject().put("fileSize", file.size).put("md5", md5)
+
+            )
+
+        val json = executeJson(
+
+            businessRequest(GuangYaConstants.UPLOAD_TOKEN, body.toString(), null, accessToken).build()
+
+        )
+
+        val code = json.optString("code")
+
+        // 156 = 秒传命中：业务上算成功，但 checkBusiness 只认 code 0
+
+        if (code != "156") checkBusiness(json, "创建上传任务失败")
+
+        val data = dataOf(json) ?: throw IllegalStateException("光鸭未创建上传任务")
+
+        val taskId = data.optString("taskId").takeIf { it.isNotBlank() }
+
+            ?: throw IllegalStateException("光鸭未创建上传任务")
+
+        if (code != "156") {
+
+            // 凭据可能平铺在 data，也可能裹在 creds 里
+
+            fun field(key: String): String = data.optString(key).ifBlank {
+
+                data.optJSONObject("creds")?.optString(key).orEmpty()
+
+            }
+
+            io.ossMultipart(
+
+                endpoint = data.optString("fullEndPoint").ifBlank { data.optString("endPoint") },
+
+                bucket = data.optString("bucketName"),
+
+                objectKey = data.optString("objectPath"),
+
+                accessKey = field("accessKeyID").ifBlank { field("accessKeyId") },
+
+                secretKey = field("secretAccessKey"),
+
+                securityToken = field("sessionToken")
+
+            )
+
+        }
+
+        io.progress(UploadPhase.FINISHING, file.size)
+
+        repeat(GuangYaConstants.UPLOAD_MAX_POLLS) {
+
+            val status = executeJson(
+
+                businessRequest(
+
+                    GuangYaConstants.UPLOAD_TASK_INFO,
+
+                    JSONObject().put("taskId", taskId).toString(),
+
+                    null,
+
+                    accessToken
+
+                ).build()
+
+            )
+
+            val fileId = dataOf(status)?.optString("fileId").orEmpty()
+
+            if (fileId.isNotBlank()) return@withContext fileId
+
+            val statusCode = status.optString("code")
+
+            if (statusCode.isNotBlank() && statusCode != "0" &&
+
+                statusCode !in GuangYaConstants.UPLOAD_PENDING_CODES
+
+            ) {
+
+                checkBusiness(status, "查询上传结果失败")
+
+            }
+
+            delay(GuangYaConstants.UPLOAD_POLL_INTERVAL_MS)
+
+        }
+
+        throw IllegalStateException("光鸭正在校验上传内容，请稍后刷新列表")
+
+    }
+
+
+
     /** 重命名（文档 §5.3）。 */
+
     suspend fun renameFile(accessToken: String, fileId: String, newName: String): Unit = withContext(Dispatchers.IO) {
+
         val json = executeJson(
             businessRequest(
+
                 GuangYaConstants.RENAME,
+
                 JSONObject().put("fileId", fileId).put("newName", newName).toString(),
+
                 null, accessToken
             ).build()
         )
+
         checkBusiness(json, "重命名失败")
+
         dataOf(json)?.optString("taskId")?.takeIf { it.isNotBlank() }?.let { waitTask(accessToken, it) }
     }
+
+
 
     /** 移动文件（文档 §5.4）。 */
+
     suspend fun moveFiles(accessToken: String, fileIds: List<String>, parentId: String): Unit = withContext(Dispatchers.IO) {
+
         val ids = JSONArray().apply { fileIds.forEach { put(it) } }
         val json = executeJson(
             businessRequest(
+
                 GuangYaConstants.MOVE_FILE,
+
                 JSONObject().put("fileIds", ids).put("parentId", parentId).toString(),
+
                 null, accessToken
             ).build()
         )
+
         checkBusiness(json, "移动失败")
+
         dataOf(json)?.optString("taskId")?.takeIf { it.isNotBlank() }?.let { waitTask(accessToken, it) }
     }
+
+
 
     /** 删除文件（文档 §5.5）。 */
+
     suspend fun deleteFiles(accessToken: String, fileIds: List<String>): Unit = withContext(Dispatchers.IO) {
+
         val ids = JSONArray().apply { fileIds.forEach { put(it) } }
+
         val json = executeJson(
             businessRequest(
+
                 GuangYaConstants.DELETE_FILE,
+
                 JSONObject().put("fileIds", ids).toString(),
+
                 null, accessToken
             ).build()
         )
+
         checkBusiness(json, "删除失败")
+
         dataOf(json)?.optString("taskId")?.takeIf { it.isNotBlank() }?.let { waitTask(accessToken, it) }
+
     }
 
+
+
     /** 个人盘取下载地址（文档 §5.6）。 */
+
     suspend fun getDownloadLink(accessToken: String, file: ShareFile): DownloadLink? = withContext(Dispatchers.IO) {
+
         val json = executeJson(
+
             businessRequest(
+
                 GuangYaConstants.RES_DOWNLOAD,
+
                 JSONObject().put("fileId", file.fid).toString(),
+
                 null, accessToken
+
             ).build()
+
         )
+
         checkBusiness(json, "获取下载地址失败")
+
         val data = dataOf(json) ?: return@withContext null
+
         val url = firstNonBlank(
+
             data.optString("signedURL"), data.optString("signedUrl"), data.optString("downloadUrl"),
+
             data.optString("download_url"), data.optString("url"), data.optString("cdnUrl")
+
         )
+
         if (url.isBlank()) throw IllegalStateException("光鸭未返回有效下载地址，请确认下载权限")
+
         val size = data.optString("size").toLongOrNull() ?: file.fsize
+
         DownloadLink(fid = file.fid, filename = file.fname, downloadUrl = url, size = size)
+
     }
+
+
 
     /** 任务状态轮询（文档 §5.7）：status 2 且 detail.code 0 = 成功。 */
     suspend fun waitTask(accessToken: String, taskId: String): Unit = withContext(Dispatchers.IO) {
@@ -747,9 +957,39 @@ class GuangYaApi(
             isdir = isDir,
             pdirFid = parent,
             fidToken = "",
-            modifyTime = time
+
+            modifyTime = time,
+
+            // 光鸭不同接口的缩略图字段名不统一（个人盘/分享各一套），按出现频率依次兜底；
+
+            // 逐档校验而不是取第一个非空：字段为 JSON null 时 optString 会给出 "null" 这个字符串。
+
+            // 图床按网页端 UA + 官网 Referer 防盗链，缺了就是 403
+
+            thumbnail = FileThumbnail.of(item.optString("thumbnail"), thumbnailHeaders)
+
+                ?: FileThumbnail.of(item.optString("thumbnailUrl"), thumbnailHeaders)
+
+                ?: FileThumbnail.of(item.optString("thumbnailURL"), thumbnailHeaders)
+
+                ?: FileThumbnail.of(item.optString("cover"), thumbnailHeaders)
+
         )
     }
+
+
+
+    /** 光鸭缩略图请求头（与下载同源的网页端 UA + 官网 Referer）；列表项共用同一份，别在循环里现拼 */
+
+    private val thumbnailHeaders: Map<String, String> = mapOf(
+
+        "User-Agent" to GuangYaConstants.WEB_UA,
+
+        "Referer" to GuangYaConstants.DOWNLOAD_REFERER
+
+    )
+
+
 
     private fun checkBusiness(json: JSONObject, fallback: String) {
         if (isSuccess(json)) return

@@ -35,7 +35,7 @@ import androidx.compose.ui.graphics.Color
  * - 独立加载态、或尺寸 ≥ 24dp 的行内加载 → [YunGetLoading]（MaterialShapes 形变动画）
  * - 尺寸 < 24dp 的行内小 spinner（通常与 18dp 图标并排）→ 继续用 `CircularProgressIndicator`：
  *   形变动画在该尺寸下读不出来，细描边转圈的观感反而更协调
- * - 确定进度（下载 / 容量占比等）→ [YunGetWavyProgress]；不确定进度 → [YunGetWavyLoading]
+ * - 确定进度（下载 / 容量占比等）→ [YunGetWavyProgress]；不确定进度 → [YunGetLoading]
  */
 
 /** Expressive 加载指示器（MaterialShapes 形变）。尺寸由 [modifier] 决定，默认 48dp。 */

@@ -24,6 +24,13 @@ import com.yunget.app.data.network.model.QuotaInfo
 import com.yunget.app.data.network.model.ShareExpire
 import com.yunget.app.data.network.model.ShareFile
 import com.yunget.app.data.network.model.ShareInfo
+
+import com.yunget.app.data.upload.UploadIo
+
+import com.yunget.app.data.upload.UploadPhase
+
+import com.yunget.app.data.upload.UploadSource
+
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.withContext
@@ -268,57 +275,263 @@ class Pan115Api(
                 .takeIf { it.isNotBlank() }
         }
 
-    /** 重命名：`POST /files/batch_rename`（文档 §3.3） */
-    suspend fun rename(id: String, newName: String, cookie: String) = withContext(Dispatchers.IO) {
-        val json = postForm(
-            Pan115Constants.FILE_RENAME_URL,
+
+
+    // ---------- 上传 ----------
+
+
+
+    /**
+
+     * 上传一个文件到 [pid] 目录，返回网盘给出的文件 id（读不到返回 null）。
+
+     *
+
+     * 115 网页端只有「OSS 单次表单直传」这一条路：先向 `sampleinitupload.php` 要一份上传策略
+
+     * （host/object/policy/accessid/signature/callback），再把文件作为 `file` 字段连同策略一起
+
+     * POST 到 OSS，OSS 回调里带回 file_id。
+
+     *
+
+     * ★ 没有分片、没有秒传、没有断点续传：整个文件一次 multipart 发完，超过 5 GB 只能换官方客户端。
+
+     * ★ OSS 阶段不带 Cookie（策略里已经签好权限），带上反而可能被对象存储拒。
+
+     */
+
+    suspend fun upload(
+
+        io: UploadIo,
+
+        file: UploadSource,
+
+        pid: String,
+
+        cookie: String
+
+    ): String? = withContext(Dispatchers.IO) {
+
+        if (file.size > Pan115Constants.UPLOAD_MAX_SIZE) {
+
+            throw IllegalStateException("115 网页端单文件最大 5 GB，更大的文件请用官方客户端上传")
+
+        }
+
+        io.progress(UploadPhase.PREPARING)
+
+        val init = postForm(
+
+            Pan115Constants.UPLOAD_INIT_URL,
+
             cookie,
             Pan115Constants.REFERER,
             form(
-                "fid" to id,
-                "file_name" to newName,
-                "files_new_name[$id]" to newName
+
+                "filename" to file.name,
+
+                "filesize" to file.size.toString(),
+
+                "target" to "U_1_${pid.ifBlank { Pan115Constants.ROOT_CID }}",
+
+                "path" to ""
+
             )
         )
-        checkState(json, "重命名失败")
-        Unit
+
+        // 成功是裸策略对象；带 state 的是标准错误信封（登录过期/空间不足等）
+
+        if (init.has("state")) checkState(init, "获取上传地址失败")
+
+        val host = init.optString("host")
+
+        val objectKey = init.optString("object")
+
+        val policy = init.optString("policy")
+
+        val accessId = init.optString("accessid")
+
+        val signature = init.optString("signature")
+
+        val callback = init.optString("callback")
+
+        val uri = runCatching { java.net.URI(host) }.getOrNull()
+
+        val hostName = uri?.host.orEmpty()
+
+        if (!hostName.endsWith(".aliyuncs.com")) {
+
+            throw IllegalStateException("115 返回的上传服务器无效")
+
+        }
+
+        if (objectKey.isBlank() || policy.isBlank() || accessId.isBlank() ||
+
+            signature.isBlank() || callback.isBlank()
+
+        ) {
+
+            throw IllegalStateException("115 上传凭据不完整")
+
+        }
+
+        val response = io.send(
+
+            url = "https://$hostName${uri?.rawPath.orEmpty()}",
+
+            method = "POST",
+
+            headers = mapOf("User-Agent" to Pan115Constants.WEB_UA),
+
+            fields = listOf(
+
+                "name" to file.name,
+
+                "key" to objectKey,
+
+                "policy" to policy,
+
+                "OSSAccessKeyId" to accessId,
+
+                "success_action_status" to "200",
+
+                "callback" to callback,
+
+                "signature" to signature
+
+            ),
+
+            retries = 0
+
+        )
+
+        if (!response.isSuccessful) {
+
+            throw IllegalStateException("文件上传失败（HTTP ${response.code}）")
+
+        }
+
+        io.progress(UploadPhase.FINISHING, file.size)
+
+        val json = runCatching { response.json() }.getOrNull() ?: return@withContext null
+
+        if (json.has("state") && !json.optBoolean("state")) {
+
+            throw IllegalStateException(json.optString("error").ifBlank { "115 上传失败" })
+
+        }
+
+        json.optJSONObject("data")?.optString("file_id")?.takeIf { it.isNotBlank() }
+
+            ?: json.optString("file_id").takeIf { it.isNotBlank() }
+
     }
 
-    /** 移动：`POST /files/move`（异步，响应含 move_proid 时轮询进度，文档 §3.2） */
-    suspend fun move(fids: List<String>, toPid: String, cookie: String) = withContext(Dispatchers.IO) {
-        val ids = fids.filter { it.isNotBlank() }
-        if (ids.isEmpty()) throw IllegalStateException("请选择要移动的文件")
-        val pairs = buildList {
-            add("pid" to toPid.ifBlank { Pan115Constants.ROOT_CID })
-            ids.forEachIndexed { index, id -> add("fid[$index]" to id) }
-        }
+
+
+    /** 重命名：`POST /files/batch_rename`（文档 §3.3） */
+
+    suspend fun rename(id: String, newName: String, cookie: String) = withContext(Dispatchers.IO) {
+
         val json = postForm(
-            Pan115Constants.FILE_MOVE_URL,
+
+            Pan115Constants.FILE_RENAME_URL,
+
             cookie,
             Pan115Constants.REFERER,
-            form(*pairs.toTypedArray())
+
+            form(
+
+                "fid" to id,
+
+                "file_name" to newName,
+
+                "files_new_name[$id]" to newName
+
+            )
+
         )
-        checkState(json, "移动失败")
-        // 115 的字段层级不稳定（`share/send` 就把信息放在 data 内层，见 createShare 注释），两层都读
-        val moveId = json.optString("move_proid")
-            .ifBlank { json.optJSONObject("data")?.optString("move_proid").orEmpty() }
-            .takeIf { it.isNotBlank() } ?: return@withContext
-        repeat(Pan115Constants.MOVE_POLL_MAX) {
-            delay(Pan115Constants.MOVE_POLL_INTERVAL_MS)
-            val progress = runCatching {
-                getJson(
-                    "${Pan115Constants.MOVE_PROGRESS_URL}?move_proid=${encode(moveId)}",
-                    cookie,
-                    Pan115Constants.REFERER
-                )
-            }.getOrNull() ?: return@withContext
-            if (!progress.optBoolean("state", false)) return@withContext
-            val data = progress.optJSONObject("data") ?: return@withContext
-            val percent = data.optDouble("percent", 0.0)
-            val count = data.optInt("count", 0)
-            if (percent >= 100.0 || count <= 0) return@withContext
-        }
+
+        checkState(json, "重命名失败")
+
+        Unit
+
     }
+
+
+
+    /** 移动：`POST /files/move`（异步，响应含 move_proid 时轮询进度，文档 §3.2） */
+
+    suspend fun move(fids: List<String>, toPid: String, cookie: String) = withContext(Dispatchers.IO) {
+
+        val ids = fids.filter { it.isNotBlank() }
+
+        if (ids.isEmpty()) throw IllegalStateException("请选择要移动的文件")
+
+        val pairs = buildList {
+
+            add("pid" to toPid.ifBlank { Pan115Constants.ROOT_CID })
+
+            ids.forEachIndexed { index, id -> add("fid[$index]" to id) }
+
+        }
+
+        val json = postForm(
+
+            Pan115Constants.FILE_MOVE_URL,
+
+            cookie,
+
+            Pan115Constants.REFERER,
+
+            form(*pairs.toTypedArray())
+
+        )
+
+        checkState(json, "移动失败")
+
+        // 115 的字段层级不稳定（`share/send` 就把信息放在 data 内层，见 createShare 注释），两层都读
+
+        val moveId = json.optString("move_proid")
+
+            .ifBlank { json.optJSONObject("data")?.optString("move_proid").orEmpty() }
+
+            .takeIf { it.isNotBlank() } ?: return@withContext
+
+        repeat(Pan115Constants.MOVE_POLL_MAX) {
+
+            delay(Pan115Constants.MOVE_POLL_INTERVAL_MS)
+
+            val progress = runCatching {
+
+                getJson(
+
+                    "${Pan115Constants.MOVE_PROGRESS_URL}?move_proid=${encode(moveId)}",
+
+                    cookie,
+
+                    Pan115Constants.REFERER
+
+                )
+
+            }.getOrNull() ?: return@withContext
+
+            if (!progress.optBoolean("state", false)) return@withContext
+
+            val data = progress.optJSONObject("data") ?: return@withContext
+
+            val percent = data.optDouble("percent", 0.0)
+
+            val count = data.optInt("count", 0)
+
+            if (percent >= 100.0 || count <= 0) return@withContext
+
+        }
+
+    }
+
+
 
     /** 删除（进回收站）：`POST /rb/delete`；errno=800007 时按文档再确认一次 */
     suspend fun delete(fids: List<String>, pid: String, cookie: String) = withContext(Dispatchers.IO) {

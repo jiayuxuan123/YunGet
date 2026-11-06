@@ -50,6 +50,13 @@ interface DownloadManager {
         fileName: String,
         headers: Map<String, String> = emptyMap(),
         size: Long = -1L,
+        platform: String = "",
+        fallbackUrl: String = "",
+        altSources: List<DownloadSource> = emptyList(),
+        mergeAudioUrl: String = "",
+        mergeAudioHeaders: Map<String, String> = emptyMap(),
+        motionUrl: String = "",
+        audioOnly: Boolean = false,
         onComplete: suspend () -> Unit = {},
     ): Long
 

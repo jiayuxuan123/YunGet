@@ -36,6 +36,10 @@ import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TopAppBarScrollBehavior
 import androidx.compose.material3.pulltorefresh.PullToRefreshBox
+import androidx.compose.ui.platform.LocalContext
+import androidx.compose.material3.TextButton
+import androidx.compose.material3.Switch
+import com.yunget.app.data.prefs.SettingsRepository
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
@@ -215,6 +219,21 @@ fun DriveScreen(
     onLanzouLogout: () -> Unit = {},
     modifier: Modifier = Modifier
 ) {
+    val orderContext = LocalContext.current
+    val orderSettings = remember(orderContext) { SettingsRepository(orderContext) }
+    var accountOrder by remember { mutableStateOf(orderSettings.driveAccountOrder) }
+    var hideUnlogged by remember { mutableStateOf(orderSettings.hideUnloggedDrives) }
+    var showOrder by rememberSaveable { mutableStateOf(false) }
+    val orderItems = listOf(
+        "quark" to "夸克网盘", "uc" to "UC 网盘", "xunlei" to "迅雷网盘",
+        "baidu" to "百度网盘", "c139" to "139 网盘", "pan123" to "123 云盘",
+        "pan115" to "115 网盘", "guangya" to "光鸭云盘", "ilanzou" to "蓝奏云优享版", "lanzou" to "蓝奏云"
+    )
+    if (showOrder) DriveOrderDialog(
+        items = orderItems, order = accountOrder,
+        onChange = { accountOrder = it; orderSettings.driveAccountOrder = it },
+        onDismiss = { showOrder = false }
+    )
     var showQuarkSheet by remember { mutableStateOf(false) }
     var showUCSheet by remember { mutableStateOf(false) }
     var showXunleiSheet by remember { mutableStateOf(false) }
@@ -541,8 +560,22 @@ fun DriveScreen(
                         { showLanzouSheet = true }, onLanzouLogin
                     ),
                 )
-                val loggedIn = entries.filter { it.account.isLoggedIn }
-                val loggedOut = entries.filterNot { it.account.isLoggedIn }
+                item(key = "account_order") {
+                    Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+                        TextButton(onClick = { showOrder = true }) { Text("账号排序") }
+                        Spacer(Modifier.weight(1f))
+                        Text("隐藏未登录", style = MaterialTheme.typography.labelMedium)
+                        Switch(checked = hideUnlogged, onCheckedChange = {
+                            hideUnlogged = it; orderSettings.hideUnloggedDrives = it
+                        })
+                    }
+                }
+                val orderedEntries = entries.sortedBy { entry ->
+                    accountOrder.indexOf(entry.account.id).takeIf { it >= 0 } ?: Int.MAX_VALUE
+                }
+                val loggedIn = if (accountOrder.isEmpty()) orderedEntries.filter { it.account.isLoggedIn }
+                    else orderedEntries.filter { !hideUnlogged || it.account.isLoggedIn }
+                val loggedOut = if (hideUnlogged || accountOrder.isNotEmpty()) emptyList() else orderedEntries.filterNot { it.account.isLoggedIn }
 
                 if (loggedIn.isEmpty()) {
                     item(key = "hint_not_logged_in") {
@@ -554,13 +587,13 @@ fun DriveScreen(
                         )
                     }
                 } else {
-                    item(key = "header_logged_in") { DriveGroupLabel("已登录") }
+                    item(key = "header_logged_in") { DriveGroupLabel(if (accountOrder.isEmpty()) "已登录" else "网盘账号") }
                     items(loggedIn, key = { it.account.id }) { entry ->
                         DriveAccountCard(
                             account = entry.account,
                             quota = entry.quota,
-                            onClick = entry.onClick,
-                            onMoreClick = entry.onMoreClick
+                            onClick = if (entry.account.isLoggedIn) entry.onClick else entry.onLogin,
+                            onMoreClick = entry.onMoreClick.takeIf { entry.account.isLoggedIn }
                         )
                     }
                 }

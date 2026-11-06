@@ -28,6 +28,7 @@ package com.yunget.app.data.download
  *   目前实际被用到的只有 [GITHUB]（内核包 GitHub 通道的分片数口径）。
  */
 object DownloadPlatform {
+    const val VIDEO = "video"
     const val QUARK = "quark"
     const val UC = "uc"
     const val XUNLEI = "xunlei"

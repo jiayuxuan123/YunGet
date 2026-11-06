@@ -53,6 +53,24 @@ object ILanzouConstants {
     const val FILE_DELETE = "$API_BASE/proved/file/delete"
     const val FILE_REDIRECT = "$API_BASE/unproved/file/redirect"
 
+    const val UPLOAD_TOKEN = "$API_BASE/proved/7n/getUpToken"
+
+    const val UPLOAD_RESULT = "$API_BASE/unproved/7n/results"
+
+
+
+    /** 七牛直传主机（小文件表单直传、大文件分片都在这里） */
+
+    const val QINIU_UPLOAD = "https://upload.qiniup.com"
+
+
+
+    /** 七牛分片接口的 bucket 名（抓包固定值） */
+
+    const val QINIU_BUCKET = "wpanstore-lanzou"
+
+
+
     // ---------- 分享（本站 Web 分享页走后端 apix，与个人盘 apis 不同） ----------
     /** 分享业务主机（分享页 JS config.apiBaseURL = https://apix.ilanzou.com/） */
     const val SHARE_API_BASE = "https://apix.ilanzou.com"

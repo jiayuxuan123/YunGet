@@ -1,5 +1,28 @@
+/*
+ * YunX (云析) - A network drive share-link parser and high-speed downloader for Android.
+ * Copyright (C) 2026 CYQawa
+ *
+ * This program is free software: you can redistribute it and/or modify
+ * it under the terms of the GNU Affero General Public License as published by
+ * the Free Software Foundation, either version 3 of the License, or
+ * (at your option) any later version.
+ *
+ * This program is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+ * GNU Affero General Public License for more details.
+ *
+ * You should have received a copy of the GNU Affero General Public License
+ * along with this program.  If not, see <https://www.gnu.org/licenses/>.
+ */
+
 package com.yunget.app.ui.viewmodel
 
+import android.content.ContentResolver
+import android.net.Uri
+import com.yunget.app.data.network.HttpClients
+import com.yunget.app.data.upload.UploadProgress
+import com.yunget.app.data.upload.UploadRunner
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateListOf
 import androidx.compose.runtime.mutableStateOf
@@ -8,16 +31,20 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.ViewModelProvider
 import androidx.lifecycle.viewModelScope
 import com.yunget.app.data.download.DownloadManager
+import com.yunget.app.data.download.DownloadPlatform
 import com.yunget.app.data.network.BaiduApi
 import com.yunget.app.data.network.BaiduConstants
+import com.yunget.app.data.network.model.ShareExpire
+import com.yunget.app.data.network.model.DownloadLink
 import com.yunget.app.data.network.model.ShareFile
 import com.yunget.app.data.network.model.ShareInfo
-import kotlinx.coroutines.flow.Flow
-import kotlinx.coroutines.flow.drop
-import kotlinx.coroutines.flow.distinctUntilChanged
+import com.yunget.app.ui.preview.CloudPreview
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.distinctUntilChanged
+import kotlinx.coroutines.flow.drop
 import kotlinx.coroutines.launch
 
 /** 百度网盘云盘浏览 UI 状态 */
@@ -42,7 +69,6 @@ class BaiduCloudViewModel(
     private val api: BaiduApi,
     private val cookieProvider: suspend () -> String?,
     private val downloadManager: DownloadManager,
-    /** 登录态（true=已登录）。登录成功后自动重载根目录，避免停在「请先登录」错误页。 */
     private val loginState: Flow<Boolean>
 ) : ViewModel() {
 
@@ -79,12 +105,9 @@ class BaiduCloudViewModel(
 
     init {
         loadRoot()
-        // 登录成功后自动重载根目录。
-        // 【为什么需要】本 VM 在未登录时也会被创建并执行 init{loadRoot()}，那时拿到的是
-        // Error("请先登录…")。用户随后登录成功，但没有任何机制触发重载 →
-        // 网盘页一直停在「请先登录」，必须手动点「重试」才恢复。
-        // drop(1) 跳过 VM 创建时的登录态快照（init 已加载过一次，避免冷启动重复请求）；
-        // distinctUntilChanged 过滤登录后凭证刷新等重复 upsert。
+        // 启动期未登录时上面的 loadRoot 会残留「请先登录…」错误态；登录态从无到有后自动重载根目录，
+        // 进网盘列表无需再手动点「重试」。drop(1) 跳过 VM 创建时的登录态快照（init 已加载，避免冷启动重复），
+        // distinctUntilChanged 过滤登录后 Cookie/Token 刷新等重复 upsert。
         viewModelScope.launch {
             loginState
                 .drop(1)
@@ -276,6 +299,7 @@ class BaiduCloudViewModel(
                             url = link,
                             fileName = relPath, // 相对路径：Download/文件夹A/子目录/文件.mp4
                             size = file.fsize,
+                            platform = DownloadPlatform.BAIDU,
                             headers = downloadHeaders(cookie)
                         )
                         okCount++
@@ -299,14 +323,28 @@ class BaiduCloudViewModel(
     }
 
     /** 下载：locatedownload 取直链（需 Cookie + netdisk UA）→ 内置下载队列 */
+    /** 待确认的下载直链（单文件下载弹窗展示用，长按链接可复制） */
+    var downloadLink by mutableStateOf<DownloadLink?>(null)
+        private set
+
+    /** 与 downloadLink 配套的入队参数（弹窗确认后直接入队） */
+    private var pendingDownload: PendingDownload? = null
+
+    /** 下载文件：取直链 → 弹出下载确认弹窗（对齐解析页行为，确认后入队） */
     fun downloadFile() {
         val file = actionFile ?: return
         viewModelScope.launch {
             isOperating = true
             try {
-                val link = api.locateDownload(file.fidToken, cookie())
-                downloadManager.enqueue(
-                    url = link,
+                val url = api.locateDownload(file.fidToken, cookie())
+                val link = DownloadLink(
+                    fid = file.fidToken,
+                    filename = file.fname,
+                    downloadUrl = url,
+                    size = file.fsize
+                )
+                pendingDownload = PendingDownload(
+                    url = url,
                     fileName = file.fname,
                     size = file.fsize,
                     headers = mapOf(
@@ -314,7 +352,54 @@ class BaiduCloudViewModel(
                         "User-Agent" to BaiduConstants.UA_NETDISK
                     )
                 )
-                cloudMessage = "已加入下载：${file.fname}"
+                downloadLink = link // 弹下载确认弹窗（长按直链可复制）
+            } catch (e: Exception) {
+                cloudMessage = e.message ?: "下载失败"
+            } finally {
+                isOperating = false
+            }
+        }
+    }
+
+    /**
+     * 在线预览（云盘文件）：BaiduApi.locateDownload(file.fidToken, …) 给的是带 sign/timestamp 的
+     * 临时 dlink，必须配同一份 Cookie + 客户端 UA 才读得到；取链失败照实回报。
+     */
+    fun openPreview() {
+        val file = actionFile ?: return
+        if (!CloudPreview.canPreview(file)) return
+        viewModelScope.launch {
+            isOperating = true
+            try {
+                val ck = cookie()
+                val url = api.locateDownload(file.fidToken, ck)
+                // 先清 actionFile 再开预览：否则关掉预览时文件操作弹窗会重新弹出来
+                actionFile = null
+                CloudPreview.open(file, url, downloadHeaders(ck))
+            } catch (e: Exception) {
+                cloudMessage = e.message ?: "预览失败"
+            } finally {
+                isOperating = false
+            }
+        }
+    }
+
+    /** 下载弹窗确认：用已生成的直链入队 */
+    fun startDownload() {
+        val pd = pendingDownload ?: return
+        downloadLink = null
+        pendingDownload = null
+        viewModelScope.launch {
+            isOperating = true
+            try {
+                downloadManager.enqueue(
+                    url = pd.url,
+                    fileName = pd.fileName,
+                    size = pd.size,
+                    platform = DownloadPlatform.BAIDU,
+                    headers = pd.headers
+                )
+                cloudMessage = "已加入下载：${pd.fileName}"
                 actionFile = null
                 downloadTriggered++
             } catch (e: Exception) {
@@ -323,6 +408,12 @@ class BaiduCloudViewModel(
                 isOperating = false
             }
         }
+    }
+
+    /** 关闭下载弹窗（放弃下载） */
+    fun dismissDownloadDialog() {
+        downloadLink = null
+        pendingDownload = null
     }
 
     /** 重命名 */
@@ -340,6 +431,30 @@ class BaiduCloudViewModel(
                 }
             } catch (e: Exception) {
                 cloudMessage = e.message ?: "重命名失败"
+            } finally {
+                isOperating = false
+            }
+        }
+    }
+
+    /** 新建文件夹（当前目录下）；百度按**绝对路径**操作，不是 fid */
+    fun createFolder(name: String) {
+        val newName = name.trim()
+        if (newName.isEmpty()) return
+        val parentPath = (uiState.value as? BaiduCloudUiState.Loaded)?.dirPath ?: "/"
+        // 根目录 "/" 不能拼成 "//名字"
+        val path = parentPath.trimEnd('/') + "/" + newName
+        viewModelScope.launch {
+            isOperating = true
+            try {
+                if (api.createDir(path, cookie())) {
+                    cloudMessage = "已创建文件夹「$newName」"
+                    reloadCurrent()
+                } else {
+                    cloudMessage = "新建文件夹失败"
+                }
+            } catch (e: Exception) {
+                cloudMessage = e.message ?: "新建文件夹失败"
             } finally {
                 isOperating = false
             }
@@ -365,19 +480,25 @@ class BaiduCloudViewModel(
         }
     }
 
-    /** 创建分享（百度必须带 4 位提取码） */
-    fun shareFile(period: Int, pwd: String) {
+    /**
+     * 创建分享（百度必须带 4 位提取码）。
+     *
+     * @param expiredType UI 中性码（[ShareExpire]），**必须转成百度 period**（0/1/7/30，0=永久）：
+     *   直接下发中性码会让「永久」变成 1 天、「7 天」变成 3 天（Agent.md §3.20）。
+     */
+    fun shareFile(expiredType: Int, pwd: String) {
         val file = actionFile ?: return
         viewModelScope.launch {
             isOperating = true
             try {
-                val result = api.createShare(listOf(file.fid), period, pwd, cookie())
+                val result = api.createShare(listOf(file.fid), ShareExpire.baiduPeriod(expiredType), pwd, cookie())
                 shareResult = ShareInfo(
                     shareUrl = result.link,
                     passcode = result.pwd,
                     pwdId = result.shareId,
                     title = file.fname,
-                    expiredType = expireType(period)
+                    // 优先用服务端回填的真实有效期，响应没给才回退到用户所选值
+                    expiredType = result.expiredType?.let { expireType(it) } ?: expiredType
                 )
             } catch (e: Exception) {
                 cloudMessage = e.message ?: "分享失败"
@@ -444,6 +565,7 @@ class BaiduCloudViewModel(
                             url = link,
                             fileName = if (relPath.contains('/')) relPath else file.fname,
                             size = file.fsize,
+                            platform = DownloadPlatform.BAIDU,
                             headers = downloadHeaders(cookie)
                         )
                         okCount++
@@ -470,22 +592,22 @@ class BaiduCloudViewModel(
         }
     }
 
-    /** 批量分享 */
-    fun shareSelected(period: Int, pwd: String) {
+    /** 批量分享（@param expiredType UI 中性码，转换见 [shareFile]） */
+    fun shareSelected(expiredType: Int, pwd: String) {
         val files = _selected.toList()
         if (files.isEmpty()) return
         viewModelScope.launch {
             isOperating = true
             try {
                 val result = api.createShare(
-                    files.map { it.fid }, period, pwd, cookie()
+                    files.map { it.fid }, ShareExpire.baiduPeriod(expiredType), pwd, cookie()
                 )
                 shareResult = ShareInfo(
                     shareUrl = result.link,
                     passcode = result.pwd,
                     pwdId = result.shareId,
                     title = if (files.size == 1) files[0].fname else "分享 ${files.size} 个文件",
-                    expiredType = expireType(period)
+                    expiredType = result.expiredType?.let { expireType(it) } ?: expiredType
                 )
                 exitMultiSelect()
             } catch (e: Exception) {
@@ -579,13 +701,46 @@ class BaiduCloudViewModel(
         }
     }
 
-    /** 百度 period → ShareInfo.expiredType（0永久/1一天/7七天/30三十天 → 1/2/3/4） */
+    /** 百度 period → ShareInfo.expiredType（0永久/1一天/7七天/30三十天 → 中性码）；其他取值显示为「未知」 */
     private fun expireType(period: Int): Int = when (period) {
-        1 -> 2
-        7 -> 3
-        30 -> 4
-        else -> 1
+        0 -> ShareExpire.FOREVER
+        1 -> ShareExpire.ONE_DAY
+        7 -> ShareExpire.SEVEN_DAYS
+        30 -> ShareExpire.THIRTY_DAYS
+        else -> ShareExpire.UNKNOWN
     }
+
+    // ---------- 上传（百度 预上传 + superfile2 分片） ----------
+
+    /** 上传进度（null 表示没有任务）；上传弹窗直接读这里 */
+    val uploadProgress: UploadProgress? get() = uploadRunner.progress
+
+    private val uploadRunner = UploadRunner(viewModelScope, { HttpClients.apiClient() }) { outcome ->
+        // 传成功过就刷新列表（失败也刷：已经落库的文件要立刻可见）
+        if (outcome.uploaded > 0 || outcome.failed > 0) reloadCurrent()
+        cloudMessage = when {
+            outcome.error != null -> outcome.error
+            outcome.cancelled -> "已取消上传"
+            else -> "已上传 ${outcome.uploaded} 个文件"
+        }
+    }
+
+    /**
+     * 上传选中的本地文件到**当前目录**。
+     *
+     * 目标目录在这里就先固定下来（上传期间用户可能切目录、返回上级），
+     * 凭据留到 IO 线程现取，避免拿着已过期的 Cookie 一路失败。
+     */
+    fun uploadFiles(resolver: ContentResolver, uris: List<Uri>) {
+        val dir = (uiState.value as? BaiduCloudUiState.Loaded)?.dirPath ?: "/"
+        uploadRunner.start(resolver, uris) { io, source ->
+            val cookie = cookieProvider() ?: throw IllegalStateException("请先登录百度网盘")
+            api.upload(io, source, dir, cookie)
+        }
+    }
+
+    /** 取消当前上传（正在发的那一段会立刻被打断） */
+    fun cancelUpload() = uploadRunner.cancel()
 
     class Factory(
         private val api: BaiduApi,
