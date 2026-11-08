@@ -54,7 +54,17 @@
 </div>
 </header>
 <main id="main">
-<div class="page-canvas" data-page="changelog"><section class="page-intro"><div class="wrap intro-grid"><h1>更新日志</h1><div class="intro-copy"><p>版本、日期与附件数量来自 GitHub Release 数据；应用内检查更新读取同一来源。</p><div class="page-actions"><a class="button button-primary" href="../download/index.html">下载当前版本<svg class="icon-arrow" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true"><path d="M5 12h14M13 6l6 6-6 6"/></svg></a><a class="button" href="https://github.com/jiayuxuan123/YunGet/releases">GitHub Releases<svg class="icon-arrow" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true"><path d="M5 12h14M13 6l6 6-6 6"/></svg></a></div></div></div></section><section class="section"><div class="wrap"><header class="section-head"><h2>最近发布</h2><p class="section-lead">完整发布说明保留在 GitHub；这里列出便于扫描的版本路线。</p></header><article class="release-row"><div class="release-id"><strong>v2.7.25</strong><span>2026-11-06</span></div><p>YunGet 2.7.25（versionCode 73）
+<div class="page-canvas" data-page="changelog"><section class="page-intro"><div class="wrap intro-grid"><h1>更新日志</h1><div class="intro-copy"><p>版本、日期与附件数量来自 GitHub Release 数据；应用内检查更新读取同一来源。</p><div class="page-actions"><a class="button button-primary" href="../download/index.html">下载当前版本<svg class="icon-arrow" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true"><path d="M5 12h14M13 6l6 6-6 6"/></svg></a><a class="button" href="https://github.com/jiayuxuan123/YunGet/releases">GitHub Releases<svg class="icon-arrow" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true"><path d="M5 12h14M13 6l6 6-6 6"/></svg></a></div></div></div></section><section class="section"><div class="wrap"><header class="section-head"><h2>最近发布</h2><p class="section-lead">完整发布说明保留在 GitHub；这里列出便于扫描的版本路线。</p></header><article class="release-row"><div class="release-id"><strong>v2.7.26</strong><span>2026-11-08</span></div><p>YunGet 2.7.26
+版本：2.7.26（versionCode 74）
+修复
+· 修复 aria2 可选内核下载仅依赖 GitHub API 与直链、任一路径失败即中止的问题。版本信息增加官网清单、仓库清单与随包保存的已发布版本作为备用来源。
+· 内核文件依次尝试官方加速、设置中的 HTTPS 下载镜像和 GitHub 直连；失败时显示各通道原因。
+· 下载后同时校验 SHA-256、包名、发布签名和 ARM64 二进制，拒绝不完整、内容异常或签名不一致的包。
+· 增加内核下载取消操作，已校验的缓存安装包可直接复用。
+· 首次需要授权安装应用时，提示授权后返回再次点击安装。
+引擎与界面
+· 内置 TurboDL 及其插件升级到 0.5.0.1，Android 继续使用 Kotlin/ART 下载路径。
+· 合入 TurboDL 对 DoH 响应大小的限制，防止异常响应占用过多内存。…</p><a href="https://github.com/jiayuxuan123/YunGet/releases/tag/v2.7.26">发布页</a></article><article class="release-row"><div class="release-id"><strong>v2.7.25</strong><span>2026-11-06</span></div><p>YunGet 2.7.25（versionCode 73）
 
 同步 CYQawa/YunX 上游功能，并保留 YunGet 的 TurboDL 接入及账号凭据加密。
 · 十家个人盘上传、上传进度/取消与列表刷新。
@@ -167,15 +177,7 @@ TurboDL 0.2.3.0 做得是网络健壮性：UA 协商、失败快速收敛、错�
 · 插件源里那四个网盘原生插件已经撤下，插件市场不再列出它们；
 · 已经装过原生插件的用户：那几个插件留在手机上但不再参与工作，网盘解析走应用内置实现，功能不受影响；需要的话可以在插件列表里把它们卸载掉。
 之后
-等云推出了 Windows 版，原生插件会在 Wind…</p><a href="https://github.com/jiayuxuan123/YunGet/releases/tag/v2.7.10">发布页</a></article><article class="release-row"><div class="release-id"><strong>v2.7.9</strong><span>2026-10-12</span></div><p>云取 YunGet 2.7.9
-修好两件影响日常使用的事：原生插件真正能加载了，图片终于能显示出来。
-原生插件现在可以正常运行
-上一版换了个目录存放插件包，真机上仍被系统拒绝——原因是 Android 10 之后系统禁止加载&quot;位于可写目录里的插件文件&quot;，换到哪个可写目录都一样。这一版改为把插件包读进内存直接加载，全程不落盘，从机制上绕开了这条限制。
-装过的网盘插件更新到本版并重启后即可正常加载；插件页不再显示&quot;未运行&quot;。
-需要留意：加载原生插件需 Android 8.0 及以上；更低版本会给出明确提示，而不是静默失败。
-图片能显示出来了
-支持页的赞赏码、插件说明里的图片此前一律直连 GitHub，国内基本加载不出来。原因是应用里的&quot;镜像&quot;设置从来没有传给图片加载器——这个开关一直是空的。修复后：
-· 图片与插件源、应用更新走同一套镜像规则（只对 GitHub 地址生效，失败…</p><a href="https://github.com/jiayuxuan123/YunGet/releases/tag/v2.7.9">发布页</a></article></div></section></div></main>
+等云推出了 Windows 版，原生插件会在 Wind…</p><a href="https://github.com/jiayuxuan123/YunGet/releases/tag/v2.7.10">发布页</a></article></div></section></div></main>
 <footer class="site-footer">
 <div class="wrap footer-station">
 <div class="footer-stop"><span class="footer-node" aria-hidden="true"></span>
@@ -195,7 +197,7 @@ TurboDL 0.2.3.0 做得是网络健壮性：UA 协商、失败快速收敛、错�
 <nav class="footer-nav" aria-label="页脚导航"><section class="footer-col"><h2>项目</h2><ul><li><a href="https://github.com/jiayuxuan123/YunGet">GitHub</a></li><li><a href="../download/index.html">下载</a></li><li><a href="index.html">更新日志</a></li><li><a href="https://github.com/jiayuxuan123/YunGet/issues">问题反馈</a></li></ul></section><section class="footer-col"><h2>文档</h2><ul><li><a href="../docs/readme/index.html">项目说明</a></li><li><a href="../docs/guide/index.html">使用说明</a></li><li><a href="../docs/faq/index.html">常见问题</a></li><li><a href="../docs/engines/index.html">下载引擎</a></li><li><a href="../docs/build/index.html">从源码构建</a></li></ul></section><section class="footer-col"><h2>插件</h2><ul><li><a href="../plugins/index.html">插件（市场与安装）</a></li><li><a href="../developers/index.html">开发者（怎么写）</a></li><li><a href="../docs/plugin-dev/index.html">写一个插件</a></li><li><a href="../docs/plugin-api/index.html">插件 ABI 参考</a></li><li><a href="../docs/plugin-publish/index.html">打包与发布</a></li><li><a href="../docs/plugin-security/index.html">插件安全模型</a></li></ul></section><section class="footer-col"><h2>协议与说明</h2><ul><li><a href="../legal/license/index.html">AGPL-3.0 原文</a></li><li><a href="../legal/notice/index.html">署名与致谢</a></li><li><a href="../legal/privacy/index.html">隐私说明</a></li><li><a href="../legal/terms/index.html">使用条款</a></li><li><a href="../support/index.html">支持开发</a></li></ul></section><section class="footer-col"><h2>相关</h2><ul><li><a href="https://github.com/CYQawa/YunX">上游 CYQawa/YunX</a></li><li><a href="https://github.com/jiayuxuan123/TurboDL">下载引擎 TurboDL</a></li><li><a href="https://github.com/jiayuxuan123/YunGet-Plugins">插件源 YunGet-Plugins</a></li><li><a href="../community/index.html">社区</a></li></ul></section></nav>
 </div>
 <div class="wrap footer-fine">
-<div class="footer-meta"><p>云取 YunGet v2.7.25 · AGPL-3.0 · 内置 TurboDL 0.5.0.0 · Android 7.0（API 24）</p><p>本项目是 CYQawa/YunX（云析）的二次开发版本，与上游作者无隐性关联。仅供个人学习与技术交流，请勿用于商业用途；下载内容的版权归原作者及相关权利人所有。</p></div>
+<div class="footer-meta"><p>云取 YunGet v2.7.26 · AGPL-3.0 · 内置 TurboDL 0.5.0.1 · Android 7.0（API 24）</p><p>本项目是 CYQawa/YunX（云析）的二次开发版本，与上游作者无隐性关联。仅供个人学习与技术交流，请勿用于商业用途；下载内容的版权归原作者及相关权利人所有。</p></div>
 <div class="footer-bottom">
 <span>云取 YunGet · ANDROID · OPEN SOURCE</span>
 <a href="https://github.com/jiayuxuan123/YunGet">GitHub / Source</a>
