@@ -1,0 +1,10 @@
+{
+  "assets": [
+    {
+      "name": "YunGet-aria2-kernel-arm64-v8a.apk",
+      "browser_download_url": "https://github.com/jiayuxuan123/YunGet/releases/download/v2.7.25/YunGet-aria2-kernel-arm64-v8a.apk",
+      "size": 8136903,
+      "digest": "sha256:5ab894b16dff5bb9b9b1981ba68eb4aad661f8570d0204ea6e2e66e9fa54ff5d"
+    }
+  ]
+}

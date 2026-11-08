@@ -4,7 +4,7 @@
 >
 > **本项目是 [CYQawa/YunX（云析）](https://github.com/CYQawa/YunX) 的二次开发版本**，在其协议与架构基础上进行功能扩展，并将下载能力逐步迁移至独立的 [TurboDL](https://github.com/jiayuxuan123/TurboDL) 下载引擎。遵循 GNU AGPL-3.0 协议开源。
 
-当前版本 **2.7.25**（versionCode 73）· Android 7.0+（minSdk 24，targetSdk 36）· 内置 TurboDL 0.5.0.0
+当前版本 **2.7.26**（versionCode 74）· Android 7.0+（minSdk 24，targetSdk 34）· 内置 TurboDL 0.5.0.1
 
 **官网**：[jiayuxuan123.github.io/YunGet](https://jiayuxuan123.github.io/YunGet/) —— 下载、使用说明、常见问题、隐私与条款
 
@@ -19,6 +19,17 @@
 - 本项目在上游协议解析、网盘功能和 Android 应用结构基础上进行了二次开发。
 - 下载能力已迁移到独立的 [TurboDL](https://github.com/jiayuxuan123/TurboDL) SDK：日常的直链下载走它，HLS 通过它的插件机制接入。项目早期自己写的那套下载实现仍留在代码里，作为可选的兜底引擎。
 - **赞赏渠道说明**：应用内「支持开发」页的赞赏码仅面向**本二次开发版本**的维护；若想支持上游原项目作者，请移步 [上游仓库](https://github.com/CYQawa/YunX) 的捐赠渠道，避免权益混淆。
+
+## 2.7.26 更新
+
+- 内置 TurboDL 升级至 **0.5.0.1**，保留 Android Kotlin/ART 下载路径。
+- 修复 aria2 可选内核下载仅依赖 GitHub API 和直链的问题：增加官网版本清单、官方加速、设置中的下载镜像及直连回退。
+- 内核包下载校验 SHA-256、包名、发布签名和 ARM64 二进制；失败通道不会留下可安装的半包。
+- 新增内核下载取消操作，复用已校验的缓存包，并明确首次安装授权后的操作提示。
+- 下载引擎页显示实际内置版本，并接入「公告与社区」更新说明入口。
+- TurboDL 的 DoH 响应在解析前限制为 64 KiB。
+
+四种应用 APK 均支持覆盖安装；aria2 仍为独立可选 ARM64 内核，无需重新下载已安装且可用的内核。
 
 ## 2.7.25 更新
 
@@ -102,7 +113,7 @@ TurboDL 保持内置，Gopeed 联网获取内核，aria2 拆成独立可选 ARM6
 |---|---|
 | **TurboDL**（默认） | 独立发布的下载 SDK。普通直链、网盘直链、HLS 都走它 |
 | 内置兼容引擎 | 项目早期的实现，固定较满的并发 + 4&nbsp;MB 分块 + 工作窃取；作为兜底 |
-| aria2 | 实验性，用于对照排查；内置可执行文件，**仅 arm64 设备** |
+| aria2 | 实验性，用于对照排查；按需下载独立内核 APK，**仅 arm64 设备** |
 | Gopeed | 磁力 / BT 这类内置分片器做不到的任务。内核不随 APK 分发，需在应用内导入 |
 
 选的引擎跑不起来时报错，而不是悄悄换一个继续下 —— 换个下载器默默下完，比直接失败更难排查。
@@ -290,7 +301,7 @@ HLS 下载功能主要面向**完整资源下载**，而不是实时播放。
 - OkHttp（网络请求与 HTTP 下载）
 - TurboDL（通用下载引擎 SDK，含 HLS 插件）
 - Gopeed（可选内核，用于磁力 / BT 这类任务；不随 APK 分发，需在应用内导入）
-- aria2（内置可执行文件，实验性，仅随 arm64-v8a 包分发）
+- aria2（独立可选内核 APK，实验性，仅支持 arm64-v8a）
 - KSP
 
 ## 安装包与缓存
@@ -299,16 +310,15 @@ Release 同时提供三个按架构拆分的包和一个通用包：
 
 | 包 | 适用设备 | 当前约体积 |
 | --- | --- | --- |
-| `app-arm64-v8a-release.apk` | 绝大多数现代 Android 手机 | 31.9 MB |
-| `app-armeabi-v7a-release.apk` | 32 位 ARM 老设备 | 23.7 MB |
-| `app-x86_64-release.apk` | 64 位模拟器/测试设备 | 23.8 MB |
-| `0-universal-release.apk`（构建产物 `app-universal-release.apk`） | 通用包，也是旧版更新器的过渡包 | 约 33 MB |
+| `app-arm64-v8a-release.apk` | 绝大多数现代 Android 手机 | 约 26.8 MB |
+| `app-armeabi-v7a-release.apk` | 32 位 ARM 老设备 | 约 26.7 MB |
+| `app-x86_64-release.apk` | 64 位模拟器/测试设备 | 约 26.8 MB |
+| `0-YunGet-2.7.26-universal.apk`（构建产物 `app-universal-release.apk`） | 通用包，也是旧版更新器的过渡包 | 约 28 MB |
 
-`arm64-v8a` 包含 aria2 可执行文件和 QuickJS，所以比另外两个包大；如果要进一步显著缩小主包，
-需要把 aria2 改成按需下载的内核，而不是继续只做 ABI 拆分。
+aria2 已拆为按需下载安装的独立 ARM64 内核 APK，Gopeed 内核也按需获取，主包不再内置这两个内核。
 
 **过渡版本规则：**2.7.22 及更早的更新器只会取 Release 中第一个 `.apk`，不认识 ABI。
-目前 GitHub API 返回的首个 APK 是 `0-universal-release.apk`；发布时必须实际检查 API 返回顺序，不能只依赖上传顺序或文件名。旧版用户先升级到 2.7.23；
+目前 GitHub API 返回的首个 APK 是 `0-YunGet-2.7.26-universal.apk`；发布时必须实际检查 API 返回顺序，不能只依赖上传顺序或文件名。旧版用户先升级到 2.7.23；
 2.7.23 起更新器会按 `Build.SUPPORTED_ABIS` 选择精确 ABI，找不到才使用兼容 32 位包或 universal。
 后续 Release 也应保留 universal 包，不能只上传三个分架构包。
 
@@ -323,12 +333,12 @@ Release 同时提供三个按架构拆分的包和一个通用包：
 - Android SDK（`local.properties` 里的 `sdk.dir`，或环境变量 `ANDROID_HOME` / `ANDROID_SDK_ROOT`）
 - `compileSdk 36` / `minSdk 24` / `targetSdk 34`
 
-**获取 TurboDL SDK。** 依赖里的 `dev.turbodl:*:0.4.1.0` 从 TurboDL Release 的离线包或本地 Maven 解析：
+**获取 TurboDL SDK。** 依赖里的 `dev.turbodl:*:0.5.0.1` 从 TurboDL Release 的离线包或本地 Maven 解析：
 
 ```kotlin
 // settings.gradle.kts 的 dependencyResolutionManagement
 repositories {
-    maven { url = uri("https://jitpack.io") }   // TurboDL SDK
+    mavenLocal() // 先导入 TurboDL Release 的 mavenLocal 离线包
     google()
     mavenCentral()
 }
@@ -337,11 +347,11 @@ repositories {
 ```kotlin
 // app/build.gradle.kts
 dependencies {
-    implementation("com.github.jiayuxuan123.TurboDL:turbodl-core:0.4.1.0")
+    implementation("dev.turbodl:turbodl-core:0.5.0.1")
 }
 ```
 
-若所在网络访问 JitPack 不稳，也可从 TurboDL 的 Release 页取离线包，
+从 TurboDL 的 Release 页取 mavenLocal 离线包，
 解压到 `~/.m2/repository`（本地开发时 `settings.gradle.kts` 里的 `mavenLocal()` 会优先命中）。
 
 > `mavenLocal()` 排在仓库列表**最前**是有意的：本地开发时优先用它，

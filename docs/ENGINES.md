@@ -16,7 +16,7 @@
 |---|---|---|
 | TurboDL | `TurboDownloadManager`，架在 `TurboBootstrap` + `TurboClient` 上 | 默认选择，普通 HTTP/HTTPS 直链 |
 | 内置兼容引擎 | `LegacyDownloadManager` + `AdaptiveDownloadEngine` | 兜底 |
-| aria2 | APK 里自带的 `libaria2c.so` | 实验性，用来对照排查 |
+| aria2 | 独立可选内核 APK 提供的 `libaria2c.so` | 实验性，用来对照排查 |
 | Gopeed | 跑在应用进程里的 Go 内核（gomobile 编译） | 磁力 / BT 这类任务 |
 
 **TurboDL** 是默认引擎，代码里是 `TurboDownloadManager`，底下由 `TurboBootstrap` 启动、`TurboClient` 干活。普通 HTTP/HTTPS 直链、分片并发、断点续传、插件形式的 HLS 都归它管，还支持现场诊断（把连接状态一类的信息导出来看）。没有特别理由就别换。
@@ -51,6 +51,14 @@
 也就是说，网盘通道能保证的只有「文件大小对得上」，没有签名校验这一层。
 
 解开之后内核装到 `filesDir/gopeed/lib/libgojni.so`，引擎数据放在 `filesDir/gopeed/store` 和 `filesDir/gopeed/tmp`，导入完成后临时包会删掉。运行期的 Gopeed 不监听任何 TCP 端口（apiEnable 是关的）。
+
+## aria2 可选内核下载与安装
+
+在「设置 → 下载引擎」点击「下载 / 更新 aria2 可选内核」。应用优先读取官网发布清单，失败时尝试仓库清单、GitHub API 和随包保存的已发布版本信息；文件下载依次尝试官方加速、设置中的 HTTPS 镜像和 GitHub 直连。
+
+每份包都会核对 SHA-256、包名、发布签名与 ARM64 二进制。下载过程中可取消；已校验的安装包会复用。首次安装可能需要授权「允许安装此来源的应用」，授权后返回并点击「安装已下载的 aria2 内核」。完成系统安装后，点击「检测 aria2 是否可用」再切换。
+
+aria2 仅支持 arm64-v8a。普通 HTTP/HTTPS 和网盘直链默认使用 TurboDL，无需安装此内核。
 
 ## HLS 的两条路
 

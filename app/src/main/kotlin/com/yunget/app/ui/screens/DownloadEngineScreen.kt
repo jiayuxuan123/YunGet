@@ -93,6 +93,7 @@ import androidx.lifecycle.compose.LocalLifecycleOwner
 import com.yunget.app.data.download.Aria2Executor
 import com.yunget.app.data.download.Aria2ProbeResult
 import com.yunget.app.data.download.DownloadEngineRegistry
+import com.yunget.app.data.download.EngineBuildInfo
 import com.yunget.app.data.gopeed.GopeedEngine
 import com.yunget.app.data.gopeed.KernelProvisioner
 import com.yunget.app.data.prefs.SettingsRepository
@@ -148,7 +149,11 @@ import androidx.compose.material3.TopAppBar
  */
 @OptIn(ExperimentalLayoutApi::class, ExperimentalMaterial3Api::class)
 @Composable
-fun DownloadEngineScreen(onBack: () -> Unit, modifier: Modifier = Modifier) {
+fun DownloadEngineScreen(
+    onBack: () -> Unit,
+    onOpenAnnouncement: () -> Unit = {},
+    modifier: Modifier = Modifier,
+) {
     BackHandler { onBack() }
 
     val context = LocalContext.current
@@ -167,6 +172,7 @@ fun DownloadEngineScreen(onBack: () -> Unit, modifier: Modifier = Modifier) {
     var aria2Result by remember { mutableStateOf<Aria2ProbeResult?>(null) }
     var aria2Checking by remember { mutableStateOf(false) }
     var aria2Installer by remember { mutableStateOf<java.io.File?>(null) }
+    var aria2DownloadJob by remember { mutableStateOf<kotlinx.coroutines.Job?>(null) }
     var busy by remember { mutableStateOf(false) }
     var soBytes by remember { mutableStateOf(0L) }
     var engineVersion by remember { mutableStateOf("") }
@@ -406,6 +412,15 @@ fun DownloadEngineScreen(onBack: () -> Unit, modifier: Modifier = Modifier) {
                                 style = MaterialTheme.typography.bodySmall,
                                 color = MaterialTheme.colorScheme.onSurfaceVariant
                             )
+                            Text(
+                                "TurboDL ${EngineBuildInfo.TURBO_DL_VERSION} · Android 使用 " +
+                                    "${EngineBuildInfo.ANDROID_RUNTIME_LABEL} 稳定路径",
+                                style = MaterialTheme.typography.labelMedium,
+                                color = MaterialTheme.colorScheme.primary
+                            )
+                            TextButton(onClick = onOpenAnnouncement) {
+                                Text("查看 0.5.0.1 更新公告")
+                            }
                             EngineActionButton(
                                 selected = !engineOn,
                                 icon = Icons.Outlined.SwapHoriz,
@@ -476,14 +491,19 @@ fun DownloadEngineScreen(onBack: () -> Unit, modifier: Modifier = Modifier) {
                                 Button(
                                     onClick = {
                                         busy = true
-                                        scope.launch {
+                                        aria2DownloadJob = scope.launch {
                                             try {
-                                                val apk = aria2Installer ?: com.yunget.app.data.download.Aria2KernelProvisioner.download(context) { done, total ->
-                                                    notice = "aria2 内核下载：${done * 100 / total}%"
+                                                val apk = aria2Installer?.takeIf { it.isFile }
+                                                    ?: com.yunget.app.data.download.Aria2KernelProvisioner.download(
+                                                        context,
+                                                        onStatus = { status -> scope.launch { notice = status } },
+                                                    ) { done, total ->
+                                                        scope.launch { notice = "aria2 内核下载：${done * 100 / total}%" }
                                                 }
                                                 aria2Installer = apk
-                                                com.yunget.app.data.download.Aria2KernelProvisioner.install(context, apk)
-                                                notice = "请完成系统安装，返回后检测 aria2 是否可用"
+                                                val opened = com.yunget.app.data.download.Aria2KernelProvisioner.install(context, apk)
+                                                notice = if (opened) "请完成系统安装，返回后检测 aria2 是否可用"
+                                                    else "请允许安装此来源的应用，返回后点击「安装已下载的 aria2 内核」"
                                             } catch (error: Exception) {
                                                 if (error is kotlinx.coroutines.CancellationException) throw error
                                                 failure = error.message ?: "内核安装失败"
@@ -493,6 +513,13 @@ fun DownloadEngineScreen(onBack: () -> Unit, modifier: Modifier = Modifier) {
                                     enabled = !busy && Aria2Executor.isSupportedAbi(),
                                     modifier = Modifier.fillMaxWidth()
                                 ) { Text(if (busy) "正在获取内核…" else if (aria2Installer != null) "安装已下载的 aria2 内核" else "下载 / 更新 aria2 可选内核") }
+
+                                if (aria2DownloadJob?.isActive == true) {
+                                    TextButton(onClick = {
+                                        aria2DownloadJob?.cancel()
+                                        notice = "已取消 aria2 内核下载"
+                                    }) { Text("取消内核下载") }
+                                }
 
                                 // aria2 可用性检测：先确认"这台设备能不能跑"再切过去，
                                 // 结果含确切失败原因（ENOENT / EACCES / ENOEXEC 语义完全不同）。

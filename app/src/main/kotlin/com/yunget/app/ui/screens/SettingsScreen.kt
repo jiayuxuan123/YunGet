@@ -1466,6 +1466,10 @@ fun SettingsScreen(
             onBack = {
                 showDownloadEngine = false
                 engineChoice = settingsRepo.downloadEngine
+            },
+            onOpenAnnouncement = {
+                showDownloadEngine = false
+                onAnnouncementClick()
             }
         )
     }

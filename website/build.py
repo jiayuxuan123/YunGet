@@ -445,6 +445,11 @@ class Site:
         emit("robots.txt", self.robots())
         emit("404.html", self.not_found())
 
+        # 发布清单同时供内核下载使用，避免客户端强依赖 GitHub API。
+        release_manifest = self.out / "assets/releases.json"
+        release_manifest.parent.mkdir(parents=True, exist_ok=True)
+        shutil.copy2(self.root / "website/data/releases.json", release_manifest)
+        written.add("assets/releases.json")
         # 静态资源原样拷贝（图片压缩由 make_assets.py 负责，这里不做二次处理）。
         # .css/.js 额外写一份**带内容指纹**的文件名：页面引用的是那个名字，
         # 浏览器 URL 变了缓存自然失效（见 sitekit.asset 的说明）。

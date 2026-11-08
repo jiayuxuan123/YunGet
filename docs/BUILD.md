@@ -37,7 +37,7 @@ git clone https://github.com/jiayuxuan123/YunGet.git
 cd YunGet
 # 配置 local.properties: sdk.dir=/path/to/Android/sdk
 ./gradlew :app:assembleRelease
-# 产物：app/build/outputs/apk/release/app-release.apk
+# 产物：app/build/outputs/apk/release/ 下四种架构 APK
 ```
 
 两点补充：
@@ -51,7 +51,7 @@ cd YunGet
 ./gradlew :app:testDebugUnitTest
 ```
 
-测试有 10 个文件、68 个用例，全部是纯 JVM 测试：不依赖 Android 运行时，也不需要模拟器。覆盖的内容包括版本号比较、分享链接解析、迅雷口令、数据库迁移契约、加密凭证契约、下载引擎枚举，以及进度落盘的节流逻辑。
+应用单元测试使用纯 JVM：不依赖 Android 运行时，也不需要模拟器。覆盖的内容包括版本号比较、分享链接解析、迅雷口令、数据库迁移契约、加密凭证契约、下载引擎枚举，以及进度落盘的节流逻辑。
 
 仓库里没有 `androidTest` 目录，所以跑测试之前不用准备设备或模拟器。
 
@@ -59,7 +59,7 @@ cd YunGet
 
 | 路径 | 是什么 |
 |---|---|
-| `app/src/main/jniLibs/arm64-v8a/libaria2c.so` | aria2 的二进制，只有 arm64 |
+| `aria2-kernel/src/main/jniLibs/arm64-v8a/libaria2c.so` | aria2 可选内核 APK 的二进制，只有 arm64，不放入主应用包 |
 | `app/libs/gopeed-classes.jar` | Gopeed 内核的 Java 接口类 |
 
 不过 Gopeed 的 `.so` 内核不在仓库里，它由用户在应用内导入，构建时不需要（细节见 `docs/ENGINES.md`）。

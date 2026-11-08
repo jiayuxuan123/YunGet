@@ -28,6 +28,7 @@ import androidx.compose.material.icons.outlined.Code
 import androidx.compose.material.icons.outlined.Memory
 import androidx.compose.material.icons.outlined.Public
 import com.yunget.app.util.AppLinks
+import com.yunget.app.data.download.EngineBuildInfo
 import androidx.compose.material.icons.outlined.Info
 import androidx.compose.material.icons.outlined.Link
 import androidx.compose.material.icons.outlined.OpenInNew
@@ -175,7 +176,7 @@ fun AboutScreen(
 
             Spacer(modifier = Modifier.height(8.dp))
             Text(
-                text = "云取 v$versionName · Made with ❤ and deepseek",
+                text = "云取 v$versionName · TurboDL ${EngineBuildInfo.TURBO_DL_VERSION} · Made with ❤ and deepseek",
                 style = MaterialTheme.typography.labelMedium,
                 color = MaterialTheme.colorScheme.outline,
                 modifier = Modifier
