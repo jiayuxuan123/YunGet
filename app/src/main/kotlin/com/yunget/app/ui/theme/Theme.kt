@@ -21,8 +21,11 @@ package com.yunget.app.ui.theme
 import android.app.Activity
 import android.os.Build
 import androidx.compose.foundation.isSystemInDarkTheme
+import androidx.compose.animation.core.FiniteAnimationSpec
+import androidx.compose.animation.core.snap
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.MaterialExpressiveTheme
+import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.MotionScheme
 import androidx.compose.material3.Shapes
 import androidx.compose.material3.lightColorScheme
@@ -31,11 +34,14 @@ import androidx.compose.material3.dynamicDarkColorScheme
 import androidx.compose.material3.dynamicLightColorScheme
 import androidx.compose.material3.Typography
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.Immutable
 import androidx.compose.runtime.remember
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.toArgb
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalConfiguration
+import androidx.compose.ui.platform.LocalInspectionMode
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -285,12 +291,20 @@ private val CornerLarge = 16.dp
 private val ExpressiveShapes = Shapes(
     extraSmall = RoundedCornerShape(4.dp),
     small = RoundedCornerShape(8.dp),
-    medium = RoundedCornerShape(12.dp),
+    medium = RoundedCornerShape(16.dp),
     large = RoundedCornerShape(CornerLarge),
     largeIncreased = RoundedCornerShape(20.dp),
     extraLarge = RoundedCornerShape(28.dp),
     extraLargeIncreased = RoundedCornerShape(32.dp),
     extraExtraLarge = RoundedCornerShape(48.dp)
+)
+
+private val ClassicShapes = Shapes(
+    extraSmall = RoundedCornerShape(4.dp),
+    small = RoundedCornerShape(8.dp),
+    medium = RoundedCornerShape(12.dp),
+    large = RoundedCornerShape(16.dp),
+    extraLarge = RoundedCornerShape(24.dp),
 )
 
 /** 列表组内的位置：决定这一项该用分段圆角里的哪一档 */
@@ -336,19 +350,37 @@ internal fun listGroupShape(index: Int, count: Int): RoundedCornerShape = listGr
  *   spatialDefault/effectsDefault 等顶层函数也用它，从而保证「组件内部动效」与
  *   「页面自定义动效」用的是同一个 scheme；只有一处可改。
  */
-internal val AppMotionScheme = MotionScheme.expressive()
+private val expressiveMotion = MotionScheme.expressive()
+private val standardMotion = MotionScheme.standard()
+private val instantMotion = object : MotionScheme {
+    override fun <T> defaultSpatialSpec(): FiniteAnimationSpec<T> = snap()
+    override fun <T> fastSpatialSpec(): FiniteAnimationSpec<T> = snap()
+    override fun <T> slowSpatialSpec(): FiniteAnimationSpec<T> = snap()
+    override fun <T> defaultEffectsSpec(): FiniteAnimationSpec<T> = snap()
+    override fun <T> fastEffectsSpec(): FiniteAnimationSpec<T> = snap()
+    override fun <T> slowEffectsSpec(): FiniteAnimationSpec<T> = snap()
+}
+internal val AppMotionScheme: MotionScheme
+    get() = when (ThemeController.motionLevel) {
+        1 -> standardMotion
+        2 -> instantMotion
+        else -> expressiveMotion
+    }
 
 @Composable
 fun ComposeEmptyActivityTheme(
     darkTheme: Boolean = isSystemInDarkTheme(),
     dynamicColor: Boolean = true,
+    uiStyleOverride: AppUiStyle? = null,
     content: @Composable () -> Unit
 ) {
     val context = LocalContext.current
+    val configuration = LocalConfiguration.current
     // 主题设置由 ThemeController 内存状态驱动（首次从 SharedPreferences 加载）
-    ThemeController.init(context)
+    val inspecting = LocalInspectionMode.current
+    if (!inspecting) ThemeController.init(context)
     // 深色模式：0=跟随系统，1=浅色，2=深色
-    val isDark = when (ThemeController.darkMode) {
+    val isDark = if (inspecting) darkTheme else when (ThemeController.darkMode) {
         1 -> false
         2 -> true
         else -> darkTheme
@@ -357,9 +389,11 @@ fun ComposeEmptyActivityTheme(
         // 动态色彩：Android 12+ 从系统壁纸取色。
         // 系统只给"标准对比度"这一套，选中中等/高对比时改走种子色路径 ——
         // 用动态色算出的种子重新生成带对比度的方案，观感仍是壁纸色调。
-        ThemeController.colorMode == 0 && Build.VERSION.SDK_INT >= Build.VERSION_CODES.S &&
+        dynamicColor && !inspecting && ThemeController.colorMode == 0 && Build.VERSION.SDK_INT >= Build.VERSION_CODES.S &&
             ThemeController.contrastLevel == 0 -> {
-            if (isDark) dynamicDarkColorScheme(context) else dynamicLightColorScheme(context)
+            remember(context, isDark) {
+                if (isDark) dynamicDarkColorScheme(context) else dynamicLightColorScheme(context)
+            }
         }
         // 自定义种子色（预选色 / 颜色卡自选）：基于种子色生成完整 Material3 方案
         ThemeController.colorMode == 2 ||
@@ -377,19 +411,55 @@ fun ComposeEmptyActivityTheme(
         // 内置方案：标准 / 中等对比 / 高对比 × 浅色 / 深色（六选一）
         else -> builtinScheme(isDark, ThemeController.contrastLevel)
     }
+    val uiStyle = uiStyleOverride ?: if (ThemeController.uiStyleMode == 0) {
+        AppUiStyle.CLASSIC
+    } else {
+        AppUiStyle.MODERN
+    }
 
 
     // Material 3 Expressive 主题入口：一次性注入 colorScheme / motionScheme / shapes / typography，
     // 并置 LocalUsingExpressiveTheme=true —— 所有 M3 组件据此切换到 Expressive 形态
     // （尺寸、圆角、形变、弹簧动效），无需逐个组件改造。
     // 颜色部分完全沿用原有逻辑（动态取色 / 种子色 / 深浅色 / 对比度方案），Expressive 不改变颜色角色。
-    MaterialExpressiveTheme(
-        colorScheme = colorScheme,
-        motionScheme = AppMotionScheme,
-        shapes = ExpressiveShapes,
-        typography = Typography,
-        content = content
-    )
+    val autoDensity = remember(configuration.screenWidthDp, configuration.screenHeightDp) {
+        autoUiDensity(configuration.screenWidthDp, configuration.screenHeightDp)
+    }
+    val fontScale = when {
+        uiStyle == AppUiStyle.CLASSIC -> 1f
+        ThemeController.autoUiDensity -> autoDensity.fontScale
+        else -> ThemeController.uiFontScale
+    }
+    val spacingScale = when {
+        uiStyle == AppUiStyle.CLASSIC -> 1f
+        ThemeController.autoUiDensity -> autoDensity.spacingScale
+        else -> ThemeController.uiSpacingScale
+    }
+    val appTypography = remember(uiStyle, fontScale) {
+        if (uiStyle == AppUiStyle.CLASSIC) buildClassicTypography()
+        else buildAppTypography(fontScale)
+    }
+    CompositionLocalProvider(
+        LocalUiMetrics provides UiMetrics(fontScale, spacingScale),
+        LocalAppUiStyle provides uiStyle,
+    ) {
+        if (uiStyle == AppUiStyle.CLASSIC) {
+            MaterialTheme(
+                colorScheme = colorScheme,
+                shapes = ClassicShapes,
+                typography = appTypography,
+                content = content,
+            )
+        } else {
+            MaterialExpressiveTheme(
+                colorScheme = colorScheme,
+                motionScheme = AppMotionScheme,
+                shapes = ExpressiveShapes,
+                typography = appTypography,
+                content = content
+            )
+        }
+    }
 }
 
 /**
@@ -444,7 +514,7 @@ private fun seedColorScheme(seedArgb: Long, dark: Boolean, contrast: Int = 0): a
     val neutral = remember(seedArgb, dark, contrast) {
         SchemeNeutral(Hct.fromInt(seedArgb.toInt()), dark, contrastValue)
     }
-    return if (dark) darkColorScheme(
+    return remember(scheme, neutral, dark) { if (dark) darkColorScheme(
         primary = Color(scheme.primary),
         onPrimary = Color(scheme.onPrimary),
         primaryContainer = Color(scheme.primaryContainer),
@@ -516,5 +586,5 @@ private fun seedColorScheme(seedArgb: Long, dark: Boolean, contrast: Int = 0): a
         surfaceContainer = Color(neutral.surfaceContainer),
         surfaceContainerHigh = Color(neutral.surfaceContainerHigh),
         surfaceContainerHighest = Color(neutral.surfaceContainerHighest),
-    )
+    ) }
 }

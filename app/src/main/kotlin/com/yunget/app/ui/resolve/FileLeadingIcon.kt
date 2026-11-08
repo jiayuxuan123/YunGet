@@ -2,7 +2,6 @@ package com.yunget.app.ui.resolve
 
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.*
-import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.outlined.Folder
@@ -46,7 +45,7 @@ internal fun FileLeadingIcon(file: ShareFile) {
     Box(
         modifier = Modifier
             .size(40.dp)
-            .clip(RoundedCornerShape(9.dp))
+            .clip(RoundedCornerShape(16.dp))
             .background(MaterialTheme.colorScheme.surfaceContainerHighest),
         contentAlignment = Alignment.Center
     ) {
@@ -54,7 +53,7 @@ internal fun FileLeadingIcon(file: ShareFile) {
             imageVector = Icons.Outlined.InsertDriveFile,
             contentDescription = null,
             modifier = Modifier.size(20.dp),
-            tint = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.4f)
+            tint = MaterialTheme.colorScheme.onSurfaceVariant
         )
         AsyncImage(
             model = request,
@@ -65,12 +64,12 @@ internal fun FileLeadingIcon(file: ShareFile) {
     }
 }
 
-/** 行首圆形图标（文件夹 / 没有缩略图的文件）：网盘页、解析页与移动/转存选择器共用同一形态 */
+/** 文件夹及无缩略图文件的 tonal 图标，与解析列表的 16dp 形状保持一致。 */
 @Composable
 private fun FileIconBadge(file: ShareFile) {
     Surface(
         modifier = Modifier.size(40.dp),
-        shape = CircleShape,
+        shape = RoundedCornerShape(16.dp),
         color = if (file.isdir) {
             MaterialTheme.colorScheme.secondaryContainer
         } else {

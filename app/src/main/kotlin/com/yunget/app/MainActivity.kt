@@ -2,6 +2,10 @@ package com.yunget.app
 
 import android.content.Intent
 import android.os.Bundle
+import android.database.ContentObserver
+import android.os.Handler
+import android.os.Looper
+import android.provider.Settings
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
@@ -9,9 +13,22 @@ import androidx.compose.runtime.mutableStateOf
 import com.yunget.app.ui.MainScreen
 import com.yunget.app.ui.screens.SafetyNoticeDialog
 import com.yunget.app.ui.theme.ComposeEmptyActivityTheme
+import com.yunget.app.ui.theme.ThemeController
+import com.yunget.app.ui.theme.AppMotionDurationScale
+import androidx.compose.ui.platform.createLifecycleAwareWindowRecomposer
 import com.yunget.app.util.DeepLinks
 
 class MainActivity : ComponentActivity() {
+    private val motionScale = AppMotionDurationScale()
+    private val animationObserver = object : ContentObserver(Handler(Looper.getMainLooper())) {
+        override fun onChange(selfChange: Boolean) { updateSystemMotionScale() }
+    }
+
+    private fun updateSystemMotionScale() {
+        motionScale.systemScale = Settings.Global.getFloat(
+            contentResolver, Settings.Global.ANIMATOR_DURATION_SCALE, 1f,
+        )
+    }
 
     /**
      * 从深链接 / 系统分享 / 选中文本解析拿到的待处理内容。
@@ -29,11 +46,20 @@ class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         enableEdgeToEdge()
+        ThemeController.init(this)
+        updateSystemMotionScale()
+        contentResolver.registerContentObserver(
+            Settings.Global.getUriFor(Settings.Global.ANIMATOR_DURATION_SCALE), false, animationObserver,
+        )
         // 只在**首次创建**时消费 intent：
         // 屏幕旋转 / 深色模式切换 / 进程重建都会重新走 onCreate，
         // 那时 savedInstanceState 非空，再解析一次会让用户莫名其妙被弹回解析页。
         if (savedInstanceState == null) handleDeepLink(intent)
-        setContent {
+        val recomposer = window.decorView.createLifecycleAwareWindowRecomposer(
+            coroutineContext = motionScale,
+            lifecycle = lifecycle,
+        )
+        setContent(parent = recomposer) {
             ComposeEmptyActivityTheme {
                 MainScreen(
                     incomingLink = pendingLink.value,
@@ -43,6 +69,11 @@ class MainActivity : ComponentActivity() {
                 SafetyNoticeDialog()
             }
         }
+    }
+
+    override fun onDestroy() {
+        contentResolver.unregisterContentObserver(animationObserver)
+        super.onDestroy()
     }
 
     /**

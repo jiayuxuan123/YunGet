@@ -24,65 +24,48 @@ import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.sp
 
-/**
- * 全局排版：整体字号保持克制，符合现代紧凑设计。
- */
-val Typography = Typography(
-    // 顶部大标题（折叠后缩小），避免过大
-    headlineMedium = TextStyle(
-        fontFamily = FontFamily.Default,
-        fontWeight = FontWeight.SemiBold,
-        fontSize = 22.sp,
-        lineHeight = 28.sp,
-        letterSpacing = 0.sp
-    ),
-    titleLarge = TextStyle(
-        fontFamily = FontFamily.Default,
-        fontWeight = FontWeight.SemiBold,
-        fontSize = 18.sp,
-        lineHeight = 24.sp,
-        letterSpacing = 0.sp
-    ),
-    titleMedium = TextStyle(
-        fontFamily = FontFamily.Default,
-        fontWeight = FontWeight.Medium,
-        fontSize = 16.sp,
-        lineHeight = 22.sp,
-        letterSpacing = 0.15.sp
-    ),
-    bodyLarge = TextStyle(
-        fontFamily = FontFamily.Default,
-        fontWeight = FontWeight.Normal,
-        fontSize = 15.sp,
-        lineHeight = 22.sp,
-        letterSpacing = 0.5.sp
-    ),
-    bodyMedium = TextStyle(
-        fontFamily = FontFamily.Default,
-        fontWeight = FontWeight.Normal,
-        fontSize = 13.sp,
-        lineHeight = 18.sp,
-        letterSpacing = 0.25.sp
-    ),
-    labelLarge = TextStyle(
-        fontFamily = FontFamily.Default,
-        fontWeight = FontWeight.Medium,
-        fontSize = 14.sp,
-        lineHeight = 18.sp,
-        letterSpacing = 0.1.sp
-    ),
-    labelMedium = TextStyle(
-        fontFamily = FontFamily.Default,
-        fontWeight = FontWeight.Medium,
-        fontSize = 12.sp,
-        lineHeight = 16.sp,
-        letterSpacing = 0.5.sp
-    ),
-    labelSmall = TextStyle(
-        fontFamily = FontFamily.Default,
-        fontWeight = FontWeight.Medium,
-        fontSize = 11.sp,
-        lineHeight = 14.sp,
-        letterSpacing = 0.5.sp
-    )
+/** Material type roles with comfortable CJK line heights and no bundled font payload. */
+private fun appText(size: Float, height: Float, weight: FontWeight = FontWeight.Normal) = TextStyle(
+    fontFamily = FontFamily.Default,
+    fontWeight = weight,
+    fontSize = size.sp,
+    lineHeight = height.sp,
+    letterSpacing = 0.sp,
 )
+
+fun buildAppTypography(scale: Float = 1f): Typography {
+    fun size(value: Int) = (value * scale).coerceAtLeast(9f)
+    return Typography(
+        displayLarge = appText(size(40), size(48)),
+        displayMedium = appText(size(34), size(42)),
+        displaySmall = appText(size(29), size(36)),
+        headlineLarge = appText(size(26), size(33), FontWeight.SemiBold),
+        headlineMedium = appText(size(23), size(30), FontWeight.SemiBold),
+        headlineSmall = appText(size(20), size(27), FontWeight.SemiBold),
+        titleLarge = appText(size(22), size(28), FontWeight.SemiBold),
+        titleMedium = appText(size(16), size(22), FontWeight.Medium),
+        titleSmall = appText(size(14), size(20), FontWeight.Medium),
+        bodyLarge = appText(size(16), size(23)),
+        bodyMedium = appText(size(14), size(20)),
+        bodySmall = appText(size(12), size(17)),
+        labelLarge = appText(size(14), size(19), FontWeight.Medium),
+        labelMedium = appText(size(12), size(16), FontWeight.Medium),
+        labelSmall = appText(size(11), size(15), FontWeight.Medium),
+    )
+}
+
+/** 2.7.26 经典界面的字阶；不参与新版自动密度缩放。 */
+fun buildClassicTypography(): Typography = Typography(
+    headlineMedium = appText(22f, 28f, FontWeight.SemiBold),
+    titleLarge = appText(18f, 24f, FontWeight.SemiBold),
+    titleMedium = appText(16f, 22f, FontWeight.Medium),
+    titleSmall = appText(14f, 20f, FontWeight.Medium),
+    bodyLarge = appText(15f, 22f),
+    bodyMedium = appText(13f, 18f),
+    bodySmall = appText(12f, 16f),
+    labelLarge = appText(14f, 18f, FontWeight.Medium),
+    labelMedium = appText(12f, 16f, FontWeight.Medium),
+    labelSmall = appText(11f, 14f, FontWeight.Medium),
+)
+
+val Typography = buildAppTypography()

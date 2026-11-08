@@ -1,86 +1,77 @@
 /*
  * YunGet (云取) - A network drive share-link parser and high-speed downloader for Android.
  * Copyright (C) 2026 CYQawa
- *
- * This program is free software: you can redistribute it and/or modify
- * it under the terms of the GNU Affero General Public License as published by
- * the Free Software Foundation, either version 3 of the License, or
- * (at your option) any later version.
- *
- * This program is distributed in the hope that it will be useful,
- * but WITHOUT ANY WARRANTY; without even the implied warranty of
- * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
- * GNU Affero General Public License for more details.
- *
- * You should have received a copy of the GNU Affero General Public License
- * along with this program.  If not, see <https://www.gnu.org/licenses/>.
+ * SPDX-License-Identifier: AGPL-3.0-or-later
  */
-
 package com.yunget.app.ui.screens
 
 import android.content.ComponentName
 import android.content.pm.PackageManager
 import android.os.Build
 import androidx.activity.compose.BackHandler
-import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.animateColorAsState
-import androidx.compose.animation.core.Animatable
-import androidx.compose.animation.core.FastOutSlowInEasing
-import androidx.compose.animation.core.LinearEasing
-import androidx.compose.animation.core.animateFloatAsState
-import androidx.compose.animation.core.tween
-import androidx.compose.animation.expandVertically
-import androidx.compose.animation.fadeIn
-import androidx.compose.animation.fadeOut
-import androidx.compose.animation.shrinkVertically
+import androidx.compose.animation.core.FiniteAnimationSpec
+import androidx.compose.animation.core.animateDpAsState
+import androidx.compose.animation.core.snap
 import androidx.compose.foundation.BorderStroke
-import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.Image
-import androidx.compose.foundation.background
-import androidx.compose.foundation.border
-import androidx.compose.foundation.clickable
-import androidx.compose.foundation.gestures.detectDragGestures
-import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.ColumnScope
+import androidx.compose.foundation.layout.ExperimentalLayoutApi
+import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
-import androidx.compose.foundation.layout.wrapContentHeight
-import androidx.compose.foundation.lazy.LazyRow
-import androidx.compose.foundation.lazy.itemsIndexed
+import androidx.compose.foundation.layout.widthIn
+import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.selection.selectable
+import androidx.compose.foundation.selection.selectableGroup
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.foundation.text.BasicTextField
+import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
-import androidx.compose.material.icons.filled.ExpandMore
 import androidx.compose.material.icons.outlined.Check
+import androidx.compose.material.icons.outlined.CloudDownload
 import androidx.compose.material.icons.outlined.Palette
-import androidx.compose.material.icons.outlined.StarOutline
+import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.Button
+import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.FilledTonalButton
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.OutlinedTextField
+import androidx.compose.material3.RadioButton
 import androidx.compose.material3.Scaffold
+import androidx.compose.material3.SegmentedButton
+import androidx.compose.material3.SegmentedButtonDefaults
+import androidx.compose.material3.SingleChoiceSegmentedButtonRow
+import androidx.compose.material3.Slider
 import androidx.compose.material3.Surface
+import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
+import androidx.compose.material3.TopAppBar
 import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableFloatStateOf
-import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.saveable.rememberSaveable
@@ -88,97 +79,52 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.draw.clipToBounds
-import androidx.compose.ui.draw.rotate
-import androidx.compose.ui.geometry.Offset
-import androidx.compose.ui.geometry.Size
-import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.graphics.SolidColor
-import androidx.compose.ui.graphics.drawscope.Stroke
-import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.ui.graphics.luminance
 import androidx.compose.ui.graphics.toArgb
-import androidx.compose.ui.input.pointer.pointerInput
-import androidx.compose.ui.layout.onSizeChanged
+import androidx.compose.ui.input.nestedscroll.nestedScroll
+import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.res.painterResource
-import androidx.compose.ui.text.font.FontFamily
+import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardCapitalization
 import androidx.compose.ui.text.input.KeyboardType
-import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
-import androidx.compose.ui.window.Dialog
 import com.yunget.app.R
 import com.yunget.app.data.prefs.SettingsRepository
 import com.yunget.app.ui.theme.ThemeController
+import com.yunget.app.ui.theme.LocalUiMetrics
+import com.yunget.app.ui.theme.autoUiDensity
 import com.yunget.app.ui.theme.effectsDefault
-import com.yunget.app.ui.theme.effectsFast
 import com.yunget.app.ui.theme.spatialDefault
-import com.yunget.app.ui.theme.spatialFast
-import androidx.compose.material3.Button
-import androidx.compose.material3.Card
-import androidx.compose.material3.IconButton
-import androidx.compose.material3.Switch
-import androidx.compose.material3.TextButton
-import androidx.compose.material3.TopAppBar
+import java.util.Locale
 
-/** 预置主题色（Material 风格种子色） */
+/** 种子色仅用于选色样本，页面本身使用 Material 语义颜色。 */
 private val presetColors = listOf(
-    "蓝色" to 0xFF415F91L,
-    "靛蓝" to 0xFF3F51B5L,
-    "紫色" to 0xFF6750A4L,
-    "玫红" to 0xFFC2185BL,
-    "红色" to 0xFFB3261EL,
-    "橙色" to 0xFFF4631CL,
-    "金黄" to 0xFFF9A825L,
-    "绿色" to 0xFF38761DL,
-    "青色" to 0xFF00897BL,
-    "天蓝" to 0xFF0288D1L,
+    "蓝色" to 0xFF415F91L, "靛蓝" to 0xFF3F51B5L, "紫色" to 0xFF6750A4L,
+    "玫红" to 0xFFC2185BL, "红色" to 0xFFB3261EL, "橙色" to 0xFFF4631CL,
+    "金黄" to 0xFFF9A825L, "绿色" to 0xFF38761DL, "青色" to 0xFF00897BL, "天蓝" to 0xFF0288D1L
 )
 
-/**
- * 主题与外观设置页（参考 WebIDE ThemeSettingsItem 风格）：
- * - 外观模式：FilterChip 胶囊单选（跟随系统 / 浅色 / 深色）
- * - 主题色：可折叠卡片，动态色彩开关（Android12+）+ LazyRow 色圆选择 + 自定义调色盘
- */
-@OptIn(ExperimentalMaterial3Api::class)
+@OptIn(ExperimentalMaterial3Api::class, ExperimentalLayoutApi::class)
 @Composable
-fun ThemeScreen(
-    onBack: () -> Unit,
-    modifier: Modifier = Modifier
-) {
+fun ThemeScreen(onBack: () -> Unit, modifier: Modifier = Modifier) {
     val context = LocalContext.current
-    BackHandler { onBack() }
-    var showColorPicker by remember { mutableStateOf(false) }
-    // 主题色卡片默认展开
-    var expanded by rememberSaveable { mutableStateOf(true) }
-    val expandDuration = 200
+    val configuration = LocalConfiguration.current
+    val autoDensity = autoUiDensity(configuration.screenWidthDp, configuration.screenHeightDp)
+    BackHandler(onBack = onBack)
+    val scrollBehavior = TopAppBarDefaults.pinnedScrollBehavior()
+    var showColorPicker by rememberSaveable { mutableStateOf(false) }
+    val effectiveColorMode = if (
+        ThemeController.colorMode == 0 && Build.VERSION.SDK_INT < Build.VERSION_CODES.S
+    ) 1 else ThemeController.colorMode
 
-    // 单一动画源驱动折叠（Animatable 支持打断：快速连续点击时自动平滑过渡到新目标）：
-    // 高度 = contentHeightPx * progress，透明度 = progress，二者同步
-    val density = LocalDensity.current
-    var contentHeightPx by remember { mutableIntStateOf(0) }
-    val expandProgress = remember { Animatable(if (expanded) 1f else 0f) }
-    LaunchedEffect(expanded) {
-        expandProgress.animateTo(
-            targetValue = if (expanded) 1f else 0f,
-            animationSpec = spatialDefault()   // 折叠进度（高度+透明度）：改用 spatial 弹簧
-        )
-    }
-
-    // Android12- 动态色不可用，视为默认蓝色
-    val effectiveColorMode = if (ThemeController.colorMode == 0 && Build.VERSION.SDK_INT < Build.VERSION_CODES.S) {
-        1
-    } else {
-        ThemeController.colorMode
-    }
-
-    // ---------- 桌面图标动态切换 ----------
-    val settingsRepo = remember { SettingsRepository(context) }
+    // 保留原图标资源和启动器切换逻辑，只重写选择器。
+    val settingsRepo = remember(context) { SettingsRepository(context) }
     var appIconVariant by remember { mutableStateOf(settingsRepo.appIconVariant) }
-    var iconExpanded by rememberSaveable { mutableStateOf(true) }
     val switchAppIcon: (Int) -> Unit = { variant ->
         val pm = context.packageManager
         val main = ComponentName(context, "com.yunget.app.MainActivity")
@@ -191,846 +137,454 @@ fun ThemeScreen(
             pm.setComponentEnabledSetting(alias, PackageManager.COMPONENT_ENABLED_STATE_DISABLED, PackageManager.DONT_KILL_APP)
         }
         settingsRepo.appIconVariant = variant
+        appIconVariant = variant
     }
 
     Scaffold(
-        modifier = modifier.fillMaxSize(),
+        modifier = modifier.fillMaxSize().nestedScroll(scrollBehavior.nestedScrollConnection),
+        containerColor = MaterialTheme.colorScheme.surface,
         topBar = {
             TopAppBar(
-                title = { Text("主题与外观", style = MaterialTheme.typography.titleLarge) },
+                title = { Text("主题与外观") },
                 navigationIcon = {
-                    IconButton(onClick = onBack) {
+                    IconButton(onClick = onBack, modifier = Modifier.size(48.dp)) {
                         Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "返回")
                     }
                 },
+                scrollBehavior = scrollBehavior,
                 colors = TopAppBarDefaults.topAppBarColors(
-                    containerColor = MaterialTheme.colorScheme.surface
+                    containerColor = MaterialTheme.colorScheme.surface,
+                    scrolledContainerColor = MaterialTheme.colorScheme.surfaceContainer
                 )
             )
         }
     ) { innerPadding ->
-        Column(
-            modifier = Modifier
-                .fillMaxSize()
-                .padding(innerPadding)
-                .verticalScroll(rememberScrollState())
-                .padding(horizontal = 16.dp, vertical = 16.dp)
-        ) {
-            // ---------- 外观模式 ----------
-            SectionLabel("外观模式")
-            Card(
-                modifier = Modifier.fillMaxWidth(),
-                colors = CardDefaults.cardColors(
-                    containerColor = MaterialTheme.colorScheme.surfaceContainer
-                )
+        Box(Modifier.fillMaxSize().padding(innerPadding), contentAlignment = Alignment.TopCenter) {
+            LazyColumn(
+                modifier = Modifier.widthIn(max = 720.dp).fillMaxSize(),
+                contentPadding = PaddingValues(start = 16.dp, end = 16.dp, top = 12.dp, bottom = 24.dp),
+                verticalArrangement = Arrangement.spacedBy(16.dp)
             ) {
-                Column(modifier = Modifier.padding(16.dp)) {
-                    Text(
-                        text = "选择应用的明暗外观",
-                        style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant
-                    )
-                    Spacer(modifier = Modifier.height(12.dp))
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.spacedBy(8.dp)
-                    ) {
-                        val modes = listOf("跟随系统", "浅色", "深色")
-                        modes.forEachIndexed { index, label ->
-                            SmoothFilterChip(
-                                selected = ThemeController.darkMode == index,
-                                label = label,
-                                onClick = { ThemeController.setDarkMode(context, index) },
-                                modifier = Modifier.weight(1f)
-                            )
+                item(key = "preview") { ThemePreview() }
+                item(key = "ui_style") {
+                    ThemePanel("界面风格", "新版分组布局与 2.7.26 经典布局可随时切换") {
+                        ThemeChoices(
+                            listOf("经典界面", "新版界面"),
+                            if (ThemeController.uiStyleMode == 0) 0 else 1,
+                        ) {
+                            ThemeController.setUiStyleMode(context, it)
                         }
                     }
                 }
-            }
-
-            Spacer(modifier = Modifier.height(16.dp))
-
-            // ---------- 颜色对比度 ----------
-            // 无障碍档位：标准配色在强光下或视力不佳时可能读不清，这里提供更高对比度的方案。
-            // 对内置配色是切换整套色板；对动态色彩/自定义色是让配色算法加大明暗差。
-            SectionLabel("颜色对比度")
-            Card(
-                modifier = Modifier.fillMaxWidth(),
-                colors = CardDefaults.cardColors(
-                    containerColor = MaterialTheme.colorScheme.surfaceContainer
-                )
-            ) {
-                Column(modifier = Modifier.padding(16.dp)) {
-                    Text(
-                        text = "提高文字与背景的明暗差，强光下更容易看清",
-                        style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant
-                    )
-                    Spacer(modifier = Modifier.height(12.dp))
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.spacedBy(8.dp)
-                    ) {
-                        val levels = listOf("标准", "中等", "高")
-                        levels.forEachIndexed { index, label ->
-                            SmoothFilterChip(
-                                selected = ThemeController.contrastLevel == index,
-                                label = label,
-                                onClick = { ThemeController.setContrastLevel(context, index) },
-                                modifier = Modifier.weight(1f)
-                            )
+                item(key = "appearance") {
+                    ThemePanel("明暗外观", "跟随系统，或固定使用浅色与深色") {
+                        ThemeChoices(listOf("跟随系统", "浅色", "深色"), ThemeController.darkMode) {
+                            ThemeController.setDarkMode(context, it)
                         }
                     }
                 }
-            }
-
-            Spacer(modifier = Modifier.height(16.dp))
-
-            // ---------- 主题色（可折叠卡片） ----------
-            Card(
-                modifier = Modifier.fillMaxWidth(),
-                colors = CardDefaults.cardColors(
-                    containerColor = MaterialTheme.colorScheme.surfaceContainer
-                )
-            ) {
-                Column {
-                    // Header：点击展开/收起
-                    Row(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .clickable { expanded = !expanded }
-                            .padding(16.dp),
-                        verticalAlignment = Alignment.CenterVertically
+                item(key = "color") {
+                    ThemePanel(
+                        title = "主题颜色",
+                        description = when (effectiveColorMode) {
+                            0 -> "动态色彩 · 从系统壁纸取色"
+                            2 -> "自定义种子色 · ${colorToHex(Color(ThemeController.seedColor.toInt()))}"
+                            else -> "默认蓝色"
+                        }
                     ) {
-                        Icon(
-                            imageVector = Icons.Outlined.Palette,
-                            contentDescription = null,
-                            tint = MaterialTheme.colorScheme.primary
-                        )
-                        Spacer(modifier = Modifier.width(16.dp))
-                        Column(modifier = Modifier.weight(1f)) {
-                            Text(
-                                text = "主题色",
-                                style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.Bold)
+                        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
+                            ThemeSwitchRow(
+                                title = "动态色彩",
+                                description = "使用壁纸生成的 Material 配色",
+                                checked = effectiveColorMode == 0,
+                                onCheckedChange = { ThemeController.setColorMode(context, if (it) 0 else 1) }
                             )
-                            AnimatedVisibility(
-                                visible = !expanded,
-                                enter = fadeIn(effectsDefault()) + expandVertically(spatialDefault(), expandFrom = Alignment.Top),
-                                exit = fadeOut(effectsFast()) + shrinkVertically(spatialFast(), shrinkTowards = Alignment.Top)
+                        }
+                        if (effectiveColorMode != 0) {
+                            FlowRow(
+                                modifier = Modifier.fillMaxWidth().selectableGroup(),
+                                horizontalArrangement = Arrangement.spacedBy(8.dp),
+                                verticalArrangement = Arrangement.spacedBy(8.dp)
                             ) {
-                                Text(
-                                    text = when {
-                                        effectiveColorMode == 0 -> "动态色彩（跟随壁纸）"
-                                        effectiveColorMode == 2 -> "自定义颜色"
-                                        else -> "默认蓝色"
-                                    },
-                                    style = MaterialTheme.typography.bodySmall,
-                                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                                    modifier = Modifier.padding(top = 2.dp)
+                                presetColors.forEach { (name, color) ->
+                                    ColorSelectionItem(
+                                        color = color, name = name,
+                                        selected = (effectiveColorMode == 1 && color == 0xFF415F91L) ||
+                                            (effectiveColorMode == 2 && ThemeController.seedColor == color),
+                                        onClick = { ThemeController.setSeedColor(context, color) }
+                                    )
+                                }
+                            }
+                            FilledTonalButton(
+                                onClick = { showColorPicker = true },
+                                modifier = Modifier.fillMaxWidth().heightIn(min = 48.dp),
+                                shape = RoundedCornerShape(16.dp)
+                            ) {
+                                Icon(Icons.Outlined.Palette, null, Modifier.size(20.dp))
+                                Spacer(Modifier.width(8.dp))
+                                Text("自定义种子色")
+                            }
+                            if (effectiveColorMode == 2) {
+                                TextButton(
+                                    onClick = { ThemeController.setColorMode(context, 1) },
+                                    modifier = Modifier.fillMaxWidth().heightIn(min = 48.dp)
+                                ) { Text("恢复默认蓝色") }
+                            }
+                        }
+                    }
+                }
+                item(key = "contrast") {
+                    ThemePanel("颜色对比度", "提高文字与背景的明暗差，让内容更容易看清") {
+                        ThemeChoices(listOf("标准", "中等", "高"), ThemeController.contrastLevel) {
+                            ThemeController.setContrastLevel(context, it)
+                        }
+                    }
+                }
+                item(key = "motion") {
+                    ThemePanel("界面动效", "选择适合你的过渡节奏") {
+                        Column(Modifier.selectableGroup(), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                            listOf(
+                                "增强" to "丰富的弹性、形状与内容过渡 · 默认",
+                                "标准" to "简洁柔和的过渡，减少位移",
+                                "关闭" to "直接显示结果，减少界面动画"
+                            ).forEachIndexed { index, (title, description) ->
+                                ThemeChoiceRow(
+                                    title = title, description = description,
+                                    selected = ThemeController.motionLevel == index,
+                                    onClick = { ThemeController.setMotionLevel(context, index) }
                                 )
                             }
                         }
-                        val rotation by animateFloatAsState(
-                            targetValue = if (expanded) 180f else 0f,
-                            label = "arrow",
-                            animationSpec = spatialDefault()
-                        )
-                        Icon(
-                            imageVector = Icons.Filled.ExpandMore,
-                            contentDescription = null,
-                            modifier = Modifier.rotate(rotation)
-                        )
                     }
-
-                            // 展开内容：高度 + 透明度由 Animatable 同步驱动（可打断、不裁剪、无跳变）
-                            val animatedHeightDp = with(density) { (contentHeightPx * expandProgress.value).toDp() }
-                            Box(
-                                modifier = Modifier
-                                    .fillMaxWidth()
-                                    .then(if (contentHeightPx > 0) Modifier.height(animatedHeightDp) else Modifier)
-                                    .clipToBounds()
-                            ) {
-                                Box(
-                                    modifier = Modifier
-                                        .fillMaxWidth()
-                                        .wrapContentHeight(unbounded = true)
-                                        .onSizeChanged { contentHeightPx = it.height }
-                                        .graphicsLayer { alpha = expandProgress.value }
-                                ) {
-                        Column(modifier = Modifier.padding(start = 16.dp, end = 16.dp, bottom = 16.dp)) {
-                            HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f))
-                            Spacer(modifier = Modifier.height(16.dp))
-
-                            // 动态色彩开关（仅 Android 12+）
-                            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
-                                Row(
-                                    modifier = Modifier.fillMaxWidth(),
-                                    horizontalArrangement = Arrangement.SpaceBetween,
-                                    verticalAlignment = Alignment.CenterVertically
-                                ) {
-                                    Column(modifier = Modifier.weight(1f)) {
-                                        Text("动态色彩", style = MaterialTheme.typography.bodyMedium)
-                                        Text(
-                                            "从系统壁纸自动取色",
-                                            style = MaterialTheme.typography.bodySmall,
-                                            color = MaterialTheme.colorScheme.onSurfaceVariant
-                                        )
-                                    }
-                                    Switch(
-                                        checked = ThemeController.colorMode == 0,
-                                        onCheckedChange = { on ->
-                                            ThemeController.setColorMode(context, if (on) 0 else 1)
-                                        }
-                                    )
+                }
+                item(key = "ui_density") {
+                    ThemePanel("字号与间距", "按窗口宽高比自动优化，也可以手动调节") {
+                        ThemeSwitchRow(
+                            title = "自动适配屏占比",
+                            description = if (ThemeController.autoUiDensity) autoDensity.reason
+                                else "已关闭自动适配，以下数值由你控制",
+                            checked = ThemeController.autoUiDensity,
+                            onCheckedChange = { enabled ->
+                                if (!enabled) {
+                                    ThemeController.setUiFontScale(context, autoDensity.fontScale)
+                                    ThemeController.setUiSpacingScale(context, autoDensity.spacingScale)
                                 }
-                                Spacer(modifier = Modifier.height(8.dp))
+                                ThemeController.setAutoUiDensity(context, enabled)
                             }
-
-                            // 主题色选择（动态开启时隐藏）
-                            AnimatedVisibility(visible = effectiveColorMode != 0) {
-                                Column {
-                                    Text(
-                                        text = "主题颜色",
-                                        style = MaterialTheme.typography.labelSmall,
-                                        color = MaterialTheme.colorScheme.primary
-                                    )
-                                    LazyRow(
-                                        horizontalArrangement = Arrangement.spacedBy(12.dp),
-                                        contentPadding = PaddingValues(top = 10.dp, bottom = 8.dp)
-                                    ) {
-                                        itemsIndexed(presetColors) { _, (name, color) ->
-                                            // 默认蓝色模式只高亮蓝色；自定义模式高亮匹配种子色的那个
-                                            val isSelected = (effectiveColorMode == 1 && color == 0xFF415F91L) ||
-                                                (effectiveColorMode == 2 && ThemeController.seedColor == color)
-                                            ColorSelectionItem(
-                                                color = color,
-                                                name = name,
-                                                isSelected = isSelected,
-                                                onClick = { ThemeController.setSeedColor(context, color) }
-                                            )
-                                        }
-                                        item {
-                                            val isCustomSelected = effectiveColorMode == 2 &&
-                                                ThemeController.seedColor !in presetColors.map { it.second }
-                                            CustomColorButton(
-                                                isSelected = isCustomSelected,
-                                                customColor = ThemeController.seedColor,
-                                                onClick = {
-                                                    ThemeController.setColorMode(context, 2)
-                                                    showColorPicker = true
-                                                }
-                                            )
-                                        }
-                                    }
-                                }
-                            }
+                        )
+                        if (!ThemeController.autoUiDensity) {
+                            DensitySlider(
+                                label = "字号",
+                                value = ThemeController.uiFontScale,
+                                range = 0.85f..1.10f,
+                                steps = 4,
+                            ) { ThemeController.setUiFontScale(context, it) }
+                            DensitySlider(
+                                label = "间距",
+                                value = ThemeController.uiSpacingScale,
+                                range = 0.85f..1.15f,
+                                steps = 5,
+                            ) { ThemeController.setUiSpacingScale(context, it) }
                         }
                     }
                 }
-            }
-        }
-
-            Spacer(modifier = Modifier.height(16.dp))
-
-            // ---------- 文件名显示 ----------
-            // 长文件名的取舍：跑马灯省高度但要点着看全，折行一眼看全但占地方。
-            // 云盘页/解析页/下载列表共用的 FileNameText 按这一项决定怎么显示。
-            SectionLabel("文件名显示")
-            Card(
-                modifier = Modifier.fillMaxWidth(),
-                colors = CardDefaults.cardColors(
-                    containerColor = MaterialTheme.colorScheme.surfaceContainer
-                )
-            ) {
-                Row(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(16.dp),
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    Column(modifier = Modifier.weight(1f)) {
-                        Text("多行折行显示", style = MaterialTheme.typography.bodyMedium)
+                item(key = "file_names") {
+                    ThemePanel("文件列表") {
+                        ThemeSwitchRow(
+                            title = "多行显示长文件名",
+                            description = if (ThemeController.fileNameMultiLine) "自动折行，完整查看文件名称" else "单行跑马灯显示，列表更紧凑",
+                            checked = ThemeController.fileNameMultiLine,
+                            onCheckedChange = { ThemeController.setFileNameMultiLine(context, it) }
+                        )
+                    }
+                }
+                item(key = "launcher_icon") {
+                    ThemePanel("桌面图标") {
+                        Row(Modifier.fillMaxWidth().selectableGroup(), horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                            AppIconOption(R.drawable.yunget_mark_approved, "新版图标（默认）", appIconVariant == 0, { switchAppIcon(0) }, Modifier.weight(1f))
+                            AppIconOption(R.drawable.icon2, "旧版图标", appIconVariant == 1, { switchAppIcon(1) }, Modifier.weight(1f))
+                        }
                         Text(
-                            text = if (ThemeController.fileNameMultiLine) {
-                                "长文件名折行显示，一眼看全"
-                            } else {
-                                "单行跑马灯滚动，列表更紧凑"
-                            },
-                            style = MaterialTheme.typography.bodySmall,
+                            "Android 12+ 立即生效；部分设备需回到桌面或重启启动器后查看。",
+                            style = MaterialTheme.typography.bodyMedium,
                             color = MaterialTheme.colorScheme.onSurfaceVariant
                         )
                     }
-                    Switch(
-                        checked = ThemeController.fileNameMultiLine,
-                        onCheckedChange = { ThemeController.setFileNameMultiLine(context, it) }
-                    )
                 }
             }
-
-            Spacer(modifier = Modifier.height(16.dp))
-
-            // ---------- 桌面图标（可折叠卡片） ----------
-            SectionLabel("桌面图标")
-            Card(
-                modifier = Modifier.fillMaxWidth(),
-                colors = CardDefaults.cardColors(
-                    containerColor = MaterialTheme.colorScheme.surfaceContainer
-                )
-            ) {
-                Column {
-                    // Header：点击展开/收起
-                    Row(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .clickable { iconExpanded = !iconExpanded }
-                            .padding(16.dp),
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
-                        Icon(
-                            imageVector = Icons.Outlined.StarOutline,
-                            contentDescription = null,
-                            tint = MaterialTheme.colorScheme.primary
-                        )
-                        Spacer(modifier = Modifier.width(16.dp))
-                        Column(modifier = Modifier.weight(1f)) {
-                            Text(
-                                text = "桌面图标",
-                                style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.Bold)
-                            )
-                            // 与主题色卡片一致的副标题动画：展开时隐藏、收起时显示
-                            AnimatedVisibility(
-                                visible = !iconExpanded,
-                                enter = fadeIn(effectsDefault()) + expandVertically(spatialDefault(), expandFrom = Alignment.Top),
-                                exit = fadeOut(effectsFast()) + shrinkVertically(spatialFast(), shrinkTowards = Alignment.Top)
-                            ) {
-                                Text(
-                                    text = if (appIconVariant == 1) "新图标" else "经典图标",
-                                    style = MaterialTheme.typography.bodySmall,
-                                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                                    modifier = Modifier.padding(top = 2.dp)
-                                )
-                            }
-                        }
-                        val iconRotation by animateFloatAsState(
-                            targetValue = if (iconExpanded) 180f else 0f,
-                            label = "iconArrow",
-                            animationSpec = spatialDefault()
-                        )
-                        Icon(
-                            imageVector = Icons.Filled.ExpandMore,
-                            contentDescription = null,
-                            modifier = Modifier.rotate(iconRotation)
-                        )
-                    }
-                    AnimatedVisibility(
-                        visible = iconExpanded,
-                        enter = fadeIn(effectsDefault()) + expandVertically(spatialDefault(), expandFrom = Alignment.Top),
-                        exit = fadeOut(effectsFast()) + shrinkVertically(spatialFast(), shrinkTowards = Alignment.Top)
-                    ) {
-                        Column(modifier = Modifier.padding(start = 16.dp, end = 16.dp, bottom = 16.dp)) {
-                            HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f))
-                            Spacer(modifier = Modifier.height(16.dp))
-                            Row(
-                                modifier = Modifier.fillMaxWidth(),
-                                horizontalArrangement = Arrangement.spacedBy(24.dp)
-                            ) {
-                                AppIconOption(
-                                    iconRes = R.drawable.icon,
-                                    name = "经典图标",
-                                    isSelected = appIconVariant == 0,
-                                    onClick = {
-                                        appIconVariant = 0
-                                        switchAppIcon(0)
-                                    }
-                                )
-                                AppIconOption(
-                                    iconRes = R.drawable.icon2,
-                                    name = "新图标",
-                                    isSelected = appIconVariant == 1,
-                                    onClick = {
-                                        appIconVariant = 1
-                                        switchAppIcon(1)
-                                    }
-                                )
-                            }
-                            Spacer(modifier = Modifier.height(10.dp))
-                            Text(
-                                text = "Android 12+ 立即生效；部分设备需回到桌面或重启启动器后查看。",
-                                style = MaterialTheme.typography.bodySmall,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant
-                            )
-                        }
-                    }
-                }
-            }
-
-            Spacer(modifier = Modifier.height(16.dp))
         }
     }
-
-    // 自定义调色盘
     if (showColorPicker) {
         ColorPickerDialog(
             initialColor = ThemeController.seedColor,
             onDismiss = { showColorPicker = false },
-            onColorSelected = { color ->
-                ThemeController.setSeedColor(context, color)
+            onColorSelected = {
+                ThemeController.setSeedColor(context, it)
                 showColorPicker = false
             }
         )
     }
 }
 
-/** FilterChip 胶囊单选（参考 WebIDE SmoothFilterChip：选中 secondaryContainer，未选中描边） */
 @Composable
-private fun SmoothFilterChip(
-    selected: Boolean,
-    label: String,
-    onClick: () -> Unit,
-    modifier: Modifier = Modifier
+private fun ThemePreview() {
+    Card(
+        modifier = Modifier.fillMaxWidth(), shape = RoundedCornerShape(24.dp),
+        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.primaryContainer)
+    ) {
+        Column(Modifier.padding(20.dp), verticalArrangement = Arrangement.spacedBy(16.dp)) {
+            Text("主题预览", style = MaterialTheme.typography.titleMedium, color = MaterialTheme.colorScheme.onPrimaryContainer)
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Surface(shape = RoundedCornerShape(16.dp), color = MaterialTheme.colorScheme.primary) {
+                    Box(Modifier.size(48.dp), contentAlignment = Alignment.Center) {
+                        Icon(Icons.Outlined.CloudDownload, null, tint = MaterialTheme.colorScheme.onPrimary)
+                    }
+                }
+                Spacer(Modifier.width(12.dp))
+                Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                    Text("云端文件，轻松获取", style = MaterialTheme.typography.titleMedium, color = MaterialTheme.colorScheme.onPrimaryContainer)
+                    Text("配色与明暗设置会即时应用", style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onPrimaryContainer)
+                }
+            }
+            HorizontalDivider(color = MaterialTheme.colorScheme.onPrimaryContainer.copy(alpha = 0.16f))
+            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                Surface(shape = RoundedCornerShape(16.dp), color = MaterialTheme.colorScheme.primary) {
+                    Text("主色", Modifier.padding(horizontal = 16.dp, vertical = 10.dp), style = MaterialTheme.typography.labelLarge, color = MaterialTheme.colorScheme.onPrimary)
+                }
+                Surface(shape = RoundedCornerShape(16.dp), color = MaterialTheme.colorScheme.secondaryContainer) {
+                    Text("辅助色", Modifier.padding(horizontal = 16.dp, vertical = 10.dp), style = MaterialTheme.typography.labelLarge, color = MaterialTheme.colorScheme.onSecondaryContainer)
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun ThemePanel(
+    title: String, description: String? = null,
+    content: @Composable ColumnScope.() -> Unit
 ) {
-    val duration = 200
+    val ui = LocalUiMetrics.current
+    Card(
+        modifier = Modifier.fillMaxWidth(), shape = RoundedCornerShape(20.dp),
+        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceContainerLow)
+    ) {
+        Column(Modifier.padding(ui.space(14.dp)), verticalArrangement = Arrangement.spacedBy(ui.space(9.dp))) {
+            Column(verticalArrangement = Arrangement.spacedBy(ui.space(2.dp))) {
+                Text(title, style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold)
+                if (description != null) Text(description, style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
+            }
+            content()
+        }
+    }
+}
+
+/** 大字体或窄屏切为纵向选项，不压缩标签和触控区域。 */
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+private fun ThemeChoices(labels: List<String>, selected: Int, onSelected: (Int) -> Unit) {
+    val fontScale = LocalDensity.current.fontScale
+    BoxWithConstraints(Modifier.fillMaxWidth()) {
+        if (maxWidth < 300.dp || fontScale > 1.2f) {
+            Column(Modifier.selectableGroup(), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                labels.forEachIndexed { index, label ->
+                    ThemeChoiceRow(title = label, selected = selected == index, onClick = { onSelected(index) })
+                }
+            }
+        } else {
+            SingleChoiceSegmentedButtonRow(Modifier.fillMaxWidth()) {
+                labels.forEachIndexed { index, label ->
+                    SegmentedButton(
+                        selected = selected == index, onClick = { onSelected(index) },
+                        shape = SegmentedButtonDefaults.itemShape(index = index, count = labels.size),
+                        modifier = Modifier.heightIn(min = 48.dp), icon = {}
+                    ) { Text(label, style = MaterialTheme.typography.labelLarge) }
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun ThemeChoiceRow(
+    title: String, selected: Boolean, onClick: () -> Unit, description: String? = null
+) {
     val containerColor by animateColorAsState(
-        targetValue = if (selected) MaterialTheme.colorScheme.secondaryContainer else MaterialTheme.colorScheme.surface,
-        animationSpec = tween(durationMillis = duration, easing = LinearEasing),   // 刻意线性：颜色扫过动画
-        label = "container"
+        if (selected) MaterialTheme.colorScheme.secondaryContainer else MaterialTheme.colorScheme.surfaceContainer,
+        animationSpec = effectsDefault(), label = "themeChoiceColor"
     )
-    val contentColor by animateColorAsState(
-        targetValue = if (selected) MaterialTheme.colorScheme.onSecondaryContainer else MaterialTheme.colorScheme.onSurface,
-        animationSpec = tween(durationMillis = duration, easing = LinearEasing),
-        label = "content"
+    val corner by animateDpAsState(
+        if (selected) 24.dp else 16.dp, animationSpec = themeSelectionSpec(), label = "themeChoiceShape"
     )
     Surface(
-        onClick = onClick,
-        modifier = modifier.height(36.dp),
-        shape = CircleShape,
-        color = containerColor,
-        contentColor = contentColor,
-        border = if (!selected) BorderStroke(1.dp, MaterialTheme.colorScheme.outline) else null
+        modifier = Modifier.fillMaxWidth().selectable(selected = selected, role = Role.RadioButton, onClick = onClick),
+        shape = RoundedCornerShape(corner), color = containerColor,
+        contentColor = if (selected) MaterialTheme.colorScheme.onSecondaryContainer else MaterialTheme.colorScheme.onSurface
     ) {
-        Box(contentAlignment = Alignment.Center) {
-            Text(
-                text = label,
-                style = MaterialTheme.typography.labelMedium,
-                fontWeight = if (selected) FontWeight.Bold else FontWeight.Medium
-            )
-        }
-    }
-}
-
-/** 预置色圆点（色圆 + 名称，选中显示对勾） */
-@Composable
-private fun ColorSelectionItem(
-    color: Long,
-    name: String,
-    isSelected: Boolean,
-    onClick: () -> Unit,
-    modifier: Modifier = Modifier
-) {
-    Column(
-        modifier = modifier,
-        horizontalAlignment = Alignment.CenterHorizontally
-    ) {
-        Box(
-            modifier = Modifier
-                .size(48.dp)
-                .clip(CircleShape)
-                .background(Color(color.toInt()))
-                .border(
-                    width = if (isSelected) 3.dp else 1.dp,
-                    color = if (isSelected) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.outlineVariant,
-                    shape = CircleShape
-                )
-                .clickable(onClick = onClick),
-            contentAlignment = Alignment.Center
-        ) {
-            if (isSelected) {
-                Icon(
-                    imageVector = Icons.Outlined.Check,
-                    contentDescription = null,
-                    tint = Color.White,
-                    modifier = Modifier.size(22.dp)
-                )
+        Row(Modifier.heightIn(min = 56.dp).padding(horizontal = 12.dp, vertical = 8.dp), verticalAlignment = Alignment.CenterVertically) {
+            RadioButton(selected = selected, onClick = null, modifier = Modifier.size(24.dp))
+            Spacer(Modifier.width(12.dp))
+            Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                Text(title, style = MaterialTheme.typography.bodyLarge, fontWeight = FontWeight.Medium)
+                if (description != null) Text(description, style = MaterialTheme.typography.bodyMedium)
             }
         }
-        Spacer(modifier = Modifier.height(4.dp))
-        Text(
-            text = name,
-            style = MaterialTheme.typography.labelSmall,
-            color = if (isSelected) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant
-        )
     }
 }
 
-/** 自定义颜色按钮（色圆 + 名称，圆内显示 Palette 图标） */
 @Composable
-private fun CustomColorButton(
-    isSelected: Boolean,
-    customColor: Long,
-    onClick: () -> Unit,
-    modifier: Modifier = Modifier
-) {
-    Column(
-        modifier = modifier,
-        horizontalAlignment = Alignment.CenterHorizontally
+private fun <T> themeSelectionSpec(): FiniteAnimationSpec<T> = when (ThemeController.motionLevel) {
+    2 -> snap()
+    else -> spatialDefault()
+}
+
+@Composable
+private fun ThemeSwitchRow(title: String, description: String, checked: Boolean, onCheckedChange: (Boolean) -> Unit) {
+    Row(
+        Modifier.fillMaxWidth().heightIn(min = 64.dp),
+        verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)
     ) {
-        Box(
-            modifier = Modifier
-                .size(48.dp)
-                .clip(CircleShape)
-                .background(
-                    if (isSelected) Color(customColor.toInt())
-                    else MaterialTheme.colorScheme.surfaceContainerHighest
-                )
-                .border(
-                    width = if (isSelected) 3.dp else 1.dp,
-                    color = if (isSelected) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.outlineVariant,
-                    shape = CircleShape
-                )
-                .clickable(onClick = onClick),
-            contentAlignment = Alignment.Center
-        ) {
-            Icon(
-                imageVector = Icons.Outlined.Palette,
-                contentDescription = null,
-                tint = if (isSelected) Color.White else MaterialTheme.colorScheme.onSurfaceVariant,
-                modifier = Modifier.size(22.dp)
-            )
+        Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(4.dp)) {
+            Text(title, style = MaterialTheme.typography.bodyLarge)
+            Text(description, style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
         }
-        Spacer(modifier = Modifier.height(4.dp))
-        Text(
-            text = "自定义",
-            style = MaterialTheme.typography.labelSmall,
-            color = if (isSelected) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant
+        Switch(checked = checked, onCheckedChange = onCheckedChange, modifier = Modifier.heightIn(min = 48.dp))
+    }
+}
+
+@Composable
+private fun DensitySlider(
+    label: String,
+    value: Float,
+    range: ClosedFloatingPointRange<Float>,
+    steps: Int,
+    onValueChange: (Float) -> Unit,
+) {
+    val ui = LocalUiMetrics.current
+    Column(verticalArrangement = Arrangement.spacedBy(ui.space(2.dp))) {
+        Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
+            Text(label, style = MaterialTheme.typography.bodyMedium)
+            Text("${(value * 100).toInt()}%", style = MaterialTheme.typography.labelMedium,
+                color = MaterialTheme.colorScheme.primary)
+        }
+        Slider(
+            value = value,
+            onValueChange = onValueChange,
+            valueRange = range,
+            steps = steps,
+            modifier = Modifier.fillMaxWidth(),
         )
     }
 }
 
-// ================= 调色盘 Dialog（参考 WebIDE ColorPickerDialog 精简版） =================
-
 @Composable
-private fun ColorPickerDialog(
-    initialColor: Long,
-    onDismiss: () -> Unit,
-    onColorSelected: (Long) -> Unit
-) {
-    val initialHsv = colorToHsv(Color(initialColor.toInt()))
+private fun ColorSelectionItem(color: Long, name: String, selected: Boolean, onClick: () -> Unit) {
+    val swatch = Color(color.toInt())
+    val corner by animateDpAsState(if (selected) 24.dp else 16.dp, animationSpec = themeSelectionSpec(), label = "seedShape")
+    Surface(
+        modifier = Modifier.widthIn(min = 64.dp).selectable(selected = selected, role = Role.RadioButton, onClick = onClick),
+        shape = RoundedCornerShape(corner),
+        color = if (selected) MaterialTheme.colorScheme.secondaryContainer else Color.Transparent,
+        contentColor = if (selected) MaterialTheme.colorScheme.onSecondaryContainer else MaterialTheme.colorScheme.onSurfaceVariant
+    ) {
+        Column(Modifier.padding(8.dp), horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(6.dp)) {
+            Surface(shape = CircleShape, color = swatch, border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant)) {
+                Box(Modifier.size(40.dp), contentAlignment = Alignment.Center) {
+                    if (selected) Icon(Icons.Outlined.Check, null, tint = if (swatch.luminance() > 0.5f) Color.Black else Color.White, modifier = Modifier.size(24.dp))
+                }
+            }
+            Text(name, style = MaterialTheme.typography.bodyMedium)
+        }
+    }
+}
+
+/** Material 滑块提供色相、饱和度和明度，与 HEX 输入双向同步。 */
+@Composable
+private fun ColorPickerDialog(initialColor: Long, onDismiss: () -> Unit, onColorSelected: (Long) -> Unit) {
+    val initialHsv = remember(initialColor) { colorToHsv(Color(initialColor.toInt())) }
     var hue by remember { mutableFloatStateOf(initialHsv[0]) }
     var saturation by remember { mutableFloatStateOf(initialHsv[1]) }
-    var value by remember { mutableFloatStateOf(initialHsv[2]) }
-    val currentColor = Color.hsv(hue, saturation, value)
-    var hexInput by remember(currentColor) {
-        mutableStateOf(colorToHex(currentColor).removePrefix("#"))
+    var brightness by remember { mutableFloatStateOf(initialHsv[2]) }
+    var hexInput by remember { mutableStateOf(colorToHex(Color(initialColor.toInt())).removePrefix("#")) }
+    val currentColor = Color.hsv(hue, saturation, brightness)
+
+    fun updateHsv(h: Float = hue, s: Float = saturation, v: Float = brightness) {
+        hue = h
+        saturation = s
+        brightness = v
+        hexInput = colorToHex(Color.hsv(h, s, v)).removePrefix("#")
     }
 
-    Dialog(onDismissRequest = onDismiss) {
-        Card(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(16.dp),
-            shape = RoundedCornerShape(28.dp),
-            colors = CardDefaults.cardColors(
-                containerColor = MaterialTheme.colorScheme.surfaceContainer
-            )
-        ) {
-            Column(
-                modifier = Modifier
-                    .padding(24.dp)
-                    .fillMaxWidth()
-            ) {
-                // 顶部：HEX 输入 + 预览
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.SpaceBetween,
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    Row(verticalAlignment = Alignment.CenterVertically) {
-                        Text(
-                            text = "#",
-                            style = MaterialTheme.typography.headlineMedium,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant
-                        )
-                        BasicTextField(
-                            value = hexInput,
-                            onValueChange = { input ->
-                                val filtered = input.filter { it.isLetterOrDigit() }.take(6).uppercase()
-                                hexInput = filtered
-                                if (filtered.length == 6) {
-                                    runCatching {
-                                        val color = hexToColor(filtered)
-                                        val hsv = colorToHsv(color)
-                                        hue = hsv[0]
-                                        saturation = hsv[1]
-                                        value = hsv[2]
-                                    }
-                                }
-                            },
-                            textStyle = MaterialTheme.typography.headlineMedium.copy(
-                                color = MaterialTheme.colorScheme.onSurface,
-                                fontWeight = FontWeight.Bold,
-                                fontFamily = FontFamily.Monospace
-                            ),
-                            keyboardOptions = androidx.compose.foundation.text.KeyboardOptions(
-                                capitalization = KeyboardCapitalization.Characters,
-                                keyboardType = KeyboardType.Ascii
-                            ),
-                            cursorBrush = SolidColor(MaterialTheme.colorScheme.primary),
-                            modifier = Modifier.width(140.dp)
-                        )
-                    }
-                    Box(
-                        modifier = Modifier
-                            .size(56.dp)
-                            .clip(RoundedCornerShape(8.dp))
-                            .background(MaterialTheme.colorScheme.surfaceVariant)
-                            .border(1.dp, MaterialTheme.colorScheme.outlineVariant, RoundedCornerShape(8.dp))
-                    ) {
-                        Box(
-                            modifier = Modifier
-                                .matchParentSize()
-                                .background(currentColor)
-                        )
+    AlertDialog(
+        onDismissRequest = onDismiss, title = { Text("自定义种子色") },
+        text = {
+            Column(Modifier.fillMaxWidth().verticalScroll(rememberScrollState()), verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                Surface(shape = RoundedCornerShape(16.dp), color = currentColor, border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant)) {
+                    Box(Modifier.fillMaxWidth().height(56.dp), contentAlignment = Alignment.Center) {
+                        Text(colorToHex(currentColor), style = MaterialTheme.typography.titleMedium, color = if (currentColor.luminance() > 0.5f) Color.Black else Color.White)
                     }
                 }
-
-                Spacer(modifier = Modifier.height(20.dp))
-
-                // 颜色选择核心区：左侧 SatVal 方块 + 右侧色相条
-                Row(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .height(200.dp)
-                ) {
-                    SatValPanel(
-                        hue = hue,
-                        saturation = saturation,
-                        value = value,
-                        onValChange = { s, v ->
-                            saturation = s
-                            value = v
-                        },
-                        modifier = Modifier
-                            .weight(1f)
-                            .fillMaxSize()
-                            .clip(RoundedCornerShape(8.dp))
-                            .border(1.dp, MaterialTheme.colorScheme.outlineVariant, RoundedCornerShape(8.dp))
-                    )
-                    Spacer(modifier = Modifier.width(12.dp))
-                    VerticalHueSlider(
-                        hue = hue,
-                        onHueChange = { hue = it },
-                        modifier = Modifier
-                            .width(24.dp)
-                            .fillMaxSize()
-                            .clip(RoundedCornerShape(8.dp))
-                            .border(1.dp, MaterialTheme.colorScheme.outlineVariant, RoundedCornerShape(8.dp))
-                    )
-                }
-
-                Spacer(modifier = Modifier.height(24.dp))
-
-                // 底部按钮
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.End
-                ) {
-                    TextButton(onClick = onDismiss) { Text("取消") }
-                    Spacer(modifier = Modifier.width(8.dp))
-                    Button(onClick = { onColorSelected(currentColor.toArgb().toLong() and 0xFFFFFFFFL) }) {
-                        Text("应用")
-                    }
-                }
-            }
-        }
-    }
-}
-
-/** 饱和度/明度大方块（可拖拽/点击） */
-@Composable
-private fun SatValPanel(
-    hue: Float,
-    saturation: Float,
-    value: Float,
-    onValChange: (Float, Float) -> Unit,
-    modifier: Modifier
-) {
-    Box(modifier = modifier) {
-        Canvas(
-            modifier = Modifier
-                .matchParentSize()
-                .pointerInput(Unit) {
-                    detectTapGestures { offset ->
-                        onValChange(
-                            (offset.x / size.width).coerceIn(0f, 1f),
-                            1f - (offset.y / size.height).coerceIn(0f, 1f)
-                        )
-                    }
-                }
-                .pointerInput(Unit) {
-                    detectDragGestures { change, _ ->
-                        change.consume()
-                        onValChange(
-                            (change.position.x / size.width).coerceIn(0f, 1f),
-                            1f - (change.position.y / size.height).coerceIn(0f, 1f)
-                        )
-                    }
-                }
-        ) {
-            drawRect(color = Color.hsv(hue, 1f, 1f))
-            drawRect(brush = Brush.horizontalGradient(listOf(Color.White, Color.Transparent)))
-            drawRect(brush = Brush.verticalGradient(listOf(Color.Transparent, Color.Black)))
-
-            // 指示器（方形描边）
-            val x = saturation * size.width
-            val y = (1f - value) * size.height
-            val cursorSize = 14f
-            drawRect(
-                color = Color.Black.copy(alpha = 0.5f),
-                topLeft = Offset(x - cursorSize / 2, y - cursorSize / 2),
-                size = Size(cursorSize, cursorSize),
-                style = Stroke(3f)
-            )
-            drawRect(
-                color = Color.White,
-                topLeft = Offset(x - cursorSize / 2, y - cursorSize / 2),
-                size = Size(cursorSize, cursorSize),
-                style = Stroke(1.5f)
-            )
-        }
-    }
-}
-
-/** 竖向色相条（可拖拽/点击） */
-@Composable
-private fun VerticalHueSlider(
-    hue: Float,
-    onHueChange: (Float) -> Unit,
-    modifier: Modifier
-) {
-    Box(modifier = modifier) {
-        Canvas(
-            modifier = Modifier
-                .matchParentSize()
-                .pointerInput(Unit) {
-                    detectTapGestures { offset ->
-                        onHueChange((offset.y / size.height * 360f).coerceIn(0f, 360f))
-                    }
-                }
-                .pointerInput(Unit) {
-                    detectDragGestures { change, _ ->
-                        change.consume()
-                        onHueChange((change.position.y / size.height * 360f).coerceIn(0f, 360f))
-                    }
-                }
-        ) {
-            val colors = (0..360 step 10).map { Color.hsv(it.toFloat(), 1f, 1f) }
-            drawRect(brush = Brush.verticalGradient(colors = colors))
-
-            // 指示器（横条）
-            val y = (hue / 360f) * size.height
-            val barHeight = 6f
-            drawRect(
-                color = Color.Black.copy(alpha = 0.5f),
-                topLeft = Offset(0f, y - barHeight / 2),
-                size = Size(size.width, barHeight),
-                style = Stroke(2f)
-            )
-            drawRect(
-                color = Color.White,
-                topLeft = Offset(0f, y - barHeight / 2),
-                size = Size(size.width, barHeight),
-                style = Stroke(1f)
-            )
-        }
-    }
-}
-
-// ================= 辅助 =================
-
-/** 桌面图标选项：图标预览 + 名称，选中高亮边框 + 角标对勾 */
-@Composable
-private fun AppIconOption(
-    iconRes: Int,
-    name: String,
-    isSelected: Boolean,
-    onClick: () -> Unit
-) {
-    Column(horizontalAlignment = Alignment.CenterHorizontally) {
-        Box(
-            modifier = Modifier
-                .size(72.dp)
-                .clip(RoundedCornerShape(18.dp))
-                .border(
-                    width = if (isSelected) 3.dp else 1.dp,
-                    color = if (isSelected) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.outlineVariant,
-                    shape = RoundedCornerShape(18.dp)
+                OutlinedTextField(
+                    value = hexInput,
+                    onValueChange = { input ->
+                        val filtered = input.removePrefix("#").filter { it in "0123456789abcdefABCDEF" }.take(6).uppercase(Locale.ROOT)
+                        hexInput = filtered
+                        if (filtered.length == 6) {
+                            val hsv = colorToHsv(Color((0xFF000000L or filtered.toLong(16)).toInt()))
+                            hue = hsv[0]
+                            saturation = hsv[1]
+                            brightness = hsv[2]
+                        }
+                    },
+                    modifier = Modifier.fillMaxWidth(), label = { Text("HEX 颜色") }, prefix = { Text("#") },
+                    supportingText = { Text("输入 6 位十六进制颜色") }, isError = hexInput.length != 6, singleLine = true,
+                    keyboardOptions = KeyboardOptions(capitalization = KeyboardCapitalization.Characters, keyboardType = KeyboardType.Ascii),
+                    shape = RoundedCornerShape(16.dp)
                 )
-                .clickable(onClick = onClick),
-            contentAlignment = Alignment.Center
-        ) {
-            Image(
-                painter = painterResource(iconRes),
-                contentDescription = name,
-                modifier = Modifier
-                    .size(64.dp)
-                    .clip(RoundedCornerShape(14.dp))
-            )
-            if (isSelected) {
-                // 右上角选中角标（对勾 + 主题色圆底）
-                Box(
-                    modifier = Modifier
-                        .align(Alignment.TopEnd)
-                        .size(20.dp)
-                        .background(MaterialTheme.colorScheme.primary, CircleShape),
-                    contentAlignment = Alignment.Center
-                ) {
-                    Icon(
-                        imageVector = Icons.Outlined.Check,
-                        contentDescription = "已选择",
-                        tint = MaterialTheme.colorScheme.onPrimary,
-                        modifier = Modifier.size(14.dp)
-                    )
-                }
+                ThemeColorSlider("色相", "${hue.toInt()}°", hue, 0f..360f) { updateHsv(h = it) }
+                ThemeColorSlider("饱和度", "${(saturation * 100).toInt()}%", saturation, 0f..1f) { updateHsv(s = it) }
+                ThemeColorSlider("明度", "${(brightness * 100).toInt()}%", brightness, 0f..1f) { updateHsv(v = it) }
             }
+        },
+        confirmButton = {
+            Button(
+                onClick = { onColorSelected(currentColor.toArgb().toLong() and 0xFFFFFFFFL) },
+                enabled = hexInput.length == 6, modifier = Modifier.heightIn(min = 48.dp)
+            ) { Text("应用") }
+        },
+        dismissButton = { TextButton(onClick = onDismiss, modifier = Modifier.heightIn(min = 48.dp)) { Text("取消") } }
+    )
+}
+
+@Composable
+private fun ThemeColorSlider(label: String, valueLabel: String, value: Float, range: ClosedFloatingPointRange<Float>, onChange: (Float) -> Unit) {
+    Column {
+        Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
+            Text(label, style = MaterialTheme.typography.bodyMedium)
+            Text(valueLabel, style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
         }
-        Spacer(modifier = Modifier.height(6.dp))
-        Text(
-            text = name,
-            style = MaterialTheme.typography.labelSmall,
-            color = if (isSelected) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant,
-            fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Normal
-        )
+        Slider(value = value, onValueChange = onChange, valueRange = range, modifier = Modifier.fillMaxWidth().heightIn(min = 48.dp))
     }
 }
 
 @Composable
-private fun SectionLabel(text: String) {
-    Text(
-        text = text,
-        style = MaterialTheme.typography.labelLarge,
-        color = MaterialTheme.colorScheme.primary,
-        modifier = Modifier.padding(start = 4.dp, bottom = 8.dp)
-    )
+private fun AppIconOption(iconRes: Int, name: String, selected: Boolean, onClick: () -> Unit, modifier: Modifier = Modifier) {
+    Surface(
+        modifier = modifier.selectable(selected = selected, role = Role.RadioButton, onClick = onClick),
+        shape = RoundedCornerShape(16.dp),
+        color = if (selected) MaterialTheme.colorScheme.secondaryContainer else MaterialTheme.colorScheme.surfaceContainer,
+        contentColor = if (selected) MaterialTheme.colorScheme.onSecondaryContainer else MaterialTheme.colorScheme.onSurface
+    ) {
+        Column(Modifier.padding(12.dp), horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(8.dp)) {
+            Image(painterResource(iconRes), contentDescription = null, contentScale = ContentScale.Fit, modifier = Modifier.size(64.dp).clip(RoundedCornerShape(16.dp)))
+            Text(name, style = MaterialTheme.typography.bodyMedium)
+            RadioButton(selected = selected, onClick = null, modifier = Modifier.size(24.dp))
+        }
+    }
 }
 
-private fun colorToHsv(color: Color): FloatArray {
-    val hsv = FloatArray(3)
-    android.graphics.Color.colorToHSV(color.toArgb(), hsv)
-    return hsv
+private fun colorToHsv(color: Color): FloatArray = FloatArray(3).also {
+    android.graphics.Color.colorToHSV(color.toArgb(), it)
 }
 
-private fun colorToHex(color: Color): String {
-    val red = (color.red * 255).toInt()
-    val green = (color.green * 255).toInt()
-    val blue = (color.blue * 255).toInt()
-    return "#%02X%02X%02X".format(red, green, blue)
-}
-
-private fun hexToColor(hex: String): Color {
-    val clean = hex.removePrefix("#")
-    return Color(
-        red = clean.substring(0, 2).toInt(16) / 255f,
-        green = clean.substring(2, 4).toInt(16) / 255f,
-        blue = clean.substring(4, 6).toInt(16) / 255f
-    )
-}
+private fun colorToHex(color: Color): String = String.format(Locale.ROOT, "#%06X", color.toArgb() and 0xFFFFFF)

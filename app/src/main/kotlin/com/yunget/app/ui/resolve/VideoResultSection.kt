@@ -22,6 +22,15 @@ import android.content.ClipData
 import android.content.ClipboardManager
 import android.content.Context
 import androidx.activity.compose.BackHandler
+import androidx.compose.animation.AnimatedContent
+import androidx.compose.animation.SizeTransform
+import androidx.compose.animation.animateColorAsState
+import androidx.compose.animation.animateContentSize
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
+import androidx.compose.animation.slideInVertically
+import androidx.compose.animation.slideOutVertically
+import androidx.compose.animation.togetherWith
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
@@ -30,18 +39,20 @@ import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.aspectRatio
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.grid.GridCells
+import androidx.compose.foundation.lazy.grid.GridItemSpan
 import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
 import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.shape.CircleShape
@@ -53,13 +64,12 @@ import androidx.compose.material.icons.outlined.Download
 import androidx.compose.material.icons.outlined.MusicNote
 import androidx.compose.material.icons.outlined.Visibility
 import androidx.compose.material3.Button
+import androidx.compose.material3.FilledTonalButton
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.Checkbox
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
-import androidx.compose.material3.ListItem
-import androidx.compose.material3.ListItemDefaults
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
@@ -73,10 +83,12 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.painterResource
+import androidx.compose.ui.semantics.Role
+import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.semantics.selected
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
@@ -87,37 +99,36 @@ import com.yunget.app.data.network.video.VideoMedia
 import com.yunget.app.data.network.video.VideoMediaKind
 import com.yunget.app.data.network.video.VideoParseResult
 import com.yunget.app.ui.SnackbarController
-import com.yunget.app.ui.items.MultiSelectAction
-import com.yunget.app.ui.items.MultiSelectBar
 import com.yunget.app.ui.items.logoRes
 import com.yunget.app.ui.preview.MediaPlayerPane
 import com.yunget.app.ui.preview.PreviewKind
 import com.yunget.app.ui.preview.PreviewLauncher
 import com.yunget.app.ui.preview.PreviewMedia
 import com.yunget.app.ui.preview.previewNetworkHeaders
-import com.yunget.app.ui.resolve.formatSize
-import com.yunget.app.ui.theme.ListGroupGap
-import com.yunget.app.ui.theme.listGroupShape
+import com.yunget.app.ui.theme.effectsDefault
+import com.yunget.app.ui.theme.effectsFast
+import com.yunget.app.ui.theme.spatialDefault
+import com.yunget.app.ui.theme.spatialFast
 import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
 
-/** 图集每页展示的张数（两列 → 每页 5 行） */
+/** 图集每页展示的张数；网格列数随可用宽度调整。 */
 private const val IMAGE_PAGE_SIZE = 10
 
 /**
  * 视频/图文解析结果区：平台信息 + 作品描述 + 媒体列表（或图集网格）+ 一键下载。
  *
  * 由解析页（[ResolveScreen]）在 `ResolveUiState.Video` 状态下直接内嵌，不是全屏覆盖层，
- * 因此用普通 Column 跟随解析页现有布局；但仍自带不透明 [Surface] 底色，
+ * 因此用普通 Column 跟随解析页现有布局；保留 [Surface] 底色，
  * 避免深色模式下半透明背景透出后面内容发黑。
  *
- * ★ **图片笔记直接铺两列缩略图**（不再是「一条图片一行 + 眼睛图标」）：图集的价值就是「看」，
+ * ★ **图片笔记直接铺自适应缩略图**（不再是「一条图片一行 + 眼睛图标」）：图集的价值就是「看」，
  *   逼用户挨个点小眼睛才看得到图是没道理的。缩略图带解析时算好的请求头（[VideoMedia.headers]），
  *   点任意一张进全屏预览 —— 那里能左右翻页、能双指放大，顶栏有「下载」。
  *   **图片过多按页展示**（每页 [IMAGE_PAGE_SIZE] 张），否则一屏几百张、滚动条直接拉爆。
  *
- * ★ 「全部下载」固定在底部：它以前跟在媒体列表最后，图集一长就得先滚到底才够得着。
+ * ★ 「全部下载」固定在底部；多选时变为「下载所选」，始终参与测量而不遮住内容。
  */
 @Composable
 fun VideoResultSection(
@@ -150,109 +161,114 @@ fun VideoResultSection(
         if (selectionMode) exitSelection() else onBack()
     }
 
-    Surface(
-        modifier = modifier.fillMaxSize(),
-        color = MaterialTheme.colorScheme.surface
-    ) {
-        // 外层 Box：多选的悬浮操作栏要叠在内容之上（见 MultiSelectBar）
-        Box(modifier = Modifier.fillMaxSize()) {
-            Column(modifier = Modifier.fillMaxSize()) {
-                if (selectionMode) {
-                    ImageSelectionTopBar(
-                        selectedCount = selectedUrls.size,
-                        allSelected = selectedUrls.size == images.size,
-                        onExit = exitSelection,
-                        onToggleSelectAll = {
-                            selectedUrls = if (selectedUrls.size == images.size) {
-                                emptySet()
-                            } else {
-                                images.map { it.url }.toSet()
-                            }
+    val mediaKeys = remember(result.medias) { mediaItemKeys(result.medias) }
+    Surface(modifier = modifier.fillMaxSize(), color = MaterialTheme.colorScheme.surface) {
+        Column(modifier = Modifier.fillMaxSize()) {
+            if (selectionMode) {
+                ImageSelectionTopBar(
+                    selectedCount = selectedUrls.size,
+                    allSelected = selectedUrls.size == images.map { it.url }.distinct().size,
+                    onExit = exitSelection,
+                    onToggleSelectAll = {
+                        val allUrls = images.map { it.url }.toSet()
+                        selectedUrls = if (selectedUrls == allUrls) emptySet() else allUrls
+                    }
+                )
+            } else {
+                VideoResultTopBar(result = result, onBack = onBack)
+            }
+
+            if (isImageNote) {
+                ImageNoteContent(
+                    result = result,
+                    images = images,
+                    selectionMode = selectionMode,
+                    selectedUrls = selectedUrls,
+                    onOpenImage = { clicked -> openMediaPreview(result, images, clicked, onDownloadMedia) },
+                    onToggleSelect = { media ->
+                        selectedUrls = if (media.url in selectedUrls) selectedUrls - media.url else selectedUrls + media.url
+                    },
+                    onEnterSelection = { media ->
+                        selectionMode = true
+                        selectedUrls = selectedUrls + media.url
+                    },
+                    onDownloadImage = onDownloadMedia,
+                    modifier = Modifier.weight(1f)
+                )
+            } else {
+                LazyColumn(
+                    modifier = Modifier.fillMaxWidth().weight(1f),
+                    contentPadding = PaddingValues(16.dp),
+                    verticalArrangement = Arrangement.spacedBy(12.dp)
+                ) {
+                    item(key = "video_metadata", contentType = "metadata") { VideoMetaBlock(result) }
+                    firstVideoOf(result)?.let { video ->
+                        item(key = "inline_video", contentType = "player") {
+                            InlineVideoPlayer(media = video.toPreviewMedia(result.title))
                         }
-                    )
-                } else {
-                    VideoResultTopBar(result = result, onBack = onBack)
-                }
-
-                if (isImageNote) {
-                    ImageNoteContent(
-                        result = result,
-                        images = images,
-                        selectionMode = selectionMode,
-                        selectedUrls = selectedUrls,
-                        onOpenImage = { clicked -> openMediaPreview(result, images, clicked, onDownloadMedia) },
-                        onToggleSelect = { media ->
-                            selectedUrls = if (media.url in selectedUrls) {
-                                selectedUrls - media.url
-                            } else {
-                                selectedUrls + media.url
-                            }
-                        },
-                        onEnterSelection = { media ->
-                            selectionMode = true
-                            selectedUrls = selectedUrls + media.url
-                        },
-                        onDownloadImage = onDownloadMedia,
-                        modifier = Modifier.weight(1f)
-                    )
-                } else {
-                    LazyColumn(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .weight(1f),
-                        contentPadding = PaddingValues(start = 16.dp, end = 16.dp, top = 8.dp, bottom = 16.dp),
-                        // 与网盘页一致：媒体各行首尾相接成一组，间距用统一发丝缝
-                        verticalArrangement = Arrangement.spacedBy(ListGroupGap)
-                    ) {
-                        item { VideoMetaBlock(result) }
-
-                        // 视频结果：**直接把第一条视频内联出来** —— 和图片笔记直接铺图同一个道理，
-                        // 不必先点小眼睛才知道里面是什么。默认 `active = false`（不自动播放）：
-                        // 一进页面就出声很唐突，用户点播放按钮才播。
-                        firstVideoOf(result)?.let { video ->
-                            item(key = "inline_video") {
-                                InlineVideoPlayer(
-                                    media = video.toPreviewMedia(result.title),
-                                    modifier = Modifier.padding(bottom = 4.dp)
-                                )
-                            }
-                        }
-
-                        itemsIndexed(result.medias) { index, media ->
-                            VideoMediaRow(
-                                index = index,
-                                count = result.medias.size,
-                                media = media,
-                                onDownload = { onDownloadMedia(media) },
-                                onDownloadAudio = { onDownloadAudio(media) },
-                                // 预览：入口直接交给全局预览页（与当前页面无关的一次性动作，不用层层传回调）
-                                onPreview = { openMediaPreview(result, listOf(media), media, onDownloadMedia) }
+                    }
+                    if (result.medias.isEmpty()) {
+                        item(key = "video_empty", contentType = "empty") {
+                            Text(
+                                "没有可下载的媒体，可返回检查链接后重试",
+                                style = MaterialTheme.typography.bodyLarge,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                modifier = Modifier.padding(vertical = 24.dp)
                             )
                         }
                     }
-                }
-
-                // 多选时不显示「全部下载」：底部让位给 MultiSelectBar 的「下载所选」
-                if (!selectionMode) {
-                    DownloadAllBar(result = result, onDownloadAll = onDownloadAll)
+                    itemsIndexed(
+                        items = result.medias,
+                        key = { index, _ -> mediaKeys[index] },
+                        contentType = { _, media -> media.kind }
+                    ) { index, media ->
+                        VideoMediaRow(
+                            index = index,
+                            count = result.medias.size,
+                            media = media,
+                            onDownload = { onDownloadMedia(media) },
+                            onDownloadAudio = { onDownloadAudio(media) },
+                            onPreview = { openMediaPreview(result, listOf(media), media, onDownloadMedia) },
+                            modifier = Modifier.animateItem(
+                                fadeInSpec = effectsDefault(),
+                                placementSpec = spatialDefault(),
+                                fadeOutSpec = effectsFast()
+                            )
+                        )
+                    }
                 }
             }
 
-            if (selectionMode) {
-                MultiSelectBar(
-                    count = selectedUrls.size,
-                    actions = listOf(
-                        MultiSelectAction(
-                            label = "下载所选",
-                            icon = Icons.Outlined.Download,
-                            tint = MaterialTheme.colorScheme.primary
+            // 底栏参与布局，不覆盖图集；两种状态的尺寸与淡入统一跟随全局动效规格。
+            AnimatedContent(
+                targetState = selectionMode,
+                transitionSpec = {
+                    (fadeIn(effectsDefault()) + slideInVertically(spatialDefault()) { it / 4 })
+                        .togetherWith(fadeOut(effectsFast()) + slideOutVertically(spatialFast()) { it / 4 })
+                        .using(SizeTransform(sizeAnimationSpec = { _, _ -> spatialDefault() }))
+                },
+                label = "videoDownloadActions"
+            ) { selecting ->
+                if (selecting) {
+                    Surface(color = MaterialTheme.colorScheme.surfaceContainerHigh) {
+                        Button(
+                            onClick = {
+                                onDownloadSelected(images.filter { it.url in selectedUrls })
+                                exitSelection()
+                            },
+                            enabled = selectedUrls.isNotEmpty(),
+                            modifier = Modifier.fillMaxWidth().padding(16.dp).heightIn(min = 56.dp),
+                            shape = RoundedCornerShape(16.dp),
+                            contentPadding = PaddingValues(horizontal = 24.dp, vertical = 16.dp)
                         ) {
-                            // 走批量入口：多张会在下载页收纳成一个可折叠的文件夹组（见 downloadVideoMedias）
-                            onDownloadSelected(images.filter { it.url in selectedUrls })
-                            exitSelection()
+                            Icon(Icons.Outlined.Download, contentDescription = null, modifier = Modifier.size(20.dp))
+                            Spacer(Modifier.width(8.dp))
+                            Text("下载所选（${selectedUrls.size} 张）")
                         }
-                    )
-                )
+                    }
+                } else {
+                    DownloadAllBar(result = result, onDownloadAll = onDownloadAll)
+                }
             }
         }
     }
@@ -267,7 +283,7 @@ private fun VideoResultTopBar(result: VideoParseResult, onBack: () -> Unit) {
             .padding(start = 4.dp, end = 16.dp, top = 8.dp, bottom = 8.dp),
         verticalAlignment = Alignment.CenterVertically
     ) {
-        IconButton(onClick = onBack) {
+        IconButton(onClick = onBack, modifier = Modifier.size(48.dp)) {
             Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "返回")
         }
         // 平台 Logo：按图标自身形状原样画（不裁圆、不垫底色，理由见 PlatformLogos 的 KDoc）
@@ -281,7 +297,7 @@ private fun VideoResultTopBar(result: VideoParseResult, onBack: () -> Unit) {
         Column(modifier = Modifier.weight(1f)) {
             Text(
                 text = result.platform.displayName,
-                style = MaterialTheme.typography.labelMedium,
+                style = MaterialTheme.typography.bodyMedium,
                 color = MaterialTheme.colorScheme.onSurfaceVariant
             )
             Text(
@@ -308,37 +324,37 @@ private fun ImageSelectionTopBar(
     onExit: () -> Unit,
     onToggleSelectAll: () -> Unit
 ) {
-    Row(
-        modifier = Modifier
-            .fillMaxWidth()
-            .padding(start = 4.dp, end = 8.dp, top = 8.dp, bottom = 8.dp),
-        verticalAlignment = Alignment.CenterVertically
-    ) {
-        IconButton(onClick = onExit) {
-            Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "退出多选")
+    Column(modifier = Modifier.fillMaxWidth().animateContentSize(spatialFast()).padding(8.dp)) {
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            IconButton(onClick = onExit, modifier = Modifier.size(48.dp)) {
+                Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "退出多选")
+            }
+            Column(modifier = Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                AnimatedContent(
+                    targetState = selectedCount,
+                    transitionSpec = {
+                        fadeIn(effectsDefault()).togetherWith(fadeOut(effectsFast()))
+                            .using(SizeTransform(sizeAnimationSpec = { _, _ -> spatialFast() }))
+                    },
+                    label = "imageSelectionCount"
+                ) { count -> Text("已选 $count 张", style = MaterialTheme.typography.titleMedium) }
+                Text(
+                    text = if (allSelected) "已全选" else "点击图片继续选择",
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+            }
         }
-        Column(modifier = Modifier.weight(1f)) {
-            Text(
-                text = "已选 $selectedCount 张",
-                style = MaterialTheme.typography.titleMedium,
-                fontWeight = FontWeight.Medium
-            )
-            Text(
-                text = if (allSelected) "已全选" else "点击图片继续选择",
-                style = MaterialTheme.typography.bodyMedium,
-                color = MaterialTheme.colorScheme.onSurfaceVariant
-            )
-        }
-        TextButton(onClick = onToggleSelectAll) {
+        TextButton(onClick = onToggleSelectAll, modifier = Modifier.align(Alignment.End).heightIn(min = 48.dp)) {
             Text(if (allSelected) "取消全选" else "全选")
         }
     }
 }
 
 /**
- * 图片笔记内容：作品信息 + （多页时）分页条 + 两列缩略图网格。
+ * 图片笔记内容：可滚动作品信息与自适应缩略图网格，分页条固定在底部。
  *
- * 分页条固定在网格上方而不是塞进网格首项：翻页控件必须**始终够得着**，
+ * 分页条放在网格外：翻页控件必须**始终够得着**，
  * 不然第二页以后要滚回顶部才能翻回去。
  */
 @Composable
@@ -361,70 +377,72 @@ private fun ImageNoteContent(
         images.drop(page * IMAGE_PAGE_SIZE).take(IMAGE_PAGE_SIZE)
     }
 
+    val imageKeys = remember(images) { mediaItemKeys(images) }
     Column(modifier = modifier.fillMaxWidth()) {
-        VideoMetaBlock(
-            result = result,
-            modifier = Modifier.padding(start = 16.dp, end = 16.dp, top = 8.dp)
-        )
-        if (pageCount > 1) {
-            ImagePagerBar(
-                page = page,
-                pageCount = pageCount,
-                total = images.size,
-                onPageChange = { page = it }
-            )
-        }
         LazyVerticalGrid(
-            columns = GridCells.Fixed(2),
-            modifier = Modifier
-                .fillMaxWidth()
-                .weight(1f),
-            // 多选时底部留出悬浮操作栏的高度，否则最后一行会被压在工具栏下面
-            contentPadding = PaddingValues(
-                start = 16.dp,
-                end = 16.dp,
-                top = 4.dp,
-                bottom = if (selectionMode) 96.dp else 12.dp
-            ),
-            horizontalArrangement = Arrangement.spacedBy(8.dp),
-            verticalArrangement = Arrangement.spacedBy(8.dp)
+            columns = GridCells.Adaptive(minSize = 148.dp),
+            modifier = Modifier.fillMaxWidth().weight(1f),
+            contentPadding = PaddingValues(16.dp),
+            horizontalArrangement = Arrangement.spacedBy(12.dp),
+            verticalArrangement = Arrangement.spacedBy(12.dp)
         ) {
-            items(count = pageImages.size, key = { pageImages[it].url }) { i ->
+            // 文案与缩略图一起滚动，长文案或大字体不会挤走整个图片区域。
+            item(key = "image_metadata", contentType = "metadata", span = { GridItemSpan(maxLineSpan) }) {
+                Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                    VideoMetaBlock(result)
+                    Text(
+                        text = "共 ${images.size} 张 · 长按图片可多选",
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                }
+            }
+            items(
+                count = pageImages.size,
+                key = { imageKeys[page * IMAGE_PAGE_SIZE + it] },
+                contentType = { "image" }
+            ) { i ->
                 val media = pageImages[i]
                 ImageGridCell(
                     media = media,
-                    // 角标用**全局序号**（不是页内序号），否则第二页又从 1/9 开始数
                     index = page * IMAGE_PAGE_SIZE + i,
                     total = images.size,
                     selectionMode = selectionMode,
                     selected = media.url in selectedUrls,
-                    // 多选态下点格子是「选中/取消」，平时是「打开大图」
                     onClick = { if (selectionMode) onToggleSelect(media) else onOpenImage(media) },
                     onLongClick = { onEnterSelection(media) },
-                    onDownload = { onDownloadImage(media) }
+                    onDownload = { onDownloadImage(media) },
+                    modifier = Modifier.animateItem(
+                        fadeInSpec = effectsDefault(),
+                        placementSpec = spatialDefault(),
+                        fadeOutSpec = effectsFast()
+                    )
                 )
             }
+        }
+        if (pageCount > 1) {
+            ImagePagerBar(page = page, pageCount = pageCount, total = images.size, onPageChange = { page = it })
         }
     }
 }
 
-/** 图集分页条：`共 N 张 · 第 1/3 页` + 上一页 / 下一页 */
+/** 分页始终可见，文字与操作分行以容纳系统大字体。 */
 @Composable
 private fun ImagePagerBar(page: Int, pageCount: Int, total: Int, onPageChange: (Int) -> Unit) {
-    Row(
-        modifier = Modifier
-            .fillMaxWidth()
-            .padding(start = 16.dp, end = 8.dp, top = 4.dp),
-        verticalAlignment = Alignment.CenterVertically
-    ) {
+    Column(modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 8.dp)) {
         Text(
             text = "共 $total 张 · 第 ${page + 1}/$pageCount 页",
-            style = MaterialTheme.typography.labelMedium,
-            color = MaterialTheme.colorScheme.onSurfaceVariant,
-            modifier = Modifier.weight(1f)
+            style = MaterialTheme.typography.bodyMedium,
+            color = MaterialTheme.colorScheme.onSurfaceVariant
         )
-        TextButton(onClick = { onPageChange(page - 1) }, enabled = page > 0) { Text("上一页") }
-        TextButton(onClick = { onPageChange(page + 1) }, enabled = page < pageCount - 1) { Text("下一页") }
+        FlowRow(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.spacedBy(8.dp, Alignment.End),
+            verticalArrangement = Arrangement.spacedBy(4.dp)
+        ) {
+            TextButton(onClick = { onPageChange(page - 1) }, enabled = page > 0, modifier = Modifier.heightIn(min = 48.dp)) { Text("上一页") }
+            TextButton(onClick = { onPageChange(page + 1) }, enabled = page < pageCount - 1, modifier = Modifier.heightIn(min = 48.dp)) { Text("下一页") }
+        }
     }
 }
 
@@ -446,7 +464,8 @@ private fun ImageGridCell(
     selected: Boolean,
     onClick: () -> Unit,
     onLongClick: () -> Unit,
-    onDownload: () -> Unit
+    onDownload: () -> Unit,
+    modifier: Modifier = Modifier
 ) {
     val context = LocalContext.current
     val request = remember(context, media.url, media.headers) {
@@ -456,12 +475,24 @@ private fun ImageGridCell(
             .build()
     }
 
+    val selectionOverlay by animateColorAsState(
+        targetValue = MaterialTheme.colorScheme.primary.copy(alpha = if (selected) 0.2f else 0f),
+        animationSpec = effectsFast(),
+        label = "imageSelectionOverlay"
+    )
     Surface(
-        modifier = Modifier
+        modifier = modifier
             .fillMaxWidth()
             .aspectRatio(1f)
-            .clip(MaterialTheme.shapes.medium)
-            .combinedClickable(onClick = onClick, onLongClick = onLongClick),
+            .clip(RoundedCornerShape(16.dp))
+            .semantics { if (selectionMode) this.selected = selected }
+            .combinedClickable(
+                onClick = onClick,
+                onLongClick = onLongClick,
+                onLongClickLabel = "选择图片",
+                role = if (selectionMode) Role.Checkbox else Role.Button
+            ),
+        shape = RoundedCornerShape(16.dp),
         color = MaterialTheme.colorScheme.surfaceContainerLow
     ) {
         Box {
@@ -472,14 +503,7 @@ private fun ImageGridCell(
                 contentScale = ContentScale.Crop
             )
 
-            // 选中标记：压一层主色薄纱。亮底图片上只画勾选框很容易看不出来
-            if (selected) {
-                Box(
-                    modifier = Modifier
-                        .fillMaxSize()
-                        .background(MaterialTheme.colorScheme.primary.copy(alpha = 0.28f))
-                )
-            }
+            Box(modifier = Modifier.fillMaxSize().background(selectionOverlay))
 
             CellBadge(
                 text = "${index + 1}/$total",
@@ -493,7 +517,7 @@ private fun ImageGridCell(
                     checked = selected,
                     // null = 不接管点击：整格的 onClick 负责切换选中，避免点勾选框有两条路径
                     onCheckedChange = null,
-                    modifier = Modifier.align(Alignment.TopEnd)
+                    modifier = Modifier.align(Alignment.TopEnd).padding(4.dp).size(48.dp)
                 )
             } else {
                 IconButton(
@@ -501,7 +525,7 @@ private fun ImageGridCell(
                     modifier = Modifier
                         .align(Alignment.BottomEnd)
                         .padding(4.dp)
-                        .size(34.dp)
+                        .size(48.dp)
                         .background(
                             color = MaterialTheme.colorScheme.surfaceContainerHighest,
                             shape = CircleShape
@@ -519,7 +543,7 @@ private fun ImageGridCell(
     }
 }
 
-/** 缩略图角标（半透明胶囊）：底色用它而不是纯色，压在明暗不一的图片上都读得清 */
+/** 角标使用不透明的 Material 容器角色，保证明暗图片上的可读性。 */
 @Composable
 private fun CellBadge(text: String, modifier: Modifier = Modifier) {
     Surface(
@@ -529,8 +553,8 @@ private fun CellBadge(text: String, modifier: Modifier = Modifier) {
     ) {
         Text(
             text = text,
-            modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp),
-            style = MaterialTheme.typography.labelSmall,
+            modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp),
+            style = MaterialTheme.typography.labelLarge,
             color = MaterialTheme.colorScheme.onSurfaceVariant
         )
     }
@@ -546,8 +570,10 @@ private fun DownloadAllBar(result: VideoParseResult, onDownloadAll: () -> Unit) 
             onClick = onDownloadAll,
             modifier = Modifier
                 .fillMaxWidth()
-                .padding(horizontal = 16.dp, vertical = 10.dp)
-                .height(48.dp)
+                .padding(16.dp)
+                .heightIn(min = 56.dp),
+            shape = RoundedCornerShape(16.dp),
+            contentPadding = PaddingValues(horizontal = 24.dp, vertical = 16.dp)
         ) {
             Text("全部下载（${result.medias.size} 项）")
         }
@@ -566,7 +592,7 @@ private fun VideoMetaBlock(result: VideoParseResult, modifier: Modifier = Modifi
         if (result.medias.isNotEmpty()) add("共 ${result.medias.size} 项")
     }.joinToString("  ·  ")
 
-    Column(modifier = modifier.padding(bottom = 12.dp)) {
+    Column(modifier = modifier.animateContentSize(spatialDefault()).padding(bottom = 12.dp)) {
         if (metaLine.isNotBlank()) {
             Text(
                 text = metaLine,
@@ -580,44 +606,31 @@ private fun VideoMetaBlock(result: VideoParseResult, modifier: Modifier = Modifi
         val caption = result.text.ifBlank { result.title }
         if (caption.isNotBlank()) {
             var expanded by remember(caption) { mutableStateOf(false) }
-            val canExpand = caption.length > 60
+            var canExpand by remember(caption) { mutableStateOf(false) }
             Text(
                 text = caption,
-                style = MaterialTheme.typography.bodyMedium,
+                style = MaterialTheme.typography.bodyLarge,
                 maxLines = if (expanded) Int.MAX_VALUE else 3,
                 overflow = TextOverflow.Ellipsis,
+                onTextLayout = { if (!expanded) canExpand = it.hasVisualOverflow },
                 modifier = Modifier
                     .padding(top = if (metaLine.isNotBlank()) 6.dp else 0.dp)
-                    .clickable(enabled = canExpand) { expanded = !expanded }
+                    .clickable(enabled = canExpand || expanded) { expanded = !expanded }
             )
-            Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.padding(top = 2.dp)) {
-                if (canExpand) {
-                    Text(
-                        text = if (expanded) "收起" else "展开",
-                        style = MaterialTheme.typography.labelMedium,
-                        color = MaterialTheme.colorScheme.primary,
-                        modifier = Modifier
-                            .padding(end = 16.dp)
-                            .clickable { expanded = !expanded }
-                    )
+            FlowRow(
+                modifier = Modifier.fillMaxWidth().padding(top = 4.dp),
+                horizontalArrangement = Arrangement.spacedBy(8.dp),
+                verticalArrangement = Arrangement.spacedBy(4.dp)
+            ) {
+                if (canExpand || expanded) {
+                    TextButton(onClick = { expanded = !expanded }, modifier = Modifier.heightIn(min = 48.dp)) {
+                        Text(if (expanded) "收起" else "展开全文")
+                    }
                 }
-                // 复制原文而不是折叠后的显示文本：长文案正是最需要复制出去的
-                Row(
-                    verticalAlignment = Alignment.CenterVertically,
-                    modifier = Modifier.clickable { copyVideoCaption(context, caption) }
-                ) {
-                    Icon(
-                        imageVector = Icons.Outlined.ContentCopy,
-                        contentDescription = null,
-                        modifier = Modifier.size(14.dp),
-                        tint = MaterialTheme.colorScheme.primary
-                    )
-                    Text(
-                        text = "复制文案",
-                        style = MaterialTheme.typography.labelMedium,
-                        color = MaterialTheme.colorScheme.primary,
-                        modifier = Modifier.padding(start = 4.dp)
-                    )
+                TextButton(onClick = { copyVideoCaption(context, caption) }, modifier = Modifier.heightIn(min = 48.dp)) {
+                    Icon(Icons.Outlined.ContentCopy, contentDescription = null, modifier = Modifier.size(20.dp))
+                    Spacer(Modifier.width(8.dp))
+                    Text("复制文案")
                 }
             }
         }
@@ -642,7 +655,7 @@ private fun InlineVideoPlayer(media: PreviewMedia, modifier: Modifier = Modifier
         modifier = modifier
             .fillMaxWidth()
             .aspectRatio(16f / 9f)
-            .clip(MaterialTheme.shapes.large),
+            .clip(RoundedCornerShape(24.dp)),
         color = MaterialTheme.colorScheme.surfaceContainerLow
     ) {
         MediaPlayerPane(
@@ -655,7 +668,7 @@ private fun InlineVideoPlayer(media: PreviewMedia, modifier: Modifier = Modifier
     }
 }
 
-/** 单条媒体行：序号 + 类型 + 清晰度 + 大小，右侧「预览」图标 +（视频）「仅下载音频」 + 「下载」 */
+/** 单条媒体：规格与操作分层，48dp 操作区随字体和宽度换行。 */
 @Composable
 private fun VideoMediaRow(
     index: Int,
@@ -663,7 +676,8 @@ private fun VideoMediaRow(
     media: VideoMedia,
     onDownload: () -> Unit,
     onDownloadAudio: () -> Unit,
-    onPreview: () -> Unit
+    onPreview: () -> Unit,
+    modifier: Modifier = Modifier
 ) {
     val subtitle = buildList {
         if (media.quality.isNotBlank()) add(media.quality)
@@ -672,62 +686,53 @@ private fun VideoMediaRow(
     }.joinToString("  ·  ")
 
     Card(
-        modifier = Modifier.fillMaxWidth(),
-        shape = listGroupShape(index, count),
-        colors = CardDefaults.cardColors(
-            containerColor = MaterialTheme.colorScheme.surfaceContainerLow
-        )
+        modifier = modifier.fillMaxWidth(),
+        shape = RoundedCornerShape(16.dp),
+        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceContainerLow)
     ) {
-        ListItem(
-            headlineContent = {
-                Text(
-                    text = "${index + 1}. ${videoMediaKindLabel(media.kind)}",
-                    style = MaterialTheme.typography.bodyLarge,
-                    maxLines = 1,
-                    overflow = TextOverflow.Ellipsis
-                )
-            },
-            supportingContent = {
-                if (subtitle.isNotBlank()) {
-                    Text(
-                        text = subtitle,
-                        style = MaterialTheme.typography.bodyMedium,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                        maxLines = 1,
-                        overflow = TextOverflow.Ellipsis
-                    )
+        Column(modifier = Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+            Text(
+                text = "${index + 1}/$count · ${videoMediaKindLabel(media.kind)}",
+                style = MaterialTheme.typography.bodyLarge
+            )
+            if (subtitle.isNotBlank()) {
+                Text(subtitle, style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
+            }
+            FlowRow(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(8.dp, Alignment.End),
+                verticalArrangement = Arrangement.spacedBy(4.dp)
+            ) {
+                TextButton(onClick = onPreview, modifier = Modifier.heightIn(min = 48.dp)) {
+                    Icon(Icons.Outlined.Visibility, contentDescription = null, modifier = Modifier.size(20.dp))
+                    Spacer(Modifier.width(8.dp))
+                    Text("预览")
                 }
-            },
-            trailingContent = {
-                Row(verticalAlignment = Alignment.CenterVertically) {
-                    // 预览：图片/视频/音频都能直接在线看，不必先下载
-                    IconButton(onClick = onPreview, modifier = Modifier.size(36.dp)) {
-                        Icon(
-                            imageVector = Icons.Outlined.Visibility,
-                            contentDescription = "预览",
-                            modifier = Modifier.size(20.dp),
-                            tint = MaterialTheme.colorScheme.primary
-                        )
-                    }
-                    // 仅下载音频：只有视频才有音轨（图片没有，音频本身就是音频）
-                    if (media.kind == VideoMediaKind.VIDEO) {
-                        IconButton(onClick = onDownloadAudio, modifier = Modifier.size(36.dp)) {
-                            Icon(
-                                imageVector = Icons.Outlined.MusicNote,
-                                contentDescription = "仅下载音频",
-                                modifier = Modifier.size(20.dp),
-                                tint = MaterialTheme.colorScheme.primary
-                            )
-                        }
-                    }
-                    TextButton(onClick = onDownload) {
-                        Text("下载")
+                if (media.kind == VideoMediaKind.VIDEO) {
+                    TextButton(onClick = onDownloadAudio, modifier = Modifier.heightIn(min = 48.dp)) {
+                        Icon(Icons.Outlined.MusicNote, contentDescription = null, modifier = Modifier.size(20.dp))
+                        Spacer(Modifier.width(8.dp))
+                        Text("仅下载音频")
                     }
                 }
-            },
-            // 底色由外层 Card 决定，这里必须透明
-            colors = ListItemDefaults.colors(containerColor = Color.Transparent)
-        )
+                FilledTonalButton(onClick = onDownload, modifier = Modifier.heightIn(min = 48.dp), shape = RoundedCornerShape(16.dp)) {
+                    Icon(Icons.Outlined.Download, contentDescription = null, modifier = Modifier.size(20.dp))
+                    Spacer(Modifier.width(8.dp))
+                    Text("下载")
+                }
+            }
+        }
+    }
+}
+
+/** 重复媒体也有唯一键；不同媒体按内容标识，翻页或更新时不以当前页下标作为身份。 */
+private fun mediaItemKeys(medias: List<VideoMedia>): List<String> {
+    val occurrences = mutableMapOf<String, Int>()
+    return medias.map { media ->
+        val identity = "${media.kind}:${media.url}:${media.fileName}:${media.quality}"
+        val occurrence = occurrences.getOrDefault(identity, 0)
+        occurrences[identity] = occurrence + 1
+        "media:$identity#$occurrence"
     }
 }
 

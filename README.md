@@ -4,7 +4,7 @@
 >
 > **本项目是 [CYQawa/YunX（云析）](https://github.com/CYQawa/YunX) 的二次开发版本**，在其协议与架构基础上进行功能扩展，并将下载能力逐步迁移至独立的 [TurboDL](https://github.com/jiayuxuan123/TurboDL) 下载引擎。遵循 GNU AGPL-3.0 协议开源。
 
-当前版本 **2.7.26**（versionCode 74）· Android 7.0+（minSdk 24，targetSdk 34）· 内置 TurboDL 0.5.0.1
+当前版本 **2.7.27**（versionCode 75）· Android 7.0+（minSdk 24，targetSdk 34）· 内置 TurboDL 0.5.0.1
 
 **官网**：[jiayuxuan123.github.io/YunGet](https://jiayuxuan123.github.io/YunGet/) —— 下载、使用说明、常见问题、隐私与条款
 
@@ -19,6 +19,19 @@
 - 本项目在上游协议解析、网盘功能和 Android 应用结构基础上进行了二次开发。
 - 下载能力已迁移到独立的 [TurboDL](https://github.com/jiayuxuan123/TurboDL) SDK：日常的直链下载走它，HLS 通过它的插件机制接入。项目早期自己写的那套下载实现仍留在代码里，作为可选的兜底引擎。
 - **赞赏渠道说明**：应用内「支持开发」页的赞赏码仅面向**本二次开发版本**的维护；若想支持上游原项目作者，请移步 [上游仓库](https://github.com/CYQawa/YunX) 的捐赠渠道，避免权益混淆。
+
+## 2.7.27 更新
+
+- 全面重写主要页面为 Google Material 3 Expressive：采用分组列表、鲜明蓝色强调、近黑深色表面与统一圆角层级，主界面、下载页和设置页使用一致的视觉语言。
+- 文案与字阶重新标定：设置行标题和图内主标题为 16sp，正文 14sp，辅助说明 12sp；下载量、剩余时间、连接数等关键数据不再使用注释字号。
+- 动效提供增强、标准和关闭三档；页面过渡、选择反馈、加载指示器与波浪进度条使用同一偏好。
+- 宽窗口采用导航侧栏，包含竖屏平板；手机保留四个目的地的底栏。
+- 接入经确认的纯白底云取图标，支持 Android 自适应与单色主题图标。
+- 主题页新增字号与间距控制：默认按窗口宽高比自动适配高屏、窄屏和平板，也可关闭自动后手动滑杆调节。
+- 主题页新增「经典界面 / 新版界面」切换：经典模式恢复 2.7.26 的大标题顶栏、经典字阶与标准 Material 组件形态，新版模式保留分组卡片与 Expressive 动效。
+- 「支持开发」页新增微信、支付宝双赞赏码，支持点选和左右滑动翻页。
+- 去除未使用的 Cupertino 与玻璃框架依赖，长文件名仅聚焦时滚动，引导背景改为随页面变化。
+- 延续 TurboDL 0.5.0.1 与原有账号、下载、上传、预览和插件功能。
 
 ## 2.7.26 更新
 
@@ -313,12 +326,12 @@ Release 同时提供三个按架构拆分的包和一个通用包：
 | `app-arm64-v8a-release.apk` | 绝大多数现代 Android 手机 | 约 26.8 MB |
 | `app-armeabi-v7a-release.apk` | 32 位 ARM 老设备 | 约 26.7 MB |
 | `app-x86_64-release.apk` | 64 位模拟器/测试设备 | 约 26.8 MB |
-| `0-YunGet-2.7.26-universal.apk`（构建产物 `app-universal-release.apk`） | 通用包，也是旧版更新器的过渡包 | 约 28 MB |
+| `0-YunGet-2.7.27-universal.apk`（构建产物 `app-universal-release.apk`） | 通用包，也是旧版更新器的过渡包 | 约 26.2 MB |
 
 aria2 已拆为按需下载安装的独立 ARM64 内核 APK，Gopeed 内核也按需获取，主包不再内置这两个内核。
 
 **过渡版本规则：**2.7.22 及更早的更新器只会取 Release 中第一个 `.apk`，不认识 ABI。
-目前 GitHub API 返回的首个 APK 是 `0-YunGet-2.7.26-universal.apk`；发布时必须实际检查 API 返回顺序，不能只依赖上传顺序或文件名。旧版用户先升级到 2.7.23；
+目前 GitHub API 返回的首个 APK 是 `0-YunGet-2.7.27-universal.apk`；发布时必须实际检查 API 返回顺序，不能只依赖上传顺序或文件名。旧版用户先升级到 2.7.23；
 2.7.23 起更新器会按 `Build.SUPPORTED_ABIS` 选择精确 ABI，找不到才使用兼容 32 位包或 universal。
 后续 Release 也应保留 universal 包，不能只上传三个分架构包。
 

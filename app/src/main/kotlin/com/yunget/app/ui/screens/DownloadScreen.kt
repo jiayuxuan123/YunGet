@@ -9,13 +9,14 @@ import android.os.Environment
 import android.provider.Settings
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
-import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.AnimatedContent
+import androidx.compose.animation.SizeTransform
+import androidx.compose.animation.animateColorAsState
 import androidx.compose.animation.core.animateFloatAsState
-import androidx.compose.animation.expandVertically
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
-import androidx.compose.animation.shrinkVertically
-import androidx.compose.foundation.clickable
+import androidx.compose.animation.scaleIn
+import androidx.compose.animation.togetherWith
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -26,348 +27,833 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
-import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.foundation.lazy.rememberLazyListState
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.selection.toggleable
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.text.KeyboardOptions
+import androidx.compose.foundation.text.selection.SelectionContainer
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.outlined.Delete
 import androidx.compose.material.icons.outlined.Download
-import androidx.compose.material.icons.outlined.ExpandLess
 import androidx.compose.material.icons.outlined.ExpandMore
 import androidx.compose.material.icons.outlined.Folder
-import androidx.compose.material.icons.outlined.InsertDriveFile
-import androidx.compose.material.icons.outlined.OpenInNew
 import androidx.compose.material.icons.outlined.Pause
 import androidx.compose.material.icons.outlined.PlayArrow
-import androidx.compose.material.icons.outlined.Refresh
-import androidx.compose.material.icons.outlined.SystemUpdate
+import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
-import androidx.compose.material3.CardDefaults
+import androidx.compose.material3.Checkbox
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.FilledTonalButton
 import androidx.compose.material3.FloatingActionButton
+import androidx.compose.material3.FloatingActionButtonDefaults
+import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
+import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.ModalBottomSheet
+import androidx.compose.material3.OutlinedTextField
+import androidx.compose.material3.SegmentedButton
+import androidx.compose.material3.SegmentedButtonDefaults
+import androidx.compose.material3.SingleChoiceSegmentedButtonRow
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBarScrollBehavior
+import androidx.compose.material3.rememberModalBottomSheetState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.input.nestedscroll.nestedScroll
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.semantics.Role
+import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.semantics.stateDescription
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.style.TextAlign
-import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.core.content.ContextCompat
 import androidx.core.content.FileProvider
 import com.yunget.app.data.db.DownloadTaskEntity
 import com.yunget.app.data.download.DownloadStats
 import com.yunget.app.ui.SnackbarController
+import com.yunget.app.ui.components.FileNameText
 import com.yunget.app.ui.components.SpeedChart
-import com.yunget.app.ui.viewmodel.DownloadViewModel
-import java.io.File
-import com.yunget.app.ui.theme.ThemeController
+import com.yunget.app.ui.items.DownloadLiveStatistics
+import com.yunget.app.ui.items.DownloadTaskActions
+import com.yunget.app.ui.items.DownloadTaskItem
+import com.yunget.app.ui.items.DownloadTaskListItem
+import com.yunget.app.ui.items.DownloadTaskStatus
+import com.yunget.app.ui.items.formatDownloadSize
+import com.yunget.app.ui.items.formatDownloadSpeed
+import com.yunget.app.ui.items.toDownloadListItem
 import com.yunget.app.ui.theme.effectsDefault
 import com.yunget.app.ui.theme.effectsFast
 import com.yunget.app.ui.theme.spatialDefault
+import com.yunget.app.ui.theme.LocalUiMetrics
 import com.yunget.app.ui.theme.spatialFast
-import kotlinx.coroutines.delay
-import androidx.compose.material3.AlertDialog
-import androidx.compose.material3.Button
-import androidx.compose.material3.Card
-import androidx.compose.material3.Checkbox
-import androidx.compose.material3.CircularProgressIndicator
-import androidx.compose.material3.IconButton
-import androidx.compose.material3.LinearProgressIndicator
-import androidx.compose.material3.OutlinedTextField
-import androidx.compose.material3.TextButton
+import com.yunget.app.ui.viewmodel.DownloadViewModel
+import java.io.File
+import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.distinctUntilChanged
+import kotlinx.coroutines.flow.map
 
-/**
- * 下载页：任务列表（分片多线程下载 / 断点续传）、进度展示、暂停/继续/删除/打开。
- */
+/** 页面只观察列表结构；任务进度、实时速度和曲线各自在使用处订阅。 */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun DownloadScreen(
     scrollBehavior: TopAppBarScrollBehavior,
     viewModel: DownloadViewModel,
-    modifier: Modifier = Modifier
+    modifier: Modifier = Modifier,
 ) {
     val context = LocalContext.current
-    val tasks by viewModel.tasks.collectAsState()
-    val stats by viewModel.stats.collectAsState()
-    val speedSeries by viewModel.speedSeries.collectAsState()
-    val (rootTasks, folderGroups) = remember(tasks) {
-        val (folders, roots) = tasks.partition { it.fileName.contains('/') }
-        roots to folders.groupBy { it.fileName.substringBefore('/') }
+    val listFlow = remember(viewModel) {
+        viewModel.tasks.map { tasks -> tasks.map { it.toDownloadListItem() } }.distinctUntilChanged()
     }
-    var showAddDialog by remember { mutableStateOf(false) }
-    var pendingDelete by remember { mutableStateOf<DownloadTaskEntity?>(null) }
-    var showDeleteAllConfirm by remember { mutableStateOf(false) }
-    var showEmptyState by remember { mutableStateOf(false) }
-
-    LaunchedEffect(tasks.isEmpty()) {
-        if (tasks.isEmpty()) {
-            delay(250)
-            showEmptyState = tasks.isEmpty()
-        } else {
-            showEmptyState = false
-        }
-    }
-
-    // Android 9- 写公共目录需要 WRITE_EXTERNAL_STORAGE
-    val needLegacyPermission = Build.VERSION.SDK_INT < Build.VERSION_CODES.Q
-    val permissionLauncher = rememberLauncherForActivityResult(
-        ActivityResultContracts.RequestPermission()
-    ) { granted ->
+    val listItems by listFlow.collectAsState(initial = viewModel.tasks.value.map { it.toDownloadListItem() })
+    var showAddDialog by rememberSaveable { mutableStateOf(false) }
+    var pendingDeleteId by rememberSaveable { mutableStateOf<Long?>(null) }
+    var detailId by rememberSaveable { mutableStateOf<Long?>(null) }
+    var showDeleteAllConfirm by rememberSaveable { mutableStateOf(false) }
+    val permissionLauncher = rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()) { granted ->
         if (granted) showAddDialog = true
         else SnackbarController.show("需要存储权限才能保存到下载目录")
     }
-
-    // 手动添加下载：先确认存储权限（Android 9- 需要），再开对话框
-    val requestAddDownload = {
-        if (!needLegacyPermission || ContextCompat.checkSelfPermission(
-                context, Manifest.permission.WRITE_EXTERNAL_STORAGE
-            ) == PackageManager.PERMISSION_GRANTED
-        ) {
-            showAddDialog = true
-        } else {
-            permissionLauncher.launch(Manifest.permission.WRITE_EXTERNAL_STORAGE)
+    // Android 9 及更早的系统仍需先申请公共下载目录写权限。
+    val requestAddDownload: () -> Unit = {
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q ||
+            ContextCompat.checkSelfPermission(context, Manifest.permission.WRITE_EXTERNAL_STORAGE) ==
+            PackageManager.PERMISSION_GRANTED
+        ) showAddDialog = true
+        else permissionLauncher.launch(Manifest.permission.WRITE_EXTERNAL_STORAGE)
+    }
+    val onPause: (Long) -> Unit = remember(viewModel) { { viewModel.pause(it) } }
+    val onResume: (Long) -> Unit = remember(viewModel) { { viewModel.resume(it) } }
+    // 在操作发生时取最新实体，避免使用列表缓存的旧保存路径。
+    val onOpen: (Long) -> Unit = remember(viewModel, context) {
+        { id ->
+            val task = viewModel.tasks.value.firstOrNull { it.id == id }
+            if (task != null) openSavedFile(context, task.savePath, task.fileName)
         }
     }
+    val onInstall: (Long) -> Unit = remember(viewModel, context) {
+        { id ->
+            val task = viewModel.tasks.value.firstOrNull { it.id == id }
+            if (task != null) installApk(context, task.savePath, task.fileName)
+        }
+    }
+    val onDetails: (Long) -> Unit = { detailId = it }
+    val onRemove: (Long) -> Unit = { detailId = null; pendingDeleteId = it }
 
-    Box(modifier = modifier.fillMaxSize()) {
-        if (showEmptyState) {
-            EmptyDownloadState(
-                onAdd = requestAddDownload,
-                modifier = Modifier.align(Alignment.Center)
-            )
-        } else if (tasks.isEmpty()) {
-            CircularProgressIndicator(modifier = Modifier.align(Alignment.Center))
-        } else {
-            Column(modifier = Modifier.fillMaxSize()) {
-                // 批量操作栏：全部暂停 / 全部开始 / 删除全部（并发任务多时附带合计速度）
-                DownloadBatchBar(
-                    hasActive = tasks.any {
-                        it.status == DownloadTaskEntity.STATUS_DOWNLOADING ||
-                            it.status == DownloadTaskEntity.STATUS_PENDING
-                    },
-                    hasResumable = tasks.any {
-                        it.status == DownloadTaskEntity.STATUS_PAUSED ||
-                            it.status == DownloadTaskEntity.STATUS_FAILED
-                    },
-                    // 合计速度：只在有任务真的在跑时有意义，否则显示"0 B/s"反而像卡住了
-                    totalSpeed = stats.values.sumOf { it.speed },
-                    activeCount = tasks.count { it.status == DownloadTaskEntity.STATUS_DOWNLOADING },
-                    onPauseAll = { viewModel.pauseAll() },
-                    onResumeAll = { viewModel.resumeAll() },
-                    onDeleteAll = { showDeleteAllConfirm = true }
+    DownloadPageContent(
+        listItems = listItems,
+        tasks = viewModel.tasks,
+        stats = viewModel.stats,
+        onAdd = requestAddDownload,
+        onPause = onPause,
+        onResume = onResume,
+        onOpen = onOpen,
+        onInstall = onInstall,
+        onDetails = onDetails,
+        onRemove = onRemove,
+        onPauseAll = { viewModel.pauseAll() },
+        onResumeAll = { viewModel.resumeAll() },
+        onDeleteAll = { showDeleteAllConfirm = true },
+        modifier = modifier.nestedScroll(scrollBehavior.nestedScrollConnection),
+    )
+    if (showAddDialog) {
+        AddDownloadDialog(
+            onDismiss = { showAddDialog = false },
+            onConfirm = { url, name -> showAddDialog = false; viewModel.enqueue(url, name) },
+        )
+    }
+    detailId?.let { id ->
+        DownloadTaskDetails(
+            id, viewModel.tasks, viewModel.stats, viewModel.speedSeries,
+            onDismiss = { detailId = null },
+            onPause = onPause, onResume = onResume, onOpen = onOpen,
+            onInstall = onInstall, onRemove = onRemove,
+        )
+    }
+    pendingDeleteId?.let { id ->
+        DeleteTaskDialogHost(
+            id = id,
+            tasks = viewModel.tasks,
+            onDismiss = { pendingDeleteId = null },
+            onConfirm = { deleteLocal -> pendingDeleteId = null; viewModel.remove(id, deleteLocal) },
+        )
+    }
+    if (showDeleteAllConfirm) {
+        DeleteAllConfirmDialog(
+            taskCount = listItems.size,
+            hasCompletedFile = listItems.any { it.isCompleted && it.hasSavedFile },
+            onDismiss = { showDeleteAllConfirm = false },
+            onConfirm = { deleteLocal -> showDeleteAllConfirm = false; viewModel.removeAll(deleteLocal) },
+        )
+    }
+}
+
+/** 生产页和截图 Preview 共享此结构；只接收状态与回调，不依赖 ViewModel 或 Room。 */
+@Composable
+private fun DownloadPageContent(
+    listItems: List<DownloadTaskListItem>,
+    tasks: StateFlow<List<DownloadTaskEntity>>,
+    stats: StateFlow<Map<Long, DownloadStats>>,
+    onAdd: () -> Unit,
+    onPause: (Long) -> Unit,
+    onResume: (Long) -> Unit,
+    onOpen: (Long) -> Unit,
+    onInstall: (Long) -> Unit,
+    onDetails: (Long) -> Unit,
+    onRemove: (Long) -> Unit,
+    onPauseAll: () -> Unit,
+    onResumeAll: () -> Unit,
+    onDeleteAll: () -> Unit,
+    modifier: Modifier = Modifier,
+    initialCompletedTab: Boolean = false,
+) {
+    val ui = LocalUiMetrics.current
+    var completedTab by rememberSaveable { mutableStateOf(initialCompletedTab) }
+    var collapsedFolders by rememberSaveable { mutableStateOf(emptyList<String>()) }
+    val activeListState = rememberLazyListState()
+    val completedListState = rememberLazyListState()
+    val completedCount = listItems.count { it.isCompleted }
+    val activeCount = listItems.size - completedCount
+    val (rootTasks, folderGroups) = remember(listItems, completedTab) {
+        val visible = listItems.filter { it.isCompleted == completedTab }
+        val (folders, roots) = visible.partition { it.fileName.contains('/') }
+        roots to folders.groupBy { it.fileName.substringBefore('/') }
+    }
+    Surface(modifier = modifier.fillMaxSize(), color = MaterialTheme.colorScheme.surface) {
+        Box(Modifier.fillMaxSize()) {
+            Column(Modifier.fillMaxSize()) {
+                DownloadTabs(
+                    completedTab = completedTab,
+                    activeCount = activeCount,
+                    completedCount = completedCount,
+                    onSelect = { completedTab = it },
+                    modifier = Modifier.padding(horizontal = ui.space(14.dp), vertical = ui.space(4.dp)),
                 )
                 LazyColumn(
-                    modifier = Modifier
-                        .weight(1f)
-                        .fillMaxWidth()
-                        .nestedScroll(scrollBehavior.nestedScrollConnection),
-                    contentPadding = PaddingValues(start = 16.dp, end = 16.dp, top = 8.dp, bottom = 96.dp),
-                    verticalArrangement = Arrangement.spacedBy(10.dp)
+                    modifier = Modifier.weight(1f).fillMaxWidth(),
+                    state = if (completedTab) completedListState else activeListState,
+                    contentPadding = PaddingValues(
+                        start = ui.space(14.dp), end = ui.space(14.dp),
+                        top = ui.space(4.dp), bottom = ui.space(96.dp),
+                    ),
+                    verticalArrangement = Arrangement.spacedBy(ui.space(8.dp)),
                 ) {
-                    items(rootTasks, key = { it.id }) { task ->
-                        Box(Modifier.animateItem()) {
-                        DownloadTaskCard(
-                            task = task,
-                            stats = stats[task.id],
-                            speedSamples = speedSeries[task.id].orEmpty(),
-                            onPause = { viewModel.pause(task.id) },
-                            onResume = { viewModel.resume(task.id) },
-                            onRemove = { pendingDelete = task }
-                        )
+                    if (listItems.isNotEmpty()) {
+                        item(key = "download_overview", contentType = "overview") {
+                            DownloadOverview(listItems, completedTab, stats, onPauseAll, onResumeAll, onDeleteAll)
                         }
                     }
-
-                    folderGroups.forEach { (folder, groupTasks) ->
-                        item(key = "folder_$folder") {
-                            Box(Modifier.animateItem()) {
-                            FolderDownloadGroup(
-                                folder = folder,
-                                tasks = groupTasks,
-                                stats = stats,
-                                onPause = { viewModel.pause(it) },
-                                onResume = { viewModel.resume(it) },
-                                onRemove = { pendingDelete = it }
+                    if (rootTasks.isEmpty() && folderGroups.isEmpty()) {
+                        item(key = "download_empty", contentType = "empty") {
+                            EmptyDownloadState(
+                                completedTab = completedTab,
+                                hasOtherTasks = if (completedTab) activeCount > 0 else completedCount > 0,
+                                onSwitchTab = { completedTab = !completedTab },
+                                onAdd = onAdd,
                             )
+                        }
+                    }
+                    items(rootTasks, key = { "download:${it.id}" }, contentType = { "task" }) { task ->
+                        DownloadTaskItem(
+                            item = task, tasks = tasks, stats = stats,
+                            onPause = onPause, onResume = onResume, onOpen = onOpen,
+                            onInstall = onInstall, onDetails = onDetails, onRemove = onRemove,
+                            // 无入场动画，只响应真实排序、目录展开和任务移除的位置变化。
+                            modifier = Modifier.animateItem(
+                                fadeInSpec = null, fadeOutSpec = null, placementSpec = spatialDefault(),
+                            ),
+                        )
+                    }
+                    folderGroups.forEach { (folder, children) ->
+                        val expanded = folder !in collapsedFolders
+                        item(key = "folder:$folder", contentType = "folder") {
+                            DownloadFolderHeader(
+                                folder = folder, children = children, tasks = tasks, expanded = expanded,
+                                onToggle = {
+                                    collapsedFolders = if (expanded) collapsedFolders + folder
+                                    else collapsedFolders - folder
+                                },
+                                modifier = Modifier.animateItem(
+                                    fadeInSpec = null, fadeOutSpec = null, placementSpec = spatialDefault(),
+                                ),
+                            )
+                        }
+                        if (expanded) {
+                            // 子任务独立懒加载；展开大目录也不一次性组合全部任务。
+                            items(children, key = { "download:${it.id}" }, contentType = { "task" }) { task ->
+                                DownloadTaskItem(
+                                    item = task, tasks = tasks, stats = stats,
+                                    onPause = onPause, onResume = onResume, onOpen = onOpen,
+                                    onInstall = onInstall, onDetails = onDetails, onRemove = onRemove,
+                                    inFolder = true,
+                                    modifier = Modifier.animateItem(
+                                        fadeInSpec = null, fadeOutSpec = null, placementSpec = spatialDefault(),
+                                    ),
+                                )
                             }
                         }
                     }
                 }
             }
-        }
-
-        // 手动添加下载：右下角常驻按钮（列表为空时引导文案也指向这里）
-        FloatingActionButton(
-            onClick = requestAddDownload,
-            modifier = Modifier
-                .align(Alignment.BottomEnd)
-                .padding(20.dp)
-        ) {
-            Icon(Icons.Filled.Add, contentDescription = "添加下载任务")
-        }
-    }
-
-    if (showAddDialog) {
-        AddDownloadDialog(
-            onDismiss = { showAddDialog = false },
-            onConfirm = { url, name ->
-                showAddDialog = false
-                viewModel.enqueue(url, name)
+            FloatingActionButton(
+                onClick = onAdd,
+                modifier = Modifier.align(Alignment.BottomEnd).padding(20.dp),
+                shape = RoundedCornerShape(16.dp),
+                containerColor = MaterialTheme.colorScheme.primaryContainer,
+                contentColor = MaterialTheme.colorScheme.onPrimaryContainer,
+                elevation = FloatingActionButtonDefaults.elevation(0.dp, 0.dp, 0.dp, 0.dp),
+            ) {
+                Icon(Icons.Filled.Add, contentDescription = "添加下载任务")
             }
-        )
-    }
-
-    // 删除二次确认（可选同时删除本地文件）
-    pendingDelete?.let { task ->
-        DeleteConfirmDialog(
-            task = task,
-            onDismiss = { pendingDelete = null },
-            onConfirm = { deleteLocal ->
-                pendingDelete = null
-                viewModel.remove(task.id, deleteLocal)
-            }
-        )
-    }
-
-    // 删除全部任务二次确认（可选同时删除本地文件）
-    if (showDeleteAllConfirm) {
-        var deleteAllLocal by remember { mutableStateOf(false) }
-        val hasCompletedFile = tasks.any {
-            it.status == DownloadTaskEntity.STATUS_COMPLETED && it.savePath.isNotBlank()
         }
-        AlertDialog(
-            onDismissRequest = { showDeleteAllConfirm = false },
-            title = { Text("删除全部任务") },
-            text = {
-                Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
-                    Text(
-                        text = "确定删除所有下载任务吗？删除后任务记录将被清除，且不可恢复。",
-                        style = MaterialTheme.typography.bodyMedium
-                    )
-                    if (hasCompletedFile) {
-                        Row(
-                            modifier = Modifier.fillMaxWidth(),
-                            verticalAlignment = Alignment.CenterVertically
-                        ) {
-                            Checkbox(
-                                checked = deleteAllLocal,
-                                onCheckedChange = { deleteAllLocal = it }
-                            )
-                            Spacer(modifier = Modifier.width(8.dp))
-                            Text(
-                                text = "同时删除本地文件",
-                                style = MaterialTheme.typography.bodyMedium
-                            )
-                        }
-                        Text(
-                            text = "勾选后将一并删除所有已下载到 Download 目录的文件，且不可恢复。",
-                            style = MaterialTheme.typography.labelSmall,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant
-                        )
+    }
+}
+
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+private fun DownloadTabs(
+    completedTab: Boolean,
+    activeCount: Int,
+    completedCount: Int,
+    onSelect: (Boolean) -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    SingleChoiceSegmentedButtonRow(modifier = modifier.fillMaxWidth().heightIn(min = 48.dp)) {
+        listOf(false, true).forEachIndexed { index, completed ->
+            val selected = completed == completedTab
+            val background by animateColorAsState(
+                targetValue = if (selected) MaterialTheme.colorScheme.primaryContainer
+                else MaterialTheme.colorScheme.surfaceContainerLow,
+                animationSpec = effectsDefault(), label = "downloadTabBackground$index",
+            )
+            val foreground by animateColorAsState(
+                targetValue = if (selected) MaterialTheme.colorScheme.onPrimaryContainer
+                else MaterialTheme.colorScheme.onSurfaceVariant,
+                animationSpec = effectsFast(), label = "downloadTabForeground$index",
+            )
+            SegmentedButton(
+                selected = selected,
+                onClick = { onSelect(completed) },
+                shape = SegmentedButtonDefaults.itemShape(index, 2, RoundedCornerShape(16.dp)),
+                modifier = Modifier.heightIn(min = 48.dp),
+                icon = {},
+                colors = SegmentedButtonDefaults.colors(
+                    activeContainerColor = background, inactiveContainerColor = background,
+                    activeContentColor = foreground, inactiveContentColor = foreground,
+                    activeBorderColor = MaterialTheme.colorScheme.outlineVariant,
+                    inactiveBorderColor = MaterialTheme.colorScheme.outlineVariant,
+                ),
+            ) {
+                Row(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
+                    Text(if (completed) "已完成" else "下载", style = MaterialTheme.typography.labelLarge)
+                    AnimatedContent(
+                        targetState = if (completed) completedCount else activeCount,
+                        transitionSpec = {
+                            (fadeIn(effectsDefault()) + scaleIn(spatialFast(), initialScale = 0.9f))
+                                .togetherWith(fadeOut(effectsFast()))
+                                .using(SizeTransform { _, _ -> spatialDefault() })
+                        },
+                        label = "downloadTabCount$index",
+                    ) { count -> Text(count.toString(), style = MaterialTheme.typography.labelLarge) }
+                }
+            }
+        }
+    }
+}
+
+@OptIn(ExperimentalLayoutApi::class)
+@Composable
+private fun DownloadOverview(
+    listItems: List<DownloadTaskListItem>,
+    completedTab: Boolean,
+    stats: StateFlow<Map<Long, DownloadStats>>,
+    onPauseAll: () -> Unit,
+    onResumeAll: () -> Unit,
+    onDeleteAll: () -> Unit,
+) {
+    val ui = LocalUiMetrics.current
+    val downloading = listItems.count { it.status == DownloadTaskEntity.STATUS_DOWNLOADING }
+    val pending = listItems.count { it.status == DownloadTaskEntity.STATUS_PENDING }
+    val paused = listItems.count { it.status == DownloadTaskEntity.STATUS_PAUSED }
+    val failed = listItems.count { it.status == DownloadTaskEntity.STATUS_FAILED }
+    val completed = listItems.count { it.isCompleted }
+    val activeIds = remember(listItems) {
+        listItems.filter { it.status == DownloadTaskEntity.STATUS_DOWNLOADING }.map { it.id }.toSet()
+    }
+    val headline = when {
+        completedTab -> "$completed 项已完成"
+        downloading > 0 -> "$downloading 项正在下载"
+        pending > 0 -> "$pending 项等待下载"
+        failed > 0 -> "$failed 项下载需要重试"
+        paused > 0 -> "$paused 项下载已暂停"
+        else -> "下载队列已完成"
+    }
+    Surface(
+        shape = RoundedCornerShape(24.dp),
+        color = MaterialTheme.colorScheme.surfaceContainer,
+        modifier = Modifier.fillMaxWidth(),
+    ) {
+        Column(modifier = Modifier.padding(ui.space(12.dp)),
+            verticalArrangement = Arrangement.spacedBy(ui.space(8.dp))) {
+            AnimatedContent(
+                targetState = headline,
+                transitionSpec = {
+                    fadeIn(effectsDefault()).togetherWith(fadeOut(effectsFast()))
+                        .using(SizeTransform { _, _ -> spatialDefault() })
+                },
+                label = "downloadOverviewState",
+            ) { text ->
+                Text(text, style = MaterialTheme.typography.titleMedium, color = MaterialTheme.colorScheme.onSurface)
+            }
+            if (!completedTab) {
+                if (activeIds.isNotEmpty()) DownloadTotalSpeed(activeIds, stats)
+                if (pending + paused + failed > 0) {
+                    FlowRow(
+                        horizontalArrangement = Arrangement.spacedBy(12.dp),
+                        verticalArrangement = Arrangement.spacedBy(4.dp),
+                    ) {
+                        if (pending > 0) OverviewCount("等待 $pending")
+                        if (paused > 0) OverviewCount("暂停 $paused")
+                        if (failed > 0) Text("失败 $failed", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.error)
                     }
                 }
-            },
-            confirmButton = {
-                Button(
-                    onClick = {
-                        showDeleteAllConfirm = false
-                        viewModel.removeAll(deleteAllLocal)
-                    },
-                    colors = ButtonDefaults.buttonColors(
-                        containerColor = MaterialTheme.colorScheme.error
-                    )
-                ) { Text("全部删除") }
-            },
-            dismissButton = {
-                TextButton(onClick = { showDeleteAllConfirm = false }) { Text("取消") }
             }
+            FlowRow(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(8.dp),
+                verticalArrangement = Arrangement.spacedBy(8.dp),
+            ) {
+                if (!completedTab) {
+                    FilledTonalButton(
+                        onClick = onPauseAll,
+                        enabled = downloading + pending > 0,
+                        modifier = Modifier.heightIn(min = 48.dp),
+                        shape = RoundedCornerShape(16.dp),
+                    ) {
+                        Icon(Icons.Outlined.Pause, contentDescription = null, modifier = Modifier.size(18.dp))
+                        Spacer(Modifier.width(6.dp))
+                        Text("全部暂停")
+                    }
+                    TextButton(
+                        onClick = onResumeAll,
+                        enabled = paused + failed > 0,
+                        modifier = Modifier.heightIn(min = 48.dp),
+                        shape = RoundedCornerShape(16.dp),
+                    ) {
+                        Icon(Icons.Outlined.PlayArrow, contentDescription = null, modifier = Modifier.size(18.dp))
+                        Spacer(Modifier.width(6.dp))
+                        Text("全部开始")
+                    }
+                }
+                TextButton(
+                    onClick = onDeleteAll,
+                    modifier = Modifier.heightIn(min = 48.dp),
+                    shape = RoundedCornerShape(16.dp),
+                    colors = ButtonDefaults.textButtonColors(contentColor = MaterialTheme.colorScheme.error),
+                ) {
+                    Icon(Icons.Outlined.Delete, contentDescription = null, modifier = Modifier.size(18.dp))
+                    Spacer(Modifier.width(6.dp))
+                    Text("删除全部")
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun OverviewCount(text: String) {
+    Text(text, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+}
+
+@Composable
+private fun DownloadTotalSpeed(activeIds: Set<Long>, stats: StateFlow<Map<Long, DownloadStats>>) {
+    val speedFlow = remember(stats, activeIds) {
+        stats.map { values -> activeIds.sumOf { values[it]?.speed?.coerceAtLeast(0) ?: 0L } }.distinctUntilChanged()
+    }
+    val speed by speedFlow.collectAsState(initial = activeIds.sumOf { stats.value[it]?.speed?.coerceAtLeast(0) ?: 0L })
+    Text(
+        text = "总速度 ${formatDownloadSpeed(speed)}",
+        style = MaterialTheme.typography.titleSmall,
+        color = MaterialTheme.colorScheme.primary,
+    )
+}
+
+@Composable
+private fun DownloadFolderHeader(
+    folder: String,
+    children: List<DownloadTaskListItem>,
+    tasks: StateFlow<List<DownloadTaskEntity>>,
+    expanded: Boolean,
+    onToggle: () -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    val rotation = animateFloatAsState(
+        targetValue = if (expanded) 180f else 0f,
+        animationSpec = spatialFast(), label = "downloadFolderExpansion",
+    )
+    val description = if (expanded) "已展开，点按收起" else "已收起，点按展开"
+    Surface(
+        onClick = onToggle,
+        modifier = modifier.fillMaxWidth().heightIn(min = 48.dp).semantics { stateDescription = description },
+        shape = RoundedCornerShape(24.dp),
+        color = MaterialTheme.colorScheme.surfaceContainer,
+    ) {
+        Column(modifier = Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
+            Row(horizontalArrangement = Arrangement.spacedBy(12.dp), verticalAlignment = Alignment.CenterVertically) {
+                Icon(Icons.Outlined.Folder, contentDescription = null, tint = MaterialTheme.colorScheme.primary)
+                Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                    FileNameText(folder, style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.SemiBold)
+                    Text(
+                        text = "${children.size} 个文件 · ${children.count { it.isCompleted }} 个已完成",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                }
+                Icon(
+                    Icons.Outlined.ExpandMore, contentDescription = null,
+                    tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                    modifier = Modifier.graphicsLayer { rotationZ = rotation.value },
+                )
+            }
+            DownloadFolderProgress(children, tasks)
+        }
+    }
+}
+
+private data class FolderProgress(val downloaded: Long, val total: Long, val hasUnknownSize: Boolean)
+
+@Composable
+private fun DownloadFolderProgress(children: List<DownloadTaskListItem>, tasks: StateFlow<List<DownloadTaskEntity>>) {
+    val ids = remember(children) { children.map { it.id }.toSet() }
+    val progressFlow = remember(tasks, ids) {
+        tasks.map { list -> folderProgress(list.filter { it.id in ids }) }.distinctUntilChanged()
+    }
+    val progress by progressFlow.collectAsState(initial = folderProgress(tasks.value.filter { it.id in ids }))
+    val fraction = if (!progress.hasUnknownSize && progress.total > 0) {
+        (progress.downloaded.toDouble() / progress.total).toFloat().coerceIn(0f, 1f)
+    } else 0f
+    val animatedProgress = animateFloatAsState(
+        targetValue = fraction, animationSpec = effectsDefault(), label = "downloadFolderProgress",
+    )
+    Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+        if (!progress.hasUnknownSize && progress.total > 0) {
+            LinearProgressIndicator(
+                progress = { animatedProgress.value.coerceIn(0f, 1f) }, modifier = Modifier.fillMaxWidth(),
+                trackColor = MaterialTheme.colorScheme.surfaceContainerHighest,
+            )
+        }
+        Text(
+            text = if (progress.hasUnknownSize) {
+                "已下载 ${formatDownloadSize(progress.downloaded)} · 部分文件大小未知"
+            } else "${formatDownloadSize(progress.downloaded)} / ${formatDownloadSize(progress.total)}",
+            style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant,
         )
     }
 }
 
-/**
- * 批量操作栏：全部暂停 / 全部开始 / 删除全部。
- *
- * 并发多个任务时在中间显示**合计速度** —— 每个任务卡上都有各自的速度，但"现在一共跑多快"
- * 得自己加，而下载页最常被问的就是这个问题。
- */
-@OptIn(ExperimentalLayoutApi::class)
+private fun folderProgress(tasks: List<DownloadTaskEntity>) = FolderProgress(
+    downloaded = tasks.sumOf {
+        if (it.totalSize > 0) it.downloadedSize.coerceIn(0, it.totalSize) else it.downloadedSize.coerceAtLeast(0)
+    },
+    total = tasks.sumOf { it.totalSize.coerceAtLeast(0) },
+    hasUnknownSize = tasks.any { it.totalSize <= 0 },
+)
+
 @Composable
-private fun DownloadBatchBar(
-    hasActive: Boolean,
-    hasResumable: Boolean,
-    totalSpeed: Long,
-    activeCount: Int,
-    onPauseAll: () -> Unit,
-    onResumeAll: () -> Unit,
-    onDeleteAll: () -> Unit
+private fun EmptyDownloadState(
+    completedTab: Boolean,
+    hasOtherTasks: Boolean,
+    onSwitchTab: () -> Unit,
+    onAdd: () -> Unit,
 ) {
-    FlowRow(
-        modifier = Modifier
-            .fillMaxWidth()
-            .padding(horizontal = 16.dp, vertical = 2.dp),
-        horizontalArrangement = Arrangement.spacedBy(4.dp),
-        verticalArrangement = Arrangement.spacedBy(2.dp),
-        itemVerticalAlignment = Alignment.CenterVertically,
+    Column(
+        modifier = Modifier.fillMaxWidth().padding(horizontal = 24.dp, vertical = 40.dp),
+        horizontalAlignment = Alignment.CenterHorizontally,
+        verticalArrangement = Arrangement.spacedBy(16.dp),
     ) {
-        TextButton(onClick = onPauseAll, enabled = hasActive) {
-            Icon(
-                imageVector = Icons.Outlined.Pause,
-                contentDescription = null,
-                modifier = Modifier.size(16.dp)
-            )
-            Spacer(modifier = Modifier.width(4.dp))
-            Text("全部暂停")
-        }
-        TextButton(onClick = onResumeAll, enabled = hasResumable) {
-            Icon(
-                imageVector = Icons.Outlined.PlayArrow,
-                contentDescription = null,
-                modifier = Modifier.size(16.dp)
-            )
-            Spacer(modifier = Modifier.width(4.dp))
-            Text("全部开始")
-        }
-        // 合计速度：只在一个以上任务同时下载时出现（单任务时卡片上已经有了，重复显示是噪音）
-        if (activeCount > 1 && totalSpeed > 0) {
-            Text(
-                text = "合计 ${formatSpeed(totalSpeed)}",
-                style = MaterialTheme.typography.labelMedium,
-                fontWeight = FontWeight.Medium,
-                color = MaterialTheme.colorScheme.primary
-            )
-        }
-        TextButton(onClick = onDeleteAll) {
-            Icon(
-                imageVector = Icons.Outlined.Delete,
-                contentDescription = null,
-                modifier = Modifier.size(16.dp),
-                tint = MaterialTheme.colorScheme.error
-            )
-            Spacer(modifier = Modifier.width(4.dp))
-            Text("删除全部", color = MaterialTheme.colorScheme.error)
+        Icon(Icons.Outlined.Download, contentDescription = null, tint = MaterialTheme.colorScheme.primary, modifier = Modifier.size(40.dp))
+        Text(
+            text = if (completedTab) "还没有已完成的文件" else "暂无下载任务",
+            style = MaterialTheme.typography.titleMedium, textAlign = TextAlign.Center,
+        )
+        Text(
+            text = if (completedTab) "下载完成后，文件会显示在这里，可直接打开或预览。"
+            else "解析分享链接后选择文件，或手动添加文件直链。",
+            style = MaterialTheme.typography.bodyMedium,
+            color = MaterialTheme.colorScheme.onSurfaceVariant, textAlign = TextAlign.Center,
+        )
+        FilledTonalButton(
+            onClick = if (hasOtherTasks) onSwitchTab else onAdd,
+            modifier = Modifier.heightIn(min = 48.dp), shape = RoundedCornerShape(16.dp),
+        ) {
+            Text(if (hasOtherTasks) {
+                if (completedTab) "查看下载任务" else "查看已完成"
+            } else "手动添加下载")
         }
     }
+}
+
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+private fun DownloadTaskDetails(
+    id: Long,
+    tasks: StateFlow<List<DownloadTaskEntity>>,
+    stats: StateFlow<Map<Long, DownloadStats>>,
+    speedSeries: StateFlow<Map<Long, List<Long>>>,
+    onDismiss: () -> Unit,
+    onPause: (Long) -> Unit,
+    onResume: (Long) -> Unit,
+    onOpen: (Long) -> Unit,
+    onInstall: (Long) -> Unit,
+    onRemove: (Long) -> Unit,
+) {
+    val taskFlow = remember(tasks, id) { tasks.map { it.firstOrNull { task -> task.id == id } }.distinctUntilChanged() }
+    val task by taskFlow.collectAsState(initial = tasks.value.firstOrNull { it.id == id })
+    val current = task
+    if (current == null) {
+        LaunchedEffect(id) { onDismiss() }
+        return
+    }
+    ModalBottomSheet(
+        onDismissRequest = onDismiss,
+        sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true),
+        shape = RoundedCornerShape(topStart = 24.dp, topEnd = 24.dp),
+        containerColor = MaterialTheme.colorScheme.surfaceContainerLow,
+    ) {
+        Column(
+            modifier = Modifier.fillMaxWidth().verticalScroll(rememberScrollState())
+                .padding(start = 24.dp, end = 24.dp, bottom = 24.dp),
+            verticalArrangement = Arrangement.spacedBy(16.dp),
+        ) {
+            Text("任务详情", style = MaterialTheme.typography.titleLarge)
+            DownloadTaskStatus(current.status)
+            DownloadDetailField("文件名", current.fileName)
+            val shown = if (current.totalSize > 0) current.downloadedSize.coerceIn(0, current.totalSize)
+            else current.downloadedSize.coerceAtLeast(0)
+            DownloadDetailField(
+                "下载进度",
+                if (current.totalSize > 0) "${formatDownloadSize(shown)} / ${formatDownloadSize(current.totalSize)}"
+                else "已下载 ${formatDownloadSize(shown)} · 大小未知",
+            )
+            if (current.status == DownloadTaskEntity.STATUS_DOWNLOADING) DownloadLiveStatistics(id, stats)
+            if (current.avgSpeed > 0) DownloadDetailField("平均速度", formatDownloadSpeed(current.avgSpeed))
+            DownloadSpeedHistory(id, speedSeries)
+            if (current.errorMsg.isNotBlank()) DownloadDetailField("失败原因", current.errorMsg, isError = true)
+            DownloadDetailField("保存位置", current.savePath.ifBlank { "完成后保存到设置的下载目录" })
+            DownloadDetailField("下载地址", current.url)
+            if (current.platform.isNotBlank()) DownloadDetailField("来源", current.platform)
+            HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
+            DownloadTaskActions(
+                item = current.toDownloadListItem(),
+                onPause = onPause, onResume = onResume, onOpen = onOpen,
+                onInstall = onInstall, onRemove = onRemove,
+            )
+            TextButton(
+                onClick = onDismiss,
+                modifier = Modifier.align(Alignment.End).heightIn(min = 48.dp),
+                shape = RoundedCornerShape(16.dp),
+            ) { Text("关闭") }
+        }
+    }
+}
+
+@Composable
+private fun DownloadDetailField(label: String, value: String, isError: Boolean = false) {
+    Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+        Text(label, style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
+        SelectionContainer {
+            Text(
+                value, style = MaterialTheme.typography.bodyMedium,
+                color = if (isError) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.onSurface,
+            )
+        }
+    }
+}
+
+/** 曲线仅在详情打开时订阅和创建，不在长列表中常驻图表。 */
+@Composable
+private fun DownloadSpeedHistory(id: Long, speedSeries: StateFlow<Map<Long, List<Long>>>) {
+    val seriesFlow = remember(speedSeries, id) { speedSeries.map { it[id].orEmpty() }.distinctUntilChanged() }
+    val samples by seriesFlow.collectAsState(initial = speedSeries.value[id].orEmpty())
+    Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+        Text("最近一分钟速度", style = MaterialTheme.typography.labelLarge)
+        if (samples.size >= 2) SpeedChart(samples = samples, modifier = Modifier.fillMaxWidth())
+        else Text(
+            "下载开始后会显示速度曲线",
+            style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant,
+        )
+    }
+}
+
+@Composable
+private fun DeleteTaskDialogHost(
+    id: Long,
+    tasks: StateFlow<List<DownloadTaskEntity>>,
+    onDismiss: () -> Unit,
+    onConfirm: (Boolean) -> Unit,
+) {
+    val taskFlow = remember(tasks, id) { tasks.map { it.firstOrNull { task -> task.id == id } }.distinctUntilChanged() }
+    val task by taskFlow.collectAsState(initial = tasks.value.firstOrNull { it.id == id })
+    val current = task
+    if (current == null) {
+        LaunchedEffect(id) { onDismiss() }
+        return
+    }
+    DeleteConfirmDialog(current, onDismiss, onConfirm)
+}
+
+@Composable
+private fun DeleteAllConfirmDialog(
+    taskCount: Int,
+    hasCompletedFile: Boolean,
+    onDismiss: () -> Unit,
+    onConfirm: (Boolean) -> Unit,
+) {
+    var deleteLocal by rememberSaveable { mutableStateOf(false) }
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        shape = RoundedCornerShape(24.dp),
+        title = { Text("删除全部 $taskCount 项任务？") },
+        text = {
+            Column(
+                modifier = Modifier.verticalScroll(rememberScrollState()),
+                verticalArrangement = Arrangement.spacedBy(12.dp),
+            ) {
+                Text("这会删除「下载」和「已完成」中的全部任务记录，并清除未完成任务的临时文件。记录无法恢复。")
+                if (hasCompletedFile) {
+                    DeleteLocalFileOption(deleteLocal) { deleteLocal = it }
+                    Text(
+                        "勾选后会同时删除已保存的文件，无法恢复。",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                }
+            }
+        },
+        confirmButton = {
+            Button(
+                onClick = { onConfirm(deleteLocal && hasCompletedFile) },
+                modifier = Modifier.heightIn(min = 48.dp),
+                shape = RoundedCornerShape(16.dp),
+                colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.error),
+            ) { Text("全部删除") }
+        },
+        dismissButton = {
+            TextButton(onClick = onDismiss, modifier = Modifier.heightIn(min = 48.dp)) { Text("取消") }
+        },
+    )
+}
+
+@Composable
+private fun DeleteLocalFileOption(checked: Boolean, onCheckedChange: (Boolean) -> Unit) {
+    Row(
+        modifier = Modifier.fillMaxWidth().heightIn(min = 48.dp)
+            .toggleable(value = checked, role = Role.Checkbox, onValueChange = onCheckedChange),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(8.dp),
+    ) {
+        Checkbox(checked = checked, onCheckedChange = null)
+        Text("同时删除本地文件", style = MaterialTheme.typography.bodyMedium, modifier = Modifier.weight(1f))
+    }
+}
+
+/** 截图演示数据只存在于此入口；无数据库、ViewModel、网络请求或下载启动。 */
+@Composable
+internal fun DownloadPreviewContent() {
+    val demoTasks = remember {
+        listOf(
+            DownloadTaskEntity(
+                id = 1, url = "https://example.com/film.mp4", fileName = "山野之间 · 旅行影像.mp4",
+                totalSize = 1_610_612_736, downloadedSize = 612_032_840,
+                status = DownloadTaskEntity.STATUS_DOWNLOADING, createTime = 0,
+            ),
+            DownloadTaskEntity(
+                id = 2, url = "https://example.com/archive.zip", fileName = "设计资料与项目归档.zip",
+                totalSize = 268_435_456, downloadedSize = 134_217_728,
+                status = DownloadTaskEntity.STATUS_PAUSED, createTime = 0,
+            ),
+            DownloadTaskEntity(
+                id = 3, url = "https://example.com/completed.mp4", fileName = "周末骑行记录.mp4",
+                totalSize = 104_857_600, downloadedSize = 104_857_600,
+                status = DownloadTaskEntity.STATUS_COMPLETED, savePath = "/preview/Download/周末骑行记录.mp4",
+                avgSpeed = 8_388_608, createTime = 0,
+            ),
+        )
+    }
+    val tasks = remember { MutableStateFlow(demoTasks) }
+    val stats = remember {
+        MutableStateFlow(mapOf(1L to DownloadStats(speed = 12_582_912, remainMillis = 79_000, chunkCount = 8, connectionLimit = 16)))
+    }
+    DownloadPageContent(
+        listItems = demoTasks.map { it.toDownloadListItem() }, tasks = tasks, stats = stats,
+        onAdd = {}, onPause = {}, onResume = {}, onOpen = {}, onInstall = {},
+        onDetails = {}, onRemove = {}, onPauseAll = {}, onResumeAll = {}, onDeleteAll = {},
+    )
+}
+
+/** Completed-only preview verifies open, preview, details and remove actions remain reachable. */
+@Composable
+internal fun DownloadCompletedPreviewContent() {
+    val completed = remember {
+        listOf(
+            DownloadTaskEntity(
+                id = 11,
+                url = "https://example.com/ride.mp4",
+                fileName = "周末骑行记录.mp4",
+                totalSize = 104_857_600,
+                downloadedSize = 104_857_600,
+                status = DownloadTaskEntity.STATUS_COMPLETED,
+                savePath = "/preview/Download/周末骑行记录.mp4",
+                avgSpeed = 8_388_608,
+                createTime = 0,
+            ),
+            DownloadTaskEntity(
+                id = 12,
+                url = "https://example.com/app.apk",
+                fileName = "示例应用.apk",
+                totalSize = 28_311_552,
+                downloadedSize = 28_311_552,
+                status = DownloadTaskEntity.STATUS_COMPLETED,
+                savePath = "/preview/Download/示例应用.apk",
+                avgSpeed = 5_242_880,
+                createTime = 0,
+            ),
+        )
+    }
+    val tasks = remember { MutableStateFlow(completed) }
+    val stats = remember { MutableStateFlow(emptyMap<Long, DownloadStats>()) }
+    DownloadPageContent(
+        listItems = completed.map { it.toDownloadListItem() },
+        tasks = tasks,
+        stats = stats,
+        onAdd = {}, onPause = {}, onResume = {}, onOpen = {}, onInstall = {},
+        onDetails = {}, onRemove = {}, onPauseAll = {}, onResumeAll = {},
+        onDeleteAll = {}, initialCompletedTab = true,
+    )
 }
 
 @Composable
@@ -376,37 +862,25 @@ private fun DeleteConfirmDialog(
     onDismiss: () -> Unit,
     onConfirm: (deleteLocal: Boolean) -> Unit
 ) {
-    var deleteLocal by remember { mutableStateOf(false) }
+    var deleteLocal by rememberSaveable(task.id) { mutableStateOf(false) }
     val hasLocalFile = task.status == DownloadTaskEntity.STATUS_COMPLETED && task.savePath.isNotBlank()
 
     AlertDialog(
         onDismissRequest = onDismiss,
+        shape = RoundedCornerShape(24.dp),
         title = { Text("删除下载任务") },
         text = {
-            Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+            Column(modifier = Modifier.verticalScroll(rememberScrollState()), verticalArrangement = Arrangement.spacedBy(12.dp)) {
                 Text(
                     text = "确定删除「${task.fileName}」吗？",
                     style = MaterialTheme.typography.bodyMedium
                 )
                 if (hasLocalFile) {
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
-                        Checkbox(
-                            checked = deleteLocal,
-                            onCheckedChange = { deleteLocal = it }
-                        )
-                        Spacer(modifier = Modifier.width(8.dp))
-                        Text(
-                            text = "同时删除本地文件",
-                            style = MaterialTheme.typography.bodyMedium
-                        )
-                    }
+                    DeleteLocalFileOption(deleteLocal) { deleteLocal = it }
                 }
                 Text(
                     text = if (hasLocalFile) {
-                        "勾选后将一并删除已下载到 Download 目录的文件，且不可恢复。"
+                        "勾选后将一并删除已保存的本地文件，且不可恢复。"
                     } else if (task.status == DownloadTaskEntity.STATUS_COMPLETED) {
                         "该任务没有已完成的本地文件。"
                     } else {
@@ -419,578 +893,18 @@ private fun DeleteConfirmDialog(
         },
         confirmButton = {
             Button(
-                onClick = { onConfirm(deleteLocal) },
+                onClick = { onConfirm(deleteLocal && hasLocalFile) },
+                modifier = Modifier.heightIn(min = 48.dp),
+                shape = RoundedCornerShape(16.dp),
                 colors = ButtonDefaults.buttonColors(
                     containerColor = MaterialTheme.colorScheme.error
                 )
             ) { Text("删除") }
         },
         dismissButton = {
-            TextButton(onClick = onDismiss) { Text("取消") }
+            TextButton(onClick = onDismiss, modifier = Modifier.heightIn(min = 48.dp)) { Text("取消") }
         }
     )
-}
-
-@Composable
-private fun EmptyDownloadState(
-    onAdd: () -> Unit,
-    modifier: Modifier = Modifier
-) {
-    Column(
-        modifier = modifier.padding(32.dp),
-        horizontalAlignment = Alignment.CenterHorizontally
-    ) {
-        Surface(
-            modifier = Modifier.size(64.dp),
-            shape = CircleShape,
-            color = MaterialTheme.colorScheme.surfaceContainerHighest
-        ) {
-            Box(contentAlignment = Alignment.Center) {
-                Icon(
-                    imageVector = Icons.Outlined.Download,
-                    contentDescription = null,
-                    modifier = Modifier.size(28.dp),
-                    tint = MaterialTheme.colorScheme.onSurfaceVariant
-                )
-            }
-        }
-        Spacer(modifier = Modifier.height(16.dp))
-        Text(
-            text = "暂无下载任务",
-            style = MaterialTheme.typography.titleMedium,
-            fontWeight = FontWeight.Medium
-        )
-        Spacer(modifier = Modifier.height(6.dp))
-        Text(
-            text = "解析分享后点击文件即可加入下载队列",
-            style = MaterialTheme.typography.bodyMedium,
-            color = MaterialTheme.colorScheme.onSurfaceVariant,
-            textAlign = TextAlign.Center
-        )
-        Spacer(modifier = Modifier.height(16.dp))
-        // 引导文案指向的按钮就在右下角，这里再给一个直接入口，省得用户去找
-        FilledTonalButton(onClick = onAdd) {
-            Icon(
-                imageVector = Icons.Filled.Add,
-                contentDescription = null,
-                modifier = Modifier.size(18.dp)
-            )
-            Spacer(modifier = Modifier.width(8.dp))
-            Text("手动添加下载")
-        }
-    }
-}
-
-/**
- * 文件夹下载组：同一「顶级目录」下的所有任务合并为一个可展开卡片。
- * 收起时显示文件夹名 + 统计 + 总体进度；展开后显示子任务（含子文件夹内文件）紧凑列表。
- */
-@Composable
-private fun FolderDownloadGroup(
-    folder: String,
-    tasks: List<DownloadTaskEntity>,
-    stats: Map<Long, DownloadStats>,
-    onPause: (Long) -> Unit,
-    onResume: (Long) -> Unit,
-    onRemove: (DownloadTaskEntity) -> Unit
-) {
-    var expanded by remember { mutableStateOf(true) }
-    val completed = tasks.count { it.status == DownloadTaskEntity.STATUS_COMPLETED }
-    val totalSize = tasks.sumOf { it.totalSize }
-    // 聚合显示钳制：任何单项竞态残留都不会让"已下载 > 总大小"
-    val downloaded = minOf(tasks.sumOf { it.downloadedSize }, totalSize)
-    val fraction = if (totalSize > 0) {
-        (downloaded.toFloat() / totalSize).coerceIn(0f, 1f)
-    } else 0f
-    val done = completed == tasks.size
-
-    Card(
-        modifier = Modifier.fillMaxWidth(),
-        shape = MaterialTheme.shapes.large,
-        colors = CardDefaults.cardColors(
-            containerColor = MaterialTheme.colorScheme.surfaceContainerLow
-        )
-    ) {
-        Column {
-            // 头部：点击展开/收起
-            Row(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .clickable { expanded = !expanded }
-                    .padding(start = 14.dp, end = 10.dp, top = 12.dp, bottom = 10.dp),
-                verticalAlignment = Alignment.CenterVertically
-            ) {
-                // 文件夹图标（圆角方块，主色容器）
-                Surface(
-                    modifier = Modifier.size(44.dp),
-                    shape = RoundedCornerShape(14.dp),
-                    color = MaterialTheme.colorScheme.primaryContainer
-                ) {
-                    Box(contentAlignment = Alignment.Center) {
-                        Icon(
-                            imageVector = Icons.Outlined.Folder,
-                            contentDescription = null,
-                            modifier = Modifier.size(24.dp),
-                            tint = MaterialTheme.colorScheme.onPrimaryContainer
-                        )
-                    }
-                }
-                Spacer(modifier = Modifier.width(12.dp))
-                Column(modifier = Modifier.weight(1f)) {
-                    Text(
-                        text = folder,
-                        style = MaterialTheme.typography.titleMedium,
-                        fontWeight = FontWeight.SemiBold,
-                        maxLines = 1,
-                        overflow = TextOverflow.Ellipsis
-                    )
-                    Spacer(modifier = Modifier.height(2.dp))
-                    Text(
-                        text = "${completed}/${tasks.size} 个文件 · ${formatSize(downloaded)} / ${formatSize(totalSize)}",
-                        style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant
-                    )
-                }
-                // 总体进度徽标
-                Surface(
-                    shape = RoundedCornerShape(50),
-                    color = if (done) {
-                        MaterialTheme.colorScheme.secondaryContainer
-                    } else {
-                        MaterialTheme.colorScheme.surfaceContainerHighest
-                    }
-                ) {
-                    Text(
-                        text = if (done) "已完成" else "${(fraction * 100).toInt()}%",
-                        style = MaterialTheme.typography.labelMedium,
-                        fontWeight = FontWeight.SemiBold,
-                        color = if (done) {
-                            MaterialTheme.colorScheme.onSecondaryContainer
-                        } else {
-                            MaterialTheme.colorScheme.onSurfaceVariant
-                        },
-                        modifier = Modifier.padding(horizontal = 10.dp, vertical = 4.dp)
-                    )
-                }
-                Spacer(modifier = Modifier.width(2.dp))
-                Icon(
-                    imageVector = if (expanded) Icons.Outlined.ExpandLess else Icons.Outlined.ExpandMore,
-                    contentDescription = if (expanded) "收起" else "展开",
-                    tint = MaterialTheme.colorScheme.onSurfaceVariant
-                )
-            }
-
-            // 展开区：总体进度条 + 子任务紧凑列表
-            AnimatedVisibility(
-                visible = expanded,
-                enter = fadeIn(effectsDefault()) + expandVertically(
-                    animationSpec = spatialDefault(),
-                    expandFrom = Alignment.Top,
-                ),
-                exit = fadeOut(effectsFast()) + shrinkVertically(
-                    animationSpec = spatialFast(),
-                    shrinkTowards = Alignment.Top,
-                )
-            ) {
-                Column {
-                    // 总体进度条（细条，圆角）
-                    LinearProgressIndicator(
-                        progress = { fraction },
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .padding(horizontal = 14.dp)
-                            .height(4.dp)
-                            .clip(RoundedCornerShape(2.dp)),
-                        color = MaterialTheme.colorScheme.primary,
-                        trackColor = MaterialTheme.colorScheme.surfaceContainerHighest
-                    )
-                    // 子任务列表（紧凑行，含子文件夹内文件）
-                    Column(
-                        modifier = Modifier.padding(10.dp),
-                        verticalArrangement = Arrangement.spacedBy(8.dp)
-                    ) {
-                        tasks.forEach { task ->
-                            DownloadSubTaskRow(
-                                task = task,
-                                stats = stats[task.id],
-                                onPause = { onPause(task.id) },
-                                onResume = { onResume(task.id) },
-                                onRemove = { onRemove(task) }
-                            )
-                        }
-                    }
-                }
-            }
-        }
-    }
-}
-
-/**
- * 文件夹组内子任务紧凑行：相对路径 + 状态 + 进度条 + 操作按钮。
- * 相比独立任务卡更轻量，适合嵌套在文件夹组内。
- */
-@Composable
-private fun DownloadSubTaskRow(
-    task: DownloadTaskEntity,
-    stats: DownloadStats?,
-    onPause: () -> Unit,
-    onResume: () -> Unit,
-    onRemove: () -> Unit
-) {
-    val context = LocalContext.current
-    val isDownloading = task.status == DownloadTaskEntity.STATUS_DOWNLOADING ||
-        task.status == DownloadTaskEntity.STATUS_PENDING
-    val fraction = if (task.totalSize > 0) {
-        (task.downloadedSize.toFloat() / task.totalSize).coerceIn(0f, 1f)
-    } else 0f
-    // 显示相对路径（去掉顶级目录前缀，如 "A/B/b.mp4" → "B/b.mp4"）
-    val displayName = task.fileName.substringAfter('/')
-    val animatedFraction by animateFloatAsState(
-        targetValue = if (task.status == DownloadTaskEntity.STATUS_COMPLETED) 1f else fraction,
-        animationSpec = effectsDefault(), label = "childDownloadProgress",
-    )
-
-    Surface(
-        modifier = Modifier.fillMaxWidth(),
-        shape = RoundedCornerShape(14.dp),
-        color = MaterialTheme.colorScheme.surfaceContainer
-    ) {
-        Column(modifier = Modifier.padding(horizontal = 10.dp, vertical = 8.dp)) {
-            Row(verticalAlignment = Alignment.CenterVertically) {
-                // 文件小图标
-                Surface(
-                    modifier = Modifier.size(32.dp),
-                    shape = RoundedCornerShape(9.dp),
-                    color = MaterialTheme.colorScheme.surfaceContainerHighest
-                ) {
-                    Box(contentAlignment = Alignment.Center) {
-                        Icon(
-                            imageVector = Icons.Outlined.InsertDriveFile,
-                            contentDescription = null,
-                            modifier = Modifier.size(16.dp),
-                            tint = MaterialTheme.colorScheme.onSurfaceVariant
-                        )
-                    }
-                }
-                Spacer(modifier = Modifier.width(10.dp))
-                Column(modifier = Modifier.weight(1f)) {
-                    Text(
-                        text = displayName,
-                        style = MaterialTheme.typography.bodyMedium,
-                        fontWeight = FontWeight.Medium,
-                        maxLines = 1,
-                        overflow = TextOverflow.Ellipsis
-                    )
-                    Text(
-                        text = if (isDownloading && stats != null && stats.speed > 0) {
-                            "${DownloadTaskEntity.statusText(task.status)} · ${formatSpeed(stats.speed)}"
-                        } else {
-                            taskStatusLine(task)
-                        },
-                        style = MaterialTheme.typography.labelSmall,
-                        color = if (task.status == DownloadTaskEntity.STATUS_FAILED) {
-                            MaterialTheme.colorScheme.error
-                        } else {
-                            MaterialTheme.colorScheme.onSurfaceVariant
-                        }
-                    )
-                }
-                // 主操作（暂停/继续/重试/打开）
-                when (task.status) {
-                    DownloadTaskEntity.STATUS_DOWNLOADING,
-                    DownloadTaskEntity.STATUS_PENDING -> IconButton(onClick = onPause) {
-                        Icon(
-                            Icons.Outlined.Pause, contentDescription = "暂停",
-                            tint = MaterialTheme.colorScheme.primary, modifier = Modifier.size(18.dp)
-                        )
-                    }
-                    DownloadTaskEntity.STATUS_PAUSED -> IconButton(onClick = onResume) {
-                        Icon(
-                            Icons.Outlined.PlayArrow, contentDescription = "继续",
-                            tint = MaterialTheme.colorScheme.primary, modifier = Modifier.size(18.dp)
-                        )
-                    }
-                    DownloadTaskEntity.STATUS_FAILED -> IconButton(onClick = onResume) {
-                        Icon(
-                            Icons.Outlined.Refresh, contentDescription = "重试",
-                            tint = MaterialTheme.colorScheme.error, modifier = Modifier.size(18.dp)
-                        )
-                    }
-                    DownloadTaskEntity.STATUS_COMPLETED -> {
-                        if (task.savePath.isNotBlank()) {
-                            IconButton(onClick = { openSavedFile(context, task.savePath, task.fileName) }) {
-                                Icon(
-                                    Icons.Outlined.OpenInNew, contentDescription = "打开",
-                                    tint = MaterialTheme.colorScheme.primary, modifier = Modifier.size(18.dp)
-                                )
-                            }
-                        }
-                    }
-                }
-                // 删除
-                IconButton(onClick = onRemove) {
-                    Icon(
-                        Icons.Outlined.Delete, contentDescription = "删除",
-                        tint = MaterialTheme.colorScheme.error, modifier = Modifier.size(18.dp)
-                    )
-                }
-            }
-            // 细进度条
-            LinearProgressIndicator(
-                progress = { animatedFraction },
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(top = 6.dp)
-                    .height(3.dp)
-                    .clip(RoundedCornerShape(1.5f)),
-                color = if (task.status == DownloadTaskEntity.STATUS_FAILED) {
-                    MaterialTheme.colorScheme.error
-                } else {
-                    MaterialTheme.colorScheme.primary
-                },
-                trackColor = MaterialTheme.colorScheme.surfaceContainerHighest
-            )
-        }
-    }
-}
-
-@Composable
-private fun DownloadTaskCard(
-    task: DownloadTaskEntity,
-    stats: DownloadStats?,
-    speedSamples: List<Long>,
-    onPause: () -> Unit,
-    onResume: () -> Unit,
-    onRemove: () -> Unit
-) {
-    val context = LocalContext.current
-    val isDownloading = task.status == DownloadTaskEntity.STATUS_DOWNLOADING ||
-        task.status == DownloadTaskEntity.STATUS_PENDING
-    val isActive = task.status == DownloadTaskEntity.STATUS_DOWNLOADING
-    val fraction = if (task.totalSize > 0) {
-        (task.downloadedSize.toFloat() / task.totalSize).coerceIn(0f, 1f)
-    } else 0f
-    val animatedFraction by animateFloatAsState(
-        targetValue = if (task.status == DownloadTaskEntity.STATUS_COMPLETED) 1f else fraction,
-        animationSpec = effectsDefault(), label = "downloadProgress",
-    )
-
-    Card(
-        modifier = Modifier.fillMaxWidth(),
-        shape = MaterialTheme.shapes.large,
-        colors = CardDefaults.cardColors(
-            containerColor = MaterialTheme.colorScheme.surfaceContainerLow
-        )
-    ) {
-        Column(modifier = Modifier.padding(14.dp)) {
-            // ---- 标题行：图标 + 文件名 + 状态 + 主操作 ----
-            Row(verticalAlignment = Alignment.CenterVertically) {
-                Surface(
-                    modifier = Modifier.size(40.dp),
-                    shape = CircleShape,
-                    color = MaterialTheme.colorScheme.surfaceContainerHighest
-                ) {
-                    Box(contentAlignment = Alignment.Center) {
-                        Icon(
-                            imageVector = Icons.Outlined.InsertDriveFile,
-                            contentDescription = null,
-                            modifier = Modifier.size(20.dp),
-                            tint = MaterialTheme.colorScheme.onSurfaceVariant
-                        )
-                    }
-                }
-                Spacer(modifier = Modifier.width(12.dp))
-                Column(modifier = Modifier.weight(1f)) {
-                    Text(
-                        text = task.fileName,
-                        style = MaterialTheme.typography.bodyLarge,
-                        fontWeight = FontWeight.Medium,
-                        maxLines = 1,
-                        overflow = TextOverflow.Ellipsis
-                    )
-                    Spacer(modifier = Modifier.height(2.dp))
-                    Text(
-                        text = taskStatusLine(task),
-                        style = MaterialTheme.typography.bodyMedium,
-                        color = if (task.status == DownloadTaskEntity.STATUS_FAILED) {
-                            MaterialTheme.colorScheme.error
-                        } else {
-                            MaterialTheme.colorScheme.onSurfaceVariant
-                        }
-                    )
-                }
-                // 主操作按钮
-                when (task.status) {
-                    DownloadTaskEntity.STATUS_DOWNLOADING,
-                    DownloadTaskEntity.STATUS_PENDING -> IconButton(onClick = onPause) {
-                        Icon(Icons.Outlined.Pause, contentDescription = "暂停", tint = MaterialTheme.colorScheme.primary)
-                    }
-                    DownloadTaskEntity.STATUS_PAUSED -> IconButton(onClick = onResume) {
-                        Icon(Icons.Outlined.PlayArrow, contentDescription = "继续", tint = MaterialTheme.colorScheme.primary)
-                    }
-                    DownloadTaskEntity.STATUS_FAILED -> IconButton(onClick = onResume) {
-                        Icon(Icons.Outlined.Refresh, contentDescription = "重试", tint = MaterialTheme.colorScheme.error)
-                    }
-                    DownloadTaskEntity.STATUS_COMPLETED -> {
-                        if (task.savePath.isNotBlank()) {
-                            Row {
-                                // APK 文件：额外显示「安装」按钮
-                                if (task.fileName.endsWith(".apk", true)) {
-                                    IconButton(onClick = { installApk(context, task.savePath, task.fileName) }) {
-                                        Icon(
-                                            imageVector = Icons.Outlined.SystemUpdate,
-                                            contentDescription = "安装",
-                                            tint = MaterialTheme.colorScheme.primary
-                                        )
-                                    }
-                                }
-                                IconButton(onClick = { openSavedFile(context, task.savePath, task.fileName) }) {
-                                    Icon(
-                                        Icons.Outlined.OpenInNew,
-                                        contentDescription = "打开",
-                                        tint = MaterialTheme.colorScheme.primary
-                                    )
-                                }
-                            }
-                        }
-                    }
-                }
-            }
-
-            // 失败原因（红色小字展示具体错误）
-            if (task.status == DownloadTaskEntity.STATUS_FAILED && task.errorMsg.isNotBlank()) {
-                Spacer(modifier = Modifier.height(10.dp))
-                Text(
-                    text = "失败原因：${task.errorMsg}",
-                    style = MaterialTheme.typography.labelSmall,
-                    color = MaterialTheme.colorScheme.error,
-                    maxLines = 2,
-                    overflow = TextOverflow.Ellipsis
-                )
-            }
-
-            // ---- 速度曲线：只在真正下载中且攒够两个点时出现 ----
-            // 暂停/失败/完成都不显示：那几秒的曲线没有信息量，留着只会让卡片高度跳来跳去。
-            AnimatedVisibility(
-                visible = isActive && speedSamples.size >= 2,
-                enter = fadeIn(effectsDefault()) + expandVertically(spatialDefault()),
-                exit = fadeOut(effectsFast()) + shrinkVertically(spatialFast()),
-            ) {
-                Column {
-                Spacer(modifier = Modifier.height(10.dp))
-                SpeedChart(
-                    samples = speedSamples,
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .height(CHART_AREA_HEIGHT)
-                )
-                }
-            }
-
-            Spacer(modifier = Modifier.height(12.dp))
-
-            // ---- 实时统计：速度 / 剩余时间 / 线程数 ----
-            if (isDownloading && stats != null && stats.speed > 0) {
-                Text(
-                    text = "${formatSpeed(stats.speed)} · 剩余 ${formatRemain(stats.remainMillis)} · ${stats.connectionSummary()}",
-                    style = MaterialTheme.typography.labelSmall,
-                    color = MaterialTheme.colorScheme.primary
-                )
-                Spacer(modifier = Modifier.height(6.dp))
-            }
-
-            // ---- 进度条 ----
-            LinearProgressIndicator(
-                progress = { animatedFraction },
-                modifier = Modifier.fillMaxWidth(),
-                color = when (task.status) {
-                    DownloadTaskEntity.STATUS_FAILED -> MaterialTheme.colorScheme.error
-                    else -> MaterialTheme.colorScheme.primary
-                },
-                trackColor = MaterialTheme.colorScheme.surfaceContainerHighest
-            )
-
-            Spacer(modifier = Modifier.height(8.dp))
-
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                verticalAlignment = Alignment.CenterVertically
-            ) {
-                Text(
-                    text = progressText(task),
-                    style = MaterialTheme.typography.labelSmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    modifier = Modifier.weight(1f)
-                )
-                TextButton(onClick = onRemove) {
-                    Icon(
-                        imageVector = Icons.Outlined.Delete,
-                        contentDescription = null,
-                        modifier = Modifier.size(14.dp),
-                        tint = MaterialTheme.colorScheme.error
-                    )
-                    Spacer(modifier = Modifier.width(4.dp))
-                    Text("删除", color = MaterialTheme.colorScheme.error)
-                }
-            }
-        }
-    }
-}
-
-/** 曲线占位高度：48dp 曲线 + 上下留白，卡片总高保持在「一眼能看两三张」的范围。 */
-private val CHART_AREA_HEIGHT = 48.dp
-
-private fun taskStatusLine(task: DownloadTaskEntity): String {
-    val status = DownloadTaskEntity.statusText(task.status)
-    return if (task.totalSize > 0) {
-        // 显示值钳制到 total（防恢复竞态残留导致显示超总大小）
-        val shown = minOf(task.downloadedSize, task.totalSize)
-        "$status · ${formatSize(shown)} / ${formatSize(task.totalSize)}"
-    } else {
-        status
-    }
-}
-
-private fun progressText(task: DownloadTaskEntity): String {
-    if (task.totalSize <= 0) return ""
-    // 显示值钳制到 total（防恢复竞态残留导致显示超总大小）
-    val shown = minOf(task.downloadedSize, task.totalSize)
-    val percent = (shown * 100 / task.totalSize).toInt().coerceIn(0, 100)
-    return "已下载 ${formatSize(shown)} / ${formatSize(task.totalSize)} · $percent%"
-}
-
-private fun formatSize(bytes: Long): String {
-    if (bytes <= 0) return "0 B"
-    val units = arrayOf("B", "KB", "MB", "GB", "TB")
-    var value = bytes.toDouble()
-    var i = 0
-    while (value >= 1024 && i < units.size - 1) {
-        value /= 1024
-        i++
-    }
-    return String.format("%.1f %s", value, units[i])
-}
-
-private fun formatSpeed(bytesPerSec: Long): String {
-    if (bytesPerSec <= 0) return "0 B/s"
-    val units = arrayOf("B/s", "KB/s", "MB/s", "GB/s")
-    var value = bytesPerSec.toDouble()
-    var i = 0
-    while (value >= 1024 && i < units.size - 1) {
-        value /= 1024
-        i++
-    }
-    return String.format("%.1f %s", value, units[i])
-}
-
-private fun formatRemain(millis: Long): String {
-    if (millis < 0) return "计算中"
-    val sec = millis / 1000
-    return when {
-        sec < 60 -> "${sec}秒"
-        sec < 3600 -> "${sec / 60}分${sec % 60}秒"
-        else -> "${sec / 3600}时${(sec % 3600) / 60}分"
-    }
 }
 
 private fun openSavedFile(context: android.content.Context, savePath: String, fileName: String) {
@@ -1074,16 +988,17 @@ private fun AddDownloadDialog(
     onDismiss: () -> Unit,
     onConfirm: (url: String, name: String) -> Unit
 ) {
-    var url by remember { mutableStateOf("") }
-    var name by remember { mutableStateOf("") }
+    var url by rememberSaveable { mutableStateOf("") }
+    var name by rememberSaveable { mutableStateOf("") }
 
     AlertDialog(
         onDismissRequest = onDismiss,
+        shape = RoundedCornerShape(24.dp),
         title = { Text("添加下载任务") },
         text = {
-            Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+            Column(modifier = Modifier.verticalScroll(rememberScrollState()), verticalArrangement = Arrangement.spacedBy(16.dp)) {
                 Text(
-                    text = "下载文件将保存到 ${Environment.DIRECTORY_DOWNLOADS} 目录",
+                    text = "保存到设置的下载目录，默认是 ${Environment.DIRECTORY_DOWNLOADS}",
                     style = MaterialTheme.typography.bodyMedium,
                     color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
@@ -1094,14 +1009,17 @@ private fun AddDownloadDialog(
                         if (name.isBlank()) name = it.substringAfterLast('/').take(80)
                     },
                     modifier = Modifier.fillMaxWidth(),
-                    placeholder = { Text("文件直链 URL") },
+                    label = { Text("文件直链 URL") },
+                    shape = RoundedCornerShape(16.dp),
+                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Uri),
                     singleLine = true
                 )
                 OutlinedTextField(
                     value = name,
                     onValueChange = { name = it },
                     modifier = Modifier.fillMaxWidth(),
-                    placeholder = { Text("保存文件名") },
+                    label = { Text("保存文件名") },
+                    shape = RoundedCornerShape(16.dp),
                     singleLine = true
                 )
             }
@@ -1109,11 +1027,13 @@ private fun AddDownloadDialog(
         confirmButton = {
             Button(
                 onClick = { onConfirm(url.trim(), name.trim()) },
-                enabled = url.isNotBlank() && name.isNotBlank()
+                enabled = url.isNotBlank() && name.isNotBlank(),
+                modifier = Modifier.heightIn(min = 48.dp),
+                shape = RoundedCornerShape(16.dp)
             ) { Text("开始下载") }
         },
         dismissButton = {
-            TextButton(onClick = onDismiss) { Text("取消") }
+            TextButton(onClick = onDismiss, modifier = Modifier.heightIn(min = 48.dp)) { Text("取消") }
         }
     )
 }

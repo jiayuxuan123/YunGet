@@ -8,6 +8,7 @@ plugins {
     alias(libs.plugins.kotlin.compose)
 
     alias(libs.plugins.ksp)
+    id("com.android.compose.screenshot") version "0.0.1-alpha16"
 }
 
 // 固定发布签名：从根目录 keystore.properties 读取（该文件与 keystore 均已 gitignore，不进公开仓库）。
@@ -19,6 +20,7 @@ if (keystorePropsFile.exists()) {
 }
 
 android {
+    experimentalProperties["android.experimental.enableScreenshotTest"] = true
     namespace = "com.yunget.app"
     compileSdk = 36
 
@@ -29,7 +31,7 @@ android {
         // Android 7.0 发布于 2016 年，覆盖率早已 >99%。
         minSdk = 24
         targetSdk = 34
-        versionCode = 74
+        versionCode = 75
         // 2.7.10 内容：**原生（L2）插件在手机端暂时禁用**
         //  ① 移除整条 dex 加载链：AndroidNativePluginLoader、YunHostBridge、l2-providers 模块；
         //  ② 移除网盘 CloudProvider 抽象（CloudProvider.kt / Resolver / ShareRepository）
@@ -390,7 +392,7 @@ android {
         //  视频平台解析（微博/小红书/Pixiv）改为**引擎级原生插件** turbo-plugin-parser，
         //  与 HLS 插件同一套机制：只往 LINK_PARSER 注册解析器、往 PROTOCOL_HANDLER
         //  每平台声明一条，引擎内核对这三个平台一无所知。平台改版只需换这个插件。
-        versionName = "2.7.26"
+        versionName = "2.7.27"
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
     }
@@ -658,6 +660,8 @@ tasks.register("verifyApkVersion") {
     }
 
 dependencies {
+    "screenshotTestImplementation"("com.android.tools.screenshot:screenshot-validation-api:0.0.1-alpha16")
+    "screenshotTestImplementation"(libs.androidx.ui.tooling)
     implementation("androidx.compose.material:material-icons-extended")
     implementation("androidx.lifecycle:lifecycle-viewmodel-ktx:2.8.7")
     implementation("androidx.lifecycle:lifecycle-viewmodel-compose:2.8.7")
@@ -721,13 +725,7 @@ dependencies {
     implementation("io.coil-kt.coil3:coil-compose:3.0.4")
     implementation("io.coil-kt.coil3:coil-network-okhttp:3.0.4")
 
-    // iOS（Cupertino）风格组件：分组列表、iOS 开关/导航栏/弹层。
-    // 只作为「可切换的第 2 套界面」使用，默认界面仍走 Material 3。
-    implementation(libs.cupertino)
-
-    // 液态玻璃：真实背景采样 + 模糊 + 边缘折射（底栏、卡片、按钮共用）
-    implementation(libs.backdrop)
-
+    // UI 统一使用原生 Material 3，不加载额外的 Cupertino 或背景模糊框架。
     implementation(libs.androidx.core.ktx)
     implementation(libs.androidx.lifecycle.runtime.ktx)
     implementation(libs.androidx.activity.compose)

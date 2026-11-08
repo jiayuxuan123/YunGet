@@ -1,19 +1,30 @@
 package com.yunget.app.ui.resolve
 
+import androidx.activity.compose.BackHandler
+import androidx.compose.animation.AnimatedContent
+import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.SizeTransform
+import androidx.compose.animation.animateColorAsState
+import androidx.compose.animation.animateContentSize
+import androidx.compose.animation.expandVertically
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
+import androidx.compose.animation.shrinkVertically
+import androidx.compose.animation.togetherWith
 import androidx.compose.foundation.ExperimentalFoundationApi
-import androidx.compose.foundation.basicMarquee
-import androidx.compose.foundation.clickable
 import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
@@ -21,25 +32,31 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.rememberScrollState
-import androidx.compose.foundation.shape.CircleShape
-import androidx.compose.material.icons.outlined.Visibility
-import com.yunget.app.ui.preview.CloudPreview
+import androidx.compose.foundation.selection.toggleable
+import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.outlined.ArrowUpward
 import androidx.compose.material.icons.outlined.ChevronRight
-import androidx.compose.material.icons.outlined.Folder
-import androidx.compose.material.icons.outlined.FolderOpen
-import androidx.compose.material.icons.outlined.InsertDriveFile
 import androidx.compose.material.icons.outlined.Download
+import androidx.compose.material.icons.outlined.FolderOpen
 import androidx.compose.material.icons.outlined.MoreVert
 import androidx.compose.material.icons.outlined.SaveAlt
+import androidx.compose.material.icons.outlined.Visibility
+import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.Button
+import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
+import androidx.compose.material3.Checkbox
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBarScrollBehavior
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
@@ -49,43 +66,43 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.input.nestedscroll.nestedScroll
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.semantics.Role
+import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.semantics.selected
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
-import androidx.activity.compose.BackHandler
-import com.yunget.app.ui.components.YunGetLoading
 import com.yunget.app.data.network.model.ShareFile
 import com.yunget.app.data.network.model.ShareSession
 import com.yunget.app.data.prefs.SettingsRepository
 import com.yunget.app.ui.components.ScrollToTopButton
-import com.yunget.app.ui.items.MultiSelectAction
-import com.yunget.app.ui.items.MultiSelectBar
+import com.yunget.app.ui.components.YunGetLoading
+import com.yunget.app.ui.preview.CloudPreview
 import com.yunget.app.ui.screens.BaiduSaveSheet
 import com.yunget.app.ui.screens.C139SaveSheet
+import com.yunget.app.ui.screens.GuangYaSaveSheet
+import com.yunget.app.ui.screens.Pan115SaveSheet
 import com.yunget.app.ui.screens.Pan123SaveSheet
 import com.yunget.app.ui.screens.SaveToCloudSheet
 import com.yunget.app.ui.screens.UCSaveSheet
 import com.yunget.app.ui.screens.XunleiSaveSheet
+import com.yunget.app.ui.theme.effectsDefault
+import com.yunget.app.ui.theme.effectsFast
+import com.yunget.app.ui.theme.spatialDefault
+import com.yunget.app.ui.theme.spatialFast
 import com.yunget.app.ui.viewmodel.BaiduCloudViewModel
 import com.yunget.app.ui.viewmodel.C139CloudViewModel
+import com.yunget.app.ui.viewmodel.GuangYaCloudViewModel
+import com.yunget.app.ui.viewmodel.Pan115CloudViewModel
 import com.yunget.app.ui.viewmodel.Pan123CloudViewModel
 import com.yunget.app.ui.viewmodel.QuarkCloudViewModel
 import com.yunget.app.ui.viewmodel.ResolveViewModel
 import com.yunget.app.ui.viewmodel.UCCoudViewModel
 import com.yunget.app.ui.viewmodel.XunleiCloudViewModel
-import com.yunget.app.ui.screens.GuangYaSaveSheet
-import com.yunget.app.ui.screens.Pan115SaveSheet
-import com.yunget.app.ui.viewmodel.GuangYaCloudViewModel
-import com.yunget.app.ui.viewmodel.Pan115CloudViewModel
-import androidx.compose.material3.AlertDialog
-import androidx.compose.material3.Button
-import androidx.compose.material3.Card
-import androidx.compose.material3.Checkbox
-import androidx.compose.material3.IconButton
-import androidx.compose.material3.TextButton
 
 /** 百度非会员限速阈值：>300MB 提示 */
 private const val BAIDU_LIMIT_BYTES = 300L * 1024 * 1024
@@ -139,167 +156,179 @@ fun ShareDetailScreen(
             proceed()
         }
     }
-    // 系统返回键 → 返回上一级目录 / 根目录回输入页（而不是退出应用）
-    BackHandler { onBack() }
-    // 文件列表滚动状态（返回顶部按钮用）
+    // 多选时先退出选择；普通状态保持目录返回契约。
+    BackHandler {
+        if (viewModel.multiSelectMode) viewModel.exitMultiSelect() else onBack()
+    }
     val listState = rememberLazyListState()
-    // 多选模式：底部批量操作栏 + 处理中弹窗
-    Box(modifier = modifier.fillMaxSize()) {
-        LazyColumn(
-            state = listState,
-            modifier = Modifier
-                .fillMaxSize()
-                .nestedScroll(scrollBehavior.nestedScrollConnection),
-            contentPadding = PaddingValues(
-                        start = 16.dp, end = 16.dp, top = 16.dp,
-                        bottom = if (viewModel.multiSelectMode) 96.dp else 16.dp
-                    ),
-            verticalArrangement = Arrangement.spacedBy(8.dp)
-        ) {
-            item {
-                Column {
-                    Row(verticalAlignment = Alignment.CenterVertically) {
-                        if (viewModel.multiSelectMode) {
-                            // 多选模式：取消选择
-                            IconButton(onClick = { viewModel.exitMultiSelect() }) {
-                                Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "取消选择")
-                            }
-                            Column(modifier = Modifier.weight(1f)) {
-                                Text(
-                                    text = "已选 ${viewModel.selected.size} 项",
-                                    style = MaterialTheme.typography.titleMedium,
-                                    fontWeight = FontWeight.Medium
-                                )
-                                Text(
-                                    text = if (viewModel.selected.size == files.size) "已全选" else "点击选择更多文件",
-                                    style = MaterialTheme.typography.bodyMedium,
-                                    color = MaterialTheme.colorScheme.onSurfaceVariant
-                                )
-                            }
-                            TextButton(onClick = { viewModel.toggleSelectAll(files) }) {
-                                Text(if (viewModel.selected.size == files.size) "取消全选" else "全选")
-                            }
-                        } else {
-                            IconButton(onClick = onExit) {
-                                Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "返回")
-                            }
-                            Column(modifier = Modifier.weight(1f)) {
-                                Text(
-                                    text = session.title.ifBlank { "分享内容" },
-                                    style = MaterialTheme.typography.titleMedium,
-                                    fontWeight = FontWeight.Medium,
-                                    maxLines = 1,
-                                    overflow = TextOverflow.Ellipsis
-                                )
-                                Text(
-                                    text = "共 ${files.size} 项",
-                                    style = MaterialTheme.typography.bodyMedium,
-                                    color = MaterialTheme.colorScheme.onSurfaceVariant
-                                )
+    Surface(modifier = modifier.fillMaxSize(), color = MaterialTheme.colorScheme.surface) {
+        Column {
+            Box(modifier = Modifier.weight(1f)) {
+                LazyColumn(
+                    state = listState,
+                    modifier = Modifier.fillMaxSize().nestedScroll(scrollBehavior.nestedScrollConnection),
+                    contentPadding = PaddingValues(16.dp),
+                    verticalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
+                    item(key = "share_summary", contentType = "summary") {
+                        Surface(
+                            modifier = Modifier.fillMaxWidth().animateContentSize(spatialDefault()),
+                            shape = RoundedCornerShape(24.dp),
+                            color = MaterialTheme.colorScheme.surfaceContainerLow
+                        ) {
+                            Column(modifier = Modifier.padding(12.dp)) {
+                                Row(verticalAlignment = Alignment.CenterVertically) {
+                                    IconButton(
+                                        onClick = { if (viewModel.multiSelectMode) viewModel.exitMultiSelect() else onExit() },
+                                        modifier = Modifier.size(48.dp)
+                                    ) {
+                                        Icon(
+                                            Icons.AutoMirrored.Filled.ArrowBack,
+                                            contentDescription = if (viewModel.multiSelectMode) "取消选择" else "返回解析首页"
+                                        )
+                                    }
+                                    Column(modifier = Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                                        AnimatedContent(
+                                            targetState = if (viewModel.multiSelectMode) "已选 ${viewModel.selected.size} 项" else session.title.ifBlank { "分享内容" },
+                                            transitionSpec = {
+                                                fadeIn(effectsDefault()).togetherWith(fadeOut(effectsFast()))
+                                                    .using(SizeTransform(sizeAnimationSpec = { _, _ -> spatialFast() }))
+                                            },
+                                            label = "shareSelectionTitle"
+                                        ) { title ->
+                                            Text(
+                                                text = title,
+                                                style = MaterialTheme.typography.titleMedium,
+                                                maxLines = 3,
+                                                overflow = TextOverflow.Ellipsis
+                                            )
+                                        }
+                                        Text(
+                                            text = if (viewModel.multiSelectMode) {
+                                                if (viewModel.selected.size == files.size) "已全选" else "点击文件继续选择"
+                                            } else "共 ${files.size} 项 · 长按文件可多选",
+                                            style = MaterialTheme.typography.bodyMedium,
+                                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                                        )
+                                    }
+                                }
+                                if (viewModel.multiSelectMode) {
+                                    TextButton(
+                                        onClick = { viewModel.toggleSelectAll(files) },
+                                        modifier = Modifier.align(Alignment.End).heightIn(min = 48.dp)
+                                    ) {
+                                        Text(if (viewModel.selected.size == files.size) "取消全选" else "全选")
+                                    }
+                                } else {
+                                    CrumbBar(
+                                        rootTitle = session.title.ifBlank { "分享内容" },
+                                        pathNames = pathNames,
+                                        onNavigate = { viewModel.navigateToLevel(it) }
+                                    )
+                                }
                             }
                         }
                     }
-                    // 可点击面包屑（多选模式下隐藏）
-                    if (!viewModel.multiSelectMode) {
-                        CrumbBar(
-                            rootTitle = session.title.ifBlank { "分享内容" },
-                            pathNames = pathNames,
-                            onNavigate = { viewModel.navigateToLevel(it) }
+                    if (pathNames.isNotEmpty()) {
+                        item(key = "share_parent", contentType = "navigation") {
+                            BackToParentItem(onClick = onBack)
+                        }
+                    }
+                    if (files.isEmpty()) {
+                        item(key = "share_empty", contentType = "empty") {
+                            Column(
+                                modifier = Modifier.fillMaxWidth().padding(vertical = 32.dp),
+                                horizontalAlignment = Alignment.CenterHorizontally,
+                                verticalArrangement = Arrangement.spacedBy(12.dp)
+                            ) {
+                                Icon(Icons.Outlined.FolderOpen, contentDescription = null, modifier = Modifier.size(40.dp), tint = MaterialTheme.colorScheme.onSurfaceVariant)
+                                Text("此目录为空", style = MaterialTheme.typography.bodyLarge, color = MaterialTheme.colorScheme.onSurfaceVariant, textAlign = TextAlign.Center)
+                            }
+                        }
+                    }
+                    items(
+                        items = files,
+                        key = { "share_file:${it.fid}" },
+                        contentType = { if (it.isdir) "folder" else "file" }
+                    ) { file ->
+                        ShareFileRow(
+                            file = file,
+                            modifier = Modifier.animateItem(
+                                fadeInSpec = effectsDefault(),
+                                placementSpec = spatialDefault(),
+                                fadeOutSpec = effectsFast()
+                            ),
+                            onClick = {
+                                if (viewModel.multiSelectMode) {
+                                    viewModel.toggleSelect(file)
+                                } else if (file.isdir) {
+                                    viewModel.openFolder(file)
+                                } else {
+                                    checkBaiduLimit(file) { viewModel.fetchDownloadLink(file) }
+                                }
+                            },
+                            onPreview = if (!file.isdir && CloudPreview.canPreview(file)) ({ viewModel.openPreview(file) }) else null,
+                            onSave = if (!viewModel.multiSelectMode && viewModel.canSave) {
+                                { viewModel.requestSave(file) }
+                            } else null,
+                            onLongClick = if (!viewModel.multiSelectMode) {
+                                { viewModel.enterMultiSelect(file) }
+                            } else null,
+                            selected = viewModel.selected.contains(file),
+                            showCheckbox = viewModel.multiSelectMode
                         )
                     }
                 }
-            }
-
-            // 返回上一级（单独列表项；根目录时不显示）
-            if (pathNames.isNotEmpty()) {
-                item {
-                    BackToParentItem(onClick = onBack)
-                }
-            }
-
-            if (files.isEmpty()) {
-                item {
-                    Text(
-                        text = "此目录为空",
-                        style = MaterialTheme.typography.bodyMedium,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .padding(vertical = 32.dp),
-                        textAlign = TextAlign.Center
-                    )
-                }
-            }
-
-            items(files, key = { it.fid }) { file ->
-                ShareFileRow(
-                    file = file,
-                    modifier = Modifier.animateItem(),
-                    onClick = {
-                        if (viewModel.multiSelectMode) {
-                            viewModel.toggleSelect(file)
-                        } else if (file.isdir) {
-                            viewModel.openFolder(file)
-                        } else {
-                            checkBaiduLimit(file) { viewModel.fetchDownloadLink(file) }
-                        }
-                    },
-                    onPreview = if (!file.isdir && CloudPreview.canPreview(file)) ({ viewModel.openPreview(file) }) else null,
-                    // 仅夸克分享显示转存按钮（多选时隐藏）
-                    onSave = if (!viewModel.multiSelectMode && viewModel.canSave) {
-                        { viewModel.requestSave(file) }
-                    } else {
-                        null
-                    },
-                    onLongClick = if (!viewModel.multiSelectMode) {
-                        { viewModel.enterMultiSelect(file) }
-                    } else {
-                        null
-                    },
-                    selected = viewModel.selected.contains(file),
-                    showCheckbox = viewModel.multiSelectMode
+                ScrollToTopButton(
+                    listState = listState,
+                    modifier = Modifier.align(Alignment.BottomEnd).padding(16.dp)
                 )
             }
-        }
-
-        // 返回顶部按钮（上滑离开顶部后显示；多选模式下上移避开底部批量栏）
-        ScrollToTopButton(
-            listState = listState,
-            modifier = Modifier
-                .align(Alignment.BottomEnd)
-                .padding(
-                    end = 16.dp,
-                    bottom = if (viewModel.multiSelectMode) 104.dp else 16.dp
-                )
-        )
-
-        // 多选模式：底部批量操作栏（转存/下载）
-        if (viewModel.multiSelectMode) {
-            MultiSelectBar(
-                count = viewModel.selected.size,
-                actions = buildList {
-                    // 转存仅夸克分享支持
-                    if (viewModel.canSave) {
-                        add(
-                            MultiSelectAction("转存", Icons.Outlined.SaveAlt, MaterialTheme.colorScheme.primary) {
-                                viewModel.batchSaveToCloud()
+            // 栏位参与测量，不叠在列表上；大字体换行后也不会遮住最后一项。
+            AnimatedVisibility(
+                visible = viewModel.multiSelectMode,
+                enter = fadeIn(effectsDefault()) + expandVertically(spatialDefault()),
+                exit = fadeOut(effectsFast()) + shrinkVertically(spatialFast())
+            ) {
+                Surface(color = MaterialTheme.colorScheme.surfaceContainerHigh) {
+                    FlowRow(
+                        modifier = Modifier.fillMaxWidth().padding(16.dp),
+                        horizontalArrangement = Arrangement.spacedBy(12.dp, Alignment.End),
+                        verticalArrangement = Arrangement.spacedBy(8.dp)
+                    ) {
+                        if (viewModel.canSave) {
+                            OutlinedButton(
+                                onClick = { viewModel.batchSaveToCloud() },
+                                enabled = viewModel.selected.isNotEmpty(),
+                                modifier = Modifier.heightIn(min = 48.dp),
+                                shape = RoundedCornerShape(16.dp)
+                            ) {
+                                Icon(Icons.Outlined.SaveAlt, contentDescription = null, modifier = Modifier.size(20.dp))
+                                Spacer(Modifier.width(8.dp))
+                                Text("转存所选")
                             }
-                        )
+                        }
+                        Button(
+                            onClick = {
+                                val hasBig = viewModel.selected.any { it.fsize > BAIDU_LIMIT_BYTES }
+                                if (viewModel.isBaidu && !baiduLimitDismissed && hasBig) {
+                                    pendingBaiduAction = { viewModel.batchDownload() }
+                                    showBaiduLimitDialog = true
+                                } else {
+                                    viewModel.batchDownload()
+                                }
+                            },
+                            enabled = viewModel.selected.isNotEmpty(),
+                            modifier = Modifier.heightIn(min = 48.dp),
+                            shape = RoundedCornerShape(16.dp)
+                        ) {
+                            Icon(Icons.Outlined.Download, contentDescription = null, modifier = Modifier.size(20.dp))
+                            Spacer(Modifier.width(8.dp))
+                            Text("下载所选（${viewModel.selected.size}）")
+                        }
                     }
-                    add(
-                        MultiSelectAction("下载", Icons.Outlined.Download, MaterialTheme.colorScheme.primary) {
-                            // 百度批量下载：选中项含 >300MB 文件时先弹限速提示
-                            val hasBig = viewModel.selected.any { it.fsize > BAIDU_LIMIT_BYTES }
-                            if (viewModel.isBaidu && !baiduLimitDismissed && hasBig) {
-                                pendingBaiduAction = { viewModel.batchDownload() }
-                                showBaiduLimitDialog = true
-                            } else {
-                                viewModel.batchDownload()
-                            }
-                        }
-                    )
                 }
-            )
+            }
         }
     }
 
@@ -310,13 +339,20 @@ fun ShareDetailScreen(
             onDismissRequest = { showBaiduLimitDialog = false },
             title = { Text("下载大文件提示") },
             text = {
-                Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                Column(modifier = Modifier.verticalScroll(rememberScrollState()), verticalArrangement = Arrangement.spacedBy(12.dp)) {
                     Text(
                         text = "百度网盘非会员超过300MB会被限速，下载速度可能较慢。是否继续下载？",
                         style = MaterialTheme.typography.bodyMedium
                     )
-                    Row(verticalAlignment = Alignment.CenterVertically) {
-                        Checkbox(checked = neverShow, onCheckedChange = { neverShow = it })
+                    Row(
+                        modifier = Modifier.fillMaxWidth().heightIn(min = 48.dp).toggleable(
+                            value = neverShow,
+                            role = Role.Checkbox,
+                            onValueChange = { neverShow = it }
+                        ),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Checkbox(checked = neverShow, onCheckedChange = null)
                         Spacer(modifier = Modifier.width(8.dp))
                         Text("不再显示此提示", style = MaterialTheme.typography.bodyMedium)
                     }
@@ -324,6 +360,7 @@ fun ShareDetailScreen(
             },
             confirmButton = {
                 Button(
+                    modifier = Modifier.heightIn(min = 48.dp),
                     onClick = {
                         showBaiduLimitDialog = false
                         baiduSettings.baiduLimitHintDismissed = neverShow
@@ -334,7 +371,7 @@ fun ShareDetailScreen(
                 ) { Text("继续下载") }
             },
             dismissButton = {
-                TextButton(onClick = { showBaiduLimitDialog = false }) { Text("取消") }
+                TextButton(onClick = { showBaiduLimitDialog = false }, modifier = Modifier.heightIn(min = 48.dp)) { Text("取消") }
             }
         )
     }
@@ -345,15 +382,14 @@ fun ShareDetailScreen(
             onDismissRequest = { },
             confirmButton = { },
             dismissButton = {
-                TextButton(onClick = { viewModel.cancelBatch() }) {
+                TextButton(onClick = { viewModel.cancelBatch() }, modifier = Modifier.heightIn(min = 48.dp)) {
                     Text("中断", color = MaterialTheme.colorScheme.error)
                 }
             },
             title = { Text("批量处理中") },
             text = {
                 Row(verticalAlignment = Alignment.CenterVertically) {
-                    YunGetLoading(modifier = Modifier.size(24.dp)
-                    )
+                    YunGetLoading(modifier = Modifier.size(48.dp))
                     Spacer(modifier = Modifier.width(12.dp))
                     Text(
                         text = viewModel.batchProgress?.let { "正在获取下载链接 $it" }
@@ -416,42 +452,20 @@ fun ShareDetailScreen(
 
 @Composable
 internal fun BackToParentItem(onClick: () -> Unit) {
-    Card(
+    TextButton(
         onClick = onClick,
-        modifier = Modifier.fillMaxWidth(),
-        shape = MaterialTheme.shapes.large,
-        colors = CardDefaults.cardColors(
-            containerColor = MaterialTheme.colorScheme.surfaceContainerHigh
-        )
+        modifier = Modifier.fillMaxWidth().heightIn(min = 48.dp),
+        shape = RoundedCornerShape(16.dp),
+        contentPadding = PaddingValues(horizontal = 16.dp, vertical = 12.dp)
     ) {
-        Row(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(horizontal = 16.dp, vertical = 12.dp),
-            verticalAlignment = Alignment.CenterVertically
-        ) {
-            Icon(
-                imageVector = Icons.Outlined.ArrowUpward,
-                contentDescription = null,
-                modifier = Modifier.size(20.dp),
-                tint = MaterialTheme.colorScheme.primary
-            )
-            Spacer(modifier = Modifier.width(10.dp))
-            Text(
-                text = "返回上一级",
-                style = MaterialTheme.typography.bodyLarge,
-                color = MaterialTheme.colorScheme.primary,
-                fontWeight = FontWeight.Medium
-            )
-        }
+        Icon(Icons.Outlined.ArrowUpward, contentDescription = null, modifier = Modifier.size(20.dp))
+        Spacer(Modifier.width(12.dp))
+        Text("返回上一级", style = MaterialTheme.typography.bodyLarge)
+        Spacer(Modifier.weight(1f))
     }
 }
 
-/**
- * 可点击面包屑：根标题 > 目录1 > 目录2。
- * 非当前层可点击回退到对应目录；当前层高亮（文件夹图标 + 主题色）。
- * 横向滚动并自动定位到当前层。
- */
+/** 可横向滚动的目录路径；每个可点击层级均有 48dp 触摸目标。 */
 @Composable
 internal fun CrumbBar(
     rootTitle: String,
@@ -459,57 +473,32 @@ internal fun CrumbBar(
     onNavigate: (Int) -> Unit,
     modifier: Modifier = Modifier
 ) {
-    val crumbs = buildList {
-        add(rootTitle.ifBlank { "根目录" })
-        pathNames.forEach { add(it) }
-    }
+    val crumbs = remember(rootTitle, pathNames) { listOf(rootTitle.ifBlank { "根目录" }) + pathNames }
     val scroll = rememberScrollState()
-    LaunchedEffect(crumbs.size, crumbs.lastOrNull()) {
-        scroll.scrollTo(scroll.maxValue)
-    }
+    LaunchedEffect(crumbs.size, crumbs.lastOrNull()) { scroll.scrollTo(scroll.maxValue) }
     Row(
-        verticalAlignment = Alignment.CenterVertically,
-        modifier = modifier
-            .fillMaxWidth()
-            .horizontalScroll(scroll)
-            .padding(start = 8.dp, top = 4.dp)
+        modifier = modifier.fillMaxWidth().horizontalScroll(scroll),
+        verticalAlignment = Alignment.CenterVertically
     ) {
         crumbs.forEachIndexed { i, name ->
-            val isLast = i == crumbs.size - 1
-            if (!isLast) {
-                // 可点击层级：点击回退到该目录
-                Text(
-                    text = name,
-                    style = MaterialTheme.typography.labelLarge,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    maxLines = 1,
-                    modifier = Modifier
-                        .clickable { onNavigate(i) }
-                        .padding(horizontal = 4.dp, vertical = 2.dp)
-                )
-                Icon(
-                    imageVector = Icons.Outlined.ChevronRight,
-                    contentDescription = null,
-                    modifier = Modifier.size(16.dp),
-                    tint = MaterialTheme.colorScheme.outline
-                )
+            if (i < crumbs.lastIndex) {
+                TextButton(
+                    onClick = { onNavigate(i) },
+                    modifier = Modifier.heightIn(min = 48.dp),
+                    contentPadding = PaddingValues(horizontal = 12.dp)
+                ) {
+                    Text(name, style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                }
+                Icon(Icons.Outlined.ChevronRight, contentDescription = null, modifier = Modifier.size(16.dp), tint = MaterialTheme.colorScheme.outline)
             } else {
-                // 当前层：高亮 + 文件夹图标（不可点）
-                Icon(
-                    imageVector = Icons.Outlined.FolderOpen,
-                    contentDescription = null,
-                    modifier = Modifier.size(16.dp),
-                    tint = MaterialTheme.colorScheme.primary
-                )
-                Spacer(modifier = Modifier.width(4.dp))
-                Text(
-                    text = name,
-                    style = MaterialTheme.typography.labelLarge,
-                    color = MaterialTheme.colorScheme.primary,
-                    fontWeight = FontWeight.SemiBold,
-                    maxLines = 1,
-                    modifier = Modifier.padding(end = 4.dp)
-                )
+                Row(
+                    modifier = Modifier.heightIn(min = 48.dp).padding(horizontal = 12.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
+                    Icon(Icons.Outlined.FolderOpen, contentDescription = null, modifier = Modifier.size(20.dp), tint = MaterialTheme.colorScheme.primary)
+                    Text(name, style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.primary, fontWeight = FontWeight.Medium)
+                }
             }
         }
     }
@@ -536,88 +525,80 @@ internal fun ShareFileRow(
      * （首/末项大圆角、中间项小圆角，形成「整组一张卡片」的观感）；
      * 不传时为整行统一大圆角。
      */
-    shape: androidx.compose.ui.graphics.Shape = MaterialTheme.shapes.large,
+    shape: androidx.compose.ui.graphics.Shape = RoundedCornerShape(16.dp),
     /** 列表项动画等（调用方传入 Modifier.animateItem()） */
     modifier: Modifier = Modifier
 ) {
+    val containerColor by animateColorAsState(
+        targetValue = if (selected) MaterialTheme.colorScheme.primaryContainer else MaterialTheme.colorScheme.surfaceContainerLow,
+        animationSpec = effectsFast(),
+        label = "shareFileSelection"
+    )
     Card(
         modifier = modifier
             .fillMaxWidth()
+            .animateContentSize(spatialFast())
+            .clip(shape)
+            .semantics { if (showCheckbox) this.selected = selected }
             .combinedClickable(
                 onClick = onClick,
-                onLongClick = onLongClick
+                onClickLabel = if (showCheckbox) "切换选择" else if (file.isdir) "打开文件夹" else "获取下载链接",
+                onLongClick = onLongClick,
+                onLongClickLabel = if (onLongClick != null) "选择文件" else null,
+                role = if (showCheckbox) Role.Checkbox else Role.Button
             ),
         shape = shape,
         colors = CardDefaults.cardColors(
-            containerColor = if (selected) {
-                MaterialTheme.colorScheme.primaryContainer
-            } else {
-                MaterialTheme.colorScheme.surfaceContainerLow
-            }
+            containerColor = containerColor,
+            contentColor = if (selected) MaterialTheme.colorScheme.onPrimaryContainer else MaterialTheme.colorScheme.onSurface
         )
     ) {
-        Row(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(14.dp),
-            verticalAlignment = Alignment.CenterVertically
-        ) {
-            // 多选模式：行首复选框（仅多选列表显示）
-            if (showCheckbox) {
-                Checkbox(
-                    checked = selected,
-                    onCheckedChange = { onClick() },
-                    modifier = Modifier.size(36.dp)
-                )
-                Spacer(modifier = Modifier.width(4.dp))
-            }
-            FileLeadingIcon(file)
-            Spacer(modifier = Modifier.width(12.dp))
-            Column(modifier = Modifier.weight(1f)) {
-                // 文件名过长时滚动播放显示
-                Text(
-                    text = file.fname,
-                    style = MaterialTheme.typography.bodyLarge,
-                    maxLines = 1,
-                    modifier = Modifier.basicMarquee(iterations = Int.MAX_VALUE)
-                )
-                Spacer(modifier = Modifier.height(2.dp))
-                Text(
-                    text = if (file.isdir) "文件夹" else formatSize(file.fsize),
-                    style = MaterialTheme.typography.bodyMedium,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant
-                )
-            }
-            if (onPreview != null) {
-                IconButton(onClick = onPreview) {
-                    Icon(Icons.Outlined.Visibility, contentDescription = "预览${file.fname}")
+        Column(modifier = Modifier.fillMaxWidth().heightIn(min = 72.dp).padding(12.dp)) {
+            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                if (showCheckbox) {
+                    // 整行统一处理点击，避免复选框和行同时切换两次。
+                    Checkbox(checked = selected, onCheckedChange = null, modifier = Modifier.size(48.dp))
                 }
-            }
-            if (onSave != null) {
-                IconButton(onClick = onSave, modifier = Modifier.size(36.dp)) {
-                    Icon(
-                        imageVector = Icons.Outlined.SaveAlt,
-                        contentDescription = "转存",
-                        modifier = Modifier.size(18.dp),
-                        tint = MaterialTheme.colorScheme.primary
+                FileLeadingIcon(file)
+                Column(modifier = Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                    // 完整名称静态换行；列表中不再运行永久 marquee。
+                    Text(text = file.fname, style = MaterialTheme.typography.bodyLarge)
+                    Text(
+                        text = if (file.isdir) "文件夹" else formatSize(file.fsize),
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = if (selected) MaterialTheme.colorScheme.onPrimaryContainer else MaterialTheme.colorScheme.onSurfaceVariant
                     )
                 }
+                Icon(
+                    imageVector = if (file.isdir) Icons.Outlined.ChevronRight else Icons.Outlined.Download,
+                    contentDescription = null,
+                    modifier = Modifier.size(20.dp),
+                    tint = if (selected) MaterialTheme.colorScheme.onPrimaryContainer else MaterialTheme.colorScheme.onSurfaceVariant
+                )
             }
-            if (onMore != null) {
-                IconButton(onClick = onMore, modifier = Modifier.size(36.dp)) {
-                    Icon(
-                        imageVector = Icons.Outlined.MoreVert,
-                        contentDescription = "更多",
-                        modifier = Modifier.size(18.dp),
-                        tint = MaterialTheme.colorScheme.onSurfaceVariant
-                    )
+            if (onPreview != null || onSave != null || onMore != null) {
+                FlowRow(
+                    modifier = Modifier.fillMaxWidth().padding(top = 4.dp),
+                    horizontalArrangement = Arrangement.spacedBy(8.dp, Alignment.End),
+                    verticalArrangement = Arrangement.spacedBy(4.dp)
+                ) {
+                    if (onPreview != null) {
+                        IconButton(onClick = onPreview, modifier = Modifier.size(48.dp)) {
+                            Icon(Icons.Outlined.Visibility, contentDescription = "预览${file.fname}")
+                        }
+                    }
+                    if (onSave != null) {
+                        IconButton(onClick = onSave, modifier = Modifier.size(48.dp)) {
+                            Icon(Icons.Outlined.SaveAlt, contentDescription = "转存${file.fname}", tint = MaterialTheme.colorScheme.primary)
+                        }
+                    }
+                    if (onMore != null) {
+                        IconButton(onClick = onMore, modifier = Modifier.size(48.dp)) {
+                            Icon(Icons.Outlined.MoreVert, contentDescription = "${file.fname}的更多操作")
+                        }
+                    }
                 }
             }
-            Icon(
-                imageVector = Icons.Outlined.ChevronRight,
-                contentDescription = null,
-                tint = MaterialTheme.colorScheme.outline
-            )
         }
     }
 }

@@ -17,8 +17,11 @@
 
 package com.yunget.app.ui.screens
 
+import androidx.compose.animation.animateColorAsState
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
+import androidx.compose.foundation.pager.HorizontalPager
+import androidx.compose.foundation.pager.rememberPagerState
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -41,11 +44,15 @@ import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Scaffold
+import androidx.compose.material3.SegmentedButton
+import androidx.compose.material3.SegmentedButtonDefaults
+import androidx.compose.material3.SingleChoiceSegmentedButtonRow
 import androidx.compose.material3.Text
 import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.produceState
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.asImageBitmap
@@ -61,7 +68,10 @@ import com.yunget.app.data.plugin.SupportEntry
 import com.yunget.app.data.plugin.sharedPluginRuntime
 import com.yunget.app.ui.SnackbarController
 import com.yunget.app.ui.components.RemoteImage
+import com.yunget.app.ui.theme.effectsDefault
+import com.yunget.app.ui.theme.effectsFast
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import java.io.File
 import androidx.compose.material3.Card
@@ -114,6 +124,7 @@ import androidx.compose.material.icons.outlined.Info
 fun SupportScreen(
     onBack: () -> Unit,
     modifier: Modifier = Modifier,
+    initialPage: Int = 0,
 ) {
     val context = LocalContext.current
 
@@ -163,7 +174,7 @@ fun SupportScreen(
                 )
 
                 // 没有插件内容时用内置兜底，而不是空白页。
-                list.isEmpty() -> BuiltinSupport()
+                list.isEmpty() -> BuiltinSupport(initialPage = initialPage)
 
                 else -> list.forEach { item -> SupportEntryCard(item) }
             }
@@ -194,8 +205,42 @@ fun SupportScreen(
  * 旧的"保存二维码到相册"按钮没有搬回来：截图后微信扫一扫支持从相册识别，
  * 为一个按钮引入存储权限流程不值得。
  */
+private data class PaymentCode(
+    val tabLabel: String,
+    val title: String,
+    val hint: String,
+    val contentDescription: String,
+    val imageRes: Int,
+    val imageHeight: androidx.compose.ui.unit.Dp,
+)
+
+private val BuiltinPaymentCodes = listOf(
+    PaymentCode(
+        tabLabel = "微信",
+        title = "微信扫码赞赏",
+        hint = "截图保存后，可从微信「扫一扫」的相册中识别",
+        contentDescription = "微信赞赏码",
+        imageRes = R.drawable.weixin,
+        imageHeight = 300.dp,
+    ),
+    PaymentCode(
+        tabLabel = "支付宝",
+        title = "支付宝扫码赞赏",
+        hint = "截图保存后，可从支付宝「扫一扫」的相册中识别",
+        contentDescription = "支付宝赞赏码",
+        imageRes = R.drawable.alipay_qr,
+        imageHeight = 340.dp,
+    ),
+)
+
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
-private fun BuiltinSupport() {
+private fun BuiltinSupport(initialPage: Int = 0) {
+    val pagerState = rememberPagerState(
+        initialPage = initialPage.coerceIn(BuiltinPaymentCodes.indices),
+        pageCount = { BuiltinPaymentCodes.size },
+    )
+    val scope = rememberCoroutineScope()
     Column(
         modifier = Modifier.fillMaxWidth(),
         verticalArrangement = Arrangement.spacedBy(16.dp),
@@ -211,8 +256,7 @@ private fun BuiltinSupport() {
             )
             Spacer(Modifier.height(6.dp))
             Text(
-                text = "日常的维护、适配新系统、跟进网盘接口变动，都要花时间。" +
-                    "如果它帮到了你，可以用下面的方式支持一下。",
+                text = "如果云取帮到了你，可以扫码支持后续维护。",
                 style = MaterialTheme.typography.bodyMedium,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
@@ -232,36 +276,96 @@ private fun BuiltinSupport() {
                     .padding(horizontal = 20.dp, vertical = 24.dp),
                 horizontalAlignment = Alignment.CenterHorizontally,
             ) {
-                // 二维码放在白底里：深色主题下二维码直接压在深色卡片上会扫不出来，
-                // 微信要求码本身是高对比的黑白。这里固定白底、固定内边距，
-                // 与系统主题解耦 —— 是「码的显示规范」，不是「页面的配色」。
-                Surface(
-                    shape = RoundedCornerShape(16.dp),
-                    color = Color.White,
-                ) {
-                    Image(
-                        painter = painterResource(R.drawable.weixin),
-                        contentDescription = "微信赞赏码",
-                        modifier = Modifier
-                            .padding(12.dp)
-                            .size(220.dp),
-                        contentScale = ContentScale.Fit,
-                    )
+                SingleChoiceSegmentedButtonRow(Modifier.fillMaxWidth()) {
+                    BuiltinPaymentCodes.forEachIndexed { index, code ->
+                        val selected = pagerState.currentPage == index
+                        val background by animateColorAsState(
+                            targetValue = if (selected) {
+                                MaterialTheme.colorScheme.primaryContainer
+                            } else {
+                                MaterialTheme.colorScheme.surfaceContainerHigh
+                            },
+                            animationSpec = effectsDefault(),
+                            label = "paymentTabBackground$index",
+                        )
+                        val foreground by animateColorAsState(
+                            targetValue = if (selected) {
+                                MaterialTheme.colorScheme.onPrimaryContainer
+                            } else {
+                                MaterialTheme.colorScheme.onSurfaceVariant
+                            },
+                            animationSpec = effectsFast(),
+                            label = "paymentTabForeground$index",
+                        )
+                        SegmentedButton(
+                            selected = selected,
+                            onClick = {
+                                scope.launch { pagerState.animateScrollToPage(index) }
+                            },
+                            shape = SegmentedButtonDefaults.itemShape(
+                                index = index,
+                                count = BuiltinPaymentCodes.size,
+                                baseShape = RoundedCornerShape(16.dp),
+                            ),
+                            modifier = Modifier.heightIn(min = 48.dp),
+                            icon = {},
+                            colors = SegmentedButtonDefaults.colors(
+                                activeContainerColor = background,
+                                inactiveContainerColor = background,
+                                activeContentColor = foreground,
+                                inactiveContentColor = foreground,
+                                activeBorderColor = MaterialTheme.colorScheme.outlineVariant,
+                                inactiveBorderColor = MaterialTheme.colorScheme.outlineVariant,
+                            ),
+                        ) {
+                            Text(code.tabLabel, style = MaterialTheme.typography.labelLarge)
+                        }
+                    }
                 }
 
-                Spacer(Modifier.height(16.dp))
-                Text(
-                    text = "微信扫码赞赏",
-                    style = MaterialTheme.typography.titleSmall,
-                    fontWeight = FontWeight.Medium,
-                )
-                Spacer(Modifier.height(4.dp))
-                Text(
-                    text = "长按图片可保存，或在微信「扫一扫」里从相册识别",
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    textAlign = TextAlign.Center,
-                )
+                HorizontalPager(
+                    state = pagerState,
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .height(460.dp),
+                    pageSpacing = 12.dp,
+                    beyondViewportPageCount = 1,
+                ) { page ->
+                    val code = BuiltinPaymentCodes[page]
+                    Column(
+                        modifier = Modifier.fillMaxSize(),
+                        horizontalAlignment = Alignment.CenterHorizontally,
+                    ) {
+                        Surface(
+                            shape = RoundedCornerShape(20.dp),
+                            color = Color.White,
+                            shadowElevation = 2.dp,
+                        ) {
+                            Image(
+                                painter = painterResource(code.imageRes),
+                                contentDescription = code.contentDescription,
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .height(code.imageHeight)
+                                    .padding(12.dp),
+                                contentScale = ContentScale.Fit,
+                            )
+                        }
+                        Spacer(Modifier.height(14.dp))
+                        Text(
+                            text = code.title,
+                            style = MaterialTheme.typography.titleMedium,
+                            fontWeight = FontWeight.Medium,
+                        )
+                        Spacer(Modifier.height(4.dp))
+                        Text(
+                            text = code.hint,
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            textAlign = TextAlign.Center,
+                        )
+                    }
+                }
             }
         }
 
@@ -298,6 +402,19 @@ private fun BuiltinSupport() {
                 }
             }
         }
+    }
+}
+
+/** Screenshot-only host for the built-in payment pager; avoids the async plugin lookup. */
+@Composable
+internal fun SupportBuiltinPreviewContent(initialPage: Int = 0) {
+    Column(
+        modifier = Modifier
+            .fillMaxSize()
+            .verticalScroll(rememberScrollState())
+            .padding(horizontal = 20.dp, vertical = 16.dp),
+    ) {
+        BuiltinSupport(initialPage = initialPage)
     }
 }
 

@@ -1,5 +1,27 @@
 package com.yunget.app.ui.screens
 
+import androidx.compose.animation.EnterTransition
+import androidx.compose.animation.ExitTransition
+import androidx.compose.animation.slideInHorizontally
+import androidx.compose.animation.slideOutHorizontally
+import androidx.compose.foundation.layout.heightIn
+import androidx.compose.foundation.layout.widthIn
+import androidx.compose.foundation.selection.toggleable
+import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material.icons.automirrored.outlined.Login
+import androidx.compose.material.icons.outlined.Cloud
+import androidx.compose.material.icons.outlined.Sort
+import androidx.compose.material3.FilledTonalButton
+import androidx.compose.material3.HorizontalDivider
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.semantics.Role
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import com.yunget.app.ui.theme.ThemeController
+import com.yunget.app.ui.theme.spatialDefault
+import com.yunget.app.ui.theme.spatialFast
+
 import androidx.compose.animation.AnimatedContent
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.core.tween
@@ -42,7 +64,6 @@ import androidx.compose.material3.Switch
 import com.yunget.app.data.prefs.SettingsRepository
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
-import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -124,25 +145,7 @@ private data class DriveEntry(
     val onLogin: () -> Unit
 )
 
-/** 网盘分组标题（「已登录」/「未登录」）。 */
-@Composable
-private fun DriveGroupLabel(text: String) {
-    // 分组标题用**次级文字色**，不是强调色。
-    // 满屏蓝色的"已登录/未登录"是 Material 的做法；iOS 的分组标题是灰的，
-    // 强调色留给真正的可操作项（比如右侧的「去登录」）。
-    Text(
-        text = text,
-        style = MaterialTheme.typography.labelLarge,
-        color = MaterialTheme.colorScheme.onSurfaceVariant,
-        modifier = Modifier.padding(top = 4.dp, bottom = 0.dp)
-    )
-}
-
-/**
- * 网盘页：
- * - 夸克未登录：点击进入登录页；
- * - 夸克已登录：副标题显示昵称，点击弹出账号信息底部弹窗（可查看 Cookie / 退出登录）。
- */
+/** 十个平台的账号、配额与文件浏览入口；业务状态由调用方与现有 ViewModel 持有。 */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun DriveScreen(
@@ -269,56 +272,56 @@ fun DriveScreen(
     val quark = DriveAccount(
         id = "quark",
         name = "夸克网盘",
-        description = displayName(quarkAccount?.remark, quarkAccount?.nickname) ?: "点击登录，支持解析下载",
+        description = displayName(quarkAccount?.remark, quarkAccount?.nickname) ?: "登录后浏览文件与下载",
         avatarText = "夸",
         isLoggedIn = quarkAccount != null
     )
     val uc = DriveAccount(
         id = "uc",
-        name = "UC网盘",
-        description = displayName(ucAccount?.remark, ucAccount?.nickname) ?: "点击登录，支持解析下载",
+        name = "UC 网盘",
+        description = displayName(ucAccount?.remark, ucAccount?.nickname) ?: "登录后浏览文件与下载",
         avatarText = "UC",
         isLoggedIn = ucAccount != null
     )
     val xunlei = DriveAccount(
         id = "xunlei",
         name = "迅雷网盘",
-        description = displayName(xunleiAccount?.remark, xunleiAccount?.nickname) ?: "点击登录，支持解析下载",
+        description = displayName(xunleiAccount?.remark, xunleiAccount?.nickname) ?: "登录后浏览文件与下载",
         avatarText = "迅",
         isLoggedIn = xunleiAccount != null
     )
     val baidu = DriveAccount(
         id = "baidu",
         name = "百度网盘",
-        description = displayName(baiduAccount?.remark, baiduAccount?.nickname) ?: "点击登录，支持解析下载",
+        description = displayName(baiduAccount?.remark, baiduAccount?.nickname) ?: "登录后浏览文件与下载",
         avatarText = "度",
         isLoggedIn = baiduAccount != null
     )
     val c139 = DriveAccount(
         id = "c139",
-        name = "139网盘",
-        description = displayName(c139Account?.remark, c139Account?.nickname) ?: "点击登录，支持解析下载",
+        name = "139 网盘",
+        description = displayName(c139Account?.remark, c139Account?.nickname) ?: "登录后浏览文件与下载",
         avatarText = "139",
         isLoggedIn = c139Account != null
     )
     val pan123 = DriveAccount(
         id = "pan123",
-        name = "123云盘",
-        description = displayName(pan123Account?.remark, pan123Account?.nickname) ?: "点击登录，支持解析下载",
+        name = "123 云盘",
+        description = displayName(pan123Account?.remark, pan123Account?.nickname) ?: "登录后浏览文件与下载",
         avatarText = "123",
         isLoggedIn = pan123Account != null
     )
     val pan115 = DriveAccount(
         id = "pan115",
-        name = "115网盘",
-        description = displayName(pan115Account?.remark, pan115Account?.nickname) ?: "点击登录，支持解析下载",
+        name = "115 网盘",
+        description = displayName(pan115Account?.remark, pan115Account?.nickname) ?: "登录后浏览文件与下载",
         avatarText = "115",
         isLoggedIn = pan115Account != null
     )
     val guangya = DriveAccount(
         id = "guangya",
         name = "光鸭云盘",
-        description = displayName(guangyaAccount?.remark, guangyaAccount?.nickname) ?: "点击登录，支持解析下载",
+        description = displayName(guangyaAccount?.remark, guangyaAccount?.nickname) ?: "登录后浏览文件与下载",
         avatarText = "光",
         isLoggedIn = guangyaAccount != null
     )
@@ -326,7 +329,7 @@ fun DriveScreen(
         id = "ilanzou",
         name = "蓝奏云优享版",
         description = displayName(ilanzouAccount?.remark, ilanzouAccount?.nickname)?.let { maskAccount(it) }
-            ?: "点击登录，支持解析下载",
+            ?: "登录后浏览文件与下载",
         avatarText = "蓝优",
         isLoggedIn = ilanzouAccount != null
     )
@@ -334,27 +337,67 @@ fun DriveScreen(
         id = "lanzou",
         name = "蓝奏云",
         description = displayName(lanzouAccount?.remark, lanzouAccount?.nickname)?.let { maskAccount(it) }
-            ?: "点击登录，支持解析下载",
+            ?: "登录后浏览文件与下载",
         avatarText = "蓝",
         isLoggedIn = lanzouAccount != null
     )
-    val others = remember {
-        emptyList<DriveAccount>()
-    }
 
     // 进入网盘页加载空间详情（仅已登录平台）
     LaunchedEffect(Unit) {
         driveQuotaViewModel.loadAll()
     }
     // 下拉刷新状态：绑定空间配额加载中状态
-    val isRefreshing by driveQuotaViewModel.loading.collectAsState()
+    val isRefreshing by driveQuotaViewModel.loading.collectAsStateWithLifecycle()
     // 各平台配额：在 LazyColumn 外读出来（列表内容 lambda 不是 composable，不能在里面 collectAsState）
-    val quarkQuota by driveQuotaViewModel.quarkQuota.collectAsState()
-    val ucQuota by driveQuotaViewModel.ucQuota.collectAsState()
-    val xunleiQuota by driveQuotaViewModel.xunleiQuota.collectAsState()
-    val baiduQuota by driveQuotaViewModel.baiduQuota.collectAsState()
-    val c139Quota by driveQuotaViewModel.c139Quota.collectAsState()
-    val pan123Quota by driveQuotaViewModel.pan123Quota.collectAsState()
+    val quarkQuota by driveQuotaViewModel.quarkQuota.collectAsStateWithLifecycle()
+    val ucQuota by driveQuotaViewModel.ucQuota.collectAsStateWithLifecycle()
+    val xunleiQuota by driveQuotaViewModel.xunleiQuota.collectAsStateWithLifecycle()
+    val baiduQuota by driveQuotaViewModel.baiduQuota.collectAsStateWithLifecycle()
+    val c139Quota by driveQuotaViewModel.c139Quota.collectAsStateWithLifecycle()
+    val pan123Quota by driveQuotaViewModel.pan123Quota.collectAsStateWithLifecycle()
+
+    val entries = listOf(
+        DriveEntry(quark, quarkQuota, { showCloud = true }, { showQuarkSheet = true }, onQuarkLogin),
+        DriveEntry(uc, ucQuota, { showUCCloud = true }, { showUCSheet = true }, onUCLogin),
+        DriveEntry(xunlei, xunleiQuota, { showXunleiCloud = true }, { showXunleiSheet = true }, onXunleiLogin),
+        DriveEntry(baidu, baiduQuota, { showBaiduCloud = true }, { showBaiduSheet = true }, onBaiduLogin),
+        DriveEntry(c139, c139Quota, { showC139Cloud = true }, { showC139Sheet = true }, onC139Login),
+        DriveEntry(pan123, pan123Quota, { showPan123Cloud = true }, { showPan123Sheet = true }, onPan123Login),
+        // 以下 4 个平台暂未接入空间配额（DriveQuotaViewModel 只有 6 个平台），故 quota 为 null。
+        // 浏览 ViewModel 未接线时点击退回账号信息弹窗，避免进入空白页。
+        DriveEntry(
+            pan115, null,
+            when {
+                pan115CloudViewModel != null -> ({ showPan115Cloud = true })
+                else -> ({ showPan115Sheet = true })
+            },
+            { showPan115Sheet = true }, onPan115Login
+        ),
+        DriveEntry(
+            guangya, null,
+            when {
+                guangyaCloudViewModel != null -> ({ showGuangYaCloud = true })
+                else -> ({ showGuangYaSheet = true })
+            },
+            { showGuangYaSheet = true }, onGuangYaLogin
+        ),
+        DriveEntry(
+            ilanzou, null,
+            when {
+                ilanzouCloudViewModel != null -> ({ showILanzouCloud = true })
+                else -> ({ showILanzouSheet = true })
+            },
+            { showILanzouSheet = true }, onILanzouLogin
+        ),
+        DriveEntry(
+            lanzou, null,
+            when {
+                lanzouCloudViewModel != null -> ({ showLanzouCloud = true })
+                else -> ({ showLanzouSheet = true })
+            },
+            { showLanzouSheet = true }, onLanzouLogin
+        ),
+    )
 
     // 账号列表 ↔ 夸克云盘 ↔ UC 云盘 ↔ 迅雷云盘 ↔ 百度云盘 ↔ 139 云盘 ↔ 123 云盘 ↔ 115 云盘 ↔ 光鸭云盘 ↔ 蓝奏云优享版 ↔ 蓝奏云：平滑过渡（淡入 + 轻微缩放，不僵硬）
     AnimatedContent(
@@ -372,9 +415,14 @@ fun DriveScreen(
             showLanzouCloud && lanzouCloudViewModel != null -> 10
             else -> 0
         },
+        modifier = modifier.fillMaxSize(),
         transitionSpec = {
-            (fadeIn(effectsDefault()) + scaleIn(tween(220), initialScale = 0.98f))
-                .togetherWith(fadeOut(effectsFast()) + scaleOut(tween(150), targetScale = 0.98f))
+            when (ThemeController.motionLevel) {
+                2 -> EnterTransition.None.togetherWith(ExitTransition.None)
+                1 -> fadeIn(effectsDefault()).togetherWith(fadeOut(effectsFast()))
+                else -> (fadeIn(effectsDefault()) + slideInHorizontally(spatialDefault()) { it / 12 })
+                    .togetherWith(fadeOut(effectsFast()) + slideOutHorizontally(spatialFast()) { -it / 16 })
+            }
         },
         label = "driveContent"
     ) { target ->
@@ -452,170 +500,18 @@ fun DriveScreen(
                 onRefresh = { driveQuotaViewModel.loadAll() },
                 modifier = Modifier.fillMaxSize()
             ) {
-                LazyColumn(
-                modifier = modifier
-                    .fillMaxSize()
-                    .nestedScroll(scrollBehavior.nestedScrollConnection),
-                contentPadding = PaddingValues(16.dp),
-                verticalArrangement = Arrangement.spacedBy(12.dp)
-            ) {
-                // 已登录的排在前面、未登录的排后面，中间用分组标题分开。
-                //
-                // 【为什么分组】10 个网盘平铺一列时，常用的那一两个混在八个"点击登录"里，
-                // 每次都要从头往下找。分完组，"我有哪些盘能用"和"还能加哪些盘"一眼分得开。
-                // 一个都没登录时整屏都是未登录，此时标题写「全部网盘」而不是「未登录」——
-                // 满屏"未登录"读起来像出了错。
-                // 账号管理入口：只在确实存在账号时显示。
-                // 没有任何账号时这一行是干扰 —— 用户该做的是先登录。
-                if (onManageAccounts != null &&
-                    listOfNotNull(
-                        quarkAccount, ucAccount, xunleiAccount, baiduAccount, c139Account,
-                        pan123Account, pan115Account, guangyaAccount, ilanzouAccount, lanzouAccount,
-                    ).isNotEmpty()
-                ) {
-                    item(key = "manage_accounts") {
-                        Card(
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .clickable(onClick = onManageAccounts),
-                            shape = MaterialTheme.shapes.large,
-                            colors = CardDefaults.cardColors(
-                                containerColor = MaterialTheme.colorScheme.secondaryContainer,
-                            ),
-                        ) {
-                            Row(
-                                modifier = Modifier.fillMaxWidth().padding(14.dp),
-                                verticalAlignment = Alignment.CenterVertically,
-                            ) {
-                                Icon(
-                                    imageVector = Icons.Outlined.ManageAccounts,
-                                    contentDescription = null,
-                                    modifier = Modifier.size(20.dp),
-                                    tint = MaterialTheme.colorScheme.onSecondaryContainer,
-                                )
-                                Spacer(Modifier.width(10.dp))
-                                Column(modifier = Modifier.weight(1f)) {
-                                    Text(
-                                        text = "账号管理",
-                                        style = MaterialTheme.typography.titleSmall,
-                                        fontWeight = FontWeight.Medium,
-                                        color = MaterialTheme.colorScheme.onSecondaryContainer,
-                                    )
-                                    Text(
-                                        text = "查看各平台的全部账号，切换主账号或删除",
-                                        style = MaterialTheme.typography.labelSmall,
-                                        color = MaterialTheme.colorScheme.onSecondaryContainer,
-                                    )
-                                }
-                                Icon(
-                                    imageVector = Icons.Outlined.ChevronRight,
-                                    contentDescription = null,
-                                    modifier = Modifier.size(18.dp),
-                                    tint = MaterialTheme.colorScheme.onSecondaryContainer,
-                                )
-                            }
-                        }
-                    }
-                }
-
-                val entries = listOf(
-                    DriveEntry(quark, quarkQuota, { showCloud = true }, { showQuarkSheet = true }, onQuarkLogin),
-                    DriveEntry(uc, ucQuota, { showUCCloud = true }, { showUCSheet = true }, onUCLogin),
-                    DriveEntry(xunlei, xunleiQuota, { showXunleiCloud = true }, { showXunleiSheet = true }, onXunleiLogin),
-                    DriveEntry(baidu, baiduQuota, { showBaiduCloud = true }, { showBaiduSheet = true }, onBaiduLogin),
-                    DriveEntry(c139, c139Quota, { showC139Cloud = true }, { showC139Sheet = true }, onC139Login),
-                    DriveEntry(pan123, pan123Quota, { showPan123Cloud = true }, { showPan123Sheet = true }, onPan123Login),
-                    // 以下 4 个平台暂未接入空间配额（DriveQuotaViewModel 只有 6 个平台），故 quota 为 null。
-                    // 浏览 ViewModel 未接线时点击退回账号信息弹窗，避免进入空白页。
-                    DriveEntry(
-                        pan115, null,
-                        when {
-                            pan115CloudViewModel != null -> ({ showPan115Cloud = true })
-                            else -> ({ showPan115Sheet = true })
-                        },
-                        { showPan115Sheet = true }, onPan115Login
-                    ),
-                    DriveEntry(
-                        guangya, null,
-                        when {
-                            guangyaCloudViewModel != null -> ({ showGuangYaCloud = true })
-                            else -> ({ showGuangYaSheet = true })
-                        },
-                        { showGuangYaSheet = true }, onGuangYaLogin
-                    ),
-                    DriveEntry(
-                        ilanzou, null,
-                        when {
-                            ilanzouCloudViewModel != null -> ({ showILanzouCloud = true })
-                            else -> ({ showILanzouSheet = true })
-                        },
-                        { showILanzouSheet = true }, onILanzouLogin
-                    ),
-                    DriveEntry(
-                        lanzou, null,
-                        when {
-                            lanzouCloudViewModel != null -> ({ showLanzouCloud = true })
-                            else -> ({ showLanzouSheet = true })
-                        },
-                        { showLanzouSheet = true }, onLanzouLogin
-                    ),
+                DriveListContent(
+                    entries = entries,
+                    accountOrder = accountOrder,
+                    hideUnlogged = hideUnlogged,
+                    onHideUnloggedChange = {
+                        hideUnlogged = it
+                        orderSettings.hideUnloggedDrives = it
+                    },
+                    onOrderClick = { showOrder = true },
+                    onManageAccounts = onManageAccounts,
+                    modifier = Modifier.nestedScroll(scrollBehavior.nestedScrollConnection)
                 )
-                item(key = "account_order") {
-                    Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
-                        TextButton(onClick = { showOrder = true }) { Text("账号排序") }
-                        Spacer(Modifier.weight(1f))
-                        Text("隐藏未登录", style = MaterialTheme.typography.labelMedium)
-                        Switch(checked = hideUnlogged, onCheckedChange = {
-                            hideUnlogged = it; orderSettings.hideUnloggedDrives = it
-                        })
-                    }
-                }
-                val orderedEntries = entries.sortedBy { entry ->
-                    accountOrder.indexOf(entry.account.id).takeIf { it >= 0 } ?: Int.MAX_VALUE
-                }
-                val loggedIn = if (accountOrder.isEmpty()) orderedEntries.filter { it.account.isLoggedIn }
-                    else orderedEntries.filter { !hideUnlogged || it.account.isLoggedIn }
-                val loggedOut = if (hideUnlogged || accountOrder.isNotEmpty()) emptyList() else orderedEntries.filterNot { it.account.isLoggedIn }
-
-                if (loggedIn.isEmpty()) {
-                    item(key = "hint_not_logged_in") {
-                        Text(
-                            text = "登录后即可自动携带凭证解析与下载",
-                            style = MaterialTheme.typography.bodyMedium,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant,
-                            modifier = Modifier.padding(bottom = 4.dp)
-                        )
-                    }
-                } else {
-                    item(key = "header_logged_in") { DriveGroupLabel(if (accountOrder.isEmpty()) "已登录" else "网盘账号") }
-                    items(loggedIn, key = { it.account.id }) { entry ->
-                        DriveAccountCard(
-                            account = entry.account,
-                            quota = entry.quota,
-                            onClick = if (entry.account.isLoggedIn) entry.onClick else entry.onLogin,
-                            onMoreClick = entry.onMoreClick.takeIf { entry.account.isLoggedIn }
-                        )
-                    }
-                }
-
-                if (loggedOut.isNotEmpty()) {
-                    item(key = "header_logged_out") {
-                        DriveGroupLabel(if (loggedIn.isEmpty()) "全部网盘" else "未登录")
-                    }
-                    items(loggedOut, key = { it.account.id }) { entry ->
-                        DriveAccountCard(
-                            account = entry.account,
-                            quota = entry.quota,
-                            onClick = entry.onLogin,
-                            onMoreClick = null
-                        )
-                    }
-                }
-
-                items(others, key = { it.id }) { account ->
-                    DriveAccountCard(account = account)
-                }
-            }
             }
         }
     }
@@ -745,204 +641,243 @@ fun DriveScreen(
     }
 }
 
+/**
+ * 无数据层副作用的生产列表。排序只调整组内顺序，始终保留已登录／待登录分组。
+ */
 @Composable
-private fun DriveAccountCard(
-    account: DriveAccount,
-    /** 网盘空间详情（已登录且有数据时在卡片内显示进度条）；null 不显示 */
-    quota: QuotaInfo? = null,
-    onClick: (() -> Unit)? = null,
-    /** 已登录时右侧「三个点」更多按钮（打开账号弹窗）；null 则不显示 */
-    onMoreClick: (() -> Unit)? = null
+private fun DriveListContent(
+    entries: List<DriveEntry>,
+    accountOrder: List<String>,
+    hideUnlogged: Boolean,
+    onHideUnloggedChange: (Boolean) -> Unit,
+    onOrderClick: () -> Unit,
+    onManageAccounts: (() -> Unit)?,
+    modifier: Modifier = Modifier
 ) {
-    val cardShape = MaterialTheme.shapes.large
-    val cardColors = CardDefaults.cardColors(
-        containerColor = MaterialTheme.colorScheme.surfaceContainerLow
-    )
-    val content: @Composable () -> Unit = {
-        DriveAccountCardContent(
-            account = account,
-            quota = quota,
-            clickable = onClick != null,
-            onMoreClick = onMoreClick
-        )
+    val ordered = entries.sortedBy { entry ->
+        accountOrder.indexOf(entry.account.id).takeIf { it >= 0 } ?: Int.MAX_VALUE
     }
-
-    if (onClick != null) {
-        Card(
-            onClick = onClick,
-            modifier = Modifier.fillMaxWidth(),
-            shape = cardShape,
-            colors = cardColors
-        ) { content() }
-    } else {
-        Card(
-            modifier = Modifier.fillMaxWidth(),
-            shape = cardShape,
-            colors = cardColors
-        ) { content() }
+    val loggedIn = ordered.filter { it.account.isLoggedIn }
+    val loggedOut = ordered.filterNot { it.account.isLoggedIn }
+    Box(modifier.fillMaxSize(), contentAlignment = Alignment.TopCenter) {
+        LazyColumn(
+            modifier = Modifier.widthIn(max = 720.dp).fillMaxSize(),
+            contentPadding = PaddingValues(start = 16.dp, end = 16.dp, top = 12.dp, bottom = 24.dp),
+            verticalArrangement = Arrangement.spacedBy(16.dp)
+        ) {
+            item(key = "overview") {
+                DriveOverview(loggedIn.size, entries.size, onManageAccounts.takeIf { loggedIn.isNotEmpty() })
+            }
+            item(key = "display_options") {
+                Surface(
+                    Modifier.fillMaxWidth(), shape = RoundedCornerShape(24.dp),
+                    color = MaterialTheme.colorScheme.surfaceContainerLow
+                ) {
+                    Column(Modifier.padding(4.dp)) {
+                        Surface(onClick = onOrderClick, shape = RoundedCornerShape(16.dp), color = Color.Transparent) {
+                            Row(
+                                Modifier.fillMaxWidth().heightIn(min = 64.dp).padding(12.dp),
+                                verticalAlignment = Alignment.CenterVertically,
+                                horizontalArrangement = Arrangement.spacedBy(12.dp)
+                            ) {
+                                Icon(Icons.Outlined.Sort, null, tint = MaterialTheme.colorScheme.primary)
+                                Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                                    Text("平台排序", style = MaterialTheme.typography.bodyLarge)
+                                    Text("调整各分组内的显示顺序", style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                                }
+                                Icon(Icons.Outlined.ChevronRight, null, tint = MaterialTheme.colorScheme.onSurfaceVariant)
+                            }
+                        }
+                        HorizontalDivider(Modifier.padding(horizontal = 12.dp), color = MaterialTheme.colorScheme.outlineVariant)
+                        Row(
+                            modifier = Modifier.fillMaxWidth().clip(RoundedCornerShape(16.dp))
+                                .toggleable(value = hideUnlogged, role = Role.Switch, onValueChange = onHideUnloggedChange)
+                                .heightIn(min = 64.dp).padding(12.dp),
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(12.dp)
+                        ) {
+                            Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                                Text("隐藏未登录网盘", style = MaterialTheme.typography.bodyLarge)
+                                Text("只显示已经登录的平台", style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                            }
+                            Switch(checked = hideUnlogged, onCheckedChange = null)
+                        }
+                    }
+                }
+            }
+            if (loggedIn.isNotEmpty()) {
+                item(key = "logged_in") { DriveAccountGroup("已登录", loggedIn) }
+            }
+            if (!hideUnlogged && loggedOut.isNotEmpty()) {
+                item(key = "logged_out") {
+                    DriveAccountGroup(if (loggedIn.isEmpty()) "全部网盘" else "待登录", loggedOut)
+                }
+            }
+            if (hideUnlogged && loggedIn.isEmpty()) {
+                item(key = "empty") {
+                    Card(
+                        Modifier.fillMaxWidth(), shape = RoundedCornerShape(24.dp),
+                        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceContainerLow)
+                    ) {
+                        Column(Modifier.padding(20.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                            Icon(Icons.Outlined.Cloud, null, tint = MaterialTheme.colorScheme.primary)
+                            Text("还没有已登录账号", style = MaterialTheme.typography.titleMedium)
+                            Text("显示全部网盘，选择一个平台登录后即可浏览文件与下载。", style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                            FilledTonalButton(onClick = { onHideUnloggedChange(false) }, modifier = Modifier.heightIn(min = 48.dp)) {
+                                Text("显示全部网盘")
+                            }
+                        }
+                    }
+                }
+            }
+        }
     }
 }
 
 @Composable
-private fun DriveAccountCardContent(
-    account: DriveAccount,
-    quota: QuotaInfo? = null,
-    clickable: Boolean,
-    onMoreClick: (() -> Unit)? = null
-) {
-    Row(
-        modifier = Modifier
-            .fillMaxWidth()
-            .padding(16.dp),
-        verticalAlignment = Alignment.CenterVertically
+private fun DriveOverview(loggedInCount: Int, platformCount: Int, onManageAccounts: (() -> Unit)?) {
+    Card(
+        Modifier.fillMaxWidth(), shape = RoundedCornerShape(24.dp),
+        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.primaryContainer)
     ) {
-        // 品牌图标（真实 logo），取不到时回落到文字首字母。
-        //
-        // 【为什么不一律用首字母】"夸"/"蓝"/"度"这类单字在列表里几乎认不出是哪个网盘，
-        // 而正版 logo 一眼就能分辨 —— 这是用户最直接的识别依据，比配色重要。
-        //
-        // 【不裁圆、不加底色】这批图标有两种：自带底色的圆角方块、透明背景的图形。
-        // 统一裁圆会把前者的四角切掉；加统一底色会给后者糊一圈假色。
-        // 所以直接按原样画，只用 size 控制尺寸。
-        //
-        // 未登录状态用 45% 透明度表示 —— 而不是换成别的图形：
-        // 位置和形状保持稳定，用户扫一眼就知道"这个没登录"。
-        val logoRes = com.yunget.app.ui.items.platformLogoRes(account.id)
-        if (logoRes != null) {
-            Image(
-                painter = painterResource(logoRes),
-                contentDescription = account.name,
-                modifier = Modifier
-                    .size(44.dp)
-                    .alpha(if (account.isLoggedIn) 1f else 0.45f),
-                contentScale = ContentScale.Fit,
+        Column(Modifier.padding(20.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
+            Text("网盘账号", style = MaterialTheme.typography.titleLarge, color = MaterialTheme.colorScheme.onPrimaryContainer)
+            Text("$loggedInCount 个平台已登录 · 共 $platformCount 个平台", style = MaterialTheme.typography.bodyLarge, color = MaterialTheme.colorScheme.onPrimaryContainer)
+            Text(
+                if (loggedInCount == 0) "选择平台登录，开始浏览与下载" else "点击平台浏览文件，在更多菜单中查看账号",
+                style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onPrimaryContainer
             )
-        } else {
-            Surface(
-                modifier = Modifier.size(44.dp),
-                shape = CircleShape,
-                color = MaterialTheme.colorScheme.surfaceContainerHighest
-            ) {
-                Box(contentAlignment = Alignment.Center) {
-                    Text(
-                        text = account.avatarText,
-                        style = MaterialTheme.typography.titleMedium,
-                        fontWeight = FontWeight.SemiBold,
-                        color = MaterialTheme.colorScheme.onSurface
+            if (onManageAccounts != null) {
+                FilledTonalButton(
+                    onClick = onManageAccounts, modifier = Modifier.fillMaxWidth().heightIn(min = 48.dp),
+                    shape = RoundedCornerShape(16.dp)
+                ) {
+                    Icon(Icons.Outlined.ManageAccounts, null, Modifier.size(20.dp))
+                    Spacer(Modifier.width(8.dp))
+                    Text("管理全部账号")
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun DriveAccountGroup(title: String, entries: List<DriveEntry>) {
+    Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+        Row(
+            Modifier.fillMaxWidth().padding(horizontal = 4.dp), verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(12.dp)
+        ) {
+            Text(title, style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold, modifier = Modifier.weight(1f))
+            Text("${entries.size} 个平台", style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
+        }
+        Surface(
+            Modifier.fillMaxWidth(), shape = RoundedCornerShape(24.dp),
+            color = MaterialTheme.colorScheme.surfaceContainerLow
+        ) {
+            Column(Modifier.padding(4.dp)) {
+                entries.forEachIndexed { index, entry ->
+                    if (index > 0) HorizontalDivider(Modifier.padding(horizontal = 12.dp), color = MaterialTheme.colorScheme.outlineVariant)
+                    DriveAccountCard(
+                        account = entry.account, quota = entry.quota,
+                        onClick = if (entry.account.isLoggedIn) entry.onClick else entry.onLogin,
+                        onMoreClick = entry.onMoreClick.takeIf { entry.account.isLoggedIn }
                     )
                 }
             }
         }
+    }
+}
 
-        Column(
-            modifier = Modifier
-                .weight(1f)
-                .padding(horizontal = 16.dp)
-        ) {
-            Text(
-                text = account.name,
-                style = MaterialTheme.typography.titleMedium,
-                fontWeight = FontWeight.Medium
-            )
-            Spacer(modifier = Modifier.height(2.dp))
-            Text(
-                text = account.description,
-                style = MaterialTheme.typography.bodyMedium,
-                color = MaterialTheme.colorScheme.onSurfaceVariant
-            )
-            // 已登录且有空间数据：卡片内展示剩余空间进度条（出现时淡入 + 纵向展开，避免突兀）
-            AnimatedVisibility(
-                visible = account.isLoggedIn && quota != null,
-                enter = fadeIn(effectsDefault()) + expandVertically(
-                    expandFrom = Alignment.Top,
-                    animationSpec = tween(300)
-                ),
-                exit = fadeOut(effectsFast()) + shrinkVertically(animationSpec = tween(200))
-            ) {
-                Column {
-                    Spacer(modifier = Modifier.height(8.dp))
-                    quota?.let { QuotaInlineBar(it) }
+@Composable
+private fun DriveAccountCard(account: DriveAccount, quota: QuotaInfo?, onClick: () -> Unit, onMoreClick: (() -> Unit)?) {
+    val largeText = LocalDensity.current.fontScale > 1.2f
+    Surface(
+        onClick = onClick, modifier = Modifier.fillMaxWidth(),
+        shape = RoundedCornerShape(16.dp), color = Color.Transparent
+    ) {
+        Column(Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                val logoRes = com.yunget.app.ui.items.platformLogoRes(account.id)
+                if (logoRes != null) {
+                    Image(painterResource(logoRes), contentDescription = null, modifier = Modifier.size(40.dp), contentScale = ContentScale.Fit)
+                } else {
+                    Surface(shape = RoundedCornerShape(16.dp), color = MaterialTheme.colorScheme.secondaryContainer) {
+                        Box(Modifier.size(40.dp), contentAlignment = Alignment.Center) {
+                            Text(account.avatarText, style = MaterialTheme.typography.labelLarge, color = MaterialTheme.colorScheme.onSecondaryContainer)
+                        }
+                    }
+                }
+                Text(account.name, modifier = Modifier.weight(1f), style = MaterialTheme.typography.bodyLarge, fontWeight = FontWeight.Medium)
+                if (account.isLoggedIn && onMoreClick != null) {
+                    IconButton(onClick = onMoreClick, modifier = Modifier.size(48.dp)) {
+                        Icon(Icons.Outlined.MoreVert, contentDescription = "${account.name}账号选项", tint = MaterialTheme.colorScheme.onSurfaceVariant)
+                    }
+                } else {
+                    Icon(
+                        if (account.isLoggedIn) Icons.Outlined.ChevronRight else Icons.AutoMirrored.Outlined.Login,
+                        contentDescription = if (account.isLoggedIn) "浏览文件" else "登录",
+                        tint = MaterialTheme.colorScheme.primary, modifier = Modifier.size(24.dp)
+                    )
                 }
             }
-        }
-
-        when {
-            account.isLoggedIn && onMoreClick != null -> IconButton(onClick = onMoreClick) {
-                Icon(
-                    imageVector = Icons.Outlined.MoreVert,
-                    contentDescription = "更多",
-                    tint = MaterialTheme.colorScheme.onSurfaceVariant
-                )
+            Column(
+                Modifier.fillMaxWidth().padding(start = if (largeText) 0.dp else 52.dp),
+                verticalArrangement = Arrangement.spacedBy(8.dp)
+            ) {
+                Text(account.description, style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                if (account.isLoggedIn && quota != null) QuotaInlineBar(quota)
             }
-            account.isLoggedIn -> LoginBadge(isLoggedIn = true)
-            clickable -> Text(
-                text = "去登录",
-                style = MaterialTheme.typography.labelMedium,
-                color = MaterialTheme.colorScheme.primary
-            )
-            else -> LoginBadge(isLoggedIn = false)
         }
     }
 }
 
-/** 网盘卡片内空间进度条：已用 / 总容量 + 细进度条 */
 @Composable
 private fun QuotaInlineBar(quota: QuotaInfo) {
-    val ratio = if (quota.total > 0) {
-        (quota.used.toFloat() / quota.total.toFloat()).coerceIn(0f, 1f)
-    } else {
-        0f
-    }
-    Column {
+    Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
         Text(
-            text = "已用 ${formatBytes(quota.used)} / ${formatBytes(quota.total)}",
-            style = MaterialTheme.typography.bodySmall,
-            color = MaterialTheme.colorScheme.onSurfaceVariant
+            if (quota.total > 0) "已用 ${formatBytes(quota.used)} / ${formatBytes(quota.total)}"
+            else "已用 ${formatBytes(quota.used)} · 总容量暂未获取",
+            style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant
         )
-        Spacer(modifier = Modifier.height(4.dp))
-        LinearProgressIndicator(
-            progress = { ratio },
-            modifier = Modifier
-                .fillMaxWidth()
-                .height(4.dp),
-            color = MaterialTheme.colorScheme.primary,
-            trackColor = MaterialTheme.colorScheme.surfaceContainerHighest,
-        )
+        if (quota.total > 0) {
+            LinearProgressIndicator(
+                progress = { (quota.used.toFloat() / quota.total.toFloat()).coerceIn(0f, 1f) },
+                modifier = Modifier.fillMaxWidth().height(6.dp), color = MaterialTheme.colorScheme.primary,
+                trackColor = MaterialTheme.colorScheme.surfaceContainerHighest
+            )
+        }
     }
 }
 
+/** 官方 Screenshot Preview 使用真实生产布局和明确的假账号、假配额；不访问数据层。 */
 @Composable
-private fun LoginBadge(isLoggedIn: Boolean) {
-    val (label, color) = if (isLoggedIn) {
-        "已登录" to MaterialTheme.colorScheme.primary
-    } else {
-        "未登录" to MaterialTheme.colorScheme.outline
-    }
-    Row(verticalAlignment = Alignment.CenterVertically) {
-        Box(
-            modifier = Modifier
-                .size(8.dp)
-                .background(color = color, shape = CircleShape)
-        )
-        Spacer(modifier = Modifier.width(6.dp))
-        Text(
-            text = label,
-            style = MaterialTheme.typography.labelMedium,
-            color = MaterialTheme.colorScheme.onSurfaceVariant
+internal fun DrivePreviewContent() {
+    val entries = remember {
+        listOf(
+            DriveEntry(
+                DriveAccount("quark", "夸克网盘", "工作资料 · 主账号（预览）", "夸", true),
+                QuotaInfo(used = 96L * 1024 * 1024 * 1024, total = 512L * 1024 * 1024 * 1024), {}, {}, {}
+            ),
+            DriveEntry(
+                DriveAccount("baidu", "百度网盘", "照片与日常备份（预览）", "度", true),
+                QuotaInfo(used = 320L * 1024 * 1024 * 1024, total = 1024L * 1024 * 1024 * 1024), {}, {}, {}
+            ),
+            DriveEntry(DriveAccount("uc", "UC 网盘", "登录后浏览文件与下载", "UC"), null, {}, null, {}),
+            DriveEntry(DriveAccount("lanzou", "蓝奏云", "登录后浏览文件与下载", "蓝"), null, {}, null, {})
         )
     }
+    DriveListContent(
+        entries = entries, accountOrder = emptyList(), hideUnlogged = false,
+        onHideUnloggedChange = {}, onOrderClick = {}, onManageAccounts = {}
+    )
 }
 
-/** 字节数格式化：B / KB / MB / GB / TB */
 private fun formatBytes(bytes: Long): String {
     if (bytes <= 0) return "0 B"
     val units = arrayOf("B", "KB", "MB", "GB", "TB")
     var value = bytes.toDouble()
     var unit = 0
-    while (value >= 1024 && unit < units.size - 1) {
-        value /= 1024
-        unit++
-    }
-    return if (unit == 0) "${bytes} B"
-    else String.format("%.1f %s", value, units[unit])
+    while (value >= 1024 && unit < units.size - 1) { value /= 1024; unit++ }
+    return if (unit == 0) "$bytes B" else String.format("%.1f %s", value, units[unit])
 }

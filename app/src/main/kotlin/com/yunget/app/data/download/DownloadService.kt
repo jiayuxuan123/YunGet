@@ -89,7 +89,7 @@ class DownloadService : Service() {
             Notification.Builder(this)
         }
         builder
-            .setSmallIcon(R.drawable.icon)
+            .setSmallIcon(R.drawable.yunget_mark_monochrome)
             .setContentTitle(title)
             // 完整通知显示下载速度；简化模式仅提示下载中（且不显示进度条）
             .setContentText(

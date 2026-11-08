@@ -20,6 +20,14 @@ package com.yunget.app.ui.components
 
 import androidx.compose.material3.LinearWavyProgressIndicator
 import androidx.compose.material3.LoadingIndicator
+import androidx.compose.material3.CircularProgressIndicator
+import androidx.compose.material3.LinearProgressIndicator
+import androidx.compose.material3.Icon
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.outlined.HourglassEmpty
+import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.semantics.stateDescription
+import com.yunget.app.ui.theme.ThemeController
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
@@ -41,7 +49,12 @@ import androidx.compose.ui.graphics.Color
 /** Expressive 加载指示器（MaterialShapes 形变）。尺寸由 [modifier] 决定，默认 48dp。 */
 @Composable
 fun YunGetLoading(modifier: Modifier = Modifier) {
-    LoadingIndicator(modifier = modifier)
+    when (ThemeController.motionLevel) {
+        2 -> Icon(Icons.Outlined.HourglassEmpty, contentDescription = "正在处理",
+            modifier = modifier.semantics { stateDescription = "正在加载" })
+        1 -> CircularProgressIndicator(modifier = modifier)
+        else -> LoadingIndicator(modifier = modifier)
+    }
 }
 
 /**
@@ -67,12 +80,16 @@ fun YunGetWavyProgress(
         modifier = modifier,
         color = color,
         trackColor = trackColor,
-        amplitude = { if (waving) 1f else 0f }
+        amplitude = { if (waving && ThemeController.motionLevel == 0) 1f else 0f }
     )
 }
 
 /** 波浪进度条（不确定进度）：用于"正在加载但无进度"的场景，如 WebView 页面加载。 */
 @Composable
 fun YunGetWavyLoading(modifier: Modifier = Modifier) {
-    LinearWavyProgressIndicator(modifier = modifier)
+    if (ThemeController.motionLevel == 0) LinearWavyProgressIndicator(modifier = modifier)
+    else if (ThemeController.motionLevel == 1) LinearProgressIndicator(modifier = modifier)
+    else LinearProgressIndicator(progress = { 0.5f }, modifier = modifier.semantics {
+        stateDescription = "正在加载"
+    })
 }

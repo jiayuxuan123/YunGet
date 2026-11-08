@@ -211,7 +211,7 @@ class SettingsRepository(context: Context) {
 
     /** 主题色模式：0=动态色彩（Android12+ 壁纸取色，低版本回退默认蓝），1=默认蓝色，2=自定义种子色 */
     var themeColorMode: Int
-        get() = prefs.getInt("theme_color_mode", 0)
+        get() = prefs.getInt("theme_color_mode", 1)
         set(value) {
             prefs.edit().putInt("theme_color_mode", value.coerceIn(0, 2)).apply()
         }
@@ -565,6 +565,14 @@ class SettingsRepository(context: Context) {
     var contrastLevel: Int
         get() = prefs.getInt("contrast_level", 0)
         set(value) { prefs.edit().putInt("contrast_level", value.coerceIn(0, 2)).apply() }
+
+    /** 界面世代：0=2.7.26 经典布局，1=2.7.27 新版分组布局。 */
+    var uiStyleMode: Int
+        get() = prefs.getInt("ui_style_mode", 1)
+        set(value) {
+            prefs.edit().putInt("ui_style_mode", value.coerceIn(0, 1)).apply()
+        }
+
     var acceptPrereleaseUpdate: Boolean
         get() = prefs.getBoolean("accept_prerelease_update", false)
         set(value) { prefs.edit().putBoolean("accept_prerelease_update", value).apply() }

@@ -25,12 +25,8 @@ import androidx.compose.animation.AnimatedContent
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.animateColorAsState
 import androidx.compose.animation.core.LinearEasing
-import androidx.compose.animation.core.RepeatMode
 import androidx.compose.animation.core.animateDpAsState
-import androidx.compose.animation.core.animateFloat
-import androidx.compose.animation.core.infiniteRepeatable
-import androidx.compose.animation.core.rememberInfiniteTransition
-import androidx.compose.animation.core.tween
+import com.yunget.app.ui.theme.motionTween
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
 import androidx.compose.animation.togetherWith
@@ -125,7 +121,7 @@ import androidx.compose.material3.TextButton
  *   其中通知与后台运行可跳过，**存储权限在 Android 9 及以下是必要权限**（没有它保存必失败），
  *   未授权时底部「开始使用」按钮置灰禁用，不给跳过（文案与图标不变，授权入口在权限页的存储卡片上）；
  * - 底部导航：圆点指示器 + 「上一步 / 下一步 / 开始使用」，页面切换用 pager 自身滑动 + 按钮区淡入淡出；
- * - 背景：Animated Blob（流体渐变）—— 自绘实现，不引第三方库。
+ * - 背景：随页面变换的 Material 色调背景，无常驻逐帧绘制。
  */
 @Composable
 fun OnboardingScreen(
@@ -181,7 +177,7 @@ fun OnboardingScreen(
         color = MaterialTheme.colorScheme.surface
     ) {
         Box(modifier = Modifier.fillMaxSize()) {
-            BlobBackground()
+            OnboardingBackdrop(page)
 
             Column(
                 modifier = Modifier
@@ -232,58 +228,24 @@ fun OnboardingScreen(
     }
 }
 
-// ==================== 背景：流体渐变 / Blob ====================
+// ==================== Page-driven Material surface ====================
 
-/**
- * Animated Blob 背景：底色 + 3 个缓慢漂移的径向渐变光斑（颜色→透明，天然柔边）。
- *
- * ★ 为什么用"径向渐变"而不是 Modifier.blur：硬件模糊要 Android 12+，低版本上直接不生效；
- *   径向渐变的 alpha 衰减本身就有柔边效果，全版本一致，也不用额外绘制层。
- * ★ 动效刻意用超长周期 + 线性缓动（环境动效是"呼吸"，不是"操作反馈"，弹簧/过冲在这里只会显得躁）。
- */
 @Composable
-private fun BlobBackground(modifier: Modifier = Modifier) {
+private fun OnboardingBackdrop(page: Int, modifier: Modifier = Modifier) {
     val scheme = MaterialTheme.colorScheme
-    // 颜色 / 透明度 / 初始相位
-    val blobs = listOf(
-        Triple(scheme.primary, 0.34f, 0.00f),
-        Triple(scheme.tertiary, 0.28f, 0.34f),
-        Triple(scheme.secondary, 0.24f, 0.67f)
+    val accent by animateColorAsState(
+        targetValue = if (page == 2) scheme.tertiaryContainer else scheme.primaryContainer,
+        animationSpec = effectsDefault(),
+        label = "onboardingAccent",
     )
-    val transition = rememberInfiniteTransition(label = "blob")
-    val drift = blobs.mapIndexed { i, _ ->
-        transition.animateFloat(
-            initialValue = 0f,
-            targetValue = 1f,
-            animationSpec = infiniteRepeatable(
-                animation = tween(durationMillis = 17000 + i * 5300, easing = LinearEasing),
-                repeatMode = RepeatMode.Reverse
-            ),
-            label = "blob$i"
-        )
-    }
-    val base = scheme.surface
-
     Canvas(modifier = modifier.fillMaxSize()) {
-        drawRect(color = base)
-        blobs.forEachIndexed { i, (color, alpha, phase) ->
-            val t = (drift[i].value + phase) % 1f
-            val angle = 2f * PI.toFloat() * t
-            val center = Offset(
-                x = size.width * (0.5f + 0.40f * cos(angle)),
-                y = size.height * (0.5f + 0.32f * sin(angle * 0.85f + phase * 6f))
-            )
-            val radius = size.minDimension * (0.62f + 0.10f * sin(angle * 1.3f))
-            drawCircle(
-                brush = Brush.radialGradient(
-                    colors = listOf(color.copy(alpha = alpha), Color.Transparent),
-                    center = center,
-                    radius = radius
-                ),
-                radius = radius,
-                center = center
-            )
-        }
+        drawRect(scheme.surface)
+        drawRoundRect(
+            color = accent.copy(alpha = 0.45f),
+            topLeft = Offset(size.width * 0.08f, -size.height * 0.20f),
+            size = androidx.compose.ui.geometry.Size(size.width * 0.84f, size.height * 0.48f),
+            cornerRadius = androidx.compose.ui.geometry.CornerRadius(size.width * 0.20f),
+        )
     }
 }
 
@@ -322,7 +284,7 @@ private fun WelcomePage(context: Context) {
             contentAlignment = Alignment.Center
         ) {
             Image(
-                painter = painterResource(R.drawable.icon),
+                painter = painterResource(R.drawable.yunget_mark_approved),
                 contentDescription = "云取图标",
                 modifier = Modifier
                     .size(112.dp)

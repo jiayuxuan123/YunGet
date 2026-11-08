@@ -1,5 +1,23 @@
 package com.yunget.app.ui.screens
 
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.BoxWithConstraints
+import androidx.compose.foundation.layout.ColumnScope
+import androidx.compose.foundation.layout.PaddingValues
+import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.widthIn
+import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.selection.selectable
+import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material3.ListItem
+import androidx.compose.material3.ListItemDefaults
+import androidx.compose.material3.Surface
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.semantics.Role
+import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.semantics.stateDescription
+
 import dev.turbodl.core.TurboHttpClients
 import dev.turbodl.core.DnsMode
 import android.Manifest
@@ -15,6 +33,7 @@ import android.provider.Settings
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -31,10 +50,11 @@ import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.outlined.Article
-import androidx.compose.material.icons.outlined.ReceiptLong
+import androidx.compose.material.icons.automirrored.outlined.Article
+import androidx.compose.material.icons.automirrored.outlined.ReceiptLong
 import androidx.compose.material.icons.outlined.Backup
 import androidx.compose.material.icons.outlined.ChevronRight
+import androidx.compose.material.icons.outlined.Cloud
 import androidx.compose.material.icons.outlined.Memory
 import androidx.compose.material.icons.outlined.SettingsSuggest
 import androidx.compose.material.icons.outlined.Bolt
@@ -54,7 +74,7 @@ import androidx.compose.material.icons.outlined.Restore
 import androidx.compose.material.icons.outlined.Speed
 import androidx.compose.material.icons.outlined.Storefront
 import androidx.compose.material.icons.outlined.SystemUpdate
-import androidx.compose.material.icons.outlined.TrendingUp
+import androidx.compose.material.icons.automirrored.outlined.TrendingUp
 import androidx.compose.material.icons.outlined.Tune
 import androidx.compose.material.icons.outlined.VolunteerActivism
 import androidx.compose.material.icons.outlined.Campaign
@@ -93,6 +113,9 @@ import com.yunget.app.data.network.HttpClients
 import com.yunget.app.data.plugin.PluginRepository
 import com.yunget.app.data.prefs.SettingsRepository
 import com.yunget.app.ui.theme.ThemeController
+import com.yunget.app.ui.theme.LocalUiMetrics
+import com.yunget.app.ui.theme.AppUiStyle
+import com.yunget.app.ui.theme.LocalAppUiStyle
 import com.yunget.app.data.update.UpdateChecker
 import com.yunget.app.ui.SnackbarController
 import com.yunget.app.util.LogExporter
@@ -162,6 +185,7 @@ fun SettingsScreen(
     onAnnouncementClick: () -> Unit = {},
     modifier: Modifier = Modifier
 ) {
+    val ui = LocalUiMetrics.current
     var showThreadsDialog by remember { mutableStateOf(false) }
     var showLogDialog by remember { mutableStateOf(false) }
     // 检查更新结果（非空时弹更新对话框）
@@ -220,11 +244,16 @@ fun SettingsScreen(
      */
     var diagUrlInput by remember { mutableStateOf("") }
     val diagRunning = diagStatus?.startsWith("运行中") == true
-    LaunchedEffect(Unit) {
-        while (true) {
-            diagStatus = diagStatusProvider()
-            diagResult = diagResultProvider()
-            delay(700)
+    // 诊断本身由管理器持有；只有查看诊断时才轮询，日常设置页不持续唤醒。
+    LaunchedEffect(showDevMenu, showDiagResultDialog) {
+        diagStatus = diagStatusProvider()
+        diagResult = diagResultProvider()
+        if (showDevMenu || showDiagResultDialog) {
+            while (true) {
+                delay(700)
+                diagStatus = diagStatusProvider()
+                diagResult = diagResultProvider()
+            }
         }
     }
     LaunchedEffect(Unit) { ignoreSsl = settingsRepo.ignoreSslCert }
@@ -300,418 +329,374 @@ fun SettingsScreen(
         }
     }
 
-    Column(
-        modifier = modifier
-            .fillMaxSize()
-            .nestedScroll(scrollBehavior.nestedScrollConnection)
-            .verticalScroll(rememberScrollState())
-            .padding(16.dp)
+    val activeConns = activeConnectionsProvider()
+    Box(
+        modifier = modifier.fillMaxSize().nestedScroll(scrollBehavior.nestedScrollConnection),
+        contentAlignment = Alignment.TopCenter
     ) {
-        // ---------- 下载 ----------
-        // 只放"改变下载行为本身"的项。下面按用途分了三组，而不是一长条平铺：
-        // 原先 11 项挤在一个「下载」标题下，找一项要通读全部描述。
-        SectionLabel("下载")
-        // 描述文字来自 ThreadCountAdvice（P15）：高档位会给出"调高有风险、但对每连接
-        // 限速的服务端有效"的说明。措辞是可测的（见 ThreadCountAdviceTest），
-        // 不写在这里 —— 写在 Composable 里就只能靠肉眼回归。
-        val activeConns = activeConnectionsProvider()
-        SettingsItem(
-            icon = Icons.Outlined.Tune,
-            title = "最大下载线程数",
-            description = buildString {
-                append(ThreadCountAdvice.describe(threads))
-                // 有任务在跑时，把"引擎实际用到多少"也说出来。
-                // 设定值与实际值不一致是**正常的**（引擎会按实测吞吐自行收敛），
-                // 但用户看不见就会以为没生效。
-                if (activeConns != null) {
-                    append("\n当前生效：$activeConns 条连接（引擎按实测吞吐自动调整）")
-                }
-            },
-            onClick = { showThreadsDialog = true }
-        )
-
-        Spacer(modifier = Modifier.height(8.dp))
-
-        // 下载保存目录：系统文件夹选择器（SAF，适配各 Android 版本分区存储）；
-        // 已自定义时卡片右侧内嵌「恢复默认」操作（不单独外露按钮）
-        SettingsItem(
-            icon = Icons.Outlined.FolderOpen,
-            title = "下载保存目录",
-            description = downloadDirUri?.let { "已自定义：${DownloadSaver.safDirDisplay(it)}" }
-                ?: "系统默认 Download（点击自定义）",
-            onClick = {
-                // 系统选择器被卸载或禁用时 launch 抛 ActivityNotFoundException：选中器的
-                // Activity 属于系统组件，ROM 精简 / 被冻结 / 无「文件」应用时都可能缺失。
-                // 不加这层兜底就是**点击即崩溃**，而用户只是想换个目录。
-                runCatching { dirLauncher.launch(null) }
-                    .onFailure { e ->
-                        SnackbarController.show(
-                            if (e is ActivityNotFoundException) {
-                                "本机没有可用的文件选择器，无法自定义目录"
-                            } else {
-                                "打开目录选择器失败：${e.message ?: e::class.simpleName}"
-                            }
-                        )
-                    }
-            },
-            trailing = if (downloadDirUri != null) {
-                {
-                    TextButton(
+        LazyColumn(
+            modifier = Modifier.widthIn(max = 720.dp).fillMaxSize(),
+            contentPadding = PaddingValues(
+                start = ui.space(14.dp), end = ui.space(14.dp),
+                top = ui.space(8.dp), bottom = ui.space(20.dp),
+            ),
+            verticalArrangement = Arrangement.spacedBy(ui.space(14.dp))
+        ) {
+            item(key = "download_overview") {
+                SettingsOverview(threads = threads, concurrent = maxConcurrent, isGopeed = engineChoice == SettingsRepository.ENGINE_GOPEED)
+            }
+            item(key = "settings_group_0") {
+                SettingsGroup(title = "下载任务", description = "保存位置、并发与速度") {
+                    SettingsItem(
+                        icon = Icons.Outlined.FolderOpen,
+                        title = "下载保存目录",
+                        description = downloadDirUri?.let { "已自定义：${DownloadSaver.safDirDisplay(it)}" }
+                            ?: "系统默认 Download（点击自定义）",
                         onClick = {
-                            downloadDirUri = null
-                            settingsRepo.downloadDirUri = null
-                            SnackbarController.show("已恢复默认下载目录")
+                            // 系统选择器被卸载或禁用时 launch 抛 ActivityNotFoundException：选中器的
+                            // Activity 属于系统组件，ROM 精简 / 被冻结 / 无「文件」应用时都可能缺失。
+                            // 不加这层兜底就是**点击即崩溃**，而用户只是想换个目录。
+                            runCatching { dirLauncher.launch(null) }
+                                .onFailure { e ->
+                                    SnackbarController.show(
+                                        if (e is ActivityNotFoundException) {
+                                            "本机没有可用的文件选择器，无法自定义目录"
+                                        } else {
+                                            "打开目录选择器失败：${e.message ?: e::class.simpleName}"
+                                        }
+                                    )
+                                }
                         },
-                        modifier = Modifier.padding(start = 8.dp)
-                    ) {
-                        Text(
-                            text = "恢复默认",
-                            style = MaterialTheme.typography.labelMedium,
-                            color = MaterialTheme.colorScheme.primary
-                        )
-                    }
-                }
-            } else {
-                null
-            }
-        )
-
-        Spacer(modifier = Modifier.height(8.dp))
-
-        // 网络与下载策略
-        SettingsItem(
-            icon = Icons.Outlined.Layers,
-            title = "最大同时下载任务数",
-            description = "同时下载 $maxConcurrent 个任务（限制后台并发，避免占满带宽）",
-            onClick = { showConcurrencyDialog = true }
-        )
-
-        Spacer(modifier = Modifier.height(8.dp))
-
-        SettingsItem(
-            icon = Icons.Outlined.Speed,
-            title = "下载速度限制",
-            description = speedLimitText(speedLimitBps),
-            onClick = { showSpeedDialog = true }
-        )
-
-        Spacer(modifier = Modifier.height(8.dp))
-
-        SettingsItem(
-            icon = Icons.Outlined.Refresh,
-            title = "失败自动重试",
-            description = if (retryCount == 0) "失败后不自动重试" else "失败后自动重试 $retryCount 次（断点续传）",
-            onClick = { showRetryDialog = true }
-        )
-
-        Spacer(modifier = Modifier.height(8.dp))
-
-        // 连接预热：下载前预建连接池，起步更快
-        SettingsItem(
-            icon = Icons.Outlined.Bolt,
-            title = "连接预热",
-            description = if (warmUp) "开启：下载前预建连接并预解析 DNS，起步更快" else "关闭：直接开始下载",
-            onClick = {
-                warmUp = !warmUp
-                settingsRepo.warmUpConnections = warmUp
-            },
-            trailing = { Switch(checked = warmUp, onCheckedChange = null) }
-        )
-
-        Spacer(modifier = Modifier.height(8.dp))
-
-        // 慢启动：并发从少爬升到设定值
-        SettingsItem(
-            icon = Icons.Outlined.TrendingUp,
-            title = "慢启动",
-            description = if (slowStartOn) {
-                "开启：并发从少量逐步爬升到设定值，减少瞬时连接冲击"
-            } else {
-                "关闭：立即全开并发；吞吐自适应仍会在聚合限速时向下收敛"
-            },
-            onClick = {
-                slowStartOn = !slowStartOn
-                settingsRepo.slowStart = slowStartOn
-            },
-            trailing = { Switch(checked = slowStartOn, onCheckedChange = null) }
-        )
-
-        Spacer(modifier = Modifier.height(24.dp))
-
-        // ---------- 引擎与插件 ----------
-        // 「用哪个引擎下」与「引擎能识别什么链接」是同一件事的两半，放在一组里。
-        SectionLabel("引擎与插件")
-        // 下载引擎：**所有**引擎都在这个页面里选（TurboDL / 内置兼容 / aria2 / Gopeed），
-        // 内核导入、启停与状态也都在那里 —— 设置页只留这一个入口，不再分两处。
-        SettingsItem(
-            icon = Icons.Outlined.Memory,
-            title = "下载引擎",
-            description = if (engineChoice == SettingsRepository.ENGINE_GOPEED) {
-                "Gopeed 引擎（支持磁力/BT，需导入内核）"
-            } else {
-                "内置分片下载器 · 具体实现与 Gopeed 引擎都在这一页里选"
-            },
-            onClick = { showDownloadEngine = true }
-        )
-
-        Spacer(modifier = Modifier.height(8.dp))
-
-        // 引擎高级参数：默认值与旧硬编码完全一致，不动就等于不生效。
-        // 单独一项而不是塞进引擎页：引擎页管"用哪个引擎"，这里管"引擎怎么跑"。
-        SettingsItem(
-            icon = Icons.Outlined.Tune,
-            title = "引擎高级参数",
-            description = "HTTP/1.1 强制、动态分片、预分块数、吞吐自适应、背压与超时等 12 项",
-            onClick = { showEngineAdvanced = true }
-        )
-
-        Spacer(modifier = Modifier.height(8.dp))
-
-        // 插件：JS 脚本的导入 / 启停 / 运行状态 / 卸载都在那一页。
-        // 副标题直接给「装了几个、几个在跑」—— 不开插件页也能看出「装了但没启用」这种状态。
-        SettingsItem(
-            icon = Icons.Outlined.Extension,
-            title = "插件",
-            description = when {
-                pluginTotal == 0 -> "还没装插件 · 可以导入或粘贴 JS 脚本扩展解析能力"
-                pluginEnabled == pluginTotal -> "$pluginTotal 个已安装，全部启用"
-                pluginEnabled == 0 -> "$pluginTotal 个已安装，都已停用"
-                else -> "$pluginTotal 个已安装，$pluginEnabled 个启用"
-            },
-            onClick = { showPlugins = true }
-        )
-
-        Spacer(modifier = Modifier.height(8.dp))
-
-        // 插件市场：插件源管理与从源安装都在那一页。
-        // 与「插件」分开两行是有意的 —— 那一页管"本机装了什么"，这一页管"哪里能拿到插件"，
-        // 加源与装插件是两件独立的事（市场页里也是这么分开的）。
-        SettingsItem(
-            icon = Icons.Outlined.Storefront,
-            title = "插件市场",
-            description = "从插件源浏览并安装 · 检查插件更新",
-            onClick = { showMarket = true }
-        )
-
-        Spacer(modifier = Modifier.height(8.dp))
-
-        // GitHub 镜像前缀：插件源、更新检查与**远程图片**都走它。
-        // 暴露这一项是因为国内直连 raw.githubusercontent.com 基本取不到东西 ——
-        // 此前只有插件源能单独配镜像，而支持页图片与 README 图片没有入口，
-        // 表现为"插件装了、支持页却一直空白"。
-        SettingsItem(
-            icon = Icons.Outlined.Dns,
-            title = "GitHub 网络镜像",
-            description = when {
-                mirrorDraft.isNullOrBlank() -> "未设置（直连；国内可能加载不出图片与插件源）"
-                else -> "已启用：$mirrorDraft"
-            },
-            onClick = { showMirrorDialog = true }
-        )
-
-        Spacer(modifier = Modifier.height(8.dp))
-
-        // 自定义 DNS over HTTPS：绕过本地 DNS 污染/加速域名解析
-        SettingsItem(
-            icon = Icons.Outlined.Dns,
-            title = "自定义 DNS (DoH)",
-            description = when {
-                // 哨兵值不能直接展示（对用户是无意义的内部标记）
-                dohUrl == AUTO_DOH -> "自动（并发探测最快的公共 DoH）"
-                dohUrl != null -> "已启用：$dohUrl"
-                else -> "使用系统 DNS（点击配置 DNS over HTTPS）"
-            },
-            onClick = { showDohDialog = true }
-        )
-
-        Spacer(modifier = Modifier.height(24.dp))
-
-        // ---------- 后台与通知 ----------
-        // 这两项都属于"下载时系统怎么对待本应用"，与下载参数不是一回事。
-        SectionLabel("后台与通知")
-        SettingsItem(
-            icon = Icons.Outlined.Power,
-            title = "锁屏后保持下载",
-            description = "开启后下载时获取 WakeLock 维持网络，并可加入「忽略电池优化」白名单",
-            onClick = {
-                keepLocked = !keepLocked
-                settingsRepo.keepDownloadWhenLocked = keepLocked
-                if (keepLocked) {
-                    val pm = context.getSystemService(Context.POWER_SERVICE) as? PowerManager
-                    if (pm?.isIgnoringBatteryOptimizations(context.packageName) != true) {
-                        showBatteryDialog = true
-                    }
-                }
-            },
-            trailing = { Switch(checked = keepLocked, onCheckedChange = null) }
-        )
-
-        Spacer(modifier = Modifier.height(8.dp))
-
-        SettingsItem(
-            icon = Icons.Outlined.Notifications,
-            title = "通知栏下载进度",
-            description = when {
-                Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU &&
-                    ContextCompat.checkSelfPermission(context, Manifest.permission.POST_NOTIFICATIONS) !=
-                    PackageManager.PERMISSION_GRANTED ->
-                    "未授予通知权限，下载通知将不可见（点击申请）"
-                showSpeed -> "完整通知：进度条 + 下载速度"
-                else -> "仅显示通知（隐藏下载速度）"
-            },
-            onClick = {
-                // Android 13+ 未授权：先申请通知权限，授权后自动开启完整通知
-                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU &&
-                    ContextCompat.checkSelfPermission(context, Manifest.permission.POST_NOTIFICATIONS) !=
-                    PackageManager.PERMISSION_GRANTED
-                ) {
-                    notifyPermLauncher.launch(Manifest.permission.POST_NOTIFICATIONS)
-                } else {
-                    showSpeed = !showSpeed
-                    settingsRepo.notificationShowSpeed = showSpeed
-                }
-            },
-            trailing = { Switch(checked = showSpeed, onCheckedChange = null) }
-        )
-
-        Spacer(modifier = Modifier.height(24.dp))
-
-        SectionLabel("外观")
-        SettingsItem(
-            icon = Icons.Outlined.Palette,
-            title = "主题与外观",
-            description = "主题色、动态色彩与深色模式",
-            onClick = onThemeClick
-        )
-
-        Spacer(modifier = Modifier.height(8.dp))
-
-        Spacer(modifier = Modifier.height(24.dp))
-
-        SectionLabel("通用")
-        SettingsItem(
-            icon = Icons.Outlined.Image,
-            title = "列表缩略图",
-            description = if (ThemeController.cloudThumbnails) {
-                "图片文件在列表里显示小图（需要向网盘取图，会多花一点流量）"
-            } else {
-                "已关闭，列表只显示文件图标（不发取图请求）"
-            },
-            onClick = {
-                ThemeController.setCloudThumbnails(context, !ThemeController.cloudThumbnails)
-            },
-            trailing = {
-                Switch(checked = ThemeController.cloudThumbnails, onCheckedChange = null)
-            }
-        )
-
-        Spacer(modifier = Modifier.height(8.dp))
-
-        SettingsItem(
-            icon = Icons.Outlined.Groups,
-            title = "自动识别剪贴板",
-            description = if (ThemeController.clipboardSuggestEnabled) {
-                "复制分享链接后自动提示解析"
-            } else {
-                "已关闭，应用不再读取剪贴板"
-            },
-            onClick = {
-                ThemeController.setClipboardSuggestEnabled(
-                    context,
-                    !ThemeController.clipboardSuggestEnabled
-                )
-            },
-            trailing = {
-                Switch(checked = ThemeController.clipboardSuggestEnabled, onCheckedChange = null)
-            }
-        )
-
-        Spacer(modifier = Modifier.height(8.dp))
-
-        SettingsItem(
-            icon = Icons.Outlined.SystemUpdate,
-            title = "检查更新",
-            description = "检查 GitHub 是否有新版本可用",
-            onClick = {
-                scope.launch {
-                    SnackbarController.show("正在检查更新…")
-                    val release = runCatching { UpdateChecker.fetchLatestRelease() }.getOrNull()
-                    val current = UpdateChecker.currentVersion(context)
-                    if (release == null) {
-                        SnackbarController.show("检查更新失败，请检查网络")
-                    } else if (UpdateChecker.compareVersions(release.tagName, current) > 0) {
-                        updateRelease = release
-                    } else {
-                        SnackbarController.show("已是最新版本")
-                    }
+                        trailing = if (downloadDirUri != null) {
+                            {
+                                TextButton(
+                                    onClick = {
+                                        downloadDirUri = null
+                                        settingsRepo.downloadDirUri = null
+                                        SnackbarController.show("已恢复默认下载目录")
+                                    },
+                                    modifier = Modifier.padding(start = 8.dp)
+                                ) {
+                                    Text(
+                                        text = "恢复默认",
+                                        style = MaterialTheme.typography.labelMedium,
+                                        color = MaterialTheme.colorScheme.primary
+                                    )
+                                }
+                            }
+                        } else {
+                            null
+                        }
+                    )
+                    SettingsDivider()
+                    SettingsItem(
+                        icon = Icons.Outlined.Layers,
+                        title = "最大同时下载任务数",
+                        description = "同时下载 $maxConcurrent 个任务（限制后台并发，避免占满带宽）",
+                        onClick = { showConcurrencyDialog = true }
+                    )
+                    SettingsDivider()
+                    SettingsItem(
+                        icon = Icons.Outlined.Tune,
+                        title = "最大下载线程数",
+                        description = buildString {
+                            append(ThreadCountAdvice.describe(threads))
+                            // 有任务在跑时，把"引擎实际用到多少"也说出来。
+                            // 设定值与实际值不一致是**正常的**（引擎会按实测吞吐自行收敛），
+                            // 但用户看不见就会以为没生效。
+                            if (activeConns != null) {
+                                append("\n当前生效：$activeConns 条连接（引擎按实测吞吐自动调整）")
+                            }
+                        },
+                        onClick = { showThreadsDialog = true }
+                    )
+                    SettingsDivider()
+                    SettingsItem(
+                        icon = Icons.Outlined.Speed,
+                        title = "下载速度限制",
+                        description = speedLimitText(speedLimitBps),
+                        onClick = { showSpeedDialog = true }
+                    )
+                    SettingsDivider()
+                    SettingsItem(
+                        icon = Icons.Outlined.Refresh,
+                        title = "失败自动重试",
+                        description = if (retryCount == 0) "失败后不自动重试" else "失败后自动重试 $retryCount 次（断点续传）",
+                        onClick = { showRetryDialog = true }
+                    )
                 }
             }
-        )
-
-        Spacer(modifier = Modifier.height(8.dp))
-        // 入口拆成两个（日志系统升级）：实时查看与导出是两件不同的事 ——
-        // 前者回答"刚才那步有没有报错"，后者用于把证据交给别人。
-        // 旧版只有导出，为了看一眼错误也得走完整流程。
-        // 公告与社区：放在"通用"组最前 —— 用户遇到问题时第一个该看的是
-        // "是不是已知问题、有没有人讨论过"，而不是先去看日志。
-        SettingsItem(
-            icon = Icons.Outlined.Campaign,
-            title = "公告与社区",
-            description = "维护公告、已知问题说明，以及交流反馈入口",
-            onClick = onAnnouncementClick
-        )
-        Spacer(modifier = Modifier.height(8.dp))
-
-        SettingsItem(
-            icon = Icons.Outlined.ReceiptLong,
-            title = "实时日志",
-            description = "当场看最近发生了什么事，按级别过滤（错误、警告…），可复制",
-            onClick = onLogViewClick
-        )
-        Spacer(modifier = Modifier.height(8.dp))
-        SettingsItem(
-            icon = Icons.Outlined.Article,
-            title = "导出日志",
-            description = "导出崩溃日志、分类日志与应用信息，便于排查问题",
-            onClick = { showLogDialog = true }
-        )
-
-        Spacer(modifier = Modifier.height(24.dp))
-
-        SectionLabel("网盘认证")
-        SettingsItem(
-            icon = Icons.Outlined.Backup,
-            title = "导出网盘认证",
-            description = "使用至少 8 位口令加密 Cookie/JWT 后导出",
-            onClick = { showExportAuthDialog = true }
-        )
-
-        Spacer(modifier = Modifier.height(8.dp))
-        SettingsItem(
-            icon = Icons.Outlined.Restore,
-            title = "导入网盘认证",
-            description = "选择加密或明文的认证备份文件，恢复网盘登录",
-            onClick = { importLauncher.launch(arrayOf("application/json", "application/octet-stream", "*/*")) }
-        )
-
-        Spacer(modifier = Modifier.height(24.dp))
-
-        SectionLabel("关于")
-        SettingsItem(
-            icon = Icons.Outlined.Info,
-            title = "关于云取",
-            description = "版本信息、支持平台与技术说明",
-            onClick = onAboutClick,
-            onLongClick = { showDevMenu = true } // 长按打开隐藏开发调试菜单
-        )
-
-        Spacer(modifier = Modifier.height(8.dp))
-        SettingsItem(
-            icon = Icons.Outlined.VolunteerActivism,
-            title = "支持开发",
-            description = "微信扫码捐赠，支持项目持续维护",
-            onClick = onSupportClick
-        )
+            item(key = "settings_group_1") {
+                SettingsGroup(title = "下载引擎", description = "选择引擎，调整连接与高级参数") {
+                    SettingsItem(
+                        icon = Icons.Outlined.Memory,
+                        title = "下载引擎",
+                        description = if (engineChoice == SettingsRepository.ENGINE_GOPEED) {
+                            "Gopeed · 磁力 / BT"
+                        } else {
+                            "TurboDL · 自适应并发与断点续传"
+                        },
+                        onClick = { showDownloadEngine = true }
+                    )
+                    SettingsDivider()
+                    SettingsItem(
+                        icon = Icons.Outlined.Tune,
+                        title = "引擎高级参数",
+                        description = "HTTP、分片、并发、背压与超时",
+                        onClick = { showEngineAdvanced = true }
+                    )
+                    SettingsDivider()
+                    SettingsItem(
+                        checked = warmUp,
+                        icon = Icons.Outlined.Bolt,
+                        title = "连接预热",
+                        description = if (warmUp) "开启：下载前预建连接并预解析 DNS，起步更快" else "关闭：直接开始下载",
+                        onClick = {
+                            warmUp = !warmUp
+                            settingsRepo.warmUpConnections = warmUp
+                        },
+                        trailing = { Switch(checked = warmUp, onCheckedChange = null) }
+                    )
+                    SettingsDivider()
+                    SettingsItem(
+                        checked = slowStartOn,
+                        icon = Icons.AutoMirrored.Outlined.TrendingUp,
+                        title = "慢启动",
+                        description = if (slowStartOn) {
+                            "开启：并发从少量逐步爬升到设定值，减少瞬时连接冲击"
+                        } else {
+                            "关闭：立即全开并发；吞吐自适应仍会在聚合限速时向下收敛"
+                        },
+                        onClick = {
+                            slowStartOn = !slowStartOn
+                            settingsRepo.slowStart = slowStartOn
+                        },
+                        trailing = { Switch(checked = slowStartOn, onCheckedChange = null) }
+                    )
+                }
+            }
+            item(key = "settings_group_2") {
+                SettingsGroup(title = "链接解析与插件", description = "管理解析能力与链接识别") {
+                    SettingsItem(
+                        icon = Icons.Outlined.Extension,
+                        title = "插件",
+                        description = when {
+                            pluginTotal == 0 -> "还没装插件 · 可以导入或粘贴 JS 脚本扩展解析能力"
+                            pluginEnabled == pluginTotal -> "$pluginTotal 个已安装，全部启用"
+                            pluginEnabled == 0 -> "$pluginTotal 个已安装，都已停用"
+                            else -> "$pluginTotal 个已安装，$pluginEnabled 个启用"
+                        },
+                        onClick = { showPlugins = true }
+                    )
+                    SettingsDivider()
+                    SettingsItem(
+                        icon = Icons.Outlined.Storefront,
+                        title = "插件市场",
+                        description = "从插件源浏览并安装 · 检查插件更新",
+                        onClick = { showMarket = true }
+                    )
+                    SettingsDivider()
+                    SettingsItem(
+                        checked = ThemeController.clipboardSuggestEnabled,
+                        icon = Icons.Outlined.Groups,
+                        title = "自动识别剪贴板",
+                        description = if (ThemeController.clipboardSuggestEnabled) {
+                            "复制分享链接后自动提示解析"
+                        } else {
+                            "已关闭，应用不再读取剪贴板"
+                        },
+                        onClick = {
+                            ThemeController.setClipboardSuggestEnabled(
+                                context,
+                                !ThemeController.clipboardSuggestEnabled
+                            )
+                        },
+                        trailing = {
+                            Switch(checked = ThemeController.clipboardSuggestEnabled, onCheckedChange = null)
+                        }
+                    )
+                }
+            }
+            item(key = "settings_group_3") {
+                SettingsGroup(title = "网络访问", description = "镜像分发与域名解析") {
+                    SettingsItem(
+                        icon = Icons.Outlined.Dns,
+                        title = "GitHub 网络镜像",
+                        description = when {
+                            mirrorDraft.isNullOrBlank() -> "未设置（直连；国内可能加载不出图片与插件源）"
+                            else -> "已启用：$mirrorDraft"
+                        },
+                        onClick = { showMirrorDialog = true }
+                    )
+                    SettingsDivider()
+                    SettingsItem(
+                        icon = Icons.Outlined.Dns,
+                        title = "自定义 DNS (DoH)",
+                        description = when {
+                            // 哨兵值不能直接展示（对用户是无意义的内部标记）
+                            dohUrl == AUTO_DOH -> "自动（并发探测最快的公共 DoH）"
+                            dohUrl != null -> "已启用：$dohUrl"
+                            else -> "使用系统 DNS（点击配置 DNS over HTTPS）"
+                        },
+                        onClick = { showDohDialog = true }
+                    )
+                }
+            }
+            item(key = "settings_group_4") {
+                SettingsGroup(title = "后台与通知", description = "让下载在后台继续，随时掌握进度") {
+                    SettingsItem(
+                        checked = keepLocked,
+                        icon = Icons.Outlined.Power,
+                        title = "锁屏后保持下载",
+                        description = "开启后下载时获取 WakeLock 维持网络，并可加入「忽略电池优化」白名单",
+                        onClick = {
+                            keepLocked = !keepLocked
+                            settingsRepo.keepDownloadWhenLocked = keepLocked
+                            if (keepLocked) {
+                                val pm = context.getSystemService(Context.POWER_SERVICE) as? PowerManager
+                                if (pm?.isIgnoringBatteryOptimizations(context.packageName) != true) {
+                                    showBatteryDialog = true
+                                }
+                            }
+                        },
+                        trailing = { Switch(checked = keepLocked, onCheckedChange = null) }
+                    )
+                    SettingsDivider()
+                    SettingsItem(
+                        checked = showSpeed,
+                        icon = Icons.Outlined.Notifications,
+                        title = "通知栏下载进度",
+                        description = when {
+                            Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU &&
+                                ContextCompat.checkSelfPermission(context, Manifest.permission.POST_NOTIFICATIONS) !=
+                                PackageManager.PERMISSION_GRANTED ->
+                                "未授予通知权限，下载通知将不可见（点击申请）"
+                            showSpeed -> "完整通知：进度条 + 下载速度"
+                            else -> "仅显示通知（隐藏下载速度）"
+                        },
+                        onClick = {
+                            // Android 13+ 未授权：先申请通知权限，授权后自动开启完整通知
+                            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU &&
+                                ContextCompat.checkSelfPermission(context, Manifest.permission.POST_NOTIFICATIONS) !=
+                                PackageManager.PERMISSION_GRANTED
+                            ) {
+                                notifyPermLauncher.launch(Manifest.permission.POST_NOTIFICATIONS)
+                            } else {
+                                showSpeed = !showSpeed
+                                settingsRepo.notificationShowSpeed = showSpeed
+                            }
+                        },
+                        trailing = { Switch(checked = showSpeed, onCheckedChange = null) }
+                    )
+                }
+            }
+            item(key = "settings_group_5") {
+                SettingsGroup(title = "外观与文件列表", description = "主题配色、显示与浏览体验") {
+                    SettingsItem(
+                        icon = Icons.Outlined.Palette,
+                        title = "主题与外观",
+                        description = "主题色、动态色彩与深色模式",
+                        onClick = onThemeClick
+                    )
+                    SettingsDivider()
+                    SettingsItem(
+                        checked = ThemeController.cloudThumbnails,
+                        icon = Icons.Outlined.Image,
+                        title = "列表缩略图",
+                        description = if (ThemeController.cloudThumbnails) {
+                            "图片文件在列表里显示小图（需要向网盘取图，会多花一点流量）"
+                        } else {
+                            "已关闭，列表只显示文件图标（不发取图请求）"
+                        },
+                        onClick = {
+                            ThemeController.setCloudThumbnails(context, !ThemeController.cloudThumbnails)
+                        },
+                        trailing = {
+                            Switch(checked = ThemeController.cloudThumbnails, onCheckedChange = null)
+                        }
+                    )
+                }
+            }
+            item(key = "settings_group_6") {
+                SettingsGroup(title = "认证与备份", description = "导入或加密备份网盘登录信息") {
+                    SettingsItem(
+                        icon = Icons.Outlined.Backup,
+                        title = "导出网盘认证",
+                        description = "使用至少 8 位口令加密 Cookie/JWT 后导出",
+                        onClick = { showExportAuthDialog = true }
+                    )
+                    SettingsDivider()
+                    SettingsItem(
+                        icon = Icons.Outlined.Restore,
+                        title = "导入网盘认证",
+                        description = "选择加密或明文的认证备份文件，恢复网盘登录",
+                        onClick = { importLauncher.launch(arrayOf("application/json", "application/octet-stream", "*/*")) }
+                    )
+                }
+            }
+            item(key = "settings_group_7") {
+                SettingsGroup(title = "帮助与反馈", description = "查看公告、定位问题与导出记录") {
+                    SettingsItem(
+                        icon = Icons.Outlined.Campaign,
+                        title = "公告与社区",
+                        description = "维护公告、已知问题与交流反馈",
+                        onClick = onAnnouncementClick
+                    )
+                    SettingsDivider()
+                    SettingsItem(
+                        icon = Icons.AutoMirrored.Outlined.ReceiptLong,
+                        title = "实时日志",
+                        description = "筛选、查看并复制最近日志",
+                        onClick = onLogViewClick
+                    )
+                    SettingsDivider()
+                    SettingsItem(
+                        icon = Icons.AutoMirrored.Outlined.Article,
+                        title = "导出日志",
+                        description = "导出诊断信息与崩溃日志",
+                        onClick = { showLogDialog = true }
+                    )
+                }
+            }
+            item(key = "settings_group_8") {
+                SettingsGroup(title = "关于与更新", description = "版本信息与项目支持") {
+                    SettingsItem(
+                        icon = Icons.Outlined.SystemUpdate,
+                        title = "检查更新",
+                        description = "检查 GitHub 是否有新版本可用",
+                        onClick = {
+                            scope.launch {
+                                SnackbarController.show("正在检查更新…")
+                                val release = runCatching { UpdateChecker.fetchLatestRelease() }.getOrNull()
+                                val current = UpdateChecker.currentVersion(context)
+                                if (release == null) {
+                                    SnackbarController.show("检查更新失败，请检查网络")
+                                } else if (UpdateChecker.compareVersions(release.tagName, current) > 0) {
+                                    updateRelease = release
+                                } else {
+                                    SnackbarController.show("已是最新版本")
+                                }
+                            }
+                        }
+                    )
+                    SettingsDivider()
+                    SettingsItem(
+                        icon = Icons.Outlined.Info,
+                        title = "关于云取",
+                        description = "版本信息、支持平台与技术说明",
+                        onClick = onAboutClick,
+                        onLongClick = { showDevMenu = true } // 长按打开隐藏开发调试菜单
+                    )
+                    SettingsDivider()
+                    SettingsItem(
+                        icon = Icons.Outlined.VolunteerActivism,
+                        title = "支持开发",
+                        description = "微信 / 支付宝扫码支持维护",
+                        onClick = onSupportClick
+                    )
+                }
+            }
+        }
     }
 
     // 导出日志方式选择弹窗
@@ -720,7 +705,7 @@ fun SettingsScreen(
             onDismissRequest = { showLogDialog = false },
             title = { Text("导出日志") },
             text = {
-                Column {
+                Column(Modifier.verticalScroll(rememberScrollState())) {
                     Text(
                         text = "选择日志导出方式：",
                         style = MaterialTheme.typography.bodyMedium,
@@ -730,7 +715,7 @@ fun SettingsScreen(
                     Text(
                         text = "「关键诊断」段落会记录每次下载的启动信息（探测耗时、是否复用断点分片等），" +
                             "不受系统日志缓冲影响。若要排查断点续传，请先点一次「继续下载」再导出。",
-                        style = MaterialTheme.typography.bodySmall,
+                        style = MaterialTheme.typography.bodyMedium,
                         color = MaterialTheme.colorScheme.onSurfaceVariant
                     )
                     Spacer(modifier = Modifier.height(8.dp))
@@ -792,7 +777,7 @@ fun SettingsScreen(
             onDismissRequest = { showDevMenu = false },
             title = { Text("开发调试") },
             text = {
-                Column {
+                Column(Modifier.verticalScroll(rememberScrollState())) {
                     val toggleIgnoreSsl = {
                         ignoreSsl = !ignoreSsl
                         settingsRepo.ignoreSslCert = ignoreSsl
@@ -822,7 +807,7 @@ fun SettingsScreen(
                             )
                             Text(
                                 text = if (ignoreSsl) "已开启：所有网络请求不校验证书（抓包用）" else "已关闭：正常校验证书",
-                                style = MaterialTheme.typography.bodySmall,
+                                style = MaterialTheme.typography.bodyMedium,
                                 color = MaterialTheme.colorScheme.onSurfaceVariant
                             )
                         }
@@ -831,7 +816,7 @@ fun SettingsScreen(
                     Spacer(modifier = Modifier.height(12.dp))
                     Text(
                         text = "开启后所有 API 与下载请求将忽略 SSL 证书校验，便于配合抓包调试。请勿在日常使用中开启，存在中间人攻击风险。",
-                        style = MaterialTheme.typography.bodySmall,
+                        style = MaterialTheme.typography.bodyMedium,
                         color = MaterialTheme.colorScheme.onSurfaceVariant
                     )
                     Spacer(modifier = Modifier.height(16.dp))
@@ -863,7 +848,7 @@ fun SettingsScreen(
                         label = { Text("诊断用直链（留空则用最近任务）") },
                         placeholder = { Text("粘贴一条当前有效的下载直链") },
                         singleLine = true,
-                        textStyle = MaterialTheme.typography.bodySmall
+                        textStyle = MaterialTheme.typography.bodyMedium
                     )
                     Spacer(modifier = Modifier.height(8.dp))
                     Button(
@@ -901,7 +886,7 @@ fun SettingsScreen(
                         Spacer(modifier = Modifier.height(6.dp))
                         Text(
                             text = st,
-                            style = MaterialTheme.typography.bodySmall,
+                            style = MaterialTheme.typography.bodyMedium,
                             color = if (st.startsWith("❌")) MaterialTheme.colorScheme.error
                             else MaterialTheme.colorScheme.primary
                         )
@@ -933,7 +918,7 @@ fun SettingsScreen(
                             "注意：本扫描固定每任务连接数，任务数增加时**总连接数也在增加**；" +
                             "判读会同时对照两者——增益与连接数同步＝提速来自连接；" +
                             "连接数涨而吞吐不动＝限速按 IP/账户（换来源才有用）。",
-                        style = MaterialTheme.typography.bodySmall,
+                        style = MaterialTheme.typography.bodyMedium,
                         color = MaterialTheme.colorScheme.onSurfaceVariant
                     )
                     Spacer(modifier = Modifier.height(6.dp))
@@ -949,7 +934,7 @@ fun SettingsScreen(
                         text = "只改连接数、每档只跑 15 秒即取消，不会下完整个文件。" +
                             "结果用于判断服务器是「每连接限速」还是「按 IP 聚合限速」还是「对并发有惩罚」。" +
                             "结果会同时落到文件与日志里。",
-                        style = MaterialTheme.typography.bodySmall,
+                        style = MaterialTheme.typography.bodyMedium,
                         color = MaterialTheme.colorScheme.onSurfaceVariant
                     )
                 }
@@ -975,7 +960,7 @@ fun SettingsScreen(
                 ) {
                     Text(
                         text = text,
-                        style = MaterialTheme.typography.bodySmall,
+                        style = MaterialTheme.typography.bodyMedium,
                         modifier = Modifier.fillMaxWidth()
                     )
                 }
@@ -1044,11 +1029,12 @@ fun SettingsScreen(
 
     // 线程数选择弹窗
     if (showThreadsDialog) {
+        val threadColumns = if (LocalDensity.current.fontScale > 1.2f) 1 else 2
         AlertDialog(
             onDismissRequest = { showThreadsDialog = false },
             title = { Text("下载线程数") },
             text = {
-                Column {
+                Column(Modifier.verticalScroll(rememberScrollState())) {
                     Text(
                         text = ThreadCountAdvice.dialogNote(threads),
                         style = MaterialTheme.typography.bodyMedium,
@@ -1063,7 +1049,7 @@ fun SettingsScreen(
                             .heightIn(max = 320.dp)
                             .verticalScroll(rememberScrollState())
                     ) {
-                        threadOptions.chunked(2).forEach { rowValues ->
+                        threadOptions.chunked(threadColumns).forEach { rowValues ->
                             Row(
                                 modifier = Modifier.fillMaxWidth(),
                                 verticalAlignment = Alignment.CenterVertically
@@ -1081,7 +1067,7 @@ fun SettingsScreen(
                                     )
                                 }
                                 // 奇数个时补空占位，保持两列对齐
-                                if (rowValues.size == 1) Spacer(modifier = Modifier.weight(1f))
+                                if (threadColumns == 2 && rowValues.size == 1) Spacer(modifier = Modifier.weight(1f))
                             }
                         }
                     }
@@ -1160,7 +1146,7 @@ fun SettingsScreen(
             onDismissRequest = { showConcurrencyDialog = false },
             title = { Text("最大同时下载任务数") },
             text = {
-                Column {
+                Column(Modifier.verticalScroll(rememberScrollState())) {
                     options.forEach { v ->
                         Row(
                             modifier = Modifier.fillMaxWidth(),
@@ -1208,7 +1194,7 @@ fun SettingsScreen(
             onDismissRequest = { showSpeedDialog = false },
             title = { Text("下载速度限制") },
             text = {
-                Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
+                Column(Modifier.verticalScroll(rememberScrollState()), verticalArrangement = Arrangement.spacedBy(2.dp)) {
                     presets.forEach { v ->
                         Row(
                             modifier = Modifier.fillMaxWidth(),
@@ -1290,7 +1276,7 @@ fun SettingsScreen(
             onDismissRequest = { showRetryDialog = false },
             title = { Text("失败自动重试") },
             text = {
-                Column {
+                Column(Modifier.verticalScroll(rememberScrollState())) {
                     options.forEach { v ->
                         Row(
                             modifier = Modifier.fillMaxWidth(),
@@ -1348,10 +1334,10 @@ fun SettingsScreen(
             onDismissRequest = { showDohDialog = false },
             title = { Text("自定义 DNS (DoH)") },
             text = {
-                Column {
+                Column(Modifier.verticalScroll(rememberScrollState())) {
                     Text(
                         text = "下载请求改用加密 DNS 解析域名，可绕过本地 DNS 污染、提升解析速度。仅影响下载引擎，不影响其他应用。",
-                        style = MaterialTheme.typography.bodySmall,
+                        style = MaterialTheme.typography.bodyMedium,
                         color = MaterialTheme.colorScheme.onSurfaceVariant
                     )
                     Spacer(modifier = Modifier.height(8.dp))
@@ -1549,7 +1535,7 @@ private fun GitHubMirrorDialog(
                 Text(
                     text = "镜像只负责分发：取回的内容照验 SHA-256 与签名，换镜像不会让没验签的插件装得上。" +
                         "它只对 GitHub 系地址生效，其它图床不受影响。",
-                    style = MaterialTheme.typography.bodySmall,
+                    style = MaterialTheme.typography.bodyMedium,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
             }
@@ -1672,15 +1658,75 @@ private fun ImportAuthDialog(
 }
 
 @Composable
-private fun SectionLabel(text: String) {
-    Text(
-        text = text,
-        style = MaterialTheme.typography.labelMedium,
-        color = MaterialTheme.colorScheme.onSurfaceVariant,
-        modifier = Modifier.padding(start = 4.dp, bottom = 8.dp)
-    )
+private fun SettingsOverview(threads: Int, concurrent: Int, isGopeed: Boolean) {
+    val ui = LocalUiMetrics.current
+    Surface(
+        modifier = Modifier.fillMaxWidth(),
+        shape = RoundedCornerShape(20.dp),
+        color = MaterialTheme.colorScheme.surfaceContainerLow
+    ) {
+        Row(
+            modifier = Modifier.fillMaxWidth().padding(ui.space(12.dp)),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(12.dp)
+        ) {
+            Icon(Icons.Outlined.Tune, contentDescription = null,
+                modifier = Modifier.size(22.dp), tint = MaterialTheme.colorScheme.primary)
+            Column(modifier = Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(2.dp)) {
+                Text("下载策略", style = MaterialTheme.typography.titleSmall)
+                Text("$concurrent 个任务 · $threads 连接/任务",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant)
+            }
+            Text(if (isGopeed) "Gopeed" else "TurboDL",
+                style = MaterialTheme.typography.labelSmall,
+                color = MaterialTheme.colorScheme.primary)
+        }
+    }
 }
 
+@Composable
+private fun SettingsGroup(
+    title: String,
+    description: String,
+    content: @Composable ColumnScope.() -> Unit
+) {
+    val ui = LocalUiMetrics.current
+    val classic = LocalAppUiStyle.current == AppUiStyle.CLASSIC
+    Column(verticalArrangement = Arrangement.spacedBy(if (classic) 8.dp else ui.space(6.dp))) {
+        Text(
+            text = title,
+            style = if (classic) MaterialTheme.typography.bodyMedium
+            else MaterialTheme.typography.titleSmall,
+            fontWeight = FontWeight.Medium,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+            modifier = Modifier.padding(horizontal = 4.dp),
+        )
+        if (classic) {
+            content()
+        } else {
+            Surface(
+                shape = RoundedCornerShape(20.dp),
+                color = MaterialTheme.colorScheme.surfaceContainerLow,
+                modifier = Modifier.fillMaxWidth()
+            ) {
+                Column(Modifier.padding(2.dp), content = content)
+            }
+        }
+    }
+}
+
+@Composable
+private fun SettingsDivider() {
+    if (LocalAppUiStyle.current != AppUiStyle.CLASSIC) {
+        HorizontalDivider(
+            Modifier.padding(horizontal = 16.dp),
+            color = MaterialTheme.colorScheme.outlineVariant,
+        )
+    }
+}
+
+/** 生产设置行：常规尺寸使用 Material ListItem，大字下把说明和附加操作移到完整宽度。 */
 @OptIn(ExperimentalFoundationApi::class)
 @Composable
 private fun SettingsItem(
@@ -1688,89 +1734,176 @@ private fun SettingsItem(
     title: String,
     description: String,
     onClick: () -> Unit,
-    /** 长按回调（隐藏菜单等）；null 时不启用长按 */
     onLongClick: (() -> Unit)? = null,
-    /** 自定义尾部内容（如「恢复默认」操作）；null 时显示默认 ChevronRight */
-    trailing: @Composable (() -> Unit)? = null
+    trailing: @Composable (() -> Unit)? = null,
+    checked: Boolean? = null
 ) {
-    val shape = MaterialTheme.shapes.large
+    val ui = LocalUiMetrics.current
+    val classic = LocalAppUiStyle.current == AppUiStyle.CLASSIC
+    val fontScale = LocalDensity.current.fontScale
     val interactionSource = remember { MutableInteractionSource() }
-    Card(
+    BoxWithConstraints(
         modifier = Modifier
             .fillMaxWidth()
-            .clip(shape)
+            .background(
+                color = if (classic) MaterialTheme.colorScheme.surfaceContainerLow else Color.Transparent,
+                shape = RoundedCornerShape(16.dp),
+            )
+            .clip(RoundedCornerShape(16.dp))
+            .semantics {
+                if (checked != null) stateDescription = if (checked) "已开启" else "已关闭"
+            }
             .combinedClickable(
                 interactionSource = interactionSource,
-                indication = ripple(bounded = true),
+                indication = ripple(),
+                role = if (checked == null) Role.Button else Role.Switch,
                 onClick = onClick,
                 onLongClick = onLongClick
-            ),
-        shape = shape,
-        colors = CardDefaults.cardColors(
-            containerColor = MaterialTheme.colorScheme.surfaceContainerLow
-        )
-    ) {
-        Row(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(16.dp),
-            verticalAlignment = Alignment.CenterVertically
-        ) {
-            Icon(
-                imageVector = icon,
-                contentDescription = null,
-                tint = MaterialTheme.colorScheme.onSurfaceVariant
             )
-            Spacer(modifier = Modifier.width(16.dp))
-            Column(modifier = Modifier.weight(1f)) {
-                Text(
-                    text = title,
-                    style = MaterialTheme.typography.titleMedium,
-                    fontWeight = FontWeight.Medium
-                )
-                Spacer(modifier = Modifier.height(2.dp))
-                Text(
-                    text = description,
-                    style = MaterialTheme.typography.bodyMedium,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant
-                )
+    ) {
+        if (fontScale > 1.2f || maxWidth < 340.dp) {
+            Column(
+                Modifier.fillMaxWidth()
+                    .heightIn(min = maxOf(48f, ui.space(56.dp).value).dp)
+                    .padding(horizontal = ui.space(12.dp), vertical = ui.space(9.dp)),
+                verticalArrangement = Arrangement.spacedBy(ui.space(3.dp))
+            ) {
+                Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                    Icon(icon, null, Modifier.size(22.dp), tint = MaterialTheme.colorScheme.primary)
+                    Text(
+                        title,
+                        modifier = Modifier.weight(1f),
+                        style = MaterialTheme.typography.titleMedium,
+                        fontWeight = FontWeight.Medium,
+                    )
+                    if (trailing == null) Icon(Icons.Outlined.ChevronRight, null, tint = MaterialTheme.colorScheme.onSurfaceVariant)
+                }
+                Text(description, style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    maxLines = 2, overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis)
+                if (trailing != null) {
+                    Box(Modifier.align(Alignment.End).heightIn(min = 48.dp), contentAlignment = Alignment.CenterEnd) { trailing() }
+                }
             }
-            if (trailing != null) {
-                trailing()
-            } else {
-                Icon(
-                    imageVector = Icons.Outlined.ChevronRight,
-                    contentDescription = null,
-                    tint = MaterialTheme.colorScheme.outline
-                )
-            }
+        } else {
+            ListItem(
+                headlineContent = {
+                    Text(
+                        title,
+                        style = MaterialTheme.typography.titleMedium,
+                        fontWeight = FontWeight.Medium,
+                    )
+                },
+                supportingContent = { Text(description, style = MaterialTheme.typography.bodySmall,
+                    maxLines = 2, overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis) },
+                leadingContent = { Icon(icon, null, Modifier.size(22.dp), tint = MaterialTheme.colorScheme.primary) },
+                trailingContent = trailing ?: {
+                    Icon(Icons.Outlined.ChevronRight, null, tint = MaterialTheme.colorScheme.onSurfaceVariant)
+                },
+                colors = ListItemDefaults.colors(containerColor = Color.Transparent),
+                modifier = Modifier.heightIn(min = maxOf(48f, ui.space(56.dp).value).dp)
+            )
         }
     }
 }
 
-/** 线程数单选行（用于弹窗两列布局，每行占半宽） */
 @Composable
-private fun RadioThreadRow(
-    value: Int,
-    threads: Int,
-    onSelect: (Int) -> Unit,
-    modifier: Modifier = Modifier
-) {
+private fun RadioThreadRow(value: Int, threads: Int, onSelect: (Int) -> Unit, modifier: Modifier = Modifier) {
     Row(
         modifier = modifier
-            .fillMaxWidth()
-            .padding(vertical = 2.dp),
-        verticalAlignment = Alignment.CenterVertically
+            .heightIn(min = 48.dp)
+            .clip(RoundedCornerShape(16.dp))
+            .selectable(selected = threads == value, role = Role.RadioButton, onClick = { onSelect(value) })
+            .padding(horizontal = 8.dp, vertical = 8.dp),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(8.dp)
     ) {
-        RadioButton(
-            selected = threads == value,
-            onClick = { onSelect(value) }
-        )
-        Spacer(modifier = Modifier.width(8.dp))
-        Text(
-            text = "$value 线程",
-            style = MaterialTheme.typography.bodyLarge
-        )
+        RadioButton(selected = threads == value, onClick = null, modifier = Modifier.size(24.dp))
+        Text("$value 线程", style = MaterialTheme.typography.bodyLarge)
+    }
+}
+
+/** Screenshot Preview 使用真实生产分组与行，不实例化 Repository 或启动网络请求。 */
+@Composable
+internal fun SettingsPreviewContent() {
+    val ui = LocalUiMetrics.current
+    LazyColumn(
+        modifier = Modifier.fillMaxSize(),
+        contentPadding = PaddingValues(ui.space(14.dp)),
+        verticalArrangement = Arrangement.spacedBy(ui.space(14.dp))
+    ) {
+        item { SettingsOverview(threads = 16, concurrent = 3, isGopeed = false) }
+        item {
+            SettingsGroup("下载任务", "保存位置、并发与速度") {
+                SettingsItem(Icons.Outlined.FolderOpen, "下载保存目录", "系统默认 Download", {})
+                SettingsDivider()
+                SettingsItem(Icons.Outlined.Layers, "最大同时下载任务数", "同时下载 3 个任务", {})
+                SettingsDivider()
+                SettingsItem(Icons.Outlined.Tune, "最大下载线程数", "每任务最多 16 条连接，引擎按吞吐自动调整", {})
+            }
+        }
+        item {
+            SettingsGroup("后台与通知", "让下载在后台继续，随时掌握进度") {
+                SettingsItem(
+                    icon = Icons.Outlined.Power, title = "锁屏后保持下载",
+                    description = "维持网络连接，并可加入忽略电池优化名单", onClick = {},
+                    checked = true, trailing = { Switch(checked = true, onCheckedChange = null) }
+                )
+                SettingsDivider()
+                SettingsItem(
+                    icon = Icons.Outlined.Notifications, title = "通知栏下载进度",
+                    description = "显示进度与实时速度", onClick = {},
+                    checked = true, trailing = { Switch(checked = true, onCheckedChange = null) }
+                )
+            }
+        }
+        item {
+            SettingsGroup("网络与连接", "连接、DNS 与 GitHub 镜像") {
+                SettingsItem(Icons.Outlined.Speed, "下载速度上限", "不限速", {})
+                SettingsDivider()
+                SettingsItem(Icons.Outlined.Refresh, "失败自动重试", "失败后自动重试 3 次", {})
+                SettingsDivider()
+                SettingsItem(Icons.Outlined.Dns, "自定义 DNS (DoH)", "使用系统 DNS", {})
+                SettingsDivider()
+                SettingsItem(Icons.Outlined.Cloud, "GitHub 网络镜像", "自动选择可用镜像", {})
+            }
+        }
+        item {
+            SettingsGroup("外观与文件列表", "主题配色、显示与浏览体验") {
+                SettingsItem(Icons.Outlined.Palette, "主题与外观", "动态色彩、深色模式、字号与间距", {})
+                SettingsDivider()
+                SettingsItem(
+                    icon = Icons.Outlined.Image, title = "列表缩略图",
+                    description = "图片文件在列表中显示小图", onClick = {},
+                    checked = true, trailing = { Switch(checked = true, onCheckedChange = null) }
+                )
+            }
+        }
+        item {
+            SettingsGroup("认证与备份", "导入或加密备份网盘登录信息") {
+                SettingsItem(Icons.Outlined.Backup, "导出网盘认证", "使用口令加密后导出", {})
+                SettingsDivider()
+                SettingsItem(Icons.Outlined.Restore, "导入网盘认证", "恢复网盘登录", {})
+            }
+        }
+        item {
+            SettingsGroup("帮助与反馈", "公告、日志与问题排查") {
+                SettingsItem(Icons.Outlined.Campaign, "公告与社区", "维护公告与交流反馈入口", {})
+                SettingsDivider()
+                SettingsItem(Icons.AutoMirrored.Outlined.ReceiptLong, "实时日志", "按级别过滤并查看最近记录", {})
+                SettingsDivider()
+                SettingsItem(Icons.AutoMirrored.Outlined.Article, "导出日志", "分享或保存诊断信息", {})
+            }
+        }
+        item {
+            SettingsGroup("关于与更新", "版本信息与项目支持") {
+                SettingsItem(Icons.Outlined.SystemUpdate, "检查更新", "检查 GitHub 新版本", {})
+                SettingsDivider()
+                SettingsItem(Icons.Outlined.Info, "关于云取", "版本、支持平台与技术说明", {})
+                SettingsDivider()
+                SettingsItem(Icons.Outlined.VolunteerActivism, "支持开发", "微信 / 支付宝扫码支持维护", {})
+            }
+        }
     }
 }
 
@@ -1831,17 +1964,17 @@ private fun DohLatencyPanel() {
             ) {
                 Text(
                     text = if (isBest) "✔ " else "   ",
-                    style = MaterialTheme.typography.bodySmall,
+                    style = MaterialTheme.typography.bodyMedium,
                     color = MaterialTheme.colorScheme.primary
                 )
                 Text(
                     text = label,
-                    style = MaterialTheme.typography.bodySmall,
+                    style = MaterialTheme.typography.bodyMedium,
                     modifier = Modifier.weight(1f)
                 )
                 Text(
                     text = if (ms < 0) "不可用" else "${ms}ms",
-                    style = MaterialTheme.typography.bodySmall,
+                    style = MaterialTheme.typography.bodyMedium,
                     color = when {
                         ms < 0 -> MaterialTheme.colorScheme.error
                         isBest -> MaterialTheme.colorScheme.primary

@@ -2,7 +2,6 @@ package com.yunget.app.ui
 
 import androidx.compose.animation.AnimatedContent
 import androidx.compose.animation.AnimatedVisibility
-import androidx.compose.animation.core.tween
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.animation.fadeIn
@@ -17,19 +16,26 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.ui.unit.dp
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.RowScope
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.padding
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.outlined.Bookmarks
 import androidx.compose.material3.LargeTopAppBar
+import androidx.compose.material3.TopAppBar
+import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.size
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.NavigationBar
 import androidx.compose.material3.NavigationBarItem
+import androidx.compose.material3.NavigationBarItemDefaults
 import androidx.compose.material3.NavigationRail
 import androidx.compose.material3.NavigationRailItem
+import androidx.compose.material3.NavigationRailItemDefaults
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.SnackbarHost
 import androidx.compose.material3.Text
@@ -51,7 +57,6 @@ import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.lifecycle.viewmodel.compose.viewModel
-import android.content.res.Configuration
 import android.Manifest
 import android.content.Context
 import android.content.Intent
@@ -68,6 +73,8 @@ import com.yunget.app.ui.theme.spatialDefault
 import com.yunget.app.ui.theme.spatialFast
 import com.yunget.app.ui.theme.effectsDefault
 import com.yunget.app.ui.theme.effectsFast
+import com.yunget.app.ui.theme.AppUiStyle
+import com.yunget.app.ui.theme.LocalAppUiStyle
 import com.yunget.app.data.db.AppDatabase
 import com.yunget.app.data.db.DownloadTaskEntity
 import com.yunget.app.data.download.DownloadManager
@@ -116,6 +123,8 @@ import com.yunget.app.ui.login.UCLoginScreen
 import com.yunget.app.ui.login.XunleiLoginScreen
 import com.yunget.app.ui.login.XunleiVerifyWebViewScreen
 import com.yunget.app.ui.navigation.MainTab
+import com.yunget.app.ui.navigation.usesNavigationRail
+import com.yunget.app.ui.theme.motionTween
 import com.yunget.app.ui.screens.AboutScreen
 import com.yunget.app.ui.screens.DownloadScreen
 import com.yunget.app.ui.screens.DriveScreen
@@ -208,7 +217,8 @@ fun MainScreen(
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
     // 横屏时使用侧边导航栏（NavigationRail），竖屏保持底部导航栏（NavigationBar）
-    val isLandscape = LocalConfiguration.current.orientation == Configuration.ORIENTATION_LANDSCAPE
+    val configuration = LocalConfiguration.current
+    val useNavigationRail = usesNavigationRail(configuration.screenWidthDp, configuration.screenHeightDp)
     // 首次启动引导页（context 声明后检测）
     var showOnboarding by remember { mutableStateOf(false) }
     LaunchedEffect(Unit) {
@@ -832,28 +842,7 @@ fun MainScreen(
     Box(modifier = Modifier.fillMaxSize()) {
     // 顶部可折叠大标题（竖屏 / 横屏共用）
     val topBarContent: @Composable () -> Unit = {
-        LargeTopAppBar(
-            title = {
-                Text(
-                    text = currentTab.title,
-                    style = MaterialTheme.typography.headlineMedium,
-                    fontWeight = FontWeight.SemiBold
-                )
-            },
-            actions = {
-                // 解析页标题右上角：收藏网盘链接入口
-                if (currentTab == MainTab.Resolve) {
-                    IconButton(onClick = { showBookmarks = true }) {
-                        Icon(Icons.Outlined.Bookmarks, contentDescription = "收藏网盘链接")
-                    }
-                }
-            },
-            scrollBehavior = scrollBehavior,
-            colors = TopAppBarDefaults.largeTopAppBarColors(
-                containerColor = MaterialTheme.colorScheme.surface,
-                scrolledContainerColor = MaterialTheme.colorScheme.surface
-            )
-        )
+        MainAppBar(currentTab, scrollBehavior) { showBookmarks = true }
     }
     // Tab 内容区（竖屏 / 横屏共用）：每个页面独立保存状态，切换 Tab 再切回来不丢失；带 Material3 过渡动画（按 Tab 顺序决定方向）
     val tabContent: @Composable () -> Unit = {
@@ -863,11 +852,11 @@ fun MainScreen(
                 // 根据 Tab 顺序决定滑动方向：向右切（新Tab在右边）→ 新页从右滑入；向左切反向
                 val forward = targetState.ordinal > initialState.ordinal
                 if (forward) {
-                    (fadeIn(effectsDefault()) + slideInHorizontally(spatialDefault()) { it / 4 })
-                        .togetherWith(fadeOut(effectsFast()) + slideOutHorizontally(spatialFast()) { -it / 4 })
+                    (fadeIn(effectsDefault()) + slideInHorizontally(spatialDefault()) { it / 12 })
+                        .togetherWith(fadeOut(effectsFast()) + slideOutHorizontally(spatialFast()) { -it / 12 })
                 } else {
-                    (fadeIn(effectsDefault()) + slideInHorizontally(spatialDefault()) { -it / 4 })
-                        .togetherWith(fadeOut(effectsFast()) + slideOutHorizontally(spatialFast()) { it / 4 })
+                    (fadeIn(effectsDefault()) + slideInHorizontally(spatialDefault()) { -it / 12 })
+                        .togetherWith(fadeOut(effectsFast()) + slideOutHorizontally(spatialFast()) { it / 12 })
                 }
             },
             label = "mainTab"
@@ -981,7 +970,7 @@ fun MainScreen(
         }
     }
 
-    if (isLandscape) {
+    if (useNavigationRail) {
         // 横屏：左侧侧边导航栏（NavigationRail）+ 右侧顶栏 & 内容
         Box(
             modifier = Modifier
@@ -1041,8 +1030,8 @@ fun MainScreen(
     // 关于云取：叠加覆盖层（淡入 + 轻微缩放过渡）
     AnimatedVisibility(
         visible = showAbout,
-        enter = fadeIn(effectsDefault()) + scaleIn(tween(220), initialScale = 0.96f),
-        exit = fadeOut(effectsFast()) + scaleOut(tween(160), targetScale = 0.96f),
+        enter = fadeIn(effectsDefault()) + scaleIn(motionTween(220), initialScale = 0.96f),
+        exit = fadeOut(effectsFast()) + scaleOut(motionTween(160), targetScale = 0.96f),
         modifier = Modifier.fillMaxSize()
     ) {
         AboutScreen(
@@ -1062,8 +1051,8 @@ fun MainScreen(
     // 实时日志：叠加覆盖层，与其它设置子页同一套过渡
     AnimatedVisibility(
         visible = showLogViewer,
-        enter = fadeIn(effectsDefault()) + scaleIn(tween(220), initialScale = 0.96f),
-        exit = fadeOut(effectsFast()) + scaleOut(tween(160), targetScale = 0.96f),
+        enter = fadeIn(effectsDefault()) + scaleIn(motionTween(220), initialScale = 0.96f),
+        exit = fadeOut(effectsFast()) + scaleOut(motionTween(160), targetScale = 0.96f),
         modifier = Modifier.fillMaxSize()
     ) {
         LogViewerScreen(onBack = { showLogViewer = false })
@@ -1072,8 +1061,8 @@ fun MainScreen(
     // 账号管理（全平台多账号）
     AnimatedVisibility(
         visible = showAccountManager,
-        enter = fadeIn(effectsDefault()) + scaleIn(tween(220), initialScale = 0.96f),
-        exit = fadeOut(effectsFast()) + scaleOut(tween(160), targetScale = 0.96f),
+        enter = fadeIn(effectsDefault()) + scaleIn(motionTween(220), initialScale = 0.96f),
+        exit = fadeOut(effectsFast()) + scaleOut(motionTween(160), targetScale = 0.96f),
         modifier = Modifier.fillMaxSize()
     ) {
         // 平台 id 与显示名：顺序按"常用程度"排，与网盘页一致。
@@ -1175,8 +1164,8 @@ fun MainScreen(
     // 公告与社区
     AnimatedVisibility(
         visible = showAnnouncement,
-        enter = fadeIn(effectsDefault()) + scaleIn(tween(220), initialScale = 0.96f),
-        exit = fadeOut(effectsFast()) + scaleOut(tween(160), targetScale = 0.96f),
+        enter = fadeIn(effectsDefault()) + scaleIn(motionTween(220), initialScale = 0.96f),
+        exit = fadeOut(effectsFast()) + scaleOut(motionTween(160), targetScale = 0.96f),
         modifier = Modifier.fillMaxSize()
     ) {
         com.yunget.app.ui.screens.AnnouncementScreen(
@@ -1203,8 +1192,8 @@ fun MainScreen(
 
     AnimatedVisibility(
         visible = showSupport,
-        enter = fadeIn(effectsDefault()) + scaleIn(tween(220), initialScale = 0.96f),
-        exit = fadeOut(effectsFast()) + scaleOut(tween(160), targetScale = 0.96f),
+        enter = fadeIn(effectsDefault()) + scaleIn(motionTween(220), initialScale = 0.96f),
+        exit = fadeOut(effectsFast()) + scaleOut(motionTween(160), targetScale = 0.96f),
         modifier = Modifier.fillMaxSize()
     ) {
         SupportScreen(
@@ -1215,8 +1204,8 @@ fun MainScreen(
     // 主题与外观：叠加覆盖层（淡入 + 轻微缩放过渡）
     AnimatedVisibility(
         visible = showTheme,
-        enter = fadeIn(effectsDefault()) + scaleIn(tween(220), initialScale = 0.96f),
-        exit = fadeOut(effectsFast()) + scaleOut(tween(160), targetScale = 0.96f),
+        enter = fadeIn(effectsDefault()) + scaleIn(motionTween(220), initialScale = 0.96f),
+        exit = fadeOut(effectsFast()) + scaleOut(motionTween(160), targetScale = 0.96f),
         modifier = Modifier.fillMaxSize()
     ) {
         ThemeScreen(
@@ -1227,8 +1216,8 @@ fun MainScreen(
     // 网盘链接收藏：叠加覆盖层。选中条目后关闭本层并跳到解析页开始解析。
     AnimatedVisibility(
         visible = showBookmarks,
-        enter = fadeIn(effectsDefault()) + scaleIn(tween(220), initialScale = 0.96f),
-        exit = fadeOut(effectsFast()) + scaleOut(tween(160), targetScale = 0.96f),
+        enter = fadeIn(effectsDefault()) + scaleIn(motionTween(220), initialScale = 0.96f),
+        exit = fadeOut(effectsFast()) + scaleOut(motionTween(160), targetScale = 0.96f),
         modifier = Modifier.fillMaxSize()
     ) {
         BookmarkScreen(
@@ -1340,15 +1329,71 @@ fun MainScreen(
     }
 }
 
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+internal fun MainAppBar(
+    tab: MainTab,
+    scrollBehavior: androidx.compose.material3.TopAppBarScrollBehavior? = null,
+    onBookmarks: () -> Unit = {},
+) {
+    val title = if (tab == MainTab.Resolve) "云取" else tab.title
+    val actions: @Composable RowScope.() -> Unit = {
+        if (tab == MainTab.Resolve) {
+            androidx.compose.material3.FilledTonalIconButton(onClick = onBookmarks) {
+                Icon(Icons.Outlined.Bookmarks, contentDescription = "收藏网盘链接")
+            }
+            Spacer(Modifier.size(12.dp))
+        }
+    }
+    if (LocalAppUiStyle.current == AppUiStyle.CLASSIC) {
+        LargeTopAppBar(
+            title = {
+                Text(
+                    text = title,
+                    style = MaterialTheme.typography.headlineMedium,
+                    fontWeight = FontWeight.SemiBold,
+                )
+            },
+            actions = actions,
+            scrollBehavior = scrollBehavior,
+            colors = TopAppBarDefaults.topAppBarColors(
+                containerColor = MaterialTheme.colorScheme.background,
+                scrolledContainerColor = MaterialTheme.colorScheme.background,
+            ),
+        )
+    } else {
+        TopAppBar(
+            title = {
+                Text(
+                    text = title,
+                    style = MaterialTheme.typography.titleLarge,
+                    fontWeight = FontWeight.SemiBold,
+                )
+            },
+            actions = actions,
+            scrollBehavior = scrollBehavior,
+            colors = TopAppBarDefaults.topAppBarColors(
+                containerColor = MaterialTheme.colorScheme.background,
+                scrolledContainerColor = MaterialTheme.colorScheme.background,
+            ),
+        )
+    }
+}
+
 /**
  * 底部导航栏（竖屏）：4 个主 Tab（解析 / 网盘 / 下载 / 设置）。
  */
 @Composable
-private fun MainBottomBar(
+internal fun MainBottomBar(
     currentTab: MainTab,
     onTabSelected: (MainTab) -> Unit
 ) {
-    NavigationBar {
+    val classic = LocalAppUiStyle.current == AppUiStyle.CLASSIC
+    NavigationBar(
+        containerColor = if (classic) MaterialTheme.colorScheme.surface
+        else MaterialTheme.colorScheme.surfaceContainerLow,
+        tonalElevation = 0.dp,
+    ) {
         MainTab.values().forEach { tab ->
             val iconScale by animateFloatAsState(
                 targetValue = if (currentTab == tab) 1.08f else 1f,
@@ -1364,7 +1409,15 @@ private fun MainBottomBar(
                         modifier = Modifier.graphicsLayer { scaleX = iconScale; scaleY = iconScale },
                     )
                 },
-                label = { Text(tab.title) }
+                label = { Text(tab.title) },
+                colors = if (classic) NavigationBarItemDefaults.colors()
+                else NavigationBarItemDefaults.colors(
+                    selectedIconColor = MaterialTheme.colorScheme.primary,
+                    selectedTextColor = MaterialTheme.colorScheme.primary,
+                    indicatorColor = MaterialTheme.colorScheme.primaryContainer,
+                    unselectedIconColor = MaterialTheme.colorScheme.onSurfaceVariant,
+                    unselectedTextColor = MaterialTheme.colorScheme.onSurfaceVariant,
+                ),
             )
         }
     }
@@ -1374,11 +1427,16 @@ private fun MainBottomBar(
  * 侧边导航栏（横屏）：同 4 个主 Tab，未选中项只显示图标，节省横向空间。
  */
 @Composable
-private fun MainNavigationRail(
+internal fun MainNavigationRail(
     currentTab: MainTab,
     onTabSelected: (MainTab) -> Unit
 ) {
-    NavigationRail {
+    val classic = LocalAppUiStyle.current == AppUiStyle.CLASSIC
+    NavigationRail(
+        containerColor = if (classic) MaterialTheme.colorScheme.surface
+        else MaterialTheme.colorScheme.surfaceContainerLow,
+        modifier = Modifier.fillMaxHeight(),
+    ) {
         MainTab.values().forEach { tab ->
             val iconScale by animateFloatAsState(
                 targetValue = if (currentTab == tab) 1.08f else 1f,
@@ -1395,7 +1453,15 @@ private fun MainNavigationRail(
                     )
                 },
                 label = { Text(tab.title) },
-                alwaysShowLabel = currentTab == tab
+                alwaysShowLabel = true,
+                colors = if (classic) NavigationRailItemDefaults.colors()
+                else NavigationRailItemDefaults.colors(
+                    selectedIconColor = MaterialTheme.colorScheme.primary,
+                    selectedTextColor = MaterialTheme.colorScheme.primary,
+                    indicatorColor = MaterialTheme.colorScheme.primaryContainer,
+                    unselectedIconColor = MaterialTheme.colorScheme.onSurfaceVariant,
+                    unselectedTextColor = MaterialTheme.colorScheme.onSurfaceVariant,
+                ),
             )
         }
     }

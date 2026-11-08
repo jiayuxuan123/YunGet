@@ -32,12 +32,27 @@ import com.yunget.app.data.prefs.SettingsRepository
  */
 object ThemeController {
 
+    var autoUiDensity by mutableStateOf(true)
+        private set
+    var uiFontScale by mutableStateOf(1f)
+        private set
+    var uiSpacingScale by mutableStateOf(0.95f)
+        private set
+
+    /** 0 = Expressive, 1 = standard, 2 = no custom motion. */
+    var motionLevel by mutableStateOf(0)
+        private set
+
+    /** 0=经典界面，1=新版分组界面。 */
+    var uiStyleMode by mutableStateOf(1)
+        private set
+
     /** 深色模式：0=跟随系统，1=浅色，2=深色 */
     var darkMode by mutableStateOf(0)
         private set
 
     /** 主题色模式：0=动态色彩，1=默认蓝色，2=自定义种子色 */
-    var colorMode by mutableStateOf(0)
+    var colorMode by mutableStateOf(1)
         private set
 
     /** 自定义主题种子色（ARGB） */
@@ -87,6 +102,13 @@ object ThemeController {
         acceptPrereleaseUpdate = s.acceptPrereleaseUpdate
         downloadDebug = s.downloadDebug
         contrastLevel = s.contrastLevel
+        uiStyleMode = s.uiStyleMode.coerceIn(0, 1)
+        motionLevel = context.getSharedPreferences("yunget_prefs", Context.MODE_PRIVATE)
+            .getInt("ui_motion_level", 0).coerceIn(0, 2)
+        val prefs = context.getSharedPreferences("yunget_prefs", Context.MODE_PRIVATE)
+        autoUiDensity = prefs.getBoolean("ui_density_auto", true)
+        uiFontScale = prefs.getFloat("ui_font_scale", 1f).coerceIn(0.85f, 1.10f)
+        uiSpacingScale = prefs.getFloat("ui_spacing_scale", 0.95f).coerceIn(0.85f, 1.15f)
         initialized = true
     }
 
@@ -94,6 +116,11 @@ object ThemeController {
     fun setDarkMode(context: Context, value: Int) {
         darkMode = value.coerceIn(0, 2)
         SettingsRepository(context).darkMode = darkMode
+    }
+
+    fun setUiStyleMode(context: Context, value: Int) {
+        uiStyleMode = value.coerceIn(0, 1)
+        SettingsRepository(context).uiStyleMode = uiStyleMode
     }
 
     /** 设置主题色模式并持久化（0=动态 / 1=默认 / 2=自定义） */
@@ -142,5 +169,29 @@ object ThemeController {
     fun setContrastLevel(context: Context, value: Int) {
         contrastLevel = value.coerceIn(0, 2)
         SettingsRepository(context).contrastLevel = contrastLevel
+    }
+
+    fun setMotionLevel(context: Context, value: Int) {
+        motionLevel = value.coerceIn(0, 2)
+        context.getSharedPreferences("yunget_prefs", Context.MODE_PRIVATE)
+            .edit().putInt("ui_motion_level", motionLevel).apply()
+    }
+
+    fun setAutoUiDensity(context: Context, value: Boolean) {
+        autoUiDensity = value
+        context.getSharedPreferences("yunget_prefs", Context.MODE_PRIVATE)
+            .edit().putBoolean("ui_density_auto", value).apply()
+    }
+
+    fun setUiFontScale(context: Context, value: Float) {
+        uiFontScale = value.coerceIn(0.85f, 1.10f)
+        context.getSharedPreferences("yunget_prefs", Context.MODE_PRIVATE)
+            .edit().putFloat("ui_font_scale", uiFontScale).apply()
+    }
+
+    fun setUiSpacingScale(context: Context, value: Float) {
+        uiSpacingScale = value.coerceIn(0.85f, 1.15f)
+        context.getSharedPreferences("yunget_prefs", Context.MODE_PRIVATE)
+            .edit().putFloat("ui_spacing_scale", uiSpacingScale).apply()
     }
 }

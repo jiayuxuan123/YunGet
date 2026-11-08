@@ -20,6 +20,8 @@
 package com.yunget.app.ui.components
 
 import androidx.compose.foundation.basicMarquee
+import androidx.compose.foundation.MarqueeAnimationMode
+import androidx.compose.foundation.focusable
 import androidx.compose.material3.LocalTextStyle
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -36,7 +38,7 @@ private const val FILE_NAME_MAX_LINES = 3
 
 /**
  * 文件名文本：跟随「主题与外观 → 文件名显示」设置。
- * - 跑马灯模式（默认）：单行 + 循环滚动，与改动前的观感一致；
+ * - 跑马灯模式（默认）：单行，获得焦点时滚动；静止列表不持续重绘；
  * - 多行模式：最多 [maxLines] 行折行显示，仍放不下才用省略号截断。
  *
  * 展示文件名的地方统一用它（解析页 / 七个网盘页 / 转存另存弹窗 / 下载列表 / 主页快捷方式），
@@ -70,7 +72,9 @@ fun FileNameText(
         // basicMarquee 只在单行（maxLines = 1）且内容溢出时滚动
         Text(
             text = text,
-            modifier = modifier.basicMarquee(iterations = Int.MAX_VALUE),
+            modifier = if (ThemeController.motionLevel == 2) modifier else modifier
+                .basicMarquee(animationMode = MarqueeAnimationMode.WhileFocused)
+                .focusable(),
             style = style,
             color = color,
             fontWeight = fontWeight,

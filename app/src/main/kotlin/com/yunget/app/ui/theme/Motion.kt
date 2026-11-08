@@ -19,6 +19,10 @@
 package com.yunget.app.ui.theme
 
 import androidx.compose.animation.core.FiniteAnimationSpec
+import androidx.compose.animation.core.Easing
+import androidx.compose.animation.core.FastOutSlowInEasing
+import androidx.compose.animation.core.snap
+import androidx.compose.animation.core.tween
 
 /**
  * 全项目动效规格（Material 3 Expressive 弹簧）：位移/尺寸用 spatial，透明度/颜色用 effects。
@@ -47,3 +51,11 @@ fun <T> effectsDefault(): FiniteAnimationSpec<T> = AppMotionScheme.defaultEffect
 
 /** 透明度/颜色的快速规格（退出、小范围变化） */
 fun <T> effectsFast(): FiniteAnimationSpec<T> = AppMotionScheme.fastEffectsSpec()
+
+/** Explicit transitions use the same user preference as Material components. */
+fun <T> motionTween(
+    durationMillis: Int,
+    delayMillis: Int = 0,
+    easing: Easing = FastOutSlowInEasing,
+): FiniteAnimationSpec<T> = if (ThemeController.motionLevel == 2) snap()
+    else tween(durationMillis, delayMillis, easing)
