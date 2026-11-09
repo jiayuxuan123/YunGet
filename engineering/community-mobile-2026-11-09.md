@@ -42,3 +42,12 @@
 采用 Astryx 的 ChatLayout、消息列表与输入栏分离、控件触控范围及分组经验，保留轻量原生网页实现。社区的实际令牌与结构记录在 `community/DESIGN.md`，独立于官网营销视觉规范。
 
 Turnstile 尺寸与生命周期按[官方配置说明](https://developers.cloudflare.com/turnstile/get-started/client-side-rendering/widget-configurations/)和[显式渲染说明](https://developers.cloudflare.com/turnstile/get-started/client-side-rendering/)核对。
+
+## Turnstile 加载修复
+
+用户报告异步脚本配合 `turnstile.ready()` 的错误。新增测试在旧实现上可复现，再改为官方 `onload` 回调触发显式渲染；加载期间多次点击重新验证时只渲染最后一次，移除的控件回调不能覆盖新 token。
+
+- 全部社区测试 15 项通过，包括 5 个加载/重试生命周期回归。
+- 公网 390px 检查连续点击「重新验证」：SDK 脚本 1 个、控件 1 个，`Remove async/defer` 与重复渲染警告均为 0；没有代替用户完成人机验证。
+- 新 JS 资源版本 `20261109-turnstile3`。
+- 修复部署：`ec3446a4-b40c-4886-b7a9-08a913d8606a`。

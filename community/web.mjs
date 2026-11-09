@@ -12,7 +12,7 @@ export const html = String.raw`<!doctype html>
   <title>云取社区</title>
   <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='9' fill='%23275fba'/%3E%3Cpath d='M9 13h14M8 17h16M12 21h8' stroke='white' stroke-width='2.5' stroke-linecap='round'/%3E%3C/svg%3E">
   <link rel="stylesheet" href="/app.css?v=20261109-mobile2">
-  <script type="module" src="/app.js?v=20261109-mobile2"></script>
+  <script type="module" src="/app.js?v=20261109-turnstile3"></script>
 </head>
 <body>
   <a class="skip-link" href="#app">跳到内容</a>

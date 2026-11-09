@@ -23,7 +23,7 @@ let writes = [];
 const announcements = [{id: 'local-announcement', title: '2.7.28：经典界面恢复与新版细化（示例）',
   body: '本地预览，非正式公告。\n\n- 经典界面和新版界面均可使用。\n- 字号与间距可以在主题页调整。\n- 反馈可以查看处理状态。\n\n[查看云取官网](https://yunget.yunl.us.ci/)\n\n' + '较长公告的正文应自然换行，所有内容都能滚动到达。\n'.repeat(12),
   date: '2026-11-09', pinned: true, important: true, published: true}];
-const turnstileStub = 'window.turnstile={ready:fn=>fn(),render:(node,opts)=>{node.textContent="本地验证控件（测试）";setTimeout(()=>opts.callback("local-fixture-token"),20);return "local-widget";},remove:()=>{},reset:()=>{}};';
+const turnstileStub = 'window.turnstile={render:(node,opts)=>{node.textContent="本地验证控件（测试）";setTimeout(()=>opts.callback("local-fixture-token"),20);return "local-widget";},remove:()=>{},reset:()=>{}};const callback=new URL(document.currentScript.src).searchParams.get("onload");if(callback)window[callback]();';
 
 const server = http.createServer(async (request, response) => {
   const url = new URL(request.url, 'http://127.0.0.1');

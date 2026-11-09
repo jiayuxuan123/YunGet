@@ -3,7 +3,7 @@ export const script = String.raw`const state = {
   feedback: [], page: 0, more: false, feedbackBusy: false, feedbackDraft: {},
   chat: [], chatBusy: false, chatDraft: '', unread: 0, chatTimer: null, chatFollow: true, resizingChat: false,
   replyDrafts: new Map(), announcements: [], adminAnnouncements: [], announcementDraft: null,
-  modalRevision: 0, modalBack: null, widget: null, challenge: null, theme: 'system',
+  modalRevision: 0, modalBack: null, widget: null, challenge: null, challengeRevision: 0, theme: 'system',
 };
 const app = document.getElementById('app');
 const modal = document.getElementById('modal');
@@ -56,43 +56,47 @@ function showFormError(form, error) {
   target.scrollIntoView({block:'nearest'});
 }
 function clearChallenge() {
+  state.challengeRevision++;
   if (state.widget!==null && window.turnstile) { try { window.turnstile.remove(state.widget); } catch {} }
   state.widget=null; state.challenge=null;
 }
 let challengeLibrary;
+let challengeLibraryAttempt=0;
 function loadChallengeLibrary() {
-  if (window.turnstile) return Promise.resolve();
   if (challengeLibrary) return challengeLibrary;
   challengeLibrary=new Promise((resolve,reject)=>{
     const tag=document.createElement('script');
-    const timer=setTimeout(()=>{tag.remove(); challengeLibrary=null; reject(new Error('验证服务加载超时，请点击重试'));},12000);
-    tag.src='https://challenges.cloudflare.com/turnstile/v0/api.js?render=explicit'; tag.async=true;
-    tag.onload=()=>{clearTimeout(timer); resolve();};
-    tag.onerror=()=>{clearTimeout(timer); tag.remove(); challengeLibrary=null; reject(new Error('验证服务未连接，请检查网络后重试'));};
+    const callback='yungetTurnstileLoaded'+(++challengeLibraryAttempt);
+    let settled=false;
+    const cleanup=()=>{clearTimeout(timer);delete window[callback];};
+    const failed=message=>{if(settled)return;settled=true;cleanup();tag.remove();challengeLibrary=null;reject(new Error(message));};
+    const timer=setTimeout(()=>failed('验证服务加载超时，请点击重试'),12000);
+    // The SDK's onload parameter signals API readiness for async loading.
+    window[callback]=()=>{if(settled)return;settled=true;cleanup();resolve();};
+    tag.src='https://challenges.cloudflare.com/turnstile/v0/api.js?render=explicit&onload='+callback; tag.async=true;
+    tag.onerror=()=>failed('验证服务未连接，请检查网络后重试');
     document.head.append(tag);
   });
   return challengeLibrary;
 }
 async function mountChallenge() {
-  clearChallenge(); const revision=state.modalRevision;
+  clearChallenge(); const revision=state.modalRevision;const attempt=state.challengeRevision;
   const target=modal.querySelector('.turnstile-wrap'); const note=modal.querySelector('.turnstile-status');
   if (!target) return;
-  const report=message=>{if(note && revision===state.modalRevision)note.textContent=message;};
+  const current=()=>revision===state.modalRevision && attempt===state.challengeRevision && modal.open && target.isConnected;
+  const report=message=>{if(note && current())note.textContent=message;};
   if (!state.config?.sitekey) { report('验证服务暂不可用，请稍后重试'); return; }
   report('正在连接验证服务…');
   try {
     await loadChallengeLibrary();
-    if (revision!==state.modalRevision || !modal.open || !target.isConnected) return;
-    window.turnstile.ready(()=>{
-      if(revision!==state.modalRevision || !target.isConnected)return;
-      state.widget=window.turnstile.render(target, {
-        sitekey:state.config.sitekey, action:'community_write', theme:state.theme==='system'?'auto':state.theme,
-        size:target.clientWidth<300?'compact':'flexible',
-        callback:token=>{if(revision===state.modalRevision){state.challenge=token;report('验证通过，可以提交');}},
-        'expired-callback':()=>{if(revision===state.modalRevision){state.challenge=null;report('验证已过期，请重新验证');}},
-        'error-callback':()=>{if(revision===state.modalRevision){state.challenge=null;report('验证未完成，可点击“重新验证”重试');}},
-      });
-      report('请完成人机验证');
+    if (!current()) return;
+    report('请完成人机验证');
+    state.widget=window.turnstile.render(target, {
+      sitekey:state.config.sitekey, action:'community_write', theme:state.theme==='system'?'auto':state.theme,
+      size:target.clientWidth<300?'compact':'flexible',
+      callback:token=>{if(current()){state.challenge=token;report('验证通过，可以提交');}},
+      'expired-callback':()=>{if(current()){state.challenge=null;report('验证已过期，请重新验证');}},
+      'error-callback':()=>{if(current()){state.challenge=null;report('验证未完成，可点击“重新验证”重试');}},
     });
   } catch(error) { report(error.message); }
 }
