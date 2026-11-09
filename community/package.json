@@ -3,7 +3,7 @@
   "private": true,
   "type": "module",
   "scripts": {
-    "check": "node --check worker.mjs && node --check auth.mjs && node --check web.mjs",
+    "check": "node --check worker.mjs && node --check auth.mjs && node --check web.mjs && node --check style.mjs && node --check client.mjs",
     "test": "node --test test/*.test.mjs"
   }
 }

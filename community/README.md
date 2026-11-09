@@ -7,6 +7,15 @@
 - `/api/announcements`：应用内公告读取接口。
 - D1 `DB` 保存公告、反馈、回复、闲聊、匿名会话和限流记录。
 
+## 手机界面
+
+- `web.mjs` 为文档壳，`style.mjs` 与 `client.mjs` 分别维护样式与交互。
+- 反馈首页先展示列表；写反馈、昵称验证与回复使用可滚动原生 dialog，草稿在本次页面会话保留。
+- 闲聊使用独立消息滚动区，输入栏在正常布局中占位；适配 Visual Viewport、键盘高度、旋转与安全区。
+- 消息增量刷新，不重建输入框；阅读历史时提示新消息，手动点击才跳到底部。
+- 浅色、深色和跟随系统三档主题；遵守系统减少动态效果设置。
+- 本次是网页更新，云取 2.7.28 内的原社区入口刷新后即可使用。
+
 ## 安全边界
 
 - 普通用户没有密码；设置昵称时获得 30 天随机会话，网页端使用 `HttpOnly; Secure; SameSite=Lax` Cookie。
@@ -20,8 +29,11 @@
 
 ```powershell
 cd community
+npm run check
 npm test
-npx wrangler deploy --dry-run
+npx --yes wrangler@4.158.0 deploy --dry-run
 ```
+
+浏览器回归：先运行 `node test/preview-server.mjs`，用 Playwright CLI 的 `run-code` 执行 `test/mobile-browser-check.mjs` 内容。该脚本只访问 `127.0.0.1:8801`，使用示例数据与本地验证码替身，绝不写入正式社区。覆盖窄屏、键盘视口、增量刷新、草稿、重试和开发者表单。
 
 `TURNSTILE_SECRET` 只通过 Worker secret 写入，不提交。`wrangler.jsonc` 中的资源 ID、Access audience 和公开 site key 由部署脚本写入。

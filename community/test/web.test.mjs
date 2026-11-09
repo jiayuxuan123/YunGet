@@ -1,0 +1,21 @@
+import assert from 'node:assert/strict';
+import vm from 'node:vm';
+import test from 'node:test';
+import {script} from '../web.mjs';
+
+test('the served browser module parses independently of its string wrapper', () => {
+  assert.doesNotThrow(() => new vm.Script(script));
+});
+
+test('untrusted content remains escaped in feedback, chat and announcement links', () => {
+  // Exercise the same encoder/link formatter that is shipped to the browser.
+  const declarations = script.slice(script.indexOf('const esc ='), script.indexOf('const icon ='))
+    + script.slice(script.indexOf('function announcementText('), script.indexOf('async function loadAnnouncements('));
+  const context = vm.createContext({});
+  vm.runInContext(declarations + ';globalThis.encode=esc;globalThis.format=announcementText;', context);
+  assert.equal(context.encode('<img src=x onerror="alert(1)">'), '&lt;img src=x onerror=&quot;alert(1)&quot;&gt;');
+  const formatted = context.format('[unsafe](javascript:alert(1))\n[官网](https://example.com/)\n<script>alert(1)</script>');
+  assert.ok(!formatted.includes('href="javascript:'));
+  assert.ok(!formatted.includes('<script>'));
+  assert.match(formatted, /href="https:\/\/example.com\/"/);
+});

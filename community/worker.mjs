@@ -166,7 +166,7 @@ export function createHandler({fetchRemote = fetch, verifyAdmin = createAdminVer
         if (!row || (!admin && (row.hidden || (row.private && row.author_id !== owner?.id_hash)))) fail(404, '反馈不存在或不可见');
         if (request.method === 'GET' && !threadMatch[2]) {
           const {results} = await env.DB.prepare('SELECT id,nickname,developer,body,created_at FROM replies WHERE feedback_id=? AND hidden=0 ORDER BY created_at,id LIMIT 200').bind(id).all();
-          return secureResponse({item: publicFeedback(row, owner), replies: results.map(reply => ({...reply, developer: Boolean(reply.developer)}))});
+          return secureResponse({item: {...publicFeedback(row, owner), ...(admin ? {hidden: Boolean(row.hidden)} : {})}, replies: results.map(reply => ({...reply, developer: Boolean(reply.developer)}))});
         }
         if (request.method === 'POST' && threadMatch[2]) {
           if (!owner && !admin) fail(401, '请先设置昵称');
