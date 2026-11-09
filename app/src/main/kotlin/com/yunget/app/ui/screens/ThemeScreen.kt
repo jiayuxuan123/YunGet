@@ -9,7 +9,6 @@ import android.content.ComponentName
 import android.content.pm.PackageManager
 import android.os.Build
 import androidx.activity.compose.BackHandler
-import androidx.compose.animation.animateColorAsState
 import androidx.compose.animation.core.FiniteAnimationSpec
 import androidx.compose.animation.core.animateDpAsState
 import androidx.compose.animation.core.snap
@@ -17,7 +16,6 @@ import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
-import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.ColumnScope
 import androidx.compose.foundation.layout.ExperimentalLayoutApi
@@ -37,6 +35,7 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.selection.selectable
 import androidx.compose.foundation.selection.selectableGroup
+import androidx.compose.foundation.selection.toggleable
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.KeyboardOptions
@@ -48,8 +47,6 @@ import androidx.compose.material.icons.outlined.CloudDownload
 import androidx.compose.material.icons.outlined.Palette
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
-import androidx.compose.material3.Card
-import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.FilledTonalButton
 import androidx.compose.material3.HorizontalDivider
@@ -59,9 +56,6 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.RadioButton
 import androidx.compose.material3.Scaffold
-import androidx.compose.material3.SegmentedButton
-import androidx.compose.material3.SegmentedButtonDefaults
-import androidx.compose.material3.SingleChoiceSegmentedButtonRow
 import androidx.compose.material3.Slider
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Switch
@@ -86,7 +80,6 @@ import androidx.compose.ui.input.nestedscroll.nestedScroll
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalConfiguration
-import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.text.font.FontWeight
@@ -98,13 +91,13 @@ import com.yunget.app.data.prefs.SettingsRepository
 import com.yunget.app.ui.theme.ThemeController
 import com.yunget.app.ui.theme.LocalUiMetrics
 import com.yunget.app.ui.theme.autoUiDensity
-import com.yunget.app.ui.theme.effectsDefault
 import com.yunget.app.ui.theme.spatialDefault
+import com.yunget.app.ui.components.AppChoiceGroup
 import java.util.Locale
 
 /** 种子色仅用于选色样本，页面本身使用 Material 语义颜色。 */
 private val presetColors = listOf(
-    "蓝色" to 0xFF415F91L, "靛蓝" to 0xFF3F51B5L, "紫色" to 0xFF6750A4L,
+    "云取蓝" to 0xFF2B62ADL, "靛蓝" to 0xFF3F51B5L, "紫色" to 0xFF6750A4L,
     "玫红" to 0xFFC2185BL, "红色" to 0xFFB3261EL, "橙色" to 0xFFF4631CL,
     "金黄" to 0xFFF9A825L, "绿色" to 0xFF38761DL, "青色" to 0xFF00897BL, "天蓝" to 0xFF0288D1L
 )
@@ -142,7 +135,7 @@ fun ThemeScreen(onBack: () -> Unit, modifier: Modifier = Modifier) {
 
     Scaffold(
         modifier = modifier.fillMaxSize().nestedScroll(scrollBehavior.nestedScrollConnection),
-        containerColor = MaterialTheme.colorScheme.surface,
+        containerColor = MaterialTheme.colorScheme.background,
         topBar = {
             TopAppBar(
                 title = { Text("主题与外观") },
@@ -165,17 +158,18 @@ fun ThemeScreen(onBack: () -> Unit, modifier: Modifier = Modifier) {
                 contentPadding = PaddingValues(start = 16.dp, end = 16.dp, top = 12.dp, bottom = 24.dp),
                 verticalArrangement = Arrangement.spacedBy(16.dp)
             ) {
-                item(key = "preview") { ThemePreview() }
                 item(key = "ui_style") {
-                    ThemePanel("界面风格", "新版分组布局与 2.7.26 经典布局可随时切换") {
+                    ThemePanel("界面风格", "经典版还原 2.7.26 的四个主页面；数据与下载引擎共用") {
                         ThemeChoices(
                             listOf("经典界面", "新版界面"),
                             if (ThemeController.uiStyleMode == 0) 0 else 1,
                         ) {
                             ThemeController.setUiStyleMode(context, it)
                         }
+                        SettingsDescriptionsToggle(horizontalPadding = 0.dp)
                     }
                 }
+                item(key = "preview") { ThemePreview() }
                 item(key = "appearance") {
                     ThemePanel("明暗外观", "跟随系统，或固定使用浅色与深色") {
                         ThemeChoices(listOf("跟随系统", "浅色", "深色"), ThemeController.darkMode) {
@@ -189,7 +183,7 @@ fun ThemeScreen(onBack: () -> Unit, modifier: Modifier = Modifier) {
                         description = when (effectiveColorMode) {
                             0 -> "动态色彩 · 从系统壁纸取色"
                             2 -> "自定义种子色 · ${colorToHex(Color(ThemeController.seedColor.toInt()))}"
-                            else -> "默认蓝色"
+                                else -> "云取蓝"
                         }
                     ) {
                         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
@@ -209,16 +203,19 @@ fun ThemeScreen(onBack: () -> Unit, modifier: Modifier = Modifier) {
                                 presetColors.forEach { (name, color) ->
                                     ColorSelectionItem(
                                         color = color, name = name,
-                                        selected = (effectiveColorMode == 1 && color == 0xFF415F91L) ||
+                                        selected = (effectiveColorMode == 1 && color == 0xFF2B62ADL) ||
                                             (effectiveColorMode == 2 && ThemeController.seedColor == color),
-                                        onClick = { ThemeController.setSeedColor(context, color) }
+                                        onClick = {
+                                            if (color == 0xFF2B62ADL) ThemeController.setColorMode(context, 1)
+                                            else ThemeController.setSeedColor(context, color)
+                                        }
                                     )
                                 }
                             }
                             FilledTonalButton(
                                 onClick = { showColorPicker = true },
                                 modifier = Modifier.fillMaxWidth().heightIn(min = 48.dp),
-                                shape = RoundedCornerShape(16.dp)
+                                shape = RoundedCornerShape(10.dp)
                             ) {
                                 Icon(Icons.Outlined.Palette, null, Modifier.size(20.dp))
                                 Spacer(Modifier.width(8.dp))
@@ -242,18 +239,8 @@ fun ThemeScreen(onBack: () -> Unit, modifier: Modifier = Modifier) {
                 }
                 item(key = "motion") {
                     ThemePanel("界面动效", "选择适合你的过渡节奏") {
-                        Column(Modifier.selectableGroup(), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                            listOf(
-                                "增强" to "丰富的弹性、形状与内容过渡 · 默认",
-                                "标准" to "简洁柔和的过渡，减少位移",
-                                "关闭" to "直接显示结果，减少界面动画"
-                            ).forEachIndexed { index, (title, description) ->
-                                ThemeChoiceRow(
-                                    title = title, description = description,
-                                    selected = ThemeController.motionLevel == index,
-                                    onClick = { ThemeController.setMotionLevel(context, index) }
-                                )
-                            }
+                        ThemeChoices(listOf("增强", "标准", "关闭"), ThemeController.motionLevel) {
+                            ThemeController.setMotionLevel(context, it)
                         }
                     }
                 }
@@ -328,33 +315,33 @@ fun ThemeScreen(onBack: () -> Unit, modifier: Modifier = Modifier) {
 
 @Composable
 private fun ThemePreview() {
-    Card(
-        modifier = Modifier.fillMaxWidth(), shape = RoundedCornerShape(24.dp),
-        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.primaryContainer)
+    Surface(
+        color = MaterialTheme.colorScheme.primaryContainer,
+        shape = RoundedCornerShape(16.dp),
     ) {
-        Column(Modifier.padding(20.dp), verticalArrangement = Arrangement.spacedBy(16.dp)) {
-            Text("主题预览", style = MaterialTheme.typography.titleMedium, color = MaterialTheme.colorScheme.onPrimaryContainer)
-            Row(verticalAlignment = Alignment.CenterVertically) {
-                Surface(shape = RoundedCornerShape(16.dp), color = MaterialTheme.colorScheme.primary) {
-                    Box(Modifier.size(48.dp), contentAlignment = Alignment.Center) {
-                        Icon(Icons.Outlined.CloudDownload, null, tint = MaterialTheme.colorScheme.onPrimary)
-                    }
-                }
-                Spacer(Modifier.width(12.dp))
-                Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(4.dp)) {
-                    Text("云端文件，轻松获取", style = MaterialTheme.typography.titleMedium, color = MaterialTheme.colorScheme.onPrimaryContainer)
-                    Text("配色与明暗设置会即时应用", style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onPrimaryContainer)
-                }
+        Row(
+            Modifier.fillMaxWidth().padding(14.dp),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(12.dp),
+        ) {
+            Surface(shape = RoundedCornerShape(8.dp), color = MaterialTheme.colorScheme.primary) {
+                Icon(Icons.Outlined.CloudDownload, null, Modifier.padding(9.dp).size(22.dp),
+                    tint = MaterialTheme.colorScheme.onPrimary)
             }
-            HorizontalDivider(color = MaterialTheme.colorScheme.onPrimaryContainer.copy(alpha = 0.16f))
-            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                Surface(shape = RoundedCornerShape(16.dp), color = MaterialTheme.colorScheme.primary) {
-                    Text("主色", Modifier.padding(horizontal = 16.dp, vertical = 10.dp), style = MaterialTheme.typography.labelLarge, color = MaterialTheme.colorScheme.onPrimary)
-                }
-                Surface(shape = RoundedCornerShape(16.dp), color = MaterialTheme.colorScheme.secondaryContainer) {
-                    Text("辅助色", Modifier.padding(horizontal = 16.dp, vertical = 10.dp), style = MaterialTheme.typography.labelLarge, color = MaterialTheme.colorScheme.onSecondaryContainer)
-                }
+            Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(3.dp)) {
+                Text(
+                    "Aa  云取  123",
+                    style = MaterialTheme.typography.titleSmall,
+                    fontWeight = FontWeight.SemiBold,
+                    color = MaterialTheme.colorScheme.onPrimaryContainer,
+                )
+                Text(
+                    "链接、文件，随手可取",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onPrimaryContainer,
+                )
             }
+            Icon(Icons.Outlined.Check, null, tint = MaterialTheme.colorScheme.primary)
         }
     }
 }
@@ -365,17 +352,22 @@ private fun ThemePanel(
     content: @Composable ColumnScope.() -> Unit
 ) {
     val ui = LocalUiMetrics.current
-    Card(
-        modifier = Modifier.fillMaxWidth(), shape = RoundedCornerShape(20.dp),
-        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceContainerLow)
-    ) {
-        Column(Modifier.padding(ui.space(14.dp)), verticalArrangement = Arrangement.spacedBy(ui.space(9.dp))) {
+    Column(Modifier.fillMaxWidth()) {
+        Column(Modifier.padding(horizontal = ui.space(4.dp), vertical = ui.space(8.dp)),
+            verticalArrangement = Arrangement.spacedBy(ui.space(12.dp))) {
             Column(verticalArrangement = Arrangement.spacedBy(ui.space(2.dp))) {
-                Text(title, style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold)
-                if (description != null) Text(description, style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                Text(title, style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.SemiBold)
+                if (description != null && com.yunget.app.ui.theme.LocalShowSettingDescriptions.current) {
+                    Text(
+                        description,
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                }
             }
             content()
         }
+        HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.4f))
     }
 }
 
@@ -383,53 +375,7 @@ private fun ThemePanel(
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 private fun ThemeChoices(labels: List<String>, selected: Int, onSelected: (Int) -> Unit) {
-    val fontScale = LocalDensity.current.fontScale
-    BoxWithConstraints(Modifier.fillMaxWidth()) {
-        if (maxWidth < 300.dp || fontScale > 1.2f) {
-            Column(Modifier.selectableGroup(), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                labels.forEachIndexed { index, label ->
-                    ThemeChoiceRow(title = label, selected = selected == index, onClick = { onSelected(index) })
-                }
-            }
-        } else {
-            SingleChoiceSegmentedButtonRow(Modifier.fillMaxWidth()) {
-                labels.forEachIndexed { index, label ->
-                    SegmentedButton(
-                        selected = selected == index, onClick = { onSelected(index) },
-                        shape = SegmentedButtonDefaults.itemShape(index = index, count = labels.size),
-                        modifier = Modifier.heightIn(min = 48.dp), icon = {}
-                    ) { Text(label, style = MaterialTheme.typography.labelLarge) }
-                }
-            }
-        }
-    }
-}
-
-@Composable
-private fun ThemeChoiceRow(
-    title: String, selected: Boolean, onClick: () -> Unit, description: String? = null
-) {
-    val containerColor by animateColorAsState(
-        if (selected) MaterialTheme.colorScheme.secondaryContainer else MaterialTheme.colorScheme.surfaceContainer,
-        animationSpec = effectsDefault(), label = "themeChoiceColor"
-    )
-    val corner by animateDpAsState(
-        if (selected) 24.dp else 16.dp, animationSpec = themeSelectionSpec(), label = "themeChoiceShape"
-    )
-    Surface(
-        modifier = Modifier.fillMaxWidth().selectable(selected = selected, role = Role.RadioButton, onClick = onClick),
-        shape = RoundedCornerShape(corner), color = containerColor,
-        contentColor = if (selected) MaterialTheme.colorScheme.onSecondaryContainer else MaterialTheme.colorScheme.onSurface
-    ) {
-        Row(Modifier.heightIn(min = 56.dp).padding(horizontal = 12.dp, vertical = 8.dp), verticalAlignment = Alignment.CenterVertically) {
-            RadioButton(selected = selected, onClick = null, modifier = Modifier.size(24.dp))
-            Spacer(Modifier.width(12.dp))
-            Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(4.dp)) {
-                Text(title, style = MaterialTheme.typography.bodyLarge, fontWeight = FontWeight.Medium)
-                if (description != null) Text(description, style = MaterialTheme.typography.bodyMedium)
-            }
-        }
-    }
+    AppChoiceGroup(labels, selected, onSelected)
 }
 
 @Composable
@@ -441,14 +387,17 @@ private fun <T> themeSelectionSpec(): FiniteAnimationSpec<T> = when (ThemeContro
 @Composable
 private fun ThemeSwitchRow(title: String, description: String, checked: Boolean, onCheckedChange: (Boolean) -> Unit) {
     Row(
-        Modifier.fillMaxWidth().heightIn(min = 64.dp),
+        Modifier.fillMaxWidth().heightIn(min = 56.dp)
+            .toggleable(checked, role = Role.Switch, onValueChange = onCheckedChange),
         verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)
     ) {
         Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(4.dp)) {
             Text(title, style = MaterialTheme.typography.bodyLarge)
-            Text(description, style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
+            if (com.yunget.app.ui.theme.LocalShowSettingDescriptions.current) {
+                Text(description, style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
+            }
         }
-        Switch(checked = checked, onCheckedChange = onCheckedChange, modifier = Modifier.heightIn(min = 48.dp))
+        Switch(checked = checked, onCheckedChange = null, modifier = Modifier.heightIn(min = 48.dp))
     }
 }
 
@@ -480,12 +429,12 @@ private fun DensitySlider(
 @Composable
 private fun ColorSelectionItem(color: Long, name: String, selected: Boolean, onClick: () -> Unit) {
     val swatch = Color(color.toInt())
-    val corner by animateDpAsState(if (selected) 24.dp else 16.dp, animationSpec = themeSelectionSpec(), label = "seedShape")
+    val corner by animateDpAsState(if (selected) 12.dp else 9.dp, animationSpec = themeSelectionSpec(), label = "seedShape")
     Surface(
         modifier = Modifier.widthIn(min = 64.dp).selectable(selected = selected, role = Role.RadioButton, onClick = onClick),
         shape = RoundedCornerShape(corner),
-        color = if (selected) MaterialTheme.colorScheme.secondaryContainer else Color.Transparent,
-        contentColor = if (selected) MaterialTheme.colorScheme.onSecondaryContainer else MaterialTheme.colorScheme.onSurfaceVariant
+        color = if (selected) MaterialTheme.colorScheme.primary.copy(alpha = 0.10f) else Color.Transparent,
+        contentColor = if (selected) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant
     ) {
         Column(Modifier.padding(8.dp), horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(6.dp)) {
             Surface(shape = CircleShape, color = swatch, border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant)) {

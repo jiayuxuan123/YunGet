@@ -10,13 +10,14 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.selection.selectable
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.ListItem
-import androidx.compose.material3.ListItemDefaults
 import androidx.compose.material3.Surface
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.semantics.stateDescription
+import androidx.compose.ui.semantics.toggleableState
+import androidx.compose.ui.state.ToggleableState
 
 import dev.turbodl.core.TurboHttpClients
 import dev.turbodl.core.DnsMode
@@ -32,7 +33,7 @@ import android.os.PowerManager
 import android.provider.Settings
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
-import androidx.compose.foundation.clickable
+import androidx.compose.animation.animateColorAsState
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
@@ -47,6 +48,7 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.interaction.MutableInteractionSource
+import androidx.compose.foundation.interaction.collectIsPressedAsState
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
@@ -54,9 +56,7 @@ import androidx.compose.material.icons.automirrored.outlined.Article
 import androidx.compose.material.icons.automirrored.outlined.ReceiptLong
 import androidx.compose.material.icons.outlined.Backup
 import androidx.compose.material.icons.outlined.ChevronRight
-import androidx.compose.material.icons.outlined.Cloud
 import androidx.compose.material.icons.outlined.Memory
-import androidx.compose.material.icons.outlined.SettingsSuggest
 import androidx.compose.material.icons.outlined.Bolt
 import androidx.compose.material.icons.outlined.Dns
 import androidx.compose.material.icons.outlined.Extension
@@ -67,7 +67,6 @@ import androidx.compose.material.icons.outlined.Info
 import androidx.compose.material.icons.outlined.Layers
 import androidx.compose.material.icons.outlined.Notifications
 import androidx.compose.material.icons.outlined.Palette
-import androidx.compose.material.icons.outlined.Style
 import androidx.compose.material.icons.outlined.Power
 import androidx.compose.material.icons.outlined.Refresh
 import androidx.compose.material.icons.outlined.Restore
@@ -79,7 +78,6 @@ import androidx.compose.material.icons.outlined.Tune
 import androidx.compose.material.icons.outlined.VolunteerActivism
 import androidx.compose.material.icons.outlined.Campaign
 import androidx.compose.foundation.text.KeyboardOptions
-import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
@@ -116,6 +114,8 @@ import com.yunget.app.ui.theme.ThemeController
 import com.yunget.app.ui.theme.LocalUiMetrics
 import com.yunget.app.ui.theme.AppUiStyle
 import com.yunget.app.ui.theme.LocalAppUiStyle
+import com.yunget.app.ui.theme.accentText
+import com.yunget.app.ui.theme.motionTween
 import com.yunget.app.data.update.UpdateChecker
 import com.yunget.app.ui.SnackbarController
 import com.yunget.app.util.LogExporter
@@ -125,7 +125,6 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
-import androidx.compose.material3.Card
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.RadioButton
 import androidx.compose.material3.Switch
@@ -185,6 +184,28 @@ fun SettingsScreen(
     onAnnouncementClick: () -> Unit = {},
     modifier: Modifier = Modifier
 ) {
+    if (com.yunget.app.ui.theme.LocalAppUiStyle.current == com.yunget.app.ui.theme.AppUiStyle.CLASSIC) {
+        com.yunget.app.ui.classic.SettingsScreen(
+            scrollBehavior = scrollBehavior,
+            downloadThreads = downloadThreads,
+            onThreadsChange = onThreadsChange,
+            onThemeClick = onThemeClick,
+            onAboutClick = onAboutClick,
+            onSupportClick = onSupportClick,
+            backupManager = backupManager,
+            onDownloadUpdateApk = onDownloadUpdateApk,
+            onConnectionDiagnose = onConnectionDiagnose,
+            onConcurrentDiagnose = onConcurrentDiagnose,
+            diagStatusProvider = diagStatusProvider,
+            diagResultProvider = diagResultProvider,
+            activeConnectionsProvider = activeConnectionsProvider,
+            onLogViewClick = onLogViewClick,
+            onAnnouncementClick = onAnnouncementClick,
+            modifier = modifier,
+        )
+        return
+    }
+
     val ui = LocalUiMetrics.current
     var showThreadsDialog by remember { mutableStateOf(false) }
     var showLogDialog by remember { mutableStateOf(false) }
@@ -350,6 +371,7 @@ fun SettingsScreen(
                     SettingsItem(
                         icon = Icons.Outlined.FolderOpen,
                         title = "下载保存目录",
+                        valueText = downloadDirUri?.let { DownloadSaver.safDirDisplay(it) } ?: "Download",
                         description = downloadDirUri?.let { "已自定义：${DownloadSaver.safDirDisplay(it)}" }
                             ?: "系统默认 Download（点击自定义）",
                         onClick = {
@@ -392,6 +414,7 @@ fun SettingsScreen(
                     SettingsItem(
                         icon = Icons.Outlined.Layers,
                         title = "最大同时下载任务数",
+                        valueText = "$maxConcurrent 个任务",
                         description = "同时下载 $maxConcurrent 个任务（限制后台并发，避免占满带宽）",
                         onClick = { showConcurrencyDialog = true }
                     )
@@ -399,6 +422,7 @@ fun SettingsScreen(
                     SettingsItem(
                         icon = Icons.Outlined.Tune,
                         title = "最大下载线程数",
+                        valueText = if (activeConns != null) "$threads 条上限 · 当前 $activeConns 条" else "$threads 条连接",
                         description = buildString {
                             append(ThreadCountAdvice.describe(threads))
                             // 有任务在跑时，把"引擎实际用到多少"也说出来。
@@ -414,6 +438,7 @@ fun SettingsScreen(
                     SettingsItem(
                         icon = Icons.Outlined.Speed,
                         title = "下载速度限制",
+                        valueText = speedLimitText(speedLimitBps),
                         description = speedLimitText(speedLimitBps),
                         onClick = { showSpeedDialog = true }
                     )
@@ -421,6 +446,7 @@ fun SettingsScreen(
                     SettingsItem(
                         icon = Icons.Outlined.Refresh,
                         title = "失败自动重试",
+                        valueText = if (retryCount == 0) "不重试" else "$retryCount 次",
                         description = if (retryCount == 0) "失败后不自动重试" else "失败后自动重试 $retryCount 次（断点续传）",
                         onClick = { showRetryDialog = true }
                     )
@@ -431,6 +457,7 @@ fun SettingsScreen(
                     SettingsItem(
                         icon = Icons.Outlined.Memory,
                         title = "下载引擎",
+                        valueText = if (engineChoice == SettingsRepository.ENGINE_GOPEED) "Gopeed" else "TurboDL",
                         description = if (engineChoice == SettingsRepository.ENGINE_GOPEED) {
                             "Gopeed · 磁力 / BT"
                         } else {
@@ -480,6 +507,7 @@ fun SettingsScreen(
                     SettingsItem(
                         icon = Icons.Outlined.Extension,
                         title = "插件",
+                        valueText = "已安装 $pluginTotal · 已启用 $pluginEnabled",
                         description = when {
                             pluginTotal == 0 -> "还没装插件 · 可以导入或粘贴 JS 脚本扩展解析能力"
                             pluginEnabled == pluginTotal -> "$pluginTotal 个已安装，全部启用"
@@ -522,6 +550,7 @@ fun SettingsScreen(
                     SettingsItem(
                         icon = Icons.Outlined.Dns,
                         title = "GitHub 网络镜像",
+                        valueText = if (mirrorDraft.isBlank()) "自动 / 直连" else mirrorDraft,
                         description = when {
                             mirrorDraft.isNullOrBlank() -> "未设置（直连；国内可能加载不出图片与插件源）"
                             else -> "已启用：$mirrorDraft"
@@ -532,6 +561,7 @@ fun SettingsScreen(
                     SettingsItem(
                         icon = Icons.Outlined.Dns,
                         title = "自定义 DNS (DoH)",
+                        valueText = if (dohUrl.isNullOrBlank()) "系统 DNS" else if (dohUrl == AUTO_DOH) "自动优选" else dohUrl,
                         description = when {
                             // 哨兵值不能直接展示（对用户是无意义的内部标记）
                             dohUrl == AUTO_DOH -> "自动（并发探测最快的公共 DoH）"
@@ -592,6 +622,8 @@ fun SettingsScreen(
             }
             item(key = "settings_group_5") {
                 SettingsGroup(title = "外观与文件列表", description = "主题配色、显示与浏览体验") {
+                    SettingsDescriptionsToggle()
+                    SettingsDivider()
                     SettingsItem(
                         icon = Icons.Outlined.Palette,
                         title = "主题与外观",
@@ -1662,25 +1694,43 @@ private fun SettingsOverview(threads: Int, concurrent: Int, isGopeed: Boolean) {
     val ui = LocalUiMetrics.current
     Surface(
         modifier = Modifier.fillMaxWidth(),
-        shape = RoundedCornerShape(20.dp),
-        color = MaterialTheme.colorScheme.surfaceContainerLow
+        shape = RoundedCornerShape(16.dp),
+        color = MaterialTheme.colorScheme.surfaceContainerLow,
     ) {
         Row(
-            modifier = Modifier.fillMaxWidth().padding(ui.space(12.dp)),
+            modifier = Modifier.fillMaxWidth().padding(horizontal = ui.space(13.dp), vertical = ui.space(11.dp)),
             verticalAlignment = Alignment.CenterVertically,
             horizontalArrangement = Arrangement.spacedBy(12.dp)
         ) {
-            Icon(Icons.Outlined.Tune, contentDescription = null,
-                modifier = Modifier.size(22.dp), tint = MaterialTheme.colorScheme.primary)
+            Surface(
+                modifier = Modifier.size(34.dp),
+                shape = RoundedCornerShape(10.dp),
+                color = MaterialTheme.colorScheme.primaryContainer,
+            ) {
+                Box(contentAlignment = Alignment.Center) {
+                    Icon(
+                        Icons.Outlined.Tune,
+                        contentDescription = null,
+                        modifier = Modifier.size(19.dp),
+                        tint = MaterialTheme.colorScheme.onPrimaryContainer,
+                    )
+                }
+            }
             Column(modifier = Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(2.dp)) {
-                Text("下载策略", style = MaterialTheme.typography.titleSmall)
+                Text(
+                    "下载策略",
+                    style = MaterialTheme.typography.titleSmall,
+                    fontWeight = FontWeight.SemiBold,
+                )
                 Text("$concurrent 个任务 · $threads 连接/任务",
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant)
             }
-            Text(if (isGopeed) "Gopeed" else "TurboDL",
-                style = MaterialTheme.typography.labelSmall,
-                color = MaterialTheme.colorScheme.primary)
+            Text(
+                if (isGopeed) "Gopeed" else "TurboDL",
+                style = MaterialTheme.typography.labelMedium,
+                color = MaterialTheme.colorScheme.accentText,
+            )
         }
     }
 }
@@ -1692,38 +1742,39 @@ private fun SettingsGroup(
     content: @Composable ColumnScope.() -> Unit
 ) {
     val ui = LocalUiMetrics.current
-    val classic = LocalAppUiStyle.current == AppUiStyle.CLASSIC
-    Column(verticalArrangement = Arrangement.spacedBy(if (classic) 8.dp else ui.space(6.dp))) {
-        Text(
-            text = title,
-            style = if (classic) MaterialTheme.typography.bodyMedium
-            else MaterialTheme.typography.titleSmall,
-            fontWeight = FontWeight.Medium,
-            color = MaterialTheme.colorScheme.onSurfaceVariant,
-            modifier = Modifier.padding(horizontal = 4.dp),
-        )
-        if (classic) {
-            content()
-        } else {
-            Surface(
-                shape = RoundedCornerShape(20.dp),
-                color = MaterialTheme.colorScheme.surfaceContainerLow,
-                modifier = Modifier.fillMaxWidth()
-            ) {
-                Column(Modifier.padding(2.dp), content = content)
+    Column(verticalArrangement = Arrangement.spacedBy(ui.space(8.dp))) {
+        Column(
+            modifier = Modifier.padding(start = 16.dp, top = 8.dp, end = 16.dp),
+            verticalArrangement = Arrangement.spacedBy(2.dp),
+        ) {
+            Text(
+                title,
+                style = MaterialTheme.typography.titleSmall,
+                fontWeight = FontWeight.SemiBold,
+                color = MaterialTheme.colorScheme.onSurface,
+            )
+            if (com.yunget.app.ui.theme.LocalShowSettingDescriptions.current) {
+                Text(
+                    description,
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
             }
         }
+        Surface(
+            shape = RoundedCornerShape(16.dp),
+            color = MaterialTheme.colorScheme.surface,
+            modifier = Modifier.fillMaxWidth(),
+        ) { Column(content = content) }
     }
 }
 
 @Composable
 private fun SettingsDivider() {
-    if (LocalAppUiStyle.current != AppUiStyle.CLASSIC) {
-        HorizontalDivider(
-            Modifier.padding(horizontal = 16.dp),
-            color = MaterialTheme.colorScheme.outlineVariant,
-        )
-    }
+    HorizontalDivider(
+        Modifier.padding(start = 50.dp, end = 16.dp),
+        color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.35f),
+    )
 }
 
 /** 生产设置行：常规尺寸使用 Material ListItem，大字下把说明和附加操作移到完整宽度。 */
@@ -1736,74 +1787,81 @@ private fun SettingsItem(
     onClick: () -> Unit,
     onLongClick: (() -> Unit)? = null,
     trailing: @Composable (() -> Unit)? = null,
-    checked: Boolean? = null
+    checked: Boolean? = null,
+    valueText: String? = null,
 ) {
     val ui = LocalUiMetrics.current
-    val classic = LocalAppUiStyle.current == AppUiStyle.CLASSIC
-    val fontScale = LocalDensity.current.fontScale
+    val supporting = com.yunget.app.ui.theme.settingSupportingText(
+        description, valueText, com.yunget.app.ui.theme.LocalShowSettingDescriptions.current,
+    )
     val interactionSource = remember { MutableInteractionSource() }
-    BoxWithConstraints(
+    val pressed by interactionSource.collectIsPressedAsState()
+    val pressedBackground by animateColorAsState(
+        targetValue = if (pressed) {
+            MaterialTheme.colorScheme.primary.copy(alpha = 0.055f)
+        } else {
+            Color.Transparent
+        },
+        animationSpec = motionTween(120),
+        label = "settingsRowPress",
+    )
+    BoxWithConstraints(Modifier.fillMaxWidth()) {
+    val showDescriptions = com.yunget.app.ui.theme.LocalShowSettingDescriptions.current
+    val inlineValue = !showDescriptions && !valueText.isNullOrBlank() && valueText.length <= 24 &&
+        trailing == null && maxWidth >= 340.dp &&
+        LocalDensity.current.fontScale * ui.fontScale <= 1.15f
+    Row(
         modifier = Modifier
             .fillMaxWidth()
-            .background(
-                color = if (classic) MaterialTheme.colorScheme.surfaceContainerLow else Color.Transparent,
-                shape = RoundedCornerShape(16.dp),
-            )
-            .clip(RoundedCornerShape(16.dp))
+            .clip(RoundedCornerShape(12.dp))
+            .background(pressedBackground)
             .semantics {
-                if (checked != null) stateDescription = if (checked) "已开启" else "已关闭"
+                if (checked != null) {
+                    toggleableState = ToggleableState(checked)
+                    stateDescription = if (checked) "已开启" else "已关闭"
+                }
             }
             .combinedClickable(
                 interactionSource = interactionSource,
                 indication = ripple(),
                 role = if (checked == null) Role.Button else Role.Switch,
                 onClick = onClick,
-                onLongClick = onLongClick
+                onLongClick = onLongClick,
             )
+            .heightIn(min = if (supporting == null || inlineValue) 56.dp else 68.dp)
+            .padding(horizontal = 16.dp, vertical = ui.space(10.dp)),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(12.dp),
     ) {
-        if (fontScale > 1.2f || maxWidth < 340.dp) {
-            Column(
-                Modifier.fillMaxWidth()
-                    .heightIn(min = maxOf(48f, ui.space(56.dp).value).dp)
-                    .padding(horizontal = ui.space(12.dp), vertical = ui.space(9.dp)),
-                verticalArrangement = Arrangement.spacedBy(ui.space(3.dp))
-            ) {
-                Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-                    Icon(icon, null, Modifier.size(22.dp), tint = MaterialTheme.colorScheme.primary)
-                    Text(
-                        title,
-                        modifier = Modifier.weight(1f),
-                        style = MaterialTheme.typography.titleMedium,
-                        fontWeight = FontWeight.Medium,
-                    )
-                    if (trailing == null) Icon(Icons.Outlined.ChevronRight, null, tint = MaterialTheme.colorScheme.onSurfaceVariant)
-                }
-                Text(description, style = MaterialTheme.typography.bodySmall,
+        Icon(icon, contentDescription = null, modifier = Modifier.size(22.dp),
+            tint = MaterialTheme.colorScheme.onSurfaceVariant)
+        Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(3.dp)) {
+            Text(title, style = MaterialTheme.typography.titleMedium)
+            if (supporting != null && !inlineValue) {
+                Text(
+                    supporting, style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    maxLines = 2, overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis)
-                if (trailing != null) {
-                    Box(Modifier.align(Alignment.End).heightIn(min = 48.dp), contentAlignment = Alignment.CenterEnd) { trailing() }
-                }
+                    maxLines = 2, overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis,
+                )
             }
-        } else {
-            ListItem(
-                headlineContent = {
-                    Text(
-                        title,
-                        style = MaterialTheme.typography.titleMedium,
-                        fontWeight = FontWeight.Medium,
-                    )
-                },
-                supportingContent = { Text(description, style = MaterialTheme.typography.bodySmall,
-                    maxLines = 2, overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis) },
-                leadingContent = { Icon(icon, null, Modifier.size(22.dp), tint = MaterialTheme.colorScheme.primary) },
-                trailingContent = trailing ?: {
-                    Icon(Icons.Outlined.ChevronRight, null, tint = MaterialTheme.colorScheme.onSurfaceVariant)
-                },
-                colors = ListItemDefaults.colors(containerColor = Color.Transparent),
-                modifier = Modifier.heightIn(min = maxOf(48f, ui.space(56.dp).value).dp)
-            )
+            if (showDescriptions && !valueText.isNullOrBlank() && valueText != supporting) {
+                Text(valueText, style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.accentText, maxLines = 2,
+                    overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis)
+            }
         }
+        if (inlineValue) Text(valueText.orEmpty(), Modifier.widthIn(max = 124.dp),
+            style = MaterialTheme.typography.bodyMedium,
+            color = MaterialTheme.colorScheme.onSurfaceVariant, maxLines = 1,
+            overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis)
+        if (trailing != null) trailing()
+        else Icon(
+            Icons.Outlined.ChevronRight,
+            null,
+            Modifier.size(20.dp),
+            tint = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.72f),
+        )
+    }
     }
 }
 
@@ -1835,11 +1893,45 @@ internal fun SettingsPreviewContent() {
         item { SettingsOverview(threads = 16, concurrent = 3, isGopeed = false) }
         item {
             SettingsGroup("下载任务", "保存位置、并发与速度") {
-                SettingsItem(Icons.Outlined.FolderOpen, "下载保存目录", "系统默认 Download", {})
+                SettingsItem(Icons.Outlined.FolderOpen, "下载保存目录", "系统默认 Download", {}, valueText = "Download")
                 SettingsDivider()
-                SettingsItem(Icons.Outlined.Layers, "最大同时下载任务数", "同时下载 3 个任务", {})
+                SettingsItem(Icons.Outlined.Layers, "最大同时下载任务数", "同时下载 3 个任务", {}, valueText = "3 个任务")
                 SettingsDivider()
-                SettingsItem(Icons.Outlined.Tune, "最大下载线程数", "每任务最多 16 条连接，引擎按吞吐自动调整", {})
+                SettingsItem(Icons.Outlined.Tune, "最大下载线程数", "每任务最多 16 条连接，引擎按吞吐自动调整", {}, valueText = "16 条连接")
+                SettingsDivider()
+                SettingsItem(Icons.Outlined.Speed, "下载速度限制", "不限速", {}, valueText = "不限速")
+                SettingsDivider()
+                SettingsItem(Icons.Outlined.Refresh, "失败自动重试", "失败后自动重试 3 次", {}, valueText = "3 次")
+            }
+        }
+        item {
+            SettingsGroup("下载引擎", "选择引擎，调整连接与高级参数") {
+                SettingsItem(Icons.Outlined.Memory, "下载引擎", "自适应并发与断点续传", {}, valueText = "TurboDL")
+                SettingsDivider()
+                SettingsItem(Icons.Outlined.Tune, "引擎高级参数", "HTTP、分片、并发、背压与超时", {})
+                SettingsDivider()
+                SettingsItem(Icons.Outlined.Bolt, "连接预热", "下载前预建连接并解析域名", {},
+                    checked = true, trailing = { Switch(checked = true, onCheckedChange = null) })
+                SettingsDivider()
+                SettingsItem(Icons.AutoMirrored.Outlined.TrendingUp, "慢启动", "逐步增加并发连接", {},
+                    checked = false, trailing = { Switch(checked = false, onCheckedChange = null) })
+            }
+        }
+        item {
+            SettingsGroup("链接解析与插件", "管理解析能力与链接识别") {
+                SettingsItem(Icons.Outlined.Extension, "插件", "管理解析脚本与插件", {}, valueText = "已安装 3 · 已启用 3")
+                SettingsDivider()
+                SettingsItem(Icons.Outlined.Storefront, "插件市场", "从插件源浏览并安装", {})
+                SettingsDivider()
+                SettingsItem(Icons.Outlined.Groups, "自动识别剪贴板", "复制分享链接后提示解析", {},
+                    checked = true, trailing = { Switch(checked = true, onCheckedChange = null) })
+            }
+        }
+        item {
+            SettingsGroup("网络访问", "镜像分发与域名解析") {
+                SettingsItem(Icons.Outlined.Dns, "GitHub 网络镜像", "自动选择可用镜像", {}, valueText = "自动 / 直连")
+                SettingsDivider()
+                SettingsItem(Icons.Outlined.Dns, "自定义 DNS (DoH)", "使用系统 DNS", {}, valueText = "系统 DNS")
             }
         }
         item {
@@ -1858,18 +1950,9 @@ internal fun SettingsPreviewContent() {
             }
         }
         item {
-            SettingsGroup("网络与连接", "连接、DNS 与 GitHub 镜像") {
-                SettingsItem(Icons.Outlined.Speed, "下载速度上限", "不限速", {})
-                SettingsDivider()
-                SettingsItem(Icons.Outlined.Refresh, "失败自动重试", "失败后自动重试 3 次", {})
-                SettingsDivider()
-                SettingsItem(Icons.Outlined.Dns, "自定义 DNS (DoH)", "使用系统 DNS", {})
-                SettingsDivider()
-                SettingsItem(Icons.Outlined.Cloud, "GitHub 网络镜像", "自动选择可用镜像", {})
-            }
-        }
-        item {
             SettingsGroup("外观与文件列表", "主题配色、显示与浏览体验") {
+                SettingsDescriptionsToggle()
+                SettingsDivider()
                 SettingsItem(Icons.Outlined.Palette, "主题与外观", "动态色彩、深色模式、字号与间距", {})
                 SettingsDivider()
                 SettingsItem(

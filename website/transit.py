@@ -122,6 +122,32 @@ def resolver(facts: dict) -> str:
     )
 
 
+def _interface_gallery(facts: dict) -> str:
+    gallery = facts["screenshots"]
+    figures = []
+    for screen in gallery["screens"]:
+        image = screen["light"]
+        image_url = "{IMG:" + image["file"].rsplit(".", 1)[0] + "}"
+        dark_link = ""
+        if screen.get("dark"):
+            dark_url = "{IMG:" + screen["dark"]["file"].rsplit(".", 1)[0] + "}"
+            dark_link = f'<a href="{dark_url}" aria-label="查看{esc(screen["title"])}深色预览">深色版</a>'
+        figures.append(
+            '<figure class="app-capture">'
+            f'<a class="app-capture-image" href="{image_url}" aria-label="放大{esc(screen["title"])}界面预览">'
+            f'<img src="{image_url}" width="{image["width"]}" height="{image["height"]}" '
+            f'loading="lazy" decoding="async" alt="云取 {esc(gallery["version"])} {esc(screen["title"])}界面预览">'
+            f'</a><figcaption><span>{esc(screen["title"])}</span>{dark_link}</figcaption></figure>'
+        )
+    return _section(
+        "先看看用起来的样子",
+        f'云取 {esc(gallery["version"])} 的界面预览，使用示例数据。点击图片可放大，'
+        '浅色和深色均可查看；经典界面可在「主题与外观」中切换。',
+        '<div class="app-captures">' + "".join(figures) + '</div>',
+        "screenshots",
+    )
+
+
 def home(facts: dict, href) -> str:
     latest = facts["latest"]
     universal = facts["apk"]
@@ -214,7 +240,8 @@ def home(facts: dict, href) -> str:
         "<strong>一条链接的到站路线</strong><span>LOCAL ROUTE</span></div>"
         + hero_route
         + "</div></div></section>"
-        '<section class="resolver-section" id="recognize"><div class="wrap">'
+        + _interface_gallery(facts)
+        + '<section class="resolver-section" id="recognize"><div class="wrap">'
         '<header class="section-head inline-head"><h2>先识别手里的链接</h2>'
         "<p class=\"section-lead\">不伪装成已经解析完成。这个控件只做浏览器本地识别，"
         "然后告诉你在 YunGet 里下一步会发生什么。</p></header>"
@@ -272,9 +299,9 @@ def home(facts: dict, href) -> str:
             "</div>"
             + _button("阅读完整隐私说明", href("legal-privacy"))
             + "</div>"
-            '<figure class="device-figure"><img src="{IMG:setting}" width="720" height="1600" '
-            'loading="lazy" alt="YunGet 设置页中的下载线程、通知与日志选项">'
-            "<figcaption>设置页：下载线程、通知与诊断入口。</figcaption></figure>"
+            '<figure class="device-figure"><img src="{IMG:ui-2.7.28-settings-light}" width="720" height="1558" '
+            'loading="lazy" alt="YunGet 2.7.28 设置界面预览">'
+            "<figcaption>2.7.28 设置界面预览：目录、连接数与引擎选项，使用示例数据。</figcaption></figure>"
             "</div>",
         )
         + _section(
@@ -722,20 +749,30 @@ def community(facts: dict, href) -> str:
     return (
         _page_intro(
             "社区与反馈",
-            "项目没有聊天群或评论系统。可复现的问题、日志和失败案例都走 GitHub Issues。",
-            [("提交 Issue", f"{facts['repo']}/issues"), ("阅读使用说明", href("doc-guide"))],
+            "公告、问题反馈和开发者回复集中在云取社区。日常闲聊是次入口；需要持续跟进的问题会带上处理状态。",
+            [("进入云取社区", facts["community"]), ("阅读使用说明", href("doc-guide"))],
+        )
+        + _section(
+            "反馈会怎样处理",
+            "公开反馈和私密反馈放在同一个队列里，开发者可以标记计划、处理中、已解决或关闭。",
+            _route_stations(
+                [
+                    ("设置昵称", "无需账号密码；通过人机验证后即可提交。", "入口"),
+                    ("选择公开或私密", "涉及账号、文件名或签名链接时，选择“仅我和管理员可见”。", "边界"),
+                    ("开发者回复", "可继续在反馈下补充信息，开发者回复会单独标记。", "跟进"),
+                    ("状态归档", "解决后保留处理记录，方便其他用户查找同类问题。", "完成"),
+                ],
+            ),
         )
         + _section(
             "一份有效的报告",
-            "先给出环境与复现步骤，再附上脱敏后的日志。",
-            _route_stations(
-                [
-                    ("应用版本", "在设置的关于页查看当前版本。", "环境"),
-                    ("设备与系统", "写明手机型号、Android 版本和安装包架构。", "环境"),
-                    ("复现步骤", "从哪条链接开始，点了什么，期望与实际分别是什么。", "过程"),
-                    ("脱敏日志", "导出后先移除完整直链、文件名或其他不想公开的信息。", "证据"),
-                ]
-            ),
+            "先给出环境与复现步骤，再附上脱敏信息。不要在公开反馈中发送 Cookie、JWT 或仍有效的签名直链。",
+            '<div class="detail-list detail-columns">'
+            "<div><strong>版本与设备</strong><p>应用版本、Android 版本、手机型号和安装包架构。</p></div>"
+            "<div><strong>复现步骤</strong><p>从哪条链接开始、点了什么，期望与实际分别是什么。</p></div>"
+            "<div><strong>失败现象</strong><p>错误提示、发生时间、是否能稳定复现，以及相同链接是否曾成功。</p></div>"
+            "<div><strong>脱敏日志</strong><p>导出后先移除完整直链、文件名、账号和其他不想公开的信息。</p></div>"
+            "</div>",
         )
         + _section(
             "与上游项目的关系",
@@ -746,6 +783,12 @@ def community(facts: dict, href) -> str:
             "<div><strong>赞赏</strong><p>应用内赞赏入口只面向本二次开发版本，与上游捐赠渠道无关。</p></div>"
             "<div><strong>上游</strong><p><a href=\"https://github.com/CYQawa/YunX\">CYQawa/YunX</a></p></div>"
             "</div>",
+        )
+        + _section(
+            "开发者后台",
+            "开发者从社区底部进入后台，由 Cloudflare Access 验证身份；普通访客看不到管理操作。",
+            '<div class="notice"><strong>管理入口</strong> '
+            f'<a href="{facts["community"]}/admin">打开开发者后台</a>。后台可发布公告、回复反馈、标记处理状态和隐藏违规内容。</div>',
         )
     )
 

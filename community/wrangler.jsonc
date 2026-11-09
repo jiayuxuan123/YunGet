@@ -1,0 +1,33 @@
+{
+  "$schema": "node_modules/wrangler/config-schema.json",
+  "name": "yunget-community",
+  "main": "worker.mjs",
+  "compatibility_date": "2026-11-09",
+  "workers_dev": false,
+  "observability": {
+    "enabled": true,
+    "traces": {
+      "enabled": true,
+      "head_sampling_rate": 0.1
+    }
+  },
+  "vars": {
+    "PUBLIC_ORIGIN": "https://community.yunget.yunl.us.ci",
+    "ACCESS_ISSUER": "https://yuolui.cloudflareaccess.com",
+    "ACCESS_AUD": "3b47b45b6413d7659b13dc0a34cd6660d1aa4b9cd1dca1ea95dfccab30a95bb5",
+    "TURNSTILE_SITEKEY": "0x4AAAAAAF5poAcwb2D_ZwZK"
+  },
+  "d1_databases": [
+    {
+      "binding": "DB",
+      "database_name": "yunget-community",
+      "database_id": "7626cfff-86e4-4323-8cdc-96acb224c273"
+    }
+  ],
+  "routes": [
+    {
+      "pattern": "community.yunget.yunl.us.ci",
+      "custom_domain": true
+    }
+  ]
+}

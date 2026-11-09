@@ -133,6 +133,27 @@ fun ResolveScreen(
     onOpenBookmarks: () -> Unit,
     modifier: Modifier = Modifier
 ) {
+    if (com.yunget.app.ui.theme.LocalAppUiStyle.current == com.yunget.app.ui.theme.AppUiStyle.CLASSIC) {
+        com.yunget.app.ui.classic.ResolveScreen(
+            scrollBehavior = scrollBehavior,
+            viewModel = viewModel,
+            quarkCloudViewModel = quarkCloudViewModel,
+            xunleiCloudViewModel = xunleiCloudViewModel,
+            baiduCloudViewModel = baiduCloudViewModel,
+            c139CloudViewModel = c139CloudViewModel,
+            ucCloudViewModel = ucCloudViewModel,
+            pan123CloudViewModel = pan123CloudViewModel,
+            pan115CloudViewModel = pan115CloudViewModel,
+            guangyaCloudViewModel = guangyaCloudViewModel,
+            ilanzouCloudViewModel = ilanzouCloudViewModel,
+            lanzouCloudViewModel = lanzouCloudViewModel,
+            bookmarkViewModel = bookmarkViewModel,
+            onOpenBookmarks = onOpenBookmarks,
+            modifier = modifier,
+        )
+        return
+    }
+
     val ui = LocalUiMetrics.current
     val state = viewModel.uiState
     val downloadLink = viewModel.downloadLink
@@ -471,8 +492,8 @@ internal fun ResolveLandingContent(
         item(key = "resolve_workspace", contentType = "workspace") {
             Surface(
                 modifier = Modifier.fillMaxWidth().animateContentSize(spatialDefault()),
-                shape = RoundedCornerShape(24.dp),
-                color = MaterialTheme.colorScheme.surfaceContainerLow
+                shape = RoundedCornerShape(20.dp),
+                color = MaterialTheme.colorScheme.surfaceContainer
             ) {
                 Column(
                     modifier = Modifier.padding(ui.space(14.dp)),
@@ -504,7 +525,7 @@ internal fun ResolveLandingContent(
                         keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Uri),
                         minLines = 2,
                         maxLines = 5,
-                        shape = RoundedCornerShape(16.dp)
+                        shape = RoundedCornerShape(12.dp)
                     )
 
                     FlowRow(

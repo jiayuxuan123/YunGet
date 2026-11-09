@@ -29,12 +29,14 @@ private fun PreviewShell(
     dark: Boolean = false,
     wide: Boolean = false,
     uiStyle: AppUiStyle = AppUiStyle.MODERN,
+    descriptions: Boolean = false,
     content: @Composable () -> Unit,
 ) {
     ComposeEmptyActivityTheme(
         darkTheme = dark,
         dynamicColor = false,
         uiStyleOverride = uiStyle,
+        showDescriptionsOverride = descriptions,
     ) {
         Surface(color = androidx.compose.material3.MaterialTheme.colorScheme.background) {
             Row(Modifier.fillMaxSize()) {
@@ -53,12 +55,14 @@ private fun PreviewShell(
 private fun FullScreenPreview(
     dark: Boolean = false,
     uiStyle: AppUiStyle = AppUiStyle.MODERN,
+    descriptions: Boolean = false,
     content: @Composable () -> Unit,
 ) {
     ComposeEmptyActivityTheme(
         darkTheme = dark,
         dynamicColor = false,
         uiStyleOverride = uiStyle,
+        showDescriptionsOverride = descriptions,
     ) {
         Surface(
             Modifier.fillMaxSize(),
@@ -118,6 +122,21 @@ fun ThemePhone() = FullScreenPreview { ThemeScreen(onBack = {}) }
 fun ThemeFull() = FullScreenPreview { ThemeScreen(onBack = {}) }
 
 @PreviewTest
+@Preview(name = "theme-dark", widthDp = 412, heightDp = 1000, uiMode = Configuration.UI_MODE_NIGHT_YES)
+@Composable
+fun ThemeDark() = FullScreenPreview(dark = true) { ThemeScreen(onBack = {}) }
+
+@PreviewTest
+@Preview(name = "theme-large-text", widthDp = 320, heightDp = 1000, fontScale = 1.3f)
+@Composable
+fun ThemeLargeText() = FullScreenPreview { ThemeScreen(onBack = {}) }
+
+@PreviewTest
+@Preview(name = "downloads-narrow", widthDp = 320, heightDp = 820, fontScale = 1.3f)
+@Composable
+fun DownloadsNarrow() = PreviewShell(MainTab.Download) { DownloadPreviewContent() }
+
+@PreviewTest
 @Preview(name = "support-wechat", widthDp = 412, heightDp = 1000)
 @Composable
 fun SupportWechat() = FullScreenPreview { SupportBuiltinPreviewContent(initialPage = 0) }
@@ -151,19 +170,31 @@ fun DownloadsCompleted() = PreviewShell(MainTab.Download) { DownloadCompletedPre
 @Preview(name = "classic-resolve", widthDp = 412, heightDp = 892)
 @Composable
 fun ClassicResolve() = PreviewShell(MainTab.Resolve, uiStyle = AppUiStyle.CLASSIC) {
-    ResolveLandingPreviewContent()
+    com.yunget.app.ui.classic.ClassicResolvePreview()
 }
 
 @PreviewTest
 @Preview(name = "classic-settings", widthDp = 412, heightDp = 892)
 @Composable
 fun ClassicSettings() = PreviewShell(MainTab.Settings, uiStyle = AppUiStyle.CLASSIC) {
-    SettingsPreviewContent()
+    com.yunget.app.ui.classic.ClassicSettingsPreview()
 }
 
 @PreviewTest
 @Preview(name = "classic-downloads", widthDp = 412, heightDp = 892)
 @Composable
 fun ClassicDownloads() = PreviewShell(MainTab.Download, uiStyle = AppUiStyle.CLASSIC) {
-    DownloadPreviewContent()
+    com.yunget.app.ui.classic.ClassicDownloadPreview()
+}
+
+@PreviewTest
+@Preview(name = "settings-descriptions", widthDp = 412, heightDp = 892)
+@Composable
+fun SettingsDescriptions() = PreviewShell(MainTab.Settings, descriptions = true) { SettingsPreviewContent() }
+
+@PreviewTest
+@Preview(name = "classic-downloads-dark", widthDp = 412, heightDp = 892)
+@Composable
+fun ClassicDownloadsDark() = PreviewShell(MainTab.Download, dark = true, uiStyle = AppUiStyle.CLASSIC) {
+    com.yunget.app.ui.classic.ClassicDownloadPreview()
 }

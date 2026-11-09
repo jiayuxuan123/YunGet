@@ -1,0 +1,1893 @@
+package com.yunget.app.ui.classic
+
+import com.yunget.app.ui.screens.*
+
+import dev.turbodl.core.TurboHttpClients
+import dev.turbodl.core.DnsMode
+import android.Manifest
+import android.content.ActivityNotFoundException
+import android.content.Context
+import android.content.pm.PackageManager
+import android.os.Build
+import androidx.core.content.ContextCompat
+import android.content.Intent
+import android.net.Uri
+import android.os.PowerManager
+import android.provider.Settings
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
+import androidx.compose.foundation.clickable
+import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
+import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.ExperimentalFoundationApi
+import androidx.compose.foundation.combinedClickable
+import androidx.compose.foundation.interaction.MutableInteractionSource
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.outlined.Article
+import androidx.compose.material.icons.outlined.ReceiptLong
+import androidx.compose.material.icons.outlined.Backup
+import androidx.compose.material.icons.outlined.ChevronRight
+import androidx.compose.material.icons.outlined.Memory
+import androidx.compose.material.icons.outlined.SettingsSuggest
+import androidx.compose.material.icons.outlined.Bolt
+import androidx.compose.material.icons.outlined.Dns
+import androidx.compose.material.icons.outlined.Extension
+import androidx.compose.material.icons.outlined.FolderOpen
+import androidx.compose.material.icons.outlined.Groups
+import androidx.compose.material.icons.outlined.Image
+import androidx.compose.material.icons.outlined.Info
+import androidx.compose.material.icons.outlined.Layers
+import androidx.compose.material.icons.outlined.Notifications
+import androidx.compose.material.icons.outlined.Palette
+import androidx.compose.material.icons.outlined.Style
+import androidx.compose.material.icons.outlined.Power
+import androidx.compose.material.icons.outlined.Refresh
+import androidx.compose.material.icons.outlined.Restore
+import androidx.compose.material.icons.outlined.Speed
+import androidx.compose.material.icons.outlined.Storefront
+import androidx.compose.material.icons.outlined.SystemUpdate
+import androidx.compose.material.icons.outlined.TrendingUp
+import androidx.compose.material.icons.outlined.Tune
+import androidx.compose.material.icons.outlined.VolunteerActivism
+import androidx.compose.material.icons.outlined.Campaign
+import androidx.compose.foundation.text.KeyboardOptions
+import androidx.compose.material3.CardDefaults
+import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.HorizontalDivider
+import androidx.compose.material3.Icon
+import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.Text
+import androidx.compose.material3.TopAppBarScrollBehavior
+import androidx.compose.material3.ripple
+import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.setValue
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import androidx.compose.ui.Alignment
+import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.input.nestedscroll.nestedScroll
+import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.input.KeyboardType
+import androidx.compose.ui.text.input.PasswordVisualTransformation
+import androidx.compose.ui.unit.dp
+import com.yunget.app.data.backup.AuthBackupManager
+import com.yunget.app.data.backup.AuthCrypto
+import com.yunget.app.data.download.DownloadSaver
+import com.yunget.app.data.download.ThreadCountAdvice
+import com.yunget.app.data.network.HttpClients
+import com.yunget.app.data.plugin.PluginRepository
+import com.yunget.app.data.prefs.SettingsRepository
+import com.yunget.app.ui.theme.ThemeController
+import com.yunget.app.data.update.UpdateChecker
+import com.yunget.app.ui.SnackbarController
+import com.yunget.app.util.LogExporter
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
+import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.Button
+import androidx.compose.material3.Card
+import androidx.compose.material3.OutlinedTextField
+import androidx.compose.material3.RadioButton
+import androidx.compose.material3.Switch
+import androidx.compose.material3.TextButton
+
+/**
+ * 「自动 DNS」在设置里的哨兵值。
+ *
+ * 它不是合法 URL，因此不会与用户自定义输入的 DoH 地址冲突；
+ * 存进 SettingsRepository 后由下载管理器翻译成 `DnsMode.Auto`。
+ */
+private const val AUTO_DOH = "auto://best"
+
+
+
+/** 可选的最大下载线程数（引擎慢启动在 [4, 该值] 间动态爬升，最高 256 = 引擎上限） */
+private val threadOptions = listOf(1, 2, 4, 8, 16, 32, 64, 128, 192, 256)
+
+/**
+ * 设置页：下载线程数设置 + 主题外观 + 检查更新 + 日志与网盘认证。
+ */
+@OptIn(ExperimentalMaterial3Api::class, ExperimentalFoundationApi::class)
+@Composable
+fun SettingsScreen(
+    scrollBehavior: TopAppBarScrollBehavior,
+    downloadThreads: Int,
+    onThreadsChange: (Int) -> Unit,
+    onThemeClick: () -> Unit,
+    onAboutClick: () -> Unit,
+    onSupportClick: () -> Unit,
+    backupManager: AuthBackupManager,
+    /** 用应用内置下载器下载更新 APK（URL + 文件名），由 MainScreen 注入 DownloadManager */
+    onDownloadUpdateApk: (url: String, fileName: String) -> Unit,
+    /**
+     * 【开发诊断】连接数扫描。
+     *  - [onConnectionDiagnose] 启动一次（约 1 分钟，内部会更新下面两个 provider 的值）
+     *  - [diagStatusProvider]  状态行：null=从未运行；"运行中 2/4：…"；"✅ 已完成 …"
+     *  - [diagResultProvider]  上次结果全文（进程内保留，切页面不丢）
+     * 由 MainScreen 注入 DownloadManager 的状态；只在隐藏开发菜单里调用。
+     */
+    onConnectionDiagnose: suspend (urlOverride: String?) -> Unit,
+    /** 并发任务扫描（1/2/3 任务并行）：回答"多任务能不能叠加速度"。 */
+    onConcurrentDiagnose: suspend () -> Unit,
+    diagStatusProvider: () -> String?,
+    diagResultProvider: () -> String?,
+    /**
+     * 当前正在用的连接数（取活跃任务里最大的那个）；没有任务在跑时为 null。
+     *
+     * 为什么要有这个：P15 的核心是"让用户看得见自己这个旋钮的实际效果"。
+     * 设定值是 256 而引擎自适应收敛到 32，与设定值 32 实际用 32，
+     * 对用户是完全不同的两件事 —— 只显示设定值会让前者以为引擎没生效。
+     */
+    activeConnectionsProvider: () -> Int? = { null },
+    /** 打开实时日志页（日志系统升级）。 */
+    onLogViewClick: () -> Unit = {},
+    /** 打开公告与社区页（仓库里的 announcements.json + 讨论区入口）。 */
+    onAnnouncementClick: () -> Unit = {},
+    modifier: Modifier = Modifier
+) {
+    var showThreadsDialog by remember { mutableStateOf(false) }
+    var showLogDialog by remember { mutableStateOf(false) }
+    // 检查更新结果（非空时弹更新对话框）
+    var updateRelease by remember { mutableStateOf<UpdateChecker.Release?>(null) }
+    // 网盘认证导出弹窗（AES 加密 + 导出范围）
+    var showExportAuthDialog by remember { mutableStateOf(false) }
+    // 网盘认证导入：加密文件内容（非空时弹解密密码框）
+    var pendingImportContent by remember { mutableStateOf<String?>(null) }
+    var showImportAuthDialog by remember { mutableStateOf(false) }
+    // 本地状态：修改后立即刷新 UI，同时同步外部保存值
+    var threads by remember { mutableStateOf(downloadThreads) }
+    LaunchedEffect(downloadThreads) { threads = downloadThreads }
+    val context = LocalContext.current
+    val scope = rememberCoroutineScope()
+    // 下载保存目录（SAF）：本地状态驱动 UI 刷新，同时同步 SharedPreferences
+    val settingsRepo = remember { SettingsRepository(context) }
+    // 插件仓库：只用来给下面「插件」一行取已装/启用数量（插件页自己会再拿一份，各管各的）
+    val pluginRepo = remember { PluginRepository(context) }
+    var downloadDirUri by remember { mutableStateOf(settingsRepo.downloadDirUri) }
+    // 隐藏开发调试：忽略 SSL 证书（抓包用，长按「关于云取」打开菜单）
+    var ignoreSsl by remember { mutableStateOf(settingsRepo.ignoreSslCert) }
+    var showDevMenu by remember { mutableStateOf(false) }
+    // 下载引擎页（两套下载器切换、导入内核、引擎启停与状态）：独立全屏页，返回时同步副标题
+    var showDownloadEngine by remember { mutableStateOf(false) }
+    // 引擎高级参数：TurboDL 的真实旋钮（12 项）。
+    // 此前它们只有代码没有入口 —— 值被硬编码在 buildConfig() 里，
+    // 遇到 HTTP/2 塌缩、CDN 反复 503、按连接数封禁都没有自救手段。
+    var showEngineAdvanced by remember { mutableStateOf(false) }
+    var engineChoice by remember { mutableStateOf(settingsRepo.downloadEngine) }
+    // 插件页（JS 脚本导入/启停/详情）：独立全屏页，入口紧挨着「下载引擎」
+    var showPlugins by remember { mutableStateOf(false) }
+    // 插件市场页（插件源管理 / 检查更新 / 从源安装）：与插件页并列的独立全屏页
+    var showMarket by remember { mutableStateOf(false) }
+    // GitHub 镜像前缀：市场里插件源、更新检查与远程图片（支持页赞赏码等）共用。
+    // 存草稿而不是直接读设置，是为了让"编辑中"与"已保存"分离 —— 取消不该已经改掉。
+    var mirrorDraft by remember { mutableStateOf(settingsRepo.githubMirrorPrefix.orEmpty()) }
+    var showMirrorDialog by remember { mutableStateOf(false) }
+    // 插件副标题的计数：直接从插件仓库的 Flow 取，装上/卸掉/启停后这一行会自己更新，
+    // 不必等用户进插件页再回来。Flow 记住：listInstalled() 每次返回新 Flow，不记会反复重启收集。
+    val installedPluginsFlow = remember(pluginRepo) { pluginRepo.listInstalled() }
+    val installedPlugins by installedPluginsFlow.collectAsStateWithLifecycle(emptyList())
+    val pluginTotal = installedPlugins.size
+    val pluginEnabled = installedPlugins.count { it.enabled }
+    // 【开发诊断】连接数扫描。
+    // 状态与结果**由管理器持有**，这里只做轮询展示 —— 否则用户切页面/退出设置页，
+    // remember 里的状态就没了，"跑没跑完"根本无从判断（用户实报的正是这一点）。
+    var diagStatus by remember { mutableStateOf<String?>(null) }
+    var diagResult by remember { mutableStateOf<String?>(null) }
+    var showDiagResultDialog by remember { mutableStateOf(false) }
+    /**
+     * 手动指定用于诊断的直链（可空）。
+     *
+     * 为什么需要：诊断要用一条**当前可用**的链接，而任务表存的是取链时刻的签名直链 ——
+     * 网盘直链短时有效（夸克约 3 小时），过期后诊断只会报"没有链接可用的任务"。
+     * 提供输入框后，用户可在"旧任务全过期"时贴一条新链接继续诊断。
+     */
+    var diagUrlInput by remember { mutableStateOf("") }
+    val diagRunning = diagStatus?.startsWith("运行中") == true
+    LaunchedEffect(Unit) {
+        while (true) {
+            diagStatus = diagStatusProvider()
+            diagResult = diagResultProvider()
+            delay(700)
+        }
+    }
+    LaunchedEffect(Unit) { ignoreSsl = settingsRepo.ignoreSslCert }
+    // 网络与下载策略（本地状态驱动 UI，同时同步 SharedPreferences）
+    var maxConcurrent by remember { mutableStateOf(settingsRepo.maxConcurrentDownloads) }
+    var speedLimitBps by remember { mutableStateOf(settingsRepo.downloadSpeedLimit) }
+    var retryCount by remember { mutableStateOf(settingsRepo.downloadRetryCount) }
+    var dohUrl by remember { mutableStateOf(settingsRepo.dohUrl) }
+    var warmUp by remember { mutableStateOf(settingsRepo.warmUpConnections) }
+    var slowStartOn by remember { mutableStateOf(settingsRepo.slowStart) }
+    var showConcurrencyDialog by remember { mutableStateOf(false) }
+    var showSpeedDialog by remember { mutableStateOf(false) }
+    var showRetryDialog by remember { mutableStateOf(false) }
+    var showDohDialog by remember { mutableStateOf(false) }
+    // 用户体验与系统适配：锁屏保持下载 / 通知栏速度
+    var keepLocked by remember { mutableStateOf(settingsRepo.keepDownloadWhenLocked) }
+    var showSpeed by remember { mutableStateOf(settingsRepo.notificationShowSpeed) }
+    var showBatteryDialog by remember { mutableStateOf(false) }
+    // 通知权限（Android 13+）：未授权时点击「通知栏下载进度」先申请，授权后生效
+    val notifyPermLauncher = rememberLauncherForActivityResult(
+        ActivityResultContracts.RequestPermission()
+    ) { granted ->
+        if (granted) {
+            showSpeed = true
+            settingsRepo.notificationShowSpeed = true
+        }
+    }
+    val dirLauncher = rememberLauncherForActivityResult(
+        ActivityResultContracts.OpenDocumentTree()
+    ) { uri ->
+        if (uri != null) {
+            // 持久授权：应用重启后仍可写（API19+；Android 10/11+ 分区存储必需）
+            val flags = Intent.FLAG_GRANT_READ_URI_PERMISSION or Intent.FLAG_GRANT_WRITE_URI_PERMISSION
+            runCatching { context.contentResolver.takePersistableUriPermission(uri, flags) }
+            settingsRepo.downloadDirUri = uri.toString()
+            downloadDirUri = uri.toString()
+            SnackbarController.show("下载保存目录已更新")
+        }
+    }
+    // 导入网盘认证文件选择器：选择后先判断是否加密备份，加密则弹密码框
+    val importLauncher = rememberLauncherForActivityResult(
+        ActivityResultContracts.OpenDocument()
+    ) { uri ->
+        if (uri != null) {
+            scope.launch {
+                // 【必须切 IO】读的是 DocumentsProvider（可能是网盘/远端），
+                // 一次 binder IPC + 整文件读取；scope 是 rememberCoroutineScope() = 主线程。
+                // 下面 importJson 本来就切了 IO，只有这里漏了。
+                val text = withContext(Dispatchers.IO) {
+                    runCatching {
+                        context.contentResolver.openInputStream(uri)?.bufferedReader()?.use { it.readText() }
+                    }.getOrNull()
+                }
+                if (text == null) {
+                    SnackbarController.show("读取文件失败")
+                    return@launch
+                }
+                if (AuthCrypto.isEncrypted(text)) {
+                    // 加密备份：弹解密密码框
+                    pendingImportContent = text
+                    showImportAuthDialog = true
+                } else {
+                    // 明文备份：直接导入
+                    val count = runCatching {
+                        withContext(Dispatchers.IO) { backupManager.importJson(text) }
+                    }.getOrElse { e ->
+                        SnackbarController.show("导入失败：${e.message}")
+                        return@launch
+                    }
+                    SnackbarController.show("已恢复 $count 个平台的认证信息")
+                }
+            }
+        }
+    }
+
+    Column(
+        modifier = modifier
+            .fillMaxSize()
+            .nestedScroll(scrollBehavior.nestedScrollConnection)
+            .verticalScroll(rememberScrollState())
+            .padding(16.dp)
+    ) {
+        // ---------- 下载 ----------
+        // 只放"改变下载行为本身"的项。下面按用途分了三组，而不是一长条平铺：
+        // 原先 11 项挤在一个「下载」标题下，找一项要通读全部描述。
+        SectionLabel("下载")
+        // 描述文字来自 ThreadCountAdvice（P15）：高档位会给出"调高有风险、但对每连接
+        // 限速的服务端有效"的说明。措辞是可测的（见 ThreadCountAdviceTest），
+        // 不写在这里 —— 写在 Composable 里就只能靠肉眼回归。
+        val activeConns = activeConnectionsProvider()
+        SettingsItem(
+            icon = Icons.Outlined.Tune,
+            title = "最大下载线程数",
+                        valueText = if (activeConns != null) "$threads 条上限 · 当前 $activeConns 条" else "$threads 条连接",
+            description = buildString {
+                append(ThreadCountAdvice.describe(threads))
+                // 有任务在跑时，把"引擎实际用到多少"也说出来。
+                // 设定值与实际值不一致是**正常的**（引擎会按实测吞吐自行收敛），
+                // 但用户看不见就会以为没生效。
+                if (activeConns != null) {
+                    append("\n当前生效：$activeConns 条连接（引擎按实测吞吐自动调整）")
+                }
+            },
+            onClick = { showThreadsDialog = true }
+        )
+
+        Spacer(modifier = Modifier.height(8.dp))
+
+        // 下载保存目录：系统文件夹选择器（SAF，适配各 Android 版本分区存储）；
+        // 已自定义时卡片右侧内嵌「恢复默认」操作（不单独外露按钮）
+        SettingsItem(
+            icon = Icons.Outlined.FolderOpen,
+            title = "下载保存目录",
+                        valueText = downloadDirUri?.let { DownloadSaver.safDirDisplay(it) } ?: "Download",
+            description = downloadDirUri?.let { "已自定义：${DownloadSaver.safDirDisplay(it)}" }
+                ?: "系统默认 Download（点击自定义）",
+            onClick = {
+                // 系统选择器被卸载或禁用时 launch 抛 ActivityNotFoundException：选中器的
+                // Activity 属于系统组件，ROM 精简 / 被冻结 / 无「文件」应用时都可能缺失。
+                // 不加这层兜底就是**点击即崩溃**，而用户只是想换个目录。
+                runCatching { dirLauncher.launch(null) }
+                    .onFailure { e ->
+                        SnackbarController.show(
+                            if (e is ActivityNotFoundException) {
+                                "本机没有可用的文件选择器，无法自定义目录"
+                            } else {
+                                "打开目录选择器失败：${e.message ?: e::class.simpleName}"
+                            }
+                        )
+                    }
+            },
+            trailing = if (downloadDirUri != null) {
+                {
+                    TextButton(
+                        onClick = {
+                            downloadDirUri = null
+                            settingsRepo.downloadDirUri = null
+                            SnackbarController.show("已恢复默认下载目录")
+                        },
+                        modifier = Modifier.padding(start = 8.dp)
+                    ) {
+                        Text(
+                            text = "恢复默认",
+                            style = MaterialTheme.typography.labelMedium,
+                            color = MaterialTheme.colorScheme.primary
+                        )
+                    }
+                }
+            } else {
+                null
+            }
+        )
+
+        Spacer(modifier = Modifier.height(8.dp))
+
+        // 网络与下载策略
+        SettingsItem(
+            icon = Icons.Outlined.Layers,
+            title = "最大同时下载任务数",
+                        valueText = "$maxConcurrent 个任务",
+            description = "同时下载 $maxConcurrent 个任务（限制后台并发，避免占满带宽）",
+            onClick = { showConcurrencyDialog = true }
+        )
+
+        Spacer(modifier = Modifier.height(8.dp))
+
+        SettingsItem(
+            icon = Icons.Outlined.Speed,
+            title = "下载速度限制",
+                        valueText = speedLimitText(speedLimitBps),
+            description = speedLimitText(speedLimitBps),
+            onClick = { showSpeedDialog = true }
+        )
+
+        Spacer(modifier = Modifier.height(8.dp))
+
+        SettingsItem(
+            icon = Icons.Outlined.Refresh,
+            title = "失败自动重试",
+                        valueText = if (retryCount == 0) "不重试" else "$retryCount 次",
+            description = if (retryCount == 0) "失败后不自动重试" else "失败后自动重试 $retryCount 次（断点续传）",
+            onClick = { showRetryDialog = true }
+        )
+
+        Spacer(modifier = Modifier.height(8.dp))
+
+        // 连接预热：下载前预建连接池，起步更快
+        SettingsItem(
+            icon = Icons.Outlined.Bolt,
+            title = "连接预热",
+            description = if (warmUp) "开启：下载前预建连接并预解析 DNS，起步更快" else "关闭：直接开始下载",
+            onClick = {
+                warmUp = !warmUp
+                settingsRepo.warmUpConnections = warmUp
+            },
+            trailing = { Switch(checked = warmUp, onCheckedChange = null) }
+        )
+
+        Spacer(modifier = Modifier.height(8.dp))
+
+        // 慢启动：并发从少爬升到设定值
+        SettingsItem(
+            icon = Icons.Outlined.TrendingUp,
+            title = "慢启动",
+            description = if (slowStartOn) {
+                "开启：并发从少量逐步爬升到设定值，减少瞬时连接冲击"
+            } else {
+                "关闭：立即全开并发；吞吐自适应仍会在聚合限速时向下收敛"
+            },
+            onClick = {
+                slowStartOn = !slowStartOn
+                settingsRepo.slowStart = slowStartOn
+            },
+            trailing = { Switch(checked = slowStartOn, onCheckedChange = null) }
+        )
+
+        Spacer(modifier = Modifier.height(24.dp))
+
+        // ---------- 引擎与插件 ----------
+        // 「用哪个引擎下」与「引擎能识别什么链接」是同一件事的两半，放在一组里。
+        SectionLabel("引擎与插件")
+        // 下载引擎：**所有**引擎都在这个页面里选（TurboDL / 内置兼容 / aria2 / Gopeed），
+        // 内核导入、启停与状态也都在那里 —— 设置页只留这一个入口，不再分两处。
+        SettingsItem(
+            icon = Icons.Outlined.Memory,
+            title = "下载引擎",
+                        valueText = if (engineChoice == SettingsRepository.ENGINE_GOPEED) "Gopeed" else "TurboDL",
+            description = if (engineChoice == SettingsRepository.ENGINE_GOPEED) {
+                "Gopeed 引擎（支持磁力/BT，需导入内核）"
+            } else {
+                "内置分片下载器 · 具体实现与 Gopeed 引擎都在这一页里选"
+            },
+            onClick = { showDownloadEngine = true }
+        )
+
+        Spacer(modifier = Modifier.height(8.dp))
+
+        // 引擎高级参数：默认值与旧硬编码完全一致，不动就等于不生效。
+        // 单独一项而不是塞进引擎页：引擎页管"用哪个引擎"，这里管"引擎怎么跑"。
+        SettingsItem(
+            icon = Icons.Outlined.Tune,
+            title = "引擎高级参数",
+            description = "HTTP/1.1 强制、动态分片、预分块数、吞吐自适应、背压与超时等 12 项",
+            onClick = { showEngineAdvanced = true }
+        )
+
+        Spacer(modifier = Modifier.height(8.dp))
+
+        // 插件：JS 脚本的导入 / 启停 / 运行状态 / 卸载都在那一页。
+        // 副标题直接给「装了几个、几个在跑」—— 不开插件页也能看出「装了但没启用」这种状态。
+        SettingsItem(
+            icon = Icons.Outlined.Extension,
+            title = "插件",
+                        valueText = "已安装 $pluginTotal · 已启用 $pluginEnabled",
+            description = when {
+                pluginTotal == 0 -> "还没装插件 · 可以导入或粘贴 JS 脚本扩展解析能力"
+                pluginEnabled == pluginTotal -> "$pluginTotal 个已安装，全部启用"
+                pluginEnabled == 0 -> "$pluginTotal 个已安装，都已停用"
+                else -> "$pluginTotal 个已安装，$pluginEnabled 个启用"
+            },
+            onClick = { showPlugins = true }
+        )
+
+        Spacer(modifier = Modifier.height(8.dp))
+
+        // 插件市场：插件源管理与从源安装都在那一页。
+        // 与「插件」分开两行是有意的 —— 那一页管"本机装了什么"，这一页管"哪里能拿到插件"，
+        // 加源与装插件是两件独立的事（市场页里也是这么分开的）。
+        SettingsItem(
+            icon = Icons.Outlined.Storefront,
+            title = "插件市场",
+            description = "从插件源浏览并安装 · 检查插件更新",
+            onClick = { showMarket = true }
+        )
+
+        Spacer(modifier = Modifier.height(8.dp))
+
+        // GitHub 镜像前缀：插件源、更新检查与**远程图片**都走它。
+        // 暴露这一项是因为国内直连 raw.githubusercontent.com 基本取不到东西 ——
+        // 此前只有插件源能单独配镜像，而支持页图片与 README 图片没有入口，
+        // 表现为"插件装了、支持页却一直空白"。
+        SettingsItem(
+            icon = Icons.Outlined.Dns,
+            title = "GitHub 网络镜像",
+                        valueText = if (mirrorDraft.isBlank()) "自动 / 直连" else mirrorDraft,
+            description = when {
+                mirrorDraft.isNullOrBlank() -> "未设置（直连；国内可能加载不出图片与插件源）"
+                else -> "已启用：$mirrorDraft"
+            },
+            onClick = { showMirrorDialog = true }
+        )
+
+        Spacer(modifier = Modifier.height(8.dp))
+
+        // 自定义 DNS over HTTPS：绕过本地 DNS 污染/加速域名解析
+        SettingsItem(
+            icon = Icons.Outlined.Dns,
+            title = "自定义 DNS (DoH)",
+                        valueText = if (dohUrl.isNullOrBlank()) "系统 DNS" else if (dohUrl == AUTO_DOH) "自动优选" else dohUrl,
+            description = when {
+                // 哨兵值不能直接展示（对用户是无意义的内部标记）
+                dohUrl == AUTO_DOH -> "自动（并发探测最快的公共 DoH）"
+                dohUrl != null -> "已启用：$dohUrl"
+                else -> "使用系统 DNS（点击配置 DNS over HTTPS）"
+            },
+            onClick = { showDohDialog = true }
+        )
+
+        Spacer(modifier = Modifier.height(24.dp))
+
+        // ---------- 后台与通知 ----------
+        // 这两项都属于"下载时系统怎么对待本应用"，与下载参数不是一回事。
+        SectionLabel("后台与通知")
+        SettingsItem(
+            icon = Icons.Outlined.Power,
+            title = "锁屏后保持下载",
+            description = "开启后下载时获取 WakeLock 维持网络，并可加入「忽略电池优化」白名单",
+            onClick = {
+                keepLocked = !keepLocked
+                settingsRepo.keepDownloadWhenLocked = keepLocked
+                if (keepLocked) {
+                    val pm = context.getSystemService(Context.POWER_SERVICE) as? PowerManager
+                    if (pm?.isIgnoringBatteryOptimizations(context.packageName) != true) {
+                        showBatteryDialog = true
+                    }
+                }
+            },
+            trailing = { Switch(checked = keepLocked, onCheckedChange = null) }
+        )
+
+        Spacer(modifier = Modifier.height(8.dp))
+
+        SettingsItem(
+            icon = Icons.Outlined.Notifications,
+            title = "通知栏下载进度",
+            description = when {
+                Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU &&
+                    ContextCompat.checkSelfPermission(context, Manifest.permission.POST_NOTIFICATIONS) !=
+                    PackageManager.PERMISSION_GRANTED ->
+                    "未授予通知权限，下载通知将不可见（点击申请）"
+                showSpeed -> "完整通知：进度条 + 下载速度"
+                else -> "仅显示通知（隐藏下载速度）"
+            },
+            onClick = {
+                // Android 13+ 未授权：先申请通知权限，授权后自动开启完整通知
+                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU &&
+                    ContextCompat.checkSelfPermission(context, Manifest.permission.POST_NOTIFICATIONS) !=
+                    PackageManager.PERMISSION_GRANTED
+                ) {
+                    notifyPermLauncher.launch(Manifest.permission.POST_NOTIFICATIONS)
+                } else {
+                    showSpeed = !showSpeed
+                    settingsRepo.notificationShowSpeed = showSpeed
+                }
+            },
+            trailing = { Switch(checked = showSpeed, onCheckedChange = null) }
+        )
+
+        Spacer(modifier = Modifier.height(24.dp))
+
+        SectionLabel("外观")
+        com.yunget.app.ui.screens.SettingsDescriptionsToggle()
+        Spacer(Modifier.height(8.dp))
+        SettingsItem(
+            icon = Icons.Outlined.Palette,
+            title = "主题与外观",
+            description = "主题色、动态色彩与深色模式",
+            onClick = onThemeClick
+        )
+
+        Spacer(modifier = Modifier.height(8.dp))
+
+        Spacer(modifier = Modifier.height(24.dp))
+
+        SectionLabel("通用")
+        SettingsItem(
+            icon = Icons.Outlined.Image,
+            title = "列表缩略图",
+            description = if (ThemeController.cloudThumbnails) {
+                "图片文件在列表里显示小图（需要向网盘取图，会多花一点流量）"
+            } else {
+                "已关闭，列表只显示文件图标（不发取图请求）"
+            },
+            onClick = {
+                ThemeController.setCloudThumbnails(context, !ThemeController.cloudThumbnails)
+            },
+            trailing = {
+                Switch(checked = ThemeController.cloudThumbnails, onCheckedChange = null)
+            }
+        )
+
+        Spacer(modifier = Modifier.height(8.dp))
+
+        SettingsItem(
+            icon = Icons.Outlined.Groups,
+            title = "自动识别剪贴板",
+            description = if (ThemeController.clipboardSuggestEnabled) {
+                "复制分享链接后自动提示解析"
+            } else {
+                "已关闭，应用不再读取剪贴板"
+            },
+            onClick = {
+                ThemeController.setClipboardSuggestEnabled(
+                    context,
+                    !ThemeController.clipboardSuggestEnabled
+                )
+            },
+            trailing = {
+                Switch(checked = ThemeController.clipboardSuggestEnabled, onCheckedChange = null)
+            }
+        )
+
+        Spacer(modifier = Modifier.height(8.dp))
+
+        SettingsItem(
+            icon = Icons.Outlined.SystemUpdate,
+            title = "检查更新",
+            description = "检查 GitHub 是否有新版本可用",
+            onClick = {
+                scope.launch {
+                    SnackbarController.show("正在检查更新…")
+                    val release = runCatching { UpdateChecker.fetchLatestRelease() }.getOrNull()
+                    val current = UpdateChecker.currentVersion(context)
+                    if (release == null) {
+                        SnackbarController.show("检查更新失败，请检查网络")
+                    } else if (UpdateChecker.compareVersions(release.tagName, current) > 0) {
+                        updateRelease = release
+                    } else {
+                        SnackbarController.show("已是最新版本")
+                    }
+                }
+            }
+        )
+
+        Spacer(modifier = Modifier.height(8.dp))
+        // 入口拆成两个（日志系统升级）：实时查看与导出是两件不同的事 ——
+        // 前者回答"刚才那步有没有报错"，后者用于把证据交给别人。
+        // 旧版只有导出，为了看一眼错误也得走完整流程。
+        // 公告与社区：放在"通用"组最前 —— 用户遇到问题时第一个该看的是
+        // "是不是已知问题、有没有人讨论过"，而不是先去看日志。
+        SettingsItem(
+            icon = Icons.Outlined.Campaign,
+            title = "公告与社区",
+            description = "维护公告、已知问题说明，以及交流反馈入口",
+            onClick = onAnnouncementClick
+        )
+        Spacer(modifier = Modifier.height(8.dp))
+
+        SettingsItem(
+            icon = Icons.Outlined.ReceiptLong,
+            title = "实时日志",
+            description = "当场看最近发生了什么事，按级别过滤（错误、警告…），可复制",
+            onClick = onLogViewClick
+        )
+        Spacer(modifier = Modifier.height(8.dp))
+        SettingsItem(
+            icon = Icons.Outlined.Article,
+            title = "导出日志",
+            description = "导出崩溃日志、分类日志与应用信息，便于排查问题",
+            onClick = { showLogDialog = true }
+        )
+
+        Spacer(modifier = Modifier.height(24.dp))
+
+        SectionLabel("网盘认证")
+        SettingsItem(
+            icon = Icons.Outlined.Backup,
+            title = "导出网盘认证",
+            description = "使用至少 8 位口令加密 Cookie/JWT 后导出",
+            onClick = { showExportAuthDialog = true }
+        )
+
+        Spacer(modifier = Modifier.height(8.dp))
+        SettingsItem(
+            icon = Icons.Outlined.Restore,
+            title = "导入网盘认证",
+            description = "选择加密或明文的认证备份文件，恢复网盘登录",
+            onClick = { importLauncher.launch(arrayOf("application/json", "application/octet-stream", "*/*")) }
+        )
+
+        Spacer(modifier = Modifier.height(24.dp))
+
+        SectionLabel("关于")
+        SettingsItem(
+            icon = Icons.Outlined.Info,
+            title = "关于云取",
+            description = "版本信息、支持平台与技术说明",
+            onClick = onAboutClick,
+            onLongClick = { showDevMenu = true } // 长按打开隐藏开发调试菜单
+        )
+
+        Spacer(modifier = Modifier.height(8.dp))
+        SettingsItem(
+            icon = Icons.Outlined.VolunteerActivism,
+            title = "支持开发",
+            description = "微信扫码捐赠，支持项目持续维护",
+            onClick = onSupportClick
+        )
+    }
+
+    // 导出日志方式选择弹窗
+    if (showLogDialog) {
+        AlertDialog(
+            onDismissRequest = { showLogDialog = false },
+            title = { Text("导出日志") },
+            text = {
+                Column {
+                    Text(
+                        text = "选择日志导出方式：",
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                    Spacer(modifier = Modifier.height(6.dp))
+                    Text(
+                        text = "「关键诊断」段落会记录每次下载的启动信息（探测耗时、是否复用断点分片等），" +
+                            "不受系统日志缓冲影响。若要排查断点续传，请先点一次「继续下载」再导出。",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                    Spacer(modifier = Modifier.height(8.dp))
+                    TextButton(
+                        onClick = {
+                            showLogDialog = false
+                            scope.launch {
+                                val file = withContext(Dispatchers.IO) { LogExporter.export(context) }
+                                if (file != null && LogExporter.share(context, file)) {
+                                    SnackbarController.show("日志已分享")
+                                } else {
+                                    SnackbarController.show("导出日志失败")
+                                }
+                            }
+                        },
+                        modifier = Modifier.fillMaxWidth()
+                    ) {
+                        Text("分享日志（发送到其他应用）")
+                    }
+                    TextButton(
+                        onClick = {
+                            showLogDialog = false
+                            scope.launch {
+                                val ok = withContext(Dispatchers.IO) {
+                                    LogExporter.saveToDownloads(context)
+                                }
+                                SnackbarController.show(if (ok) "已保存到下载目录" else "保存失败")
+                            }
+                        },
+                        modifier = Modifier.fillMaxWidth()
+                    ) {
+                        Text("保存到下载目录")
+                    }
+                    TextButton(
+                        onClick = {
+                            showLogDialog = false
+                            scope.launch {
+                                val ok = withContext(Dispatchers.IO) {
+                                    LogExporter.clearLogcat()
+                                }
+                                SnackbarController.show(if (ok) "日志缓存已清空" else "清空失败")
+                            }
+                        },
+                        modifier = Modifier.fillMaxWidth()
+                    ) {
+                        Text("清空日志缓存（logcat -c）")
+                    }
+                }
+            },
+            confirmButton = {
+                TextButton(onClick = { showLogDialog = false }) { Text("取消") }
+            }
+        )
+    }
+
+    // 隐藏开发调试菜单（长按「关于云取」打开）：忽略 SSL 证书（抓包调试用）
+    if (showDevMenu) {
+        AlertDialog(
+            onDismissRequest = { showDevMenu = false },
+            title = { Text("开发调试") },
+            text = {
+                Column {
+                    val toggleIgnoreSsl = {
+                        ignoreSsl = !ignoreSsl
+                        settingsRepo.ignoreSslCert = ignoreSsl
+                        HttpClients.ignoreSsl = ignoreSsl
+                        SnackbarController.show(
+                            if (ignoreSsl) "已忽略 SSL 证书校验（抓包模式）" else "已恢复 SSL 证书校验"
+                        )
+                    }
+                    val rowShape = MaterialTheme.shapes.medium
+                    val rowInteraction = remember { MutableInteractionSource() }
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .clip(rowShape)
+                            .combinedClickable(
+                                interactionSource = rowInteraction,
+                                indication = ripple(bounded = true),
+                                onClick = toggleIgnoreSsl
+                            ),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Column(modifier = Modifier.weight(1f)) {
+                            Text(
+                                text = "忽略 SSL 证书",
+                                style = MaterialTheme.typography.titleMedium,
+                                fontWeight = FontWeight.Medium
+                            )
+                            Text(
+                                text = if (ignoreSsl) "已开启：所有网络请求不校验证书（抓包用）" else "已关闭：正常校验证书",
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                            )
+                        }
+                        Switch(checked = ignoreSsl, onCheckedChange = { toggleIgnoreSsl() })
+                    }
+                    Spacer(modifier = Modifier.height(12.dp))
+                    Text(
+                        text = "开启后所有 API 与下载请求将忽略 SSL 证书校验，便于配合抓包调试。请勿在日常使用中开启，存在中间人攻击风险。",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                    Spacer(modifier = Modifier.height(16.dp))
+                    Button(
+                        onClick = {
+                            showDevMenu = false
+                            // 调试用途：直接弹出更新弹窗（不判断是否已是最新版），预览弹窗 UI
+                            scope.launch {
+                                val release = runCatching { UpdateChecker.fetchLatestRelease() }.getOrNull()
+                                updateRelease = release ?: UpdateChecker.Release(
+                                    tagName = "v1.2.4（预览）",
+                                    body = "这是调试预览弹窗，用于查看更新弹窗 UI（含镜像站下载按钮）。",
+                                    assets = emptyList(),
+                                    publishedAt = ""
+                                )
+                            }
+                        },
+                        modifier = Modifier.fillMaxWidth()
+                    ) { Text("显示检查更新弹窗") }
+
+                    Spacer(modifier = Modifier.height(12.dp))
+                    // 直链输入框（可空）：留空则自动从最近任务里挑一条可用的。
+                    // 任务存的是取链时刻的签名直链，网盘直链短时有效（如夸克约 3 小时）；
+                    // 全部过期时诊断只会报"没有链接可用的任务" —— 此时可在此粘贴一条新直链。
+                    OutlinedTextField(
+                        value = diagUrlInput,
+                        onValueChange = { diagUrlInput = it.trim() },
+                        modifier = Modifier.fillMaxWidth(),
+                        label = { Text("诊断用直链（留空则用最近任务）") },
+                        placeholder = { Text("粘贴一条当前有效的下载直链") },
+                        singleLine = true,
+                        textStyle = MaterialTheme.typography.bodySmall
+                    )
+                    Spacer(modifier = Modifier.height(8.dp))
+                    Button(
+                        onClick = {
+                            showDevMenu = false
+                            if (!diagRunning) {
+                                // 状态由管理器更新，界面轮询显示；跑完会自动出现"查看结果"按钮。
+                                //
+                                // 【不再静默吞掉异常】原先写的是 `runCatching { ... }`，
+                                // 于是任何异常（如曾出现的 NetworkOnMainThreadException）
+                                // 都被无声丢弃 —— 用户只看到"什么都没发生"，无从判断原因。
+                                // 这里至少把失败原因弹给用户。
+                                scope.launch {
+                                    runCatching { onConnectionDiagnose(diagUrlInput.takeIf { it.isNotBlank() }) }
+                                        .onFailure { e ->
+                                            SnackbarController.show(
+                                                "诊断启动失败：${e.message ?: e::class.simpleName}"
+                                            )
+                                        }
+                                }
+                                SnackbarController.show("连接数诊断已开始（约 1 分钟），跑完会提示")
+                            }
+                        },
+                        enabled = !diagRunning,
+                        modifier = Modifier.fillMaxWidth()
+                    ) {
+                        Text(
+                            if (diagRunning) "连接数诊断运行中…（约 1 分钟）"
+                            else if (diagUrlInput.isNotBlank()) "连接数诊断（用上方直链）"
+                            else "连接数诊断（用最近任务）"
+                        )
+                    }
+                    // 进度/完成状态：必须一直可见，用户才能知道"跑完了没有"。
+                    diagStatus?.let { st ->
+                        Spacer(modifier = Modifier.height(6.dp))
+                        Text(
+                            text = st,
+                            style = MaterialTheme.typography.bodySmall,
+                            color = if (st.startsWith("❌")) MaterialTheme.colorScheme.error
+                            else MaterialTheme.colorScheme.primary
+                        )
+                    }
+                    Spacer(modifier = Modifier.height(6.dp))
+                    Button(
+                        onClick = {
+                            showDevMenu = false
+                            if (!diagRunning) {
+                                scope.launch {
+                                    runCatching { onConcurrentDiagnose() }
+                                        .onFailure { e ->
+                                            SnackbarController.show(
+                                                "诊断启动失败：${e.message ?: e::class.simpleName}"
+                                            )
+                                        }
+                                }
+                                SnackbarController.show("并发任务诊断已开始（约 1 分钟），跑完会提示")
+                            }
+                        },
+                        enabled = !diagRunning,
+                        modifier = Modifier.fillMaxWidth()
+                    ) {
+                        Text(if (diagRunning) "运行中…" else "并发任务诊断（1/2/3 任务并行）")
+                    }
+                    Spacer(modifier = Modifier.height(6.dp))
+                    Text(
+                        text = "并发任务诊断看「多开任务能不能叠加速度」。" +
+                            "注意：本扫描固定每任务连接数，任务数增加时**总连接数也在增加**；" +
+                            "判读会同时对照两者——增益与连接数同步＝提速来自连接；" +
+                            "连接数涨而吞吐不动＝限速按 IP/账户（换来源才有用）。",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                    Spacer(modifier = Modifier.height(6.dp))
+                    Button(
+                        onClick = { showDevMenu = false; showDiagResultDialog = true },
+                        enabled = diagResult != null,
+                        modifier = Modifier.fillMaxWidth()
+                    ) {
+                        Text(if (diagResult == null) "查看上次诊断结果（暂无）" else "查看/分享上次诊断结果")
+                    }
+                    Spacer(modifier = Modifier.height(6.dp))
+                    Text(
+                        text = "只改连接数、每档只跑 15 秒即取消，不会下完整个文件。" +
+                            "结果用于判断服务器是「每连接限速」还是「按 IP 聚合限速」还是「对并发有惩罚」。" +
+                            "结果会同时落到文件与日志里。",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                }
+            },
+            confirmButton = {
+                TextButton(onClick = { showDevMenu = false }) { Text("关闭") }
+            }
+        )
+    }
+
+    // 连接数诊断结果：可选择复制、可直接分享（发给别人/发给自己都行）
+    if (showDiagResultDialog) {
+        val text = diagResult ?: "(暂无结果)"
+        AlertDialog(
+            onDismissRequest = { showDiagResultDialog = false },
+            title = { Text("连接数诊断结果") },
+            text = {
+                Column(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .heightIn(max = 420.dp)
+                        .verticalScroll(rememberScrollState())
+                ) {
+                    Text(
+                        text = text,
+                        style = MaterialTheme.typography.bodySmall,
+                        modifier = Modifier.fillMaxWidth()
+                    )
+                }
+            },
+            confirmButton = {
+                Row {
+                    TextButton(onClick = {
+                        val cm = context.getSystemService(android.content.Context.CLIPBOARD_SERVICE)
+                            as android.content.ClipboardManager
+                        cm.setPrimaryClip(android.content.ClipData.newPlainText("连接数诊断", text))
+                        SnackbarController.show("已复制诊断结果")
+                    }) { Text("复制") }
+                    TextButton(onClick = {
+                        val send = android.content.Intent(android.content.Intent.ACTION_SEND).apply {
+                            type = "text/plain"
+                            putExtra(android.content.Intent.EXTRA_SUBJECT, "云取 · 连接数诊断结果")
+                            putExtra(android.content.Intent.EXTRA_TEXT, text)
+                        }
+                        runCatching {
+                            context.startActivity(
+                                android.content.Intent.createChooser(send, "分享诊断结果")
+                            )
+                        }
+                    }) { Text("分享") }
+                    TextButton(onClick = { showDiagResultDialog = false }) { Text("关闭") }
+                }
+            }
+        )
+    }
+
+    // 检查更新结果弹窗（发现新版本时展示，下载走系统浏览器）
+    updateRelease?.let { release ->
+        UpdateDialog(
+            currentVersion = UpdateChecker.currentVersion(context),
+            release = release,
+            onDownload = {
+                updateRelease = null
+                val apk = UpdateChecker.selectApk(release, Build.SUPPORTED_ABIS.toList())
+                if (apk != null) {
+                    onDownloadUpdateApk(apk.downloadUrl, apk.name)
+                    SnackbarController.show("已加入下载 ${apk.name}")
+                } else {
+                    SnackbarController.show("未找到 APK 下载链接")
+                }
+            },
+            onDownloadMirror = {
+                updateRelease = null
+                val apk = UpdateChecker.selectApk(release, Build.SUPPORTED_ABIS.toList())
+                if (apk != null) {
+                    onDownloadUpdateApk(UpdateChecker.mirrorUrl(apk.downloadUrl), apk.name)
+                    SnackbarController.show("已通过镜像站加入下载 ${apk.name}")
+                } else {
+                    SnackbarController.show("未找到 APK 下载链接")
+                }
+            },
+            onLater = { updateRelease = null },
+            onIgnore = {
+                context.getSharedPreferences("yunget_prefs", android.content.Context.MODE_PRIVATE)
+                    .edit()
+                    .putString("ignored_version", release.tagName)
+                    .apply()
+                updateRelease = null
+            }
+        )
+    }
+
+    // 线程数选择弹窗
+    if (showThreadsDialog) {
+        AlertDialog(
+            onDismissRequest = { showThreadsDialog = false },
+            title = { Text("下载线程数") },
+            text = {
+                Column {
+                    Text(
+                        text = ThreadCountAdvice.dialogNote(threads),
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                    Spacer(modifier = Modifier.height(8.dp))
+                    // 两列网格：10 个选项 5 行一屏可见，无需滑动就知道有哪些档位；
+                    // 仍保留限高 + 滚动，横屏/矮屏时兜底
+                    Column(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .heightIn(max = 320.dp)
+                            .verticalScroll(rememberScrollState())
+                    ) {
+                        threadOptions.chunked(2).forEach { rowValues ->
+                            Row(
+                                modifier = Modifier.fillMaxWidth(),
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                rowValues.forEach { value ->
+                                    RadioThreadRow(
+                                        value = value,
+                                        threads = threads,
+                                        onSelect = { v ->
+                                            threads = v
+                                            onThreadsChange(v)
+                                            showThreadsDialog = false
+                                        },
+                                        modifier = Modifier.weight(1f)
+                                    )
+                                }
+                                // 奇数个时补空占位，保持两列对齐
+                                if (rowValues.size == 1) Spacer(modifier = Modifier.weight(1f))
+                            }
+                        }
+                    }
+                }
+            },
+            confirmButton = {
+                TextButton(onClick = { showThreadsDialog = false }) { Text("取消") }
+            }
+        )
+    }
+
+    // 导出网盘认证弹窗（AES 加密密码 + 导出范围）
+    if (showExportAuthDialog) {
+        ExportAuthDialog(
+            onDismiss = { showExportAuthDialog = false },
+            onConfirm = { password, onlyLoggedIn ->
+                showExportAuthDialog = false
+                scope.launch {
+                    val content = runCatching {
+                        withContext(Dispatchers.IO) { backupManager.export(password, onlyLoggedIn) }
+                    }.getOrNull()
+                    if (content == null) {
+                        SnackbarController.show("导出失败")
+                        return@launch
+                    }
+                    val encrypted = true
+                    val saved = withContext(Dispatchers.IO) {
+                        backupManager.saveToDownloads(context, content, encrypted)
+                    }
+                    SnackbarController.show(
+                        if (saved) {
+                            if (encrypted) "已加密导出到下载目录" else "已导出到下载目录"
+                        } else {
+                            "导出失败"
+                        }
+                    )
+                }
+            }
+        )
+    }
+
+    // 导入加密备份弹窗（解密密码）
+    if (showImportAuthDialog) {
+        ImportAuthDialog(
+            onDismiss = {
+                showImportAuthDialog = false
+                pendingImportContent = null
+            },
+            onConfirm = { password ->
+                showImportAuthDialog = false
+                val content = pendingImportContent
+                pendingImportContent = null
+                if (content != null) {
+                    scope.launch {
+                        val count = try {
+                            withContext(Dispatchers.IO) { backupManager.import(content, password) }
+                        } catch (e: javax.crypto.AEADBadTagException) {
+                            SnackbarController.show("密码错误，解密失败")
+                            return@launch
+                        } catch (e: Exception) {
+                            SnackbarController.show("导入失败：${e.message}")
+                            return@launch
+                        }
+                        SnackbarController.show("已恢复 $count 个平台的认证信息")
+                    }
+                }
+            }
+        )
+    }
+
+    // 最大同时下载任务数
+
+    if (showConcurrencyDialog) {
+        val options = listOf(1, 2, 3, 5, 8)
+        AlertDialog(
+            onDismissRequest = { showConcurrencyDialog = false },
+            title = { Text("最大同时下载任务数") },
+            text = {
+                Column {
+                    options.forEach { v ->
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            RadioButton(
+                                selected = maxConcurrent == v,
+                                onClick = {
+                                    maxConcurrent = v
+                                    settingsRepo.maxConcurrentDownloads = v
+                                    showConcurrencyDialog = false
+                                }
+                            )
+                            Spacer(modifier = Modifier.width(8.dp))
+                            Text("同时下载 $v 个任务", style = MaterialTheme.typography.bodyMedium)
+                        }
+                    }
+                }
+            },
+            confirmButton = {
+                TextButton(onClick = { showConcurrencyDialog = false }) { Text("取消") }
+            }
+        )
+    }
+
+    // 下载速度限制：预设档位 + 自定义（KB/s）
+    if (showSpeedDialog) {
+        val presets = listOf(0L, 1L * 1024 * 1024, 2L * 1024 * 1024, 5L * 1024 * 1024, 10L * 1024 * 1024)
+        // 弹窗内临时选择（不立即写设置）：null=未操作，-1=自定义，其余=预设值
+        var tempSelected by remember { mutableStateOf<Long?>(null) }
+        // 自定义输入：打开时若当前是自定义档位，带出原值（重新打开保留）
+        var customKb by remember {
+            mutableStateOf(
+                if (speedLimitBps > 0 && speedLimitBps !in presets) (speedLimitBps / 1024).toString() else ""
+            )
+        }
+        val effective = tempSelected ?: speedLimitBps
+        // 自定义选中态：显式识别「-1=自定义」哨兵；未操作时按当前值是否为自定义档位判断
+        val isCustom = when {
+            tempSelected == -1L -> true
+            tempSelected == null -> speedLimitBps > 0 && speedLimitBps !in presets
+            else -> false
+        }
+        AlertDialog(
+            onDismissRequest = { showSpeedDialog = false },
+            title = { Text("下载速度限制") },
+            text = {
+                Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
+                    presets.forEach { v ->
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            RadioButton(
+                                selected = !isCustom && effective == v,
+                                onClick = { tempSelected = v }
+                            )
+                            Spacer(modifier = Modifier.width(8.dp))
+                            Text(
+                                text = if (v == 0L) "不限速" else speedLimitText(v),
+                                style = MaterialTheme.typography.bodyMedium
+                            )
+                        }
+                    }
+                    // 自定义档位：点击单选即可选中（进入自定义模式）
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        RadioButton(
+                            selected = isCustom,
+                            onClick = {
+                                tempSelected = -1L
+                                // 当前已是自定义值时带出原值，便于修改
+                                if (speedLimitBps > 0 && speedLimitBps !in presets && customKb.isBlank()) {
+                                    customKb = (speedLimitBps / 1024).toString()
+                                }
+                            }
+                        )
+                        Spacer(modifier = Modifier.width(8.dp))
+                        OutlinedTextField(
+                            value = customKb,
+                            onValueChange = {
+                                customKb = it.filter(Char::isDigit).take(6)
+                                // 输入即视为选择自定义
+                                tempSelected = -1L
+                            },
+                            modifier = Modifier.weight(1f),
+                            label = { Text("自定义 KB/s") },
+                            keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
+                            singleLine = true
+                        )
+                    }
+                }
+            },
+            confirmButton = {
+                TextButton(
+                    onClick = {
+                        // 以当前选中项为准：选自定义则应用输入；选预设则应用预设值
+                        if (isCustom) {
+                            val kb = customKb.toLongOrNull()?.coerceAtLeast(1L)
+                            if (kb != null) {
+                                speedLimitBps = kb * 1024
+                                settingsRepo.downloadSpeedLimit = kb * 1024
+                            }
+                            // 自定义输入为空：保持原值
+                        } else if (tempSelected != null) {
+                            val v = tempSelected ?: speedLimitBps
+                            speedLimitBps = v
+                            settingsRepo.downloadSpeedLimit = v
+                        }
+                        // 未做任何选择：保持当前值
+                        showSpeedDialog = false
+                    }
+                ) { Text("确定") }
+            },
+            dismissButton = {
+                TextButton(onClick = { showSpeedDialog = false }) { Text("取消") }
+            }
+        )
+    }
+
+    // 失败自动重试次数
+    if (showRetryDialog) {
+        val options = listOf(0, 1, 2, 3, 5, 8, 10)
+        AlertDialog(
+            onDismissRequest = { showRetryDialog = false },
+            title = { Text("失败自动重试") },
+            text = {
+                Column {
+                    options.forEach { v ->
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            RadioButton(
+                                selected = retryCount == v,
+                                onClick = {
+                                    retryCount = v
+                                    settingsRepo.downloadRetryCount = v
+                                    showRetryDialog = false
+                                }
+                            )
+                            Spacer(modifier = Modifier.width(8.dp))
+                            Text(
+                                text = if (v == 0) "不自动重试" else "失败后自动重试 $v 次",
+                                style = MaterialTheme.typography.bodyMedium
+                            )
+                        }
+                    }
+                }
+            },
+            confirmButton = {
+                TextButton(onClick = { showRetryDialog = false }) { Text("取消") }
+            }
+        )
+    }
+
+    // 自定义 DNS over HTTPS：预设公共 DoH + 自定义 URL
+    // 「自动」用哨兵值表示（不是合法 URL，故不会与自定义输入冲突）。
+    // 存进 settings 后由下载管理器翻译成 DnsMode.Auto。
+
+    if (showDohDialog) {
+        val presets = listOf(
+            "" to "不使用（系统 DNS）",
+            AUTO_DOH to "自动（推荐：并发探测最快的公共 DoH）",
+            "https://dns.alidns.com/dns-query" to "阿里 DoH（国内快）",
+            "https://doh.pub/dns-query" to "腾讯 DoH（国内快）",
+            "https://dns.google/dns-query" to "Google DoH（境外）",
+            "https://cloudflare-dns.com/dns-query" to "Cloudflare DoH（境外）",
+        )
+        // -1 = 自定义档位哨兵；null = 未操作
+        var tempPick by remember { mutableStateOf<Int?>(null) }
+        var customUrl by remember {
+            mutableStateOf(
+                if (dohUrl != null && presets.none { it.first == dohUrl }) dohUrl.orEmpty() else ""
+            )
+        }
+        val isCustom = when {
+            tempPick == -1 -> true
+            tempPick == null -> dohUrl != null && presets.none { it.first == dohUrl }
+            else -> false
+        }
+        AlertDialog(
+            onDismissRequest = { showDohDialog = false },
+            title = { Text("自定义 DNS (DoH)") },
+            text = {
+                Column {
+                    Text(
+                        text = "下载请求改用加密 DNS 解析域名，可绕过本地 DNS 污染、提升解析速度。仅影响下载引擎，不影响其他应用。",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                    Spacer(modifier = Modifier.height(8.dp))
+                    presets.forEach { (url, label) ->
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            RadioButton(
+                                selected = when {
+                                    tempPick != null -> tempPick == presets.indexOfFirst { it.first == url }
+                                    else -> (dohUrl ?: "") == url && !isCustom
+                                },
+                                onClick = { tempPick = presets.indexOfFirst { it.first == url } }
+                            )
+                            Spacer(modifier = Modifier.width(8.dp))
+                            Text(label, style = MaterialTheme.typography.bodyMedium)
+                        }
+                    }
+                    // 选中「自动」时才显示各端点延迟：让用户直观看到"自动"到底选了谁、有多快
+                    val autoSelected = (tempPick?.let { presets.getOrNull(it)?.first } ?: dohUrl) == AUTO_DOH
+                    if (autoSelected) {
+                        DohLatencyPanel()
+                    }
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        RadioButton(selected = isCustom, onClick = { tempPick = -1 })
+                        Spacer(modifier = Modifier.width(8.dp))
+                        OutlinedTextField(
+                            value = customUrl,
+                            onValueChange = {
+                                customUrl = it.trim()
+                                tempPick = -1
+                            },
+                            modifier = Modifier.weight(1f),
+                            label = { Text("自定义 DoH URL") },
+                            placeholder = { Text("https://…/dns-query") },
+                            singleLine = true
+                        )
+                    }
+                }
+            },
+            confirmButton = {
+                TextButton(
+                    onClick = {
+                        val pick = tempPick
+                        when {
+                            // 选中某个预设
+                            pick != null && pick >= 0 -> {
+                                dohUrl = presets[pick].first.ifBlank { null }
+                                settingsRepo.dohUrl = dohUrl
+                            }
+                            // 自定义
+                            pick == -1 && customUrl.startsWith("https://") -> {
+                                dohUrl = customUrl
+                                settingsRepo.dohUrl = customUrl
+                            }
+                            // 未操作：保持现值
+                        }
+                        showDohDialog = false
+                    }
+                ) { Text("确定") }
+            },
+            dismissButton = {
+                TextButton(onClick = { showDohDialog = false }) { Text("取消") }
+            }
+        )
+    }
+
+    // 锁屏保持下载：引导加入「忽略电池优化」白名单
+    if (showBatteryDialog) {
+        AlertDialog(
+            onDismissRequest = { showBatteryDialog = false },
+            title = { Text("保持后台下载") },
+            text = {
+                Text(
+                    text = "为确保障屏后下载不中断，建议将云取加入「忽略电池优化」白名单。是否前往系统设置？",
+                    style = MaterialTheme.typography.bodyMedium
+                )
+            },
+            confirmButton = {
+                TextButton(
+                    onClick = {
+                        showBatteryDialog = false
+                        runCatching {
+                            context.startActivity(
+                                Intent(
+                                    Settings.ACTION_REQUEST_IGNORE_BATTERY_OPTIMIZATIONS,
+                                    Uri.parse("package:${context.packageName}")
+                                )
+                            )
+                        }
+                    }
+                ) { Text("前往设置") }
+            },
+            dismissButton = {
+                TextButton(onClick = { showBatteryDialog = false }) { Text("暂不") }
+            }
+        )
+    }
+
+    // 下载引擎页：独立全屏页（两套下载器切换、导入内核、引擎启停与状态）。
+    // 返回时重新读一次设置，让上面那一行的副标题立刻反映新选择。
+    if (showEngineAdvanced) {
+        EngineAdvancedScreen(onBack = { showEngineAdvanced = false })
+    }
+
+    if (showDownloadEngine) {
+        DownloadEngineScreen(
+            onBack = {
+                showDownloadEngine = false
+                engineChoice = settingsRepo.downloadEngine
+            },
+            onOpenAnnouncement = {
+                showDownloadEngine = false
+                onAnnouncementClick()
+            }
+        )
+    }
+
+    // 插件页：独立全屏页（JS 脚本的导入/启停/运行状态/详情/卸载）。
+    // 副标题走的是仓库的 Flow，卸载与启停会自己反映到上面那一行，这里不必回读设置。
+    if (showPlugins) {
+        PluginsScreen(onBack = { showPlugins = false })
+    }
+
+    // 插件市场页：独立全屏页（插件源 / 检查更新 / 从源安装 / 详情）。
+    // 与插件页同理，装了什么由市场页自己的 Flow 反映，这里不必回读设置。
+    if (showMarket) {
+        PluginMarketScreen(onBack = { showMarket = false })
+    }
+
+    // GitHub 镜像前缀编辑。与市场里的"按源配镜像"是两件事：这一项是**全局**的，
+    // 作用于插件源、更新检查与远程图片（支持页赞赏码、README 图片）。
+    if (showMirrorDialog) {
+        GitHubMirrorDialog(
+            initial = mirrorDraft,
+            onDismiss = { showMirrorDialog = false },
+            onSave = { value ->
+                // 与 PluginRepository.setSourceMirror 同一套校验：镜像前缀必须是 http/https。
+                // 这里**只校验不猜**：非法就退回原值并告知，不做静默修正。
+                val trimmed = value.trim()
+                if (trimmed.isNotEmpty()) {
+                    val scheme = trimmed.substringBefore(':', "").lowercase()
+                    if (scheme != "http" && scheme != "https") {
+                        SnackbarController.show("镜像前缀必须是 http/https 地址")
+                        return@GitHubMirrorDialog
+                    }
+                }
+                settingsRepo.githubMirrorPrefix = trimmed.ifEmpty { null }
+                mirrorDraft = trimmed
+                showMirrorDialog = false
+                SnackbarController.show(
+                    if (trimmed.isEmpty()) "已取消镜像（直连）" else "镜像已设为：$trimmed"
+                )
+            },
+        )
+    }
+}
+
+/**
+ * GitHub 镜像前缀编辑弹窗。
+ *
+ * 文案要说清两件容易误解的事：
+ *  1. 它作用于**所有** GitHub 系地址（插件源、更新检查、图片），不只是插件；
+ *  2. 换镜像**不影响校验** —— 插件照验 SHA-256 与签名（否则用户会以为这是个能绕验签的开关）。
+ */
+@Composable
+private fun GitHubMirrorDialog(
+    initial: String,
+    onDismiss: () -> Unit,
+    onSave: (String) -> Unit,
+) {
+    var draft by remember(initial) { mutableStateOf(initial) }
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text("GitHub 网络镜像") },
+        text = {
+            Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                Text(
+                    text = "国内直连 raw.githubusercontent.com 经常取不到内容。填一个镜像前缀后，" +
+                        "插件源、插件图片与应用更新会先走镜像、失败再回退直连。",
+                    style = MaterialTheme.typography.bodyMedium,
+                )
+                OutlinedTextField(
+                    value = draft,
+                    onValueChange = { draft = it },
+                    label = { Text("镜像前缀（留空 = 直连）") },
+                    placeholder = { Text("https://gh.example.com/") },
+                    singleLine = true,
+                    modifier = Modifier.fillMaxWidth(),
+                )
+                Text(
+                    text = "镜像只负责分发：取回的内容照验 SHA-256 与签名，换镜像不会让没验签的插件装得上。" +
+                        "它只对 GitHub 系地址生效，其它图床不受影响。",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+            }
+        },
+        confirmButton = {
+            TextButton(onClick = { onSave(draft) }) { Text("保存") }
+        },
+        dismissButton = {
+            TextButton(onClick = onDismiss) { Text("取消") }
+        },
+    )
+}
+
+/** 导出网盘认证弹窗：AES 加密密码 + 导出范围（仅已登录 / 全部绑定） */
+@Composable
+private fun ExportAuthDialog(
+    onDismiss: () -> Unit,
+    onConfirm: (password: String, onlyLoggedIn: Boolean) -> Unit
+) {
+    var password by remember { mutableStateOf("") }
+    var onlyLoggedIn by remember { mutableStateOf(true) }
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text("导出网盘认证") },
+        text = {
+            Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                Text(
+                    text = "设置至少 8 位密码对认证文件进行 AES 加密。密码请务必牢记，丢失无法找回。",
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+                OutlinedTextField(
+                    value = password,
+                    onValueChange = { password = it },
+                    modifier = Modifier.fillMaxWidth(),
+                    label = { Text("加密密码（至少 8 位）") },
+                    visualTransformation = PasswordVisualTransformation(),
+                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Password),
+                    singleLine = true
+                )
+                Text(
+                    text = "导出范围",
+                    style = MaterialTheme.typography.labelMedium,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    RadioButton(
+                        selected = onlyLoggedIn,
+                        onClick = { onlyLoggedIn = true }
+                    )
+                    Spacer(modifier = Modifier.width(8.dp))
+                    Text("仅导出当前已登录的网盘", style = MaterialTheme.typography.bodyMedium)
+                }
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    RadioButton(
+                        selected = !onlyLoggedIn,
+                        onClick = { onlyLoggedIn = false }
+                    )
+                    Spacer(modifier = Modifier.width(8.dp))
+                    Text("导出全部绑定的网盘", style = MaterialTheme.typography.bodyMedium)
+                }
+            }
+        },
+        confirmButton = {
+            Button(
+                onClick = { onConfirm(password, onlyLoggedIn) },
+                enabled = password.length >= 8
+            ) { Text("导出") }
+        },
+        dismissButton = {
+            TextButton(onClick = onDismiss) { Text("取消") }
+        }
+    )
+}
+
+/** 导入加密备份弹窗：输入解密密码 */
+@Composable
+private fun ImportAuthDialog(
+    onDismiss: () -> Unit,
+    onConfirm: (password: String) -> Unit
+) {
+    var password by remember { mutableStateOf("") }
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text("导入网盘认证") },
+        text = {
+            Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                Text(
+                    text = "该备份文件已加密，请输入导出时设置的密码进行解密。",
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+                OutlinedTextField(
+                    value = password,
+                    onValueChange = { password = it },
+                    modifier = Modifier.fillMaxWidth(),
+                    label = { Text("解密密码") },
+                    visualTransformation = PasswordVisualTransformation(),
+                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Password),
+                    singleLine = true
+                )
+            }
+        },
+        confirmButton = {
+            Button(
+                onClick = { onConfirm(password) },
+                enabled = password.isNotBlank()
+            ) { Text("解密并导入") }
+        },
+        dismissButton = {
+            TextButton(onClick = onDismiss) { Text("取消") }
+        }
+    )
+}
+
+@Composable
+private fun SectionLabel(text: String) {
+    Text(
+        text = text,
+        style = MaterialTheme.typography.labelMedium,
+        color = MaterialTheme.colorScheme.onSurfaceVariant,
+        modifier = Modifier.padding(start = 4.dp, bottom = 8.dp)
+    )
+}
+
+@OptIn(ExperimentalFoundationApi::class)
+@Composable
+private fun SettingsItem(
+    icon: ImageVector,
+    title: String,
+    description: String,
+    onClick: () -> Unit,
+    /** 长按回调（隐藏菜单等）；null 时不启用长按 */
+    onLongClick: (() -> Unit)? = null,
+    /** 自定义尾部内容（如「恢复默认」操作）；null 时显示默认 ChevronRight */
+    trailing: @Composable (() -> Unit)? = null,
+    valueText: String? = null,
+) {
+    val supporting = com.yunget.app.ui.theme.settingSupportingText(
+        description, valueText, com.yunget.app.ui.theme.LocalShowSettingDescriptions.current,
+    )
+    val shape = MaterialTheme.shapes.large
+    val interactionSource = remember { MutableInteractionSource() }
+    Card(
+        modifier = Modifier
+            .fillMaxWidth()
+            .clip(shape)
+            .combinedClickable(
+                interactionSource = interactionSource,
+                indication = ripple(bounded = true),
+                onClick = onClick,
+                onLongClick = onLongClick
+            ),
+        shape = shape,
+        colors = CardDefaults.cardColors(
+            containerColor = MaterialTheme.colorScheme.surfaceContainerLow
+        )
+    ) {
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(16.dp),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Icon(
+                imageVector = icon,
+                contentDescription = null,
+                tint = MaterialTheme.colorScheme.onSurfaceVariant
+            )
+            Spacer(modifier = Modifier.width(16.dp))
+            Column(modifier = Modifier.weight(1f)) {
+                Text(
+                    text = title,
+                    style = MaterialTheme.typography.titleMedium,
+                    fontWeight = FontWeight.Medium
+                )
+                if (supporting != null) {
+                    Spacer(modifier = Modifier.height(2.dp))
+                    Text(
+                        text = supporting,
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                }
+            }
+            if (trailing != null) {
+                trailing()
+            } else {
+                Icon(
+                    imageVector = Icons.Outlined.ChevronRight,
+                    contentDescription = null,
+                    tint = MaterialTheme.colorScheme.outline
+                )
+            }
+        }
+    }
+}
+
+/** 线程数单选行（用于弹窗两列布局，每行占半宽） */
+@Composable
+private fun RadioThreadRow(
+    value: Int,
+    threads: Int,
+    onSelect: (Int) -> Unit,
+    modifier: Modifier = Modifier
+) {
+    Row(
+        modifier = modifier
+            .fillMaxWidth()
+            .padding(vertical = 2.dp),
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        RadioButton(
+            selected = threads == value,
+            onClick = { onSelect(value) }
+        )
+        Spacer(modifier = Modifier.width(8.dp))
+        Text(
+            text = "$value 线程",
+            style = MaterialTheme.typography.bodyLarge
+        )
+    }
+}
+
+/** 速度限制展示文案：0=不限速；>=1MB/s 显示 MB/s，否则 KB/s */
+private fun speedLimitText(bps: Long): String {
+    if (bps <= 0) return "不限速"
+    return if (bps >= 1024 * 1024) {
+        val mb = bps / (1024.0 * 1024.0)
+        if (mb >= 10) String.format("%.0f MB/s", mb) else String.format("%.1f MB/s", mb)
+    } else {
+        "${bps / 1024} KB/s"
+    }
+}
+
+
+/**
+ * 各公共 DoH 端点的实时延迟面板。
+ *
+ * 【为什么要有】用户此前只能二选一（系统 DNS / 手填一个 DoH），看不到"哪个快"。
+ * 开了自动模式后也想知道它到底选了谁。这里把每个端点的解析延迟画出来，
+ * 并把最快的那条标为已选中 —— 一眼能看出当前网络下哪个 DoH 可用。
+ *
+ * 【只测一次】进入面板时探测一次（并发，最多约 4 秒），不做定时轮询：
+ * 这是"看一眼"的信息，持续探测只会白耗流量与电量。
+ */
+@Composable
+private fun DohLatencyPanel() {
+    var results by remember { mutableStateOf<List<Pair<String, Long>>?>(null) }
+    var probing by remember { mutableStateOf(false) }
+    LaunchedEffect(Unit) {
+        if (results == null && !probing) {
+            probing = true
+            results = runCatching {
+                // 【必须切 IO】probeDohLatency 是**同步阻塞** API：内部把候选端点丢进线程池后，
+                // 用 futures[i].get(remaining) 阻塞调用线程，总期限 4 秒（网络 socket 在池线程上，
+                // 所以不抛 NetworkOnMainThreadException，但会直接冻住 UI）。
+                // LaunchedEffect 跑在主线程，必须自己切走。
+                withContext(Dispatchers.IO) { TurboHttpClients.probeDohLatency() }
+            }.getOrDefault(emptyList())
+            probing = false
+        }
+    }
+    val list = results
+    Spacer(modifier = Modifier.height(4.dp))
+    Text(
+        text = if (probing) "正在测速…" else "各 DoH 端点延迟（越短越好）",
+        style = MaterialTheme.typography.labelMedium,
+        color = MaterialTheme.colorScheme.onSurfaceVariant
+    )
+    if (list != null) {
+        val best = list.filter { it.second >= 0 }.minByOrNull { it.second }
+        list.forEach { (url, ms) ->
+            val label = url.removePrefix("https://").substringBefore('/')
+            val isBest = best != null && url == best.first
+            Row(
+                modifier = Modifier.fillMaxWidth().padding(vertical = 1.dp),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Text(
+                    text = if (isBest) "✔ " else "   ",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.primary
+                )
+                Text(
+                    text = label,
+                    style = MaterialTheme.typography.bodySmall,
+                    modifier = Modifier.weight(1f)
+                )
+                Text(
+                    text = if (ms < 0) "不可用" else "${ms}ms",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = when {
+                        ms < 0 -> MaterialTheme.colorScheme.error
+                        isBest -> MaterialTheme.colorScheme.primary
+                        else -> MaterialTheme.colorScheme.onSurfaceVariant
+                    }
+                )
+            }
+        }
+    }
+}
+
+@Composable
+internal fun ClassicSettingsPreview() {
+    Column(
+        Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(16.dp),
+        verticalArrangement = Arrangement.spacedBy(8.dp),
+    ) {
+        SectionLabel("下载")
+        SettingsItem(Icons.Outlined.Tune, "最大下载线程数", "按实际吞吐自动调整", {}, valueText = "16 条连接")
+        SettingsItem(Icons.Outlined.FolderOpen, "下载保存目录", "新任务的保存位置", {}, valueText = "Download")
+        SettingsItem(Icons.Outlined.Layers, "最大同时下载任务数", "限制同时运行的任务", {}, valueText = "3 个任务")
+        SettingsItem(Icons.Outlined.Speed, "下载速度限制", "所有任务的总速度上限", {}, valueText = "不限速")
+        SettingsItem(Icons.Outlined.Refresh, "失败自动重试", "使用已有进度继续", {}, valueText = "3 次")
+        Spacer(Modifier.height(16.dp))
+        SectionLabel("解析与引擎")
+        SettingsItem(Icons.Outlined.Memory, "下载引擎", "选择内置或可选引擎", {}, valueText = "TurboDL")
+        SettingsItem(Icons.Outlined.Tune, "引擎高级参数", "HTTP、分片、背压和超时", {})
+        SettingsItem(Icons.Outlined.Palette, "主题与外观", "切换界面与显示偏好", {})
+    }
+}

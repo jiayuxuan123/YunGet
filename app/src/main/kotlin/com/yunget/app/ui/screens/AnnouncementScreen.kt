@@ -44,12 +44,14 @@ import androidx.compose.material.icons.outlined.Refresh
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.FilledTonalButton
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBar
 import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.runtime.Composable
@@ -93,6 +95,7 @@ import kotlinx.coroutines.withContext
 fun AnnouncementScreen(
     onBack: () -> Unit,
     onOpenCommunity: () -> Unit,
+    onOpenDeveloper: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
     BackHandler { onBack() }
@@ -156,47 +159,49 @@ fun AnnouncementScreen(
             // 已经登录 GitHub 的浏览器用户点两下就能发。
             item {
                 Card(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .clickable { onOpenCommunity() },
+                    modifier = Modifier.fillMaxWidth(),
                     shape = MaterialTheme.shapes.large,
                     colors = CardDefaults.cardColors(
                         containerColor = MaterialTheme.colorScheme.primaryContainer,
                     ),
                 ) {
-                    Row(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .padding(16.dp),
-                        verticalAlignment = Alignment.CenterVertically,
-                    ) {
-                        Icon(
-                            imageVector = Icons.Outlined.Forum,
-                            contentDescription = null,
-                            modifier = Modifier.size(22.dp),
-                            tint = MaterialTheme.colorScheme.onPrimaryContainer,
-                        )
-                        Spacer(Modifier.width(12.dp))
-                        Column(modifier = Modifier.weight(1f)) {
-                            Text(
-                                text = "交流与反馈",
-                                style = MaterialTheme.typography.titleSmall,
-                                fontWeight = FontWeight.SemiBold,
-                                color = MaterialTheme.colorScheme.onPrimaryContainer,
+                    Column(Modifier.fillMaxWidth().padding(16.dp)) {
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            Icon(
+                                imageVector = Icons.Outlined.Forum,
+                                contentDescription = null,
+                                modifier = Modifier.size(22.dp),
+                                tint = MaterialTheme.colorScheme.onPrimaryContainer,
                             )
-                            Spacer(Modifier.height(2.dp))
-                            Text(
-                                text = "报告问题、提建议、和其他用户讨论（在浏览器中打开）",
-                                style = MaterialTheme.typography.bodySmall,
-                                color = MaterialTheme.colorScheme.onPrimaryContainer,
-                            )
+                            Spacer(Modifier.width(12.dp))
+                            Column(modifier = Modifier.weight(1f)) {
+                                Text(
+                                    text = "云取社区",
+                                    style = MaterialTheme.typography.titleSmall,
+                                    fontWeight = FontWeight.SemiBold,
+                                    color = MaterialTheme.colorScheme.onPrimaryContainer,
+                                )
+                                Spacer(Modifier.height(2.dp))
+                                Text(
+                                    text = "提交问题与建议、查看处理进度，或进入闲聊",
+                                    style = MaterialTheme.typography.bodySmall,
+                                    color = MaterialTheme.colorScheme.onPrimaryContainer,
+                                )
+                            }
                         }
-                        Icon(
-                            imageVector = Icons.Outlined.OpenInNew,
-                            contentDescription = null,
-                            modifier = Modifier.size(18.dp),
-                            tint = MaterialTheme.colorScheme.onPrimaryContainer,
-                        )
+                        Spacer(Modifier.height(12.dp))
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.spacedBy(8.dp),
+                        ) {
+                            FilledTonalButton(
+                                onClick = onOpenCommunity,
+                                modifier = Modifier.weight(1f),
+                            ) { Text("进入社区") }
+                            TextButton(onClick = onOpenDeveloper) {
+                                Text("开发者后台")
+                            }
+                        }
                     }
                 }
             }

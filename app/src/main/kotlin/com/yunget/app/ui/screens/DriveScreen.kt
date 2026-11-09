@@ -222,6 +222,61 @@ fun DriveScreen(
     onLanzouLogout: () -> Unit = {},
     modifier: Modifier = Modifier
 ) {
+    if (com.yunget.app.ui.theme.LocalAppUiStyle.current == com.yunget.app.ui.theme.AppUiStyle.CLASSIC) {
+        com.yunget.app.ui.classic.DriveScreen(
+            scrollBehavior = scrollBehavior,
+            quarkAccount = quarkAccount,
+            ucAccount = ucAccount,
+            xunleiAccount = xunleiAccount,
+            baiduAccount = baiduAccount,
+            c139Account = c139Account,
+            pan123Account = pan123Account,
+            pan115Account = pan115Account,
+            guangyaAccount = guangyaAccount,
+            ilanzouAccount = ilanzouAccount,
+            lanzouAccount = lanzouAccount,
+            quarkCloudViewModel = quarkCloudViewModel,
+            ucCloudViewModel = ucCloudViewModel,
+            xunleiCloudViewModel = xunleiCloudViewModel,
+            baiduCloudViewModel = baiduCloudViewModel,
+            c139CloudViewModel = c139CloudViewModel,
+            pan123CloudViewModel = pan123CloudViewModel,
+            pan115CloudViewModel = pan115CloudViewModel,
+            guangyaCloudViewModel = guangyaCloudViewModel,
+            ilanzouCloudViewModel = ilanzouCloudViewModel,
+            lanzouCloudViewModel = lanzouCloudViewModel,
+            driveQuotaViewModel = driveQuotaViewModel,
+            onQuarkLogin = onQuarkLogin,
+            onQuarkLogout = onQuarkLogout,
+            onQuarkUpdateRemark = onQuarkUpdateRemark,
+            quarkAllAccounts = quarkAllAccounts,
+            onQuarkSelectPrimary = onQuarkSelectPrimary,
+            onQuarkDeleteAccount = onQuarkDeleteAccount,
+            onManageAccounts = onManageAccounts,
+            onDownloadStarted = onDownloadStarted,
+            onUCLogin = onUCLogin,
+            onUCLogout = onUCLogout,
+            onXunleiLogin = onXunleiLogin,
+            onXunleiLogout = onXunleiLogout,
+            onBaiduLogin = onBaiduLogin,
+            onBaiduLogout = onBaiduLogout,
+            onC139Login = onC139Login,
+            onC139Logout = onC139Logout,
+            onPan123Login = onPan123Login,
+            onPan123Logout = onPan123Logout,
+            onPan115Login = onPan115Login,
+            onPan115Logout = onPan115Logout,
+            onGuangYaLogin = onGuangYaLogin,
+            onGuangYaLogout = onGuangYaLogout,
+            onILanzouLogin = onILanzouLogin,
+            onILanzouLogout = onILanzouLogout,
+            onLanzouLogin = onLanzouLogin,
+            onLanzouLogout = onLanzouLogout,
+            modifier = modifier,
+        )
+        return
+    }
+
     val orderContext = LocalContext.current
     val orderSettings = remember(orderContext) { SettingsRepository(orderContext) }
     var accountOrder by remember { mutableStateOf(orderSettings.driveAccountOrder) }

@@ -11,7 +11,7 @@
 ## 六条纪律（对应《YunGet 插件化架构设计文档》第 19 / 21 / 22 / 23 / 26 章）
 
 1. **首屏三问答**：YunGet 是什么 / 现在能做什么 / 去哪里下载。
-2. **只用真实素材**：截图只用 `images/Parsing.jpg` 与 `images/Setting.jpg` —— 另外三张
+2. **只用真实素材**：应用界面使用实际 Compose 组件生成的脱敏预览，由 `data/screenshots.json` 记录版本。旧版照片中另外三张
    分别含真实账号昵称与用量（Login.jpg）、明文签名直链（Link.jpg）、上游旧版界面（about.jpg），
    **不上站**。
 3. **平台区不造假按钮**：Android 有真实构建就做成可下载；Windows/macOS/Linux 没有构建，
@@ -83,6 +83,7 @@ BLOB = f"{REPO}/blob/main"
 UPSTREAM = "https://github.com/CYQawa/YunX"
 TURBODL_REPO = "https://github.com/jiayuxuan123/TurboDL"
 DOWNLOAD_EDGE = "https://dl.yunl.us.ci"
+COMMUNITY_URL = "https://community.yunget.yunl.us.ci"
 
 
 def _download_edge_url(url: str) -> str:
@@ -358,6 +359,7 @@ def _doc_nav(current: dict, href) -> str:
 # --------------------------------------------------------------------------- #
 
 FACTS = {
+    "screenshots": json.loads((HERE / "data" / "screenshots.json").read_text(encoding="utf-8")),
     "name": "云取 YunGet",
     "version": VERSION,
     "latest": LATEST,
@@ -374,6 +376,7 @@ FACTS = {
     "turbodl_repo": TURBODL_REPO,
     "turbodl_site": TURBODL_SITE,
     "download_edge": DOWNLOAD_EDGE,
+    "community": COMMUNITY_URL,
     "plugins_repo": PLUGINS_REPO,
     "plugin_index_url": PLUGIN_INDEX_URL,
     "plugin_index_raw": PLUGIN_INDEX_RAW,

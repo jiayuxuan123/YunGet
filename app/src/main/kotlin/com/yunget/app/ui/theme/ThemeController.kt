@@ -32,6 +32,9 @@ import com.yunget.app.data.prefs.SettingsRepository
  */
 object ThemeController {
 
+    var showSettingDescriptions by mutableStateOf(false)
+        private set
+
     var autoUiDensity by mutableStateOf(true)
         private set
     var uiFontScale by mutableStateOf(1f)
@@ -93,6 +96,7 @@ object ThemeController {
     fun init(context: Context) {
         if (initialized) return
         val s = SettingsRepository(context)
+        showSettingDescriptions = s.showSettingDescriptions
         darkMode = s.darkMode
         colorMode = s.themeColorMode
         seedColor = s.themeSeedColor
@@ -121,6 +125,11 @@ object ThemeController {
     fun setUiStyleMode(context: Context, value: Int) {
         uiStyleMode = value.coerceIn(0, 1)
         SettingsRepository(context).uiStyleMode = uiStyleMode
+    }
+
+    fun setShowSettingDescriptions(context: Context, value: Boolean) {
+        showSettingDescriptions = value
+        SettingsRepository(context).showSettingDescriptions = value
     }
 
     /** 设置主题色模式并持久化（0=动态 / 1=默认 / 2=自定义） */

@@ -1,0 +1,53 @@
+{
+  "version": "2.7.28",
+  "source": "Production Compose previews; illustrative data; not device captures",
+  "screens": [
+    {
+      "title": "解析链接",
+      "light": {
+        "file": "ui-2.7.28-resolve-light.webp",
+        "width": 720,
+        "height": 1558
+      }
+    },
+    {
+      "title": "下载任务",
+      "light": {
+        "file": "ui-2.7.28-downloads-light.webp",
+        "width": 720,
+        "height": 1558
+      },
+      "dark": {
+        "file": "ui-2.7.28-downloads-dark.webp",
+        "width": 720,
+        "height": 1558
+      }
+    },
+    {
+      "title": "设置",
+      "light": {
+        "file": "ui-2.7.28-settings-light.webp",
+        "width": 720,
+        "height": 1558
+      },
+      "dark": {
+        "file": "ui-2.7.28-settings-dark.webp",
+        "width": 720,
+        "height": 1558
+      }
+    },
+    {
+      "title": "主题与外观",
+      "light": {
+        "file": "ui-2.7.28-theme-light.webp",
+        "width": 720,
+        "height": 1558
+      },
+      "dark": {
+        "file": "ui-2.7.28-theme-dark.webp",
+        "width": 720,
+        "height": 1747
+      }
+    }
+  ]
+}

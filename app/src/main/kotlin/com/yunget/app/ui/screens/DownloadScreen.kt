@@ -9,14 +9,8 @@ import android.os.Environment
 import android.provider.Settings
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
-import androidx.compose.animation.AnimatedContent
-import androidx.compose.animation.SizeTransform
-import androidx.compose.animation.animateColorAsState
 import androidx.compose.animation.core.animateFloatAsState
-import androidx.compose.animation.fadeIn
-import androidx.compose.animation.fadeOut
-import androidx.compose.animation.scaleIn
-import androidx.compose.animation.togetherWith
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -24,13 +18,11 @@ import androidx.compose.foundation.layout.ExperimentalLayoutApi
 import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
-import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
-import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.rememberLazyListState
@@ -46,8 +38,6 @@ import androidx.compose.material.icons.outlined.Delete
 import androidx.compose.material.icons.outlined.Download
 import androidx.compose.material.icons.outlined.ExpandMore
 import androidx.compose.material.icons.outlined.Folder
-import androidx.compose.material.icons.outlined.Pause
-import androidx.compose.material.icons.outlined.PlayArrow
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
@@ -58,13 +48,11 @@ import androidx.compose.material3.FloatingActionButton
 import androidx.compose.material3.FloatingActionButtonDefaults
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
 import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.OutlinedTextField
-import androidx.compose.material3.SegmentedButton
-import androidx.compose.material3.SegmentedButtonDefaults
-import androidx.compose.material3.SingleChoiceSegmentedButtonRow
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
@@ -96,6 +84,7 @@ import com.yunget.app.data.db.DownloadTaskEntity
 import com.yunget.app.data.download.DownloadStats
 import com.yunget.app.ui.SnackbarController
 import com.yunget.app.ui.components.FileNameText
+import com.yunget.app.ui.components.AppChoiceGroup
 import com.yunget.app.ui.components.SpeedChart
 import com.yunget.app.ui.items.DownloadLiveStatistics
 import com.yunget.app.ui.items.DownloadTaskActions
@@ -106,7 +95,6 @@ import com.yunget.app.ui.items.formatDownloadSize
 import com.yunget.app.ui.items.formatDownloadSpeed
 import com.yunget.app.ui.items.toDownloadListItem
 import com.yunget.app.ui.theme.effectsDefault
-import com.yunget.app.ui.theme.effectsFast
 import com.yunget.app.ui.theme.spatialDefault
 import com.yunget.app.ui.theme.LocalUiMetrics
 import com.yunget.app.ui.theme.spatialFast
@@ -125,6 +113,15 @@ fun DownloadScreen(
     viewModel: DownloadViewModel,
     modifier: Modifier = Modifier,
 ) {
+    if (com.yunget.app.ui.theme.LocalAppUiStyle.current == com.yunget.app.ui.theme.AppUiStyle.CLASSIC) {
+        com.yunget.app.ui.classic.DownloadScreen(
+            scrollBehavior = scrollBehavior,
+            viewModel = viewModel,
+            modifier = modifier,
+        )
+        return
+    }
+
     val context = LocalContext.current
     val listFlow = remember(viewModel) {
         viewModel.tasks.map { tasks -> tasks.map { it.toDownloadListItem() } }.distinctUntilChanged()
@@ -243,7 +240,7 @@ private fun DownloadPageContent(
         val (folders, roots) = visible.partition { it.fileName.contains('/') }
         roots to folders.groupBy { it.fileName.substringBefore('/') }
     }
-    Surface(modifier = modifier.fillMaxSize(), color = MaterialTheme.colorScheme.surface) {
+    Surface(modifier = modifier.fillMaxSize(), color = MaterialTheme.colorScheme.background) {
         Box(Modifier.fillMaxSize()) {
             Column(Modifier.fillMaxSize()) {
                 DownloadTabs(
@@ -322,9 +319,9 @@ private fun DownloadPageContent(
             FloatingActionButton(
                 onClick = onAdd,
                 modifier = Modifier.align(Alignment.BottomEnd).padding(20.dp),
-                shape = RoundedCornerShape(16.dp),
-                containerColor = MaterialTheme.colorScheme.primaryContainer,
-                contentColor = MaterialTheme.colorScheme.onPrimaryContainer,
+                shape = RoundedCornerShape(12.dp),
+                containerColor = MaterialTheme.colorScheme.primary,
+                contentColor = MaterialTheme.colorScheme.onPrimary,
                 elevation = FloatingActionButtonDefaults.elevation(0.dp, 0.dp, 0.dp, 0.dp),
             ) {
                 Icon(Icons.Filled.Add, contentDescription = "添加下载任务")
@@ -342,47 +339,13 @@ private fun DownloadTabs(
     onSelect: (Boolean) -> Unit,
     modifier: Modifier = Modifier,
 ) {
-    SingleChoiceSegmentedButtonRow(modifier = modifier.fillMaxWidth().heightIn(min = 48.dp)) {
-        listOf(false, true).forEachIndexed { index, completed ->
-            val selected = completed == completedTab
-            val background by animateColorAsState(
-                targetValue = if (selected) MaterialTheme.colorScheme.primaryContainer
-                else MaterialTheme.colorScheme.surfaceContainerLow,
-                animationSpec = effectsDefault(), label = "downloadTabBackground$index",
-            )
-            val foreground by animateColorAsState(
-                targetValue = if (selected) MaterialTheme.colorScheme.onPrimaryContainer
-                else MaterialTheme.colorScheme.onSurfaceVariant,
-                animationSpec = effectsFast(), label = "downloadTabForeground$index",
-            )
-            SegmentedButton(
-                selected = selected,
-                onClick = { onSelect(completed) },
-                shape = SegmentedButtonDefaults.itemShape(index, 2, RoundedCornerShape(16.dp)),
-                modifier = Modifier.heightIn(min = 48.dp),
-                icon = {},
-                colors = SegmentedButtonDefaults.colors(
-                    activeContainerColor = background, inactiveContainerColor = background,
-                    activeContentColor = foreground, inactiveContentColor = foreground,
-                    activeBorderColor = MaterialTheme.colorScheme.outlineVariant,
-                    inactiveBorderColor = MaterialTheme.colorScheme.outlineVariant,
-                ),
-            ) {
-                Row(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
-                    Text(if (completed) "已完成" else "下载", style = MaterialTheme.typography.labelLarge)
-                    AnimatedContent(
-                        targetState = if (completed) completedCount else activeCount,
-                        transitionSpec = {
-                            (fadeIn(effectsDefault()) + scaleIn(spatialFast(), initialScale = 0.9f))
-                                .togetherWith(fadeOut(effectsFast()))
-                                .using(SizeTransform { _, _ -> spatialDefault() })
-                        },
-                        label = "downloadTabCount$index",
-                    ) { count -> Text(count.toString(), style = MaterialTheme.typography.labelLarge) }
-                }
-            }
-        }
-    }
+    AppChoiceGroup(
+        labels = listOf("下载  $activeCount", "已完成  $completedCount"),
+        selected = if (completedTab) 1 else 0,
+        onSelected = { onSelect(it == 1) },
+        modifier = modifier,
+        role = Role.Tab,
+    )
 }
 
 @OptIn(ExperimentalLayoutApi::class)
@@ -412,81 +375,45 @@ private fun DownloadOverview(
         paused > 0 -> "$paused 项下载已暂停"
         else -> "下载队列已完成"
     }
-    Surface(
-        shape = RoundedCornerShape(24.dp),
-        color = MaterialTheme.colorScheme.surfaceContainer,
-        modifier = Modifier.fillMaxWidth(),
+    Column(
+        Modifier.fillMaxWidth().padding(horizontal = 4.dp, vertical = 6.dp),
+        verticalArrangement = Arrangement.spacedBy(8.dp),
     ) {
-        Column(modifier = Modifier.padding(ui.space(12.dp)),
-            verticalArrangement = Arrangement.spacedBy(ui.space(8.dp))) {
-            AnimatedContent(
-                targetState = headline,
-                transitionSpec = {
-                    fadeIn(effectsDefault()).togetherWith(fadeOut(effectsFast()))
-                        .using(SizeTransform { _, _ -> spatialDefault() })
-                },
-                label = "downloadOverviewState",
-            ) { text ->
-                Text(text, style = MaterialTheme.typography.titleMedium, color = MaterialTheme.colorScheme.onSurface)
-            }
-            if (!completedTab) {
-                if (activeIds.isNotEmpty()) DownloadTotalSpeed(activeIds, stats)
-                if (pending + paused + failed > 0) {
-                    FlowRow(
-                        horizontalArrangement = Arrangement.spacedBy(12.dp),
-                        verticalArrangement = Arrangement.spacedBy(4.dp),
-                    ) {
-                        if (pending > 0) OverviewCount("等待 $pending")
-                        if (paused > 0) OverviewCount("暂停 $paused")
-                        if (failed > 0) Text("失败 $failed", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.error)
-                    }
+        Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+            Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                Text(headline, style = MaterialTheme.typography.titleSmall)
+                if (!completedTab && pending + paused + failed > 0) {
+                    Text(listOfNotNull(
+                        "等待 $pending".takeIf { pending > 0 },
+                        "暂停 $paused".takeIf { paused > 0 },
+                        "失败 $failed".takeIf { failed > 0 },
+                    ).joinToString(" · "), style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant)
                 }
             }
-            FlowRow(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.spacedBy(8.dp),
-                verticalArrangement = Arrangement.spacedBy(8.dp),
-            ) {
-                if (!completedTab) {
-                    FilledTonalButton(
-                        onClick = onPauseAll,
-                        enabled = downloading + pending > 0,
-                        modifier = Modifier.heightIn(min = 48.dp),
-                        shape = RoundedCornerShape(16.dp),
-                    ) {
-                        Icon(Icons.Outlined.Pause, contentDescription = null, modifier = Modifier.size(18.dp))
-                        Spacer(Modifier.width(6.dp))
-                        Text("全部暂停")
-                    }
-                    TextButton(
-                        onClick = onResumeAll,
-                        enabled = paused + failed > 0,
-                        modifier = Modifier.heightIn(min = 48.dp),
-                        shape = RoundedCornerShape(16.dp),
-                    ) {
-                        Icon(Icons.Outlined.PlayArrow, contentDescription = null, modifier = Modifier.size(18.dp))
-                        Spacer(Modifier.width(6.dp))
-                        Text("全部开始")
-                    }
-                }
+            IconButton(onClick = onDeleteAll, modifier = Modifier.size(48.dp)) {
+                Icon(Icons.Outlined.Delete, contentDescription = "删除全部任务",
+                    tint = MaterialTheme.colorScheme.onSurfaceVariant)
+            }
+        }
+        if (!completedTab) {
+            FlowRow(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp),
+                itemVerticalAlignment = Alignment.CenterVertically) {
+                DownloadTotalSpeed(activeIds, stats)
                 TextButton(
-                    onClick = onDeleteAll,
+                    onClick = onPauseAll, enabled = downloading + pending > 0,
                     modifier = Modifier.heightIn(min = 48.dp),
-                    shape = RoundedCornerShape(16.dp),
-                    colors = ButtonDefaults.textButtonColors(contentColor = MaterialTheme.colorScheme.error),
-                ) {
-                    Icon(Icons.Outlined.Delete, contentDescription = null, modifier = Modifier.size(18.dp))
-                    Spacer(Modifier.width(6.dp))
-                    Text("删除全部")
-                }
+                    shape = RoundedCornerShape(10.dp),
+                ) { Text("全部暂停") }
+                TextButton(
+                    onClick = onResumeAll, enabled = paused + failed > 0,
+                    modifier = Modifier.heightIn(min = 48.dp),
+                    shape = RoundedCornerShape(10.dp),
+                ) { Text("全部开始") }
             }
         }
     }
-}
-
-@Composable
-private fun OverviewCount(text: String) {
-    Text(text, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
 }
 
 @Composable
@@ -519,10 +446,11 @@ private fun DownloadFolderHeader(
     Surface(
         onClick = onToggle,
         modifier = modifier.fillMaxWidth().heightIn(min = 48.dp).semantics { stateDescription = description },
-        shape = RoundedCornerShape(24.dp),
-        color = MaterialTheme.colorScheme.surfaceContainer,
+        shape = RoundedCornerShape(12.dp),
+        color = MaterialTheme.colorScheme.surface,
+        border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.78f)),
     ) {
-        Column(modifier = Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
+        Column(modifier = Modifier.padding(14.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
             Row(horizontalArrangement = Arrangement.spacedBy(12.dp), verticalAlignment = Alignment.CenterVertically) {
                 Icon(Icons.Outlined.Folder, contentDescription = null, tint = MaterialTheme.colorScheme.primary)
                 Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(4.dp)) {
@@ -608,7 +536,7 @@ private fun EmptyDownloadState(
         )
         FilledTonalButton(
             onClick = if (hasOtherTasks) onSwitchTab else onAdd,
-            modifier = Modifier.heightIn(min = 48.dp), shape = RoundedCornerShape(16.dp),
+            modifier = Modifier.heightIn(min = 48.dp), shape = RoundedCornerShape(8.dp),
         ) {
             Text(if (hasOtherTasks) {
                 if (completedTab) "查看下载任务" else "查看已完成"
@@ -619,7 +547,7 @@ private fun EmptyDownloadState(
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-private fun DownloadTaskDetails(
+internal fun DownloadTaskDetails(
     id: Long,
     tasks: StateFlow<List<DownloadTaskEntity>>,
     stats: StateFlow<Map<Long, DownloadStats>>,

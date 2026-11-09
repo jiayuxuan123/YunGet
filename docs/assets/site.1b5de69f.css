@@ -549,6 +549,53 @@ main {
   min-height: 68vh;
 }
 
+.app-captures {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  align-items: start;
+  gap: 24px;
+}
+
+.app-capture {
+  min-width: 0;
+  margin: 0;
+}
+
+.app-capture-image {
+  display: block;
+  overflow: hidden;
+  border: 1px solid var(--rule);
+  border-radius: 16px;
+  background: var(--paper-raised);
+}
+
+.app-capture img {
+  display: block;
+  width: 100%;
+  height: auto;
+}
+
+.app-capture figcaption {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px 12px;
+  margin-top: 12px;
+  font-size: 0.875rem;
+}
+
+.app-capture figcaption a {
+  text-underline-offset: 4px;
+}
+
+@media (max-width: 760px) {
+  .app-captures {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 24px 16px;
+  }
+}
+
 .section {
   padding: 88px 8px;
   border-top: 1px solid var(--rule);

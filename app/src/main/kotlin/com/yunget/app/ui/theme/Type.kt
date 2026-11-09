@@ -36,36 +36,25 @@ private fun appText(size: Float, height: Float, weight: FontWeight = FontWeight.
 fun buildAppTypography(scale: Float = 1f): Typography {
     fun size(value: Int) = (value * scale).coerceAtLeast(9f)
     return Typography(
-        displayLarge = appText(size(40), size(48)),
-        displayMedium = appText(size(34), size(42)),
-        displaySmall = appText(size(29), size(36)),
-        headlineLarge = appText(size(26), size(33), FontWeight.SemiBold),
-        headlineMedium = appText(size(23), size(30), FontWeight.SemiBold),
-        headlineSmall = appText(size(20), size(27), FontWeight.SemiBold),
-        titleLarge = appText(size(22), size(28), FontWeight.SemiBold),
-        titleMedium = appText(size(16), size(22), FontWeight.Medium),
-        titleSmall = appText(size(14), size(20), FontWeight.Medium),
-        bodyLarge = appText(size(16), size(23)),
+        displayLarge = appText(size(40), size(50)),
+        displayMedium = appText(size(34), size(43)),
+        displaySmall = appText(size(28), size(36)),
+        headlineLarge = appText(size(24), size(32), FontWeight.SemiBold),
+        headlineMedium = appText(size(20), size(28), FontWeight.SemiBold),
+        headlineSmall = appText(size(17), size(24), FontWeight.SemiBold),
+        titleLarge = appText(size(20), size(27), FontWeight.SemiBold),
+        titleMedium = appText(size(16), size(24), FontWeight.Medium),
+        titleSmall = appText(size(13), size(19), FontWeight.Medium),
+        bodyLarge = appText(size(16), size(24)),
         bodyMedium = appText(size(14), size(20)),
         bodySmall = appText(size(12), size(17)),
-        labelLarge = appText(size(14), size(19), FontWeight.Medium),
+        labelLarge = appText(size(14), size(20), FontWeight.Medium),
         labelMedium = appText(size(12), size(16), FontWeight.Medium),
         labelSmall = appText(size(11), size(15), FontWeight.Medium),
     )
 }
 
 /** 2.7.26 经典界面的字阶；不参与新版自动密度缩放。 */
-fun buildClassicTypography(): Typography = Typography(
-    headlineMedium = appText(22f, 28f, FontWeight.SemiBold),
-    titleLarge = appText(18f, 24f, FontWeight.SemiBold),
-    titleMedium = appText(16f, 22f, FontWeight.Medium),
-    titleSmall = appText(14f, 20f, FontWeight.Medium),
-    bodyLarge = appText(15f, 22f),
-    bodyMedium = appText(13f, 18f),
-    bodySmall = appText(12f, 16f),
-    labelLarge = appText(14f, 18f, FontWeight.Medium),
-    labelMedium = appText(12f, 16f, FontWeight.Medium),
-    labelSmall = appText(11f, 14f, FontWeight.Medium),
-)
+fun buildClassicTypography(): Typography = com.yunget.app.ui.classic.classicTypography
 
 val Typography = buildAppTypography()

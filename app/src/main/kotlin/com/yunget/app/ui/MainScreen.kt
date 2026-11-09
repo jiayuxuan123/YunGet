@@ -22,6 +22,7 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.padding
 import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.outlined.Bookmarks
@@ -40,6 +41,7 @@ import androidx.compose.material3.Scaffold
 import androidx.compose.material3.SnackbarHost
 import androidx.compose.material3.Text
 import androidx.compose.material3.TopAppBarDefaults
+import androidx.compose.material3.VerticalDivider
 import androidx.compose.material3.rememberTopAppBarState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
@@ -69,6 +71,7 @@ import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.core.content.ContextCompat
 import com.yunget.app.data.security.CredentialStore
+import com.yunget.app.data.community.CommunityApi
 import com.yunget.app.ui.theme.spatialDefault
 import com.yunget.app.ui.theme.spatialFast
 import com.yunget.app.ui.theme.effectsDefault
@@ -135,6 +138,7 @@ import com.yunget.app.ui.screens.DownloadEngineScreen
 import com.yunget.app.ui.screens.PluginsScreen
 import com.yunget.app.ui.screens.PluginMarketScreen
 import com.yunget.app.ui.screens.SettingsScreen
+import com.yunget.app.ui.screens.CommunityWebScreen
 import com.yunget.app.ui.screens.SupportScreen
 import com.yunget.app.ui.screens.ThemeScreen
 import com.yunget.app.ui.screens.UpdateDialog
@@ -644,6 +648,8 @@ fun MainScreen(
 
     // 首次下载引导：锁屏保持下载默认开启，但新用户未加入「忽略电池优化」白名单 →引导一次
     var showAnnouncement by rememberSaveable { mutableStateOf(false) }
+    var showCommunity by rememberSaveable { mutableStateOf(false) }
+    var communityUrl by rememberSaveable { mutableStateOf(CommunityApi.BASE_URL) }
     var showBatteryGuide by remember { mutableStateOf(false) }
     var batteryGuideShown by remember { mutableStateOf(false) }
 
@@ -1171,21 +1177,29 @@ fun MainScreen(
         com.yunget.app.ui.screens.AnnouncementScreen(
             onBack = { showAnnouncement = false },
             onOpenCommunity = {
-                // 用系统浏览器打开讨论区，而不是内置 WebView：
-                // 用户很可能已经在那里登录了 GitHub，内置 WebView 会是未登录态，
-                // 想发言还得重新登一次。
-                runCatching {
-                    context.startActivity(
-                        android.content.Intent(
-                            android.content.Intent.ACTION_VIEW,
-                            android.net.Uri.parse(
-                                "https://github.com/jiayuxuan123/YunGet/discussions",
-                            ),
-                        ),
-                    )
-                }.onFailure {
-                    com.yunget.app.ui.SnackbarController.show("没有可用的浏览器")
-                }
+                communityUrl = CommunityApi.BASE_URL
+                showAnnouncement = false
+                showCommunity = true
+            },
+            onOpenDeveloper = {
+                communityUrl = CommunityApi.developerUrl
+                showAnnouncement = false
+                showCommunity = true
+            },
+        )
+    }
+
+    AnimatedVisibility(
+        visible = showCommunity,
+        enter = fadeIn(effectsDefault()) + scaleIn(motionTween(220), initialScale = 0.96f),
+        exit = fadeOut(effectsFast()) + scaleOut(motionTween(160), targetScale = 0.96f),
+        modifier = Modifier.fillMaxSize()
+    ) {
+        CommunityWebScreen(
+            initialUrl = communityUrl,
+            onBack = {
+                showCommunity = false
+                showAnnouncement = true
             },
         )
     }
@@ -1362,21 +1376,26 @@ internal fun MainAppBar(
             ),
         )
     } else {
-        TopAppBar(
-            title = {
-                Text(
-                    text = title,
-                    style = MaterialTheme.typography.titleLarge,
-                    fontWeight = FontWeight.SemiBold,
-                )
-            },
-            actions = actions,
-            scrollBehavior = scrollBehavior,
-            colors = TopAppBarDefaults.topAppBarColors(
-                containerColor = MaterialTheme.colorScheme.background,
-                scrolledContainerColor = MaterialTheme.colorScheme.background,
-            ),
-        )
+        Column(Modifier.fillMaxWidth().background(MaterialTheme.colorScheme.surface)) {
+            TopAppBar(
+                title = {
+                    Text(
+                        text = title,
+                        style = MaterialTheme.typography.titleLarge,
+                        fontWeight = FontWeight.SemiBold,
+                    )
+                },
+                actions = actions,
+                scrollBehavior = scrollBehavior,
+                colors = TopAppBarDefaults.topAppBarColors(
+                    containerColor = MaterialTheme.colorScheme.surface,
+                    scrolledContainerColor = MaterialTheme.colorScheme.surface,
+                ),
+            )
+            HorizontalDivider(
+                color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.72f)
+            )
+        }
     }
 }
 
@@ -1389,36 +1408,42 @@ internal fun MainBottomBar(
     onTabSelected: (MainTab) -> Unit
 ) {
     val classic = LocalAppUiStyle.current == AppUiStyle.CLASSIC
-    NavigationBar(
-        containerColor = if (classic) MaterialTheme.colorScheme.surface
-        else MaterialTheme.colorScheme.surfaceContainerLow,
-        tonalElevation = 0.dp,
-    ) {
-        MainTab.values().forEach { tab ->
-            val iconScale by animateFloatAsState(
-                targetValue = if (currentTab == tab) 1.08f else 1f,
-                animationSpec = spatialFast(), label = "bottomNavigationSelection",
+    Column(Modifier.fillMaxWidth()) {
+        if (!classic) {
+            HorizontalDivider(
+                color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.72f)
             )
-            NavigationBarItem(
-                selected = currentTab == tab,
-                onClick = { onTabSelected(tab) },
-                icon = {
-                    Icon(
-                        imageVector = if (currentTab == tab) tab.selectedIcon else tab.unselectedIcon,
-                        contentDescription = tab.title,
-                        modifier = Modifier.graphicsLayer { scaleX = iconScale; scaleY = iconScale },
-                    )
-                },
-                label = { Text(tab.title) },
-                colors = if (classic) NavigationBarItemDefaults.colors()
-                else NavigationBarItemDefaults.colors(
-                    selectedIconColor = MaterialTheme.colorScheme.primary,
-                    selectedTextColor = MaterialTheme.colorScheme.primary,
-                    indicatorColor = MaterialTheme.colorScheme.primaryContainer,
-                    unselectedIconColor = MaterialTheme.colorScheme.onSurfaceVariant,
-                    unselectedTextColor = MaterialTheme.colorScheme.onSurfaceVariant,
-                ),
-            )
+        }
+        NavigationBar(
+            containerColor = MaterialTheme.colorScheme.surface,
+            tonalElevation = 0.dp,
+        ) {
+            MainTab.values().forEach { tab ->
+                val iconScale by animateFloatAsState(
+                    targetValue = if (currentTab == tab) 1.06f else 1f,
+                    animationSpec = spatialFast(), label = "bottomNavigationSelection",
+                )
+                NavigationBarItem(
+                    selected = currentTab == tab,
+                    onClick = { onTabSelected(tab) },
+                    icon = {
+                        Icon(
+                            imageVector = if (currentTab == tab) tab.selectedIcon else tab.unselectedIcon,
+                            contentDescription = tab.title,
+                            modifier = Modifier.graphicsLayer { scaleX = iconScale; scaleY = iconScale },
+                        )
+                    },
+                    label = { Text(tab.title) },
+                    colors = if (classic) NavigationBarItemDefaults.colors()
+                    else NavigationBarItemDefaults.colors(
+                        selectedIconColor = MaterialTheme.colorScheme.primary,
+                        selectedTextColor = MaterialTheme.colorScheme.primary,
+                        indicatorColor = MaterialTheme.colorScheme.primary.copy(alpha = 0.10f),
+                        unselectedIconColor = MaterialTheme.colorScheme.onSurfaceVariant,
+                        unselectedTextColor = MaterialTheme.colorScheme.onSurfaceVariant,
+                    ),
+                )
+            }
         }
     }
 }
@@ -1432,36 +1457,42 @@ internal fun MainNavigationRail(
     onTabSelected: (MainTab) -> Unit
 ) {
     val classic = LocalAppUiStyle.current == AppUiStyle.CLASSIC
-    NavigationRail(
-        containerColor = if (classic) MaterialTheme.colorScheme.surface
-        else MaterialTheme.colorScheme.surfaceContainerLow,
-        modifier = Modifier.fillMaxHeight(),
-    ) {
-        MainTab.values().forEach { tab ->
-            val iconScale by animateFloatAsState(
-                targetValue = if (currentTab == tab) 1.08f else 1f,
-                animationSpec = spatialFast(), label = "railNavigationSelection",
-            )
-            NavigationRailItem(
-                selected = currentTab == tab,
-                onClick = { onTabSelected(tab) },
-                icon = {
-                    Icon(
-                        imageVector = if (currentTab == tab) tab.selectedIcon else tab.unselectedIcon,
-                        contentDescription = tab.title,
-                        modifier = Modifier.graphicsLayer { scaleX = iconScale; scaleY = iconScale },
-                    )
-                },
-                label = { Text(tab.title) },
-                alwaysShowLabel = true,
-                colors = if (classic) NavigationRailItemDefaults.colors()
-                else NavigationRailItemDefaults.colors(
-                    selectedIconColor = MaterialTheme.colorScheme.primary,
-                    selectedTextColor = MaterialTheme.colorScheme.primary,
-                    indicatorColor = MaterialTheme.colorScheme.primaryContainer,
-                    unselectedIconColor = MaterialTheme.colorScheme.onSurfaceVariant,
-                    unselectedTextColor = MaterialTheme.colorScheme.onSurfaceVariant,
-                ),
+    Row(modifier = Modifier.fillMaxHeight()) {
+        NavigationRail(
+            containerColor = MaterialTheme.colorScheme.surface,
+            modifier = Modifier.fillMaxHeight(),
+        ) {
+            MainTab.values().forEach { tab ->
+                val iconScale by animateFloatAsState(
+                    targetValue = if (currentTab == tab) 1.06f else 1f,
+                    animationSpec = spatialFast(), label = "railNavigationSelection",
+                )
+                NavigationRailItem(
+                    selected = currentTab == tab,
+                    onClick = { onTabSelected(tab) },
+                    icon = {
+                        Icon(
+                            imageVector = if (currentTab == tab) tab.selectedIcon else tab.unselectedIcon,
+                            contentDescription = tab.title,
+                            modifier = Modifier.graphicsLayer { scaleX = iconScale; scaleY = iconScale },
+                        )
+                    },
+                    label = { Text(tab.title) },
+                    alwaysShowLabel = true,
+                    colors = if (classic) NavigationRailItemDefaults.colors()
+                    else NavigationRailItemDefaults.colors(
+                        selectedIconColor = MaterialTheme.colorScheme.primary,
+                        selectedTextColor = MaterialTheme.colorScheme.primary,
+                        indicatorColor = MaterialTheme.colorScheme.primary.copy(alpha = 0.10f),
+                        unselectedIconColor = MaterialTheme.colorScheme.onSurfaceVariant,
+                        unselectedTextColor = MaterialTheme.colorScheme.onSurfaceVariant,
+                    ),
+                )
+            }
+        }
+        if (!classic) {
+            VerticalDivider(
+                color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.72f)
             )
         }
     }

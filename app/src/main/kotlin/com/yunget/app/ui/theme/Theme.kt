@@ -50,79 +50,79 @@ import com.google.android.material.color.utilities.SchemeNeutral
 import com.google.android.material.color.utilities.SchemeTonalSpot
 
 private val lightScheme = lightColorScheme(
-    primary = primaryLight,
-    onPrimary = onPrimaryLight,
-    primaryContainer = primaryContainerLight,
-    onPrimaryContainer = onPrimaryContainerLight,
-    secondary = secondaryLight,
-    onSecondary = onSecondaryLight,
-    secondaryContainer = secondaryContainerLight,
-    onSecondaryContainer = onSecondaryContainerLight,
-    tertiary = tertiaryLight,
-    onTertiary = onTertiaryLight,
-    tertiaryContainer = tertiaryContainerLight,
-    onTertiaryContainer = onTertiaryContainerLight,
-    error = errorLight,
-    onError = onErrorLight,
-    errorContainer = errorContainerLight,
-    onErrorContainer = onErrorContainerLight,
-    background = backgroundLight,
-    onBackground = onBackgroundLight,
-    surface = surfaceLight,
-    onSurface = onSurfaceLight,
-    surfaceVariant = surfaceVariantLight,
-    onSurfaceVariant = onSurfaceVariantLight,
-    outline = outlineLight,
-    outlineVariant = outlineVariantLight,
-    scrim = scrimLight,
-    inverseSurface = inverseSurfaceLight,
-    inverseOnSurface = inverseOnSurfaceLight,
-    inversePrimary = inversePrimaryLight,
-    surfaceDim = surfaceDimLight,
-    surfaceBright = surfaceBrightLight,
-    surfaceContainerLowest = surfaceContainerLowestLight,
-    surfaceContainerLow = surfaceContainerLowLight,
-    surfaceContainer = surfaceContainerLight,
-    surfaceContainerHigh = surfaceContainerHighLight,
-    surfaceContainerHighest = surfaceContainerHighestLight,
+    primary = AstryxPalette.accentLight,
+    onPrimary = AstryxPalette.onAccentLight,
+    primaryContainer = AstryxPalette.accentContainerLight,
+    onPrimaryContainer = AstryxPalette.onAccentContainerLight,
+    secondary = AstryxPalette.secondaryLight,
+    onSecondary = AstryxPalette.onSecondaryLight,
+    secondaryContainer = AstryxPalette.secondaryContainerLight,
+    onSecondaryContainer = AstryxPalette.onSecondaryContainerLight,
+    tertiary = AstryxPalette.successLight,
+    onTertiary = AstryxPalette.onSuccessLight,
+    tertiaryContainer = AstryxPalette.successContainerLight,
+    onTertiaryContainer = AstryxPalette.onSuccessContainerLight,
+    error = AstryxPalette.errorLight,
+    onError = AstryxPalette.onErrorLight,
+    errorContainer = AstryxPalette.errorContainerLight,
+    onErrorContainer = AstryxPalette.onErrorContainerLight,
+    background = AstryxPalette.backgroundLight,
+    onBackground = AstryxPalette.onBackgroundLight,
+    surface = AstryxPalette.surfaceLight,
+    onSurface = AstryxPalette.onSurfaceLight,
+    surfaceVariant = AstryxPalette.surfaceVariantLight,
+    onSurfaceVariant = AstryxPalette.onSurfaceVariantLight,
+    outline = AstryxPalette.outlineLight,
+    outlineVariant = AstryxPalette.outlineVariantLight,
+    scrim = AstryxPalette.scrimLight,
+    inverseSurface = AstryxPalette.inverseSurfaceLight,
+    inverseOnSurface = AstryxPalette.inverseOnSurfaceLight,
+    inversePrimary = AstryxPalette.inversePrimaryLight,
+    surfaceDim = AstryxPalette.surfaceDimLight,
+    surfaceBright = AstryxPalette.surfaceBrightLight,
+    surfaceContainerLowest = AstryxPalette.surfaceLowestLight,
+    surfaceContainerLow = AstryxPalette.surfaceLowLight,
+    surfaceContainer = AstryxPalette.surfaceContainerLight,
+    surfaceContainerHigh = AstryxPalette.surfaceHighLight,
+    surfaceContainerHighest = AstryxPalette.surfaceHighestLight,
 )
 
 private val darkScheme = darkColorScheme(
-    primary = primaryDark,
-    onPrimary = onPrimaryDark,
-    primaryContainer = primaryContainerDark,
-    onPrimaryContainer = onPrimaryContainerDark,
-    secondary = secondaryDark,
-    onSecondary = onSecondaryDark,
-    secondaryContainer = secondaryContainerDark,
-    onSecondaryContainer = onSecondaryContainerDark,
-    tertiary = tertiaryDark,
-    onTertiary = onTertiaryDark,
-    tertiaryContainer = tertiaryContainerDark,
-    onTertiaryContainer = onTertiaryContainerDark,
-    error = errorDark,
-    onError = onErrorDark,
-    errorContainer = errorContainerDark,
-    onErrorContainer = onErrorContainerDark,
-    background = backgroundDark,
-    onBackground = onBackgroundDark,
-    surface = surfaceDark,
-    onSurface = onSurfaceDark,
-    surfaceVariant = surfaceVariantDark,
-    onSurfaceVariant = onSurfaceVariantDark,
-    outline = outlineDark,
-    outlineVariant = outlineVariantDark,
-    scrim = scrimDark,
-    inverseSurface = inverseSurfaceDark,
-    inverseOnSurface = inverseOnSurfaceDark,
-    inversePrimary = inversePrimaryDark,
-    surfaceDim = surfaceDimDark,
-    surfaceBright = surfaceBrightDark,
-    surfaceContainerLowest = surfaceContainerLowestDark,
-    surfaceContainerLow = surfaceContainerLowDark,
-    surfaceContainer = surfaceContainerDark,
-    surfaceContainerHigh = surfaceContainerHighDark,
-    surfaceContainerHighest = surfaceContainerHighestDark,
+    primary = AstryxPalette.accentDark,
+    onPrimary = AstryxPalette.onAccentDark,
+    primaryContainer = AstryxPalette.accentContainerDark,
+    onPrimaryContainer = AstryxPalette.onAccentContainerDark,
+    secondary = AstryxPalette.secondaryDark,
+    onSecondary = AstryxPalette.onSecondaryDark,
+    secondaryContainer = AstryxPalette.secondaryContainerDark,
+    onSecondaryContainer = AstryxPalette.onSecondaryContainerDark,
+    tertiary = AstryxPalette.successDark,
+    onTertiary = AstryxPalette.onSuccessDark,
+    tertiaryContainer = AstryxPalette.successContainerDark,
+    onTertiaryContainer = AstryxPalette.onSuccessContainerDark,
+    error = AstryxPalette.errorDark,
+    onError = AstryxPalette.onErrorDark,
+    errorContainer = AstryxPalette.errorContainerDark,
+    onErrorContainer = AstryxPalette.onErrorContainerDark,
+    background = AstryxPalette.backgroundDark,
+    onBackground = AstryxPalette.onBackgroundDark,
+    surface = AstryxPalette.surfaceDark,
+    onSurface = AstryxPalette.onSurfaceDark,
+    surfaceVariant = AstryxPalette.surfaceVariantDark,
+    onSurfaceVariant = AstryxPalette.onSurfaceVariantDark,
+    outline = AstryxPalette.outlineDark,
+    outlineVariant = AstryxPalette.outlineVariantDark,
+    scrim = AstryxPalette.scrimDark,
+    inverseSurface = AstryxPalette.inverseSurfaceDark,
+    inverseOnSurface = AstryxPalette.inverseOnSurfaceDark,
+    inversePrimary = AstryxPalette.inversePrimaryDark,
+    surfaceDim = AstryxPalette.surfaceDimDark,
+    surfaceBright = AstryxPalette.surfaceBrightDark,
+    surfaceContainerLowest = AstryxPalette.surfaceLowestDark,
+    surfaceContainerLow = AstryxPalette.surfaceLowDark,
+    surfaceContainer = AstryxPalette.surfaceContainerDark,
+    surfaceContainerHigh = AstryxPalette.surfaceHighDark,
+    surfaceContainerHighest = AstryxPalette.surfaceHighestDark,
 )
 
 private val mediumContrastLightColorScheme = lightColorScheme(
@@ -280,7 +280,7 @@ private val highContrastDarkColorScheme = darkColorScheme(
 /**
  * 列表组外圈圆角：与下面 Shapes.large 共用同一个值，避免两处各写一份走样。
  */
-private val CornerLarge = 16.dp
+private val CornerLarge = 12.dp
 
 /**
  * M3 Expressive 圆角刻度。
@@ -290,13 +290,13 @@ private val CornerLarge = 16.dp
  */
 private val ExpressiveShapes = Shapes(
     extraSmall = RoundedCornerShape(4.dp),
-    small = RoundedCornerShape(8.dp),
-    medium = RoundedCornerShape(16.dp),
+    small = RoundedCornerShape(6.dp),
+    medium = RoundedCornerShape(8.dp),
     large = RoundedCornerShape(CornerLarge),
-    largeIncreased = RoundedCornerShape(20.dp),
-    extraLarge = RoundedCornerShape(28.dp),
-    extraLargeIncreased = RoundedCornerShape(32.dp),
-    extraExtraLarge = RoundedCornerShape(48.dp)
+    largeIncreased = RoundedCornerShape(14.dp),
+    extraLarge = RoundedCornerShape(20.dp),
+    extraLargeIncreased = RoundedCornerShape(24.dp),
+    extraExtraLarge = RoundedCornerShape(28.dp)
 )
 
 private val ClassicShapes = Shapes(
@@ -372,6 +372,7 @@ fun ComposeEmptyActivityTheme(
     darkTheme: Boolean = isSystemInDarkTheme(),
     dynamicColor: Boolean = true,
     uiStyleOverride: AppUiStyle? = null,
+    showDescriptionsOverride: Boolean? = null,
     content: @Composable () -> Unit
 ) {
     val context = LocalContext.current
@@ -384,6 +385,11 @@ fun ComposeEmptyActivityTheme(
         1 -> false
         2 -> true
         else -> darkTheme
+    }
+    val uiStyle = uiStyleOverride ?: if (ThemeController.uiStyleMode == 0) {
+        AppUiStyle.CLASSIC
+    } else {
+        AppUiStyle.MODERN
     }
     val colorScheme = when {
         // 动态色彩：Android 12+ 从系统壁纸取色。
@@ -409,12 +415,8 @@ fun ComposeEmptyActivityTheme(
             seedColorScheme(seed, isDark, ThemeController.contrastLevel)
         }
         // 内置方案：标准 / 中等对比 / 高对比 × 浅色 / 深色（六选一）
+        uiStyle == AppUiStyle.CLASSIC -> com.yunget.app.ui.classic.classicColorScheme(isDark, ThemeController.contrastLevel)
         else -> builtinScheme(isDark, ThemeController.contrastLevel)
-    }
-    val uiStyle = uiStyleOverride ?: if (ThemeController.uiStyleMode == 0) {
-        AppUiStyle.CLASSIC
-    } else {
-        AppUiStyle.MODERN
     }
 
 
@@ -442,6 +444,7 @@ fun ComposeEmptyActivityTheme(
     CompositionLocalProvider(
         LocalUiMetrics provides UiMetrics(fontScale, spacingScale),
         LocalAppUiStyle provides uiStyle,
+        LocalShowSettingDescriptions provides (showDescriptionsOverride ?: ThemeController.showSettingDescriptions),
     ) {
         if (uiStyle == AppUiStyle.CLASSIC) {
             MaterialTheme(

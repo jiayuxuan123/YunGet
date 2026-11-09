@@ -105,19 +105,19 @@ internal fun DownloadTaskItem(
     Surface(
         modifier = modifier.fillMaxWidth(),
         shape = RoundedCornerShape(16.dp),
-        color = MaterialTheme.colorScheme.surfaceContainerLow,
+        color = MaterialTheme.colorScheme.surface,
     ) {
         Column(
-            modifier = Modifier.padding(ui.space(14.dp)),
-            verticalArrangement = Arrangement.spacedBy(ui.space(8.dp)),
+            modifier = Modifier.padding(ui.space(13.dp)),
+            verticalArrangement = Arrangement.spacedBy(ui.space(7.dp)),
         ) {
             Row(
                 horizontalArrangement = Arrangement.spacedBy(12.dp),
                 verticalAlignment = Alignment.Top,
             ) {
                 Surface(
-                    modifier = Modifier.size(36.dp),
-                    shape = RoundedCornerShape(14.dp),
+                    modifier = Modifier.size(34.dp),
+                    shape = RoundedCornerShape(8.dp),
                     color = MaterialTheme.colorScheme.surfaceContainerHigh,
                 ) {
                     Box(contentAlignment = Alignment.Center) {
@@ -125,7 +125,7 @@ internal fun DownloadTaskItem(
                             Icons.Outlined.InsertDriveFile,
                             contentDescription = null,
                             tint = MaterialTheme.colorScheme.onSurfaceVariant,
-                            modifier = Modifier.size(20.dp),
+                            modifier = Modifier.size(19.dp),
                         )
                     }
                 }
@@ -163,7 +163,7 @@ internal fun DownloadTaskStatus(status: Int) {
         targetValue = when (status) {
             DownloadTaskEntity.STATUS_DOWNLOADING -> colors.primaryContainer
             DownloadTaskEntity.STATUS_FAILED -> colors.errorContainer
-            DownloadTaskEntity.STATUS_COMPLETED -> colors.secondaryContainer
+            DownloadTaskEntity.STATUS_COMPLETED -> colors.tertiaryContainer
             else -> colors.surfaceContainerHigh
         },
         animationSpec = effectsDefault(),
@@ -173,13 +173,13 @@ internal fun DownloadTaskStatus(status: Int) {
         targetValue = when (status) {
             DownloadTaskEntity.STATUS_DOWNLOADING -> colors.onPrimaryContainer
             DownloadTaskEntity.STATUS_FAILED -> colors.onErrorContainer
-            DownloadTaskEntity.STATUS_COMPLETED -> colors.onSecondaryContainer
+            DownloadTaskEntity.STATUS_COMPLETED -> colors.onTertiaryContainer
             else -> colors.onSurfaceVariant
         },
         animationSpec = effectsFast(),
         label = "downloadStatusForeground",
     )
-    Surface(color = container, contentColor = foreground, shape = RoundedCornerShape(8.dp)) {
+    Surface(color = container, contentColor = foreground, shape = RoundedCornerShape(6.dp)) {
         AnimatedContent(
             targetState = status,
             transitionSpec = {
@@ -249,9 +249,11 @@ private fun DownloadTaskProgress(
             LinearProgressIndicator(
                 progress = { animatedProgress.value.coerceIn(0f, 1f) },
                 modifier = Modifier.fillMaxWidth(),
-                color = if (status == DownloadTaskEntity.STATUS_FAILED) {
-                    MaterialTheme.colorScheme.error
-                } else MaterialTheme.colorScheme.primary,
+                color = when (status) {
+                    DownloadTaskEntity.STATUS_FAILED -> MaterialTheme.colorScheme.error
+                    DownloadTaskEntity.STATUS_PAUSED -> MaterialTheme.colorScheme.outline
+                    else -> MaterialTheme.colorScheme.primary
+                },
                 trackColor = MaterialTheme.colorScheme.surfaceContainerHighest,
             )
         }
@@ -351,20 +353,20 @@ internal fun DownloadTaskActions(
     val interactionSource = remember { MutableInteractionSource() }
     val pressed by interactionSource.collectIsPressedAsState()
     val scale = animateFloatAsState(
-        targetValue = if (pressed) 0.96f else 1f,
+        targetValue = if (pressed) 0.98f else 1f,
         animationSpec = spatialFast(),
         label = "downloadActionPress",
     )
     val failed = item.status == DownloadTaskEntity.STATUS_FAILED
     val container by animateColorAsState(
         targetValue = if (failed) MaterialTheme.colorScheme.errorContainer
-        else MaterialTheme.colorScheme.secondaryContainer,
+        else MaterialTheme.colorScheme.primaryContainer,
         animationSpec = effectsDefault(),
         label = "downloadActionContainer",
     )
     val foreground by animateColorAsState(
         targetValue = if (failed) MaterialTheme.colorScheme.onErrorContainer
-        else MaterialTheme.colorScheme.onSecondaryContainer,
+        else MaterialTheme.colorScheme.onPrimaryContainer,
         animationSpec = effectsFast(),
         label = "downloadActionForeground",
     )
@@ -387,7 +389,7 @@ internal fun DownloadTaskActions(
                 scaleX = scale.value
                 scaleY = scale.value
             },
-            shape = RoundedCornerShape(16.dp),
+            shape = RoundedCornerShape(8.dp),
             colors = ButtonDefaults.filledTonalButtonColors(
                 containerColor = container,
                 contentColor = foreground,
@@ -422,7 +424,7 @@ internal fun DownloadTaskActions(
                 TextButton(
                     onClick = { onOpen(item.id) },
                     modifier = Modifier.heightIn(min = 48.dp),
-                    shape = RoundedCornerShape(16.dp),
+                    shape = RoundedCornerShape(8.dp),
                 ) {
                     Icon(Icons.Outlined.PlayArrow, contentDescription = null, modifier = Modifier.size(20.dp))
                     Spacer(Modifier.width(4.dp))
@@ -433,7 +435,7 @@ internal fun DownloadTaskActions(
                 TextButton(
                     onClick = { onInstall(item.id) },
                     modifier = Modifier.heightIn(min = 48.dp),
-                    shape = RoundedCornerShape(16.dp),
+                    shape = RoundedCornerShape(8.dp),
                 ) {
                     Icon(Icons.Outlined.SystemUpdate, contentDescription = null, modifier = Modifier.size(20.dp))
                     Spacer(Modifier.width(4.dp))
@@ -445,7 +447,7 @@ internal fun DownloadTaskActions(
             TextButton(
                 onClick = { onDetails(item.id) },
                 modifier = Modifier.heightIn(min = 48.dp),
-                shape = RoundedCornerShape(16.dp),
+                shape = RoundedCornerShape(8.dp),
             ) { Text("详情") }
         }
         IconButton(onClick = { onRemove(item.id) }, modifier = Modifier.size(48.dp)) {

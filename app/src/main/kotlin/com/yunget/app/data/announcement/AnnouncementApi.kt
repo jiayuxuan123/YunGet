@@ -22,6 +22,7 @@ import android.content.Context
 import com.yunget.app.data.network.HttpClients
 import com.yunget.app.data.prefs.SettingsRepository
 import com.yunget.app.data.update.UpdateChecker
+import com.yunget.app.data.community.CommunityApi
 import com.yunget.app.util.DiagLog
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
@@ -89,8 +90,9 @@ object AnnouncementApi {
             SettingsRepository(context).githubMirrorPrefix.orEmpty()
         }.getOrDefault("")
 
-        // 镜像优先：国内直连 raw.githubusercontent 大概率超时
+        // 社区接口是当前公告源；静态仓库文件保留为迁移期的只读降级通道。
         val urls = buildList {
+            add(CommunityApi.announcementsUrl)
             if (mirror.isNotBlank()) add(UpdateChecker.mirrorUrl(RAW_URL, mirror))
             add(RAW_URL)
         }

@@ -20,7 +20,7 @@ package com.yunget.app.ui.theme
 
 import androidx.compose.animation.core.FiniteAnimationSpec
 import androidx.compose.animation.core.Easing
-import androidx.compose.animation.core.FastOutSlowInEasing
+import androidx.compose.animation.core.CubicBezierEasing
 import androidx.compose.animation.core.snap
 import androidx.compose.animation.core.tween
 
@@ -52,10 +52,12 @@ fun <T> effectsDefault(): FiniteAnimationSpec<T> = AppMotionScheme.defaultEffect
 /** 透明度/颜色的快速规格（退出、小范围变化） */
 fun <T> effectsFast(): FiniteAnimationSpec<T> = AppMotionScheme.fastEffectsSpec()
 
+private val AstryxStandardEasing = CubicBezierEasing(0.24f, 1f, 0.4f, 1f)
+
 /** Explicit transitions use the same user preference as Material components. */
 fun <T> motionTween(
     durationMillis: Int,
     delayMillis: Int = 0,
-    easing: Easing = FastOutSlowInEasing,
+    easing: Easing = AstryxStandardEasing,
 ): FiniteAnimationSpec<T> = if (ThemeController.motionLevel == 2) snap()
     else tween(durationMillis, delayMillis, easing)

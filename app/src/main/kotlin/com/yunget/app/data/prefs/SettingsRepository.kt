@@ -573,6 +573,10 @@ class SettingsRepository(context: Context) {
             prefs.edit().putInt("ui_style_mode", value.coerceIn(0, 1)).apply()
         }
 
+    var showSettingDescriptions: Boolean
+        get() = prefs.getBoolean("show_setting_descriptions", false)
+        set(value) { prefs.edit().putBoolean("show_setting_descriptions", value).apply() }
+
     var acceptPrereleaseUpdate: Boolean
         get() = prefs.getBoolean("accept_prerelease_update", false)
         set(value) { prefs.edit().putBoolean("accept_prerelease_update", value).apply() }

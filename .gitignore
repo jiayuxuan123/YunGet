@@ -43,3 +43,15 @@ __pycache__/
 # taste-skill 的测量产物（截图与 report.json）；方向单与设计笔记要留
 .taste-skill/inspect*/
 output/
+
+# Cloudflare community local state and built bundle
+/community/.wrangler/
+/community/.dev.vars
+/community/dist/
+
+# Local validation and review artifacts
+/_audit/
+/.playwright-cli/
+/.wrangler/
+/.impeccable/review/
+/$null
