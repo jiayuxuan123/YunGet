@@ -6,7 +6,6 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import java.io.File
 import java.util.concurrent.TimeUnit
-import java.util.concurrent.atomic.AtomicInteger
 
 /**
  * 「把字节下载到分片目录」这一层的可替换抽象。
@@ -81,15 +80,14 @@ interface DownloadEngineRunner {
  *
  * - 输出固定写到 `chunkDir/aria2.out`，返回 `listOf(它)` —— 上层照常"合并"
  *   （实际是单文件拷贝到最终路径），**绝不直接写最终文件**（见 [DownloadEngineRunner] 注释）；
- * - 进度靠**轮询输出文件大小**（最稳，不依赖解析 stdout 的 `\r` 覆盖式输出）；
+ * - 进度与工作连接数读取内核 readout；文件逻辑长度仅用于退出后的产物检查；
  * - 取消靠 `isActive()` 检查 + `destroy()` 杀子进程；
  * - 同时必须**持续读走 stdout/stderr**，否则管道缓冲（约 64KB）写满会把 aria2 阻塞住。
  *
  * ## 参数映射与已知限制
  *
- * - `-x`（单服务器连接数）aria2 **硬上限 16**，故 `min(targetWorkers, 16)`；
- * - `-k`（最小分片）默认 20M，且实际门槛是 `2*值` → 小于 40MB 的文件根本不分片。
- *   这里设 4M（参考 Motrix 的加速档 `-x16 -s16 -k4M`），让中等文件也能分片；
+ * - 使用随可选包提供的 aria2-next `--stream-max-connections`（1..256）；
+ *   默认仍由设置提供 16，用户选择更高值时完整传递，分片粒度由该内核管理。
  * - `--file-allocation=none`：Android 上预分配（默认 prealloc）可能长时间阻塞；
  * - `--auto-file-renaming=false`：否则同名文件会被改成 `name.1.ext`，破坏原地续传；
  * - `--no-conf -n`：HOME 下没有配置文件，显式禁用避免告警；
@@ -110,11 +108,10 @@ class Aria2Runner(private val context: Context) : DownloadEngineRunner {
          * 内置引擎已从 aria2 1.37 换为 **aria2-next 2.8.3**，其
          * `--stream-max-connections` 的允许范围是 **1..256**（旧版 `-x` 硬上限只有 16）。
          *
-         * 但这里**仍保守取 16**：不是受限于引擎，而是**避免网盘风控** ——
-         * 用户明确要求默认线程数不得拉满。若将来要在 aria2 引擎上放开，
-         * 应做成独立设置项并由用户显式选择，而不是改这个默认值。
+         * 默认连接数在 SettingsRepository 中保持 16；显式选择的值应传给内核，
+         * 不能再在执行器里把 32/64/128/256 悄悄截成 16。
          */
-        const val MAX_CONN_PER_SERVER = 16
+        const val MAX_CONN_PER_SERVER = Aria2CommandBuilder.MAX_CONNECTIONS
     }
 
     override suspend fun run(spec: DownloadEngineRunner.RunSpec): DownloadEngineRunner.Outcome {
@@ -126,66 +123,17 @@ class Aria2Runner(private val context: Context) : DownloadEngineRunner {
         val out = File(spec.chunkDir, OUT_NAME)
         spec.chunkDir.mkdirs()
 
-        // 已下载字节（续传起点）：用于进度增量计算。
-        val baseBytes = if (out.isFile) out.length() else 0L
-        if (baseBytes > 0 && spec.resumeFrom <= 0) {
-            Log.i(TAG, "task=${spec.taskId} 发现已有 $baseBytes 字节，按续传处理")
-        }
-
         val conns = spec.targetWorkers.coerceIn(1, MAX_CONN_PER_SERVER)
         // HTTPS 必需的 CA bundle（Android 上没有 aria2 默认查找的路径）。见下方注释。
         val caBundle = Aria2CaBundle.ensure(context, File(context.cacheDir, "aria2"))
-        val cmd = buildList {
-            add(bin.absolutePath)
-            add("-d"); add(spec.chunkDir.absolutePath)
-            add("-o"); add(OUT_NAME)
-            add("-c")                                   // 续传
-            // 【参数名必须用新的】内置的是 aria2-next 2.8.3（社区维护 fork），
-            // 它把分片策略重写为 `--stream-max-connections`：
-            //   - 旧的 `-s` / `-x` 会被"接受但归一化"（每次都打一条 warning 到输出）
-            //   - 旧的 `-k`（最小分片）已被**移除**：它明确会打
-            //     "accepted and skipped; the maintained native engine owns or retired this policy"
-            //     —— 发了也没用，只会刷日志。
-            // 故这里直接用新参数名，且不再传 -k（该 fork 自己决定分片粒度）。
-            add("--stream-max-connections=$conns")
-            add("--file-allocation=none")               // Android 上预分配会长时间阻塞
-            add("--auto-file-renaming=false")           // 否则破坏原地续传
-            add("--allow-overwrite=true")               // 配合 -c：控制文件缺失时从头下
-            add("--no-conf"); add("-n")                 // 无配置文件、不读 netrc
-            add("--console-log-level=warn")
-            // 【必须指定 CA bundle】Android 上没有 aria2 默认查找的 /etc/ssl/certs/…，
-            // 不指定就会对**所有 HTTPS** 报 "unable to get local issuer certificate"。
-            // 实测（OnePlus/Android 16）：aria2 下 GitHub release 必失败，而同刻 OkHttp 正常。
-            // 取不到时**不传该参数**（而不是传一个空文件）——让 aria2 用它自己的默认值，
-            // 至少 HTTP 链接仍可用；失败由上层回退兜底。
-            caBundle?.let {
-                add("--ca-certificate=${it.absolutePath}")
-                add("--check-certificate=true")
-            }
-            // 【必须保留 readout】它既是唯一的进度来源（见下方双通道注释），也是"任务在进行中"的信号。
-            // 关掉它会让 aria2 在长时间无输出时看起来像卡死。
-            add("--show-console-readout=true")
-            // 进度行刷新频率：默认 1s；调密到 1s 已足够（更密只会增加解析开销）。
-            add("--summary-interval=0")                 // 不打"摘要块"（那是多行文本），只要单行 readout
-            add("--human-readable=false")               // 关键：进度行用原始字节而非 1.2Mi，才可解析
-            if (spec.speedLimitBytesPerSec > 0) {
-                // aria2 只认 K/M 后缀，不认 G；字节数直接传也可。
-                add("--max-overall-download-limit=${spec.speedLimitBytesPerSec}")
-            }
-            spec.headers.forEach { (k, v) ->
-                // 过滤掉会与 aria2 自身参数冲突的头（Host/Content-Length 由它自己算）。
-                if (!k.equals("Host", true) && !k.equals("Content-Length", true)) {
-                    add("--header=$k: $v")
-                }
-            }
-            add(spec.url)
-        }
+        val cmd = Aria2CommandBuilder.build(bin, caBundle, spec)
 
-        Log.i(TAG, "task=${spec.taskId} 启动 aria2c: conns=$conns " +
+        Log.i(TAG, "task=${spec.taskId} 启动 aria2c: requestedConns=${spec.targetWorkers} effectiveConns=$conns " +
             "limit=${spec.speedLimitBytesPerSec} headers=${spec.headers.keys}")
 
         val proc = try {
             ProcessBuilder(cmd)
+                .redirectErrorStream(true)
                 .also { it.environment()["HOME"] = context.filesDir.absolutePath }
                 .start()
         } catch (e: Exception) {
@@ -194,45 +142,22 @@ class Aria2Runner(private val context: Context) : DownloadEngineRunner {
             )
         }
 
-        // 必须持续读走输出：管道缓冲写满会阻塞 aria2。
-        //
-        // 【同时解析进度，这是必需的第二个通道】只用"轮询输出文件大小"会漏进度：
-        // aria2 的数据先攒在内存缓冲里、且控制文件是周期性落盘，文件大小可能长时间不增长
-        // → UI 上速度显示 0、进度卡住（实测 PC 端验证时 32MB 快速下载期间一次都没采到非零值）。
-        // 这里解析 aria2 自己的进度摘要行（`[#gid 已完成/总长(百分比) ...]`），
-        // 与文件大小**取较大值**，保证进度单调不倒退。
-        val aria2DoneBytes = java.util.concurrent.atomic.AtomicLong(baseBytes)
-        // 【正则必须与真实输出对齐】已踩过两次坑，这里把两种格式都覆盖：
-        //
-        //  aria2 1.37.0：`[#940138 65536B/67108864B(0%) CN:16 DL:95819B ETA:11m39s]`
-        //      ↑ 数字带 `B` 后缀 —— 第一版写成 `(\d+)/(\d+)\(` 完全匹配不到（24 行 0 命中）。
-        //
-        //  aria2-next 2.8.3：`[#027130 [=====>    ]  26% 17825792B/67108864B CN:8 DL:17807984B]`
-        //      ↑ **百分比挪到前面、进度条插在中间、末尾没有 `(`** ——
-        //        只认 1.37 格式的正则对它 0 命中（实测 3/3 全丢），
-        //        会导致进度永远显示 0%（因为文件大小那一路在 aria2 内存缓冲期间也是 0）。
-        //
-        // 故不再依赖"数字后紧跟 `(`"这个脆弱的锚点，改为直接匹配 `已完成/总长`：
-        // 该组合在两种格式里都存在且语义一致。
-        val progressPattern = Regex("""(\d+)B?/(\d+)B?""")
+        // Both streams are merged above. Drain them continuously; only readout frames carry progress.
+        val progress = Aria2ProgressMonitor()
         val drain = Thread {
             runCatching {
                 proc.inputStream.bufferedReader().forEachLine { line ->
                     if (line.isNotBlank()) {
-                        Log.d(TAG, "[aria2] $line")
-                        progressPattern.find(line)?.let { m ->
-                            m.groupValues[1].toLongOrNull()?.let { done ->
-                                aria2DoneBytes.updateAndGet { cur -> maxOf(cur, done) }
-                            }
-                        }
+                        Log.d(TAG, "[aria2] ${com.yunget.app.util.LogRedactor.line(line).take(1000)}")
+                        progress.accept(line)
                     }
                 }
             }
         }.apply { isDaemon = true; start() }
 
         try {
-            var lastReported = baseBytes
-            val lastWorkers = AtomicInteger(conns)
+            var lastWorkers = 0
+            spec.onWorkers(0)
             while (proc.isAlive) {
                 if (!spec.isActive()) {
                     Log.i(TAG, "task=${spec.taskId} 任务已取消，终止 aria2c")
@@ -240,14 +165,12 @@ class Aria2Runner(private val context: Context) : DownloadEngineRunner {
                     if (!proc.waitFor(3, TimeUnit.SECONDS)) proc.destroyForcibly()
                     return DownloadEngineRunner.Outcome.Failed("已取消")
                 }
-                // 双通道取进度：文件实际大小 vs aria2 自报的已完成字节，取较大者。
-                val fromFile = if (out.isFile) out.length() else 0L
-                val now = maxOf(fromFile, aria2DoneBytes.get())
-                if (now > lastReported) {
-                    val delta = now - lastReported
-                    lastReported = now
-                    spec.onWorkers(lastWorkers.get())
-                    spec.onBytes(delta, now)
+                progress.poll()?.let { sample ->
+                    if (sample.connections != lastWorkers) {
+                        lastWorkers = sample.connections
+                        spec.onWorkers(sample.connections)
+                    }
+                    if (sample.initial || sample.delta > 0) spec.onBytes(sample.delta, sample.completed)
                 }
                 withContext(Dispatchers.IO) { Thread.sleep(300) }
             }
@@ -268,6 +191,9 @@ class Aria2Runner(private val context: Context) : DownloadEngineRunner {
             }
         } finally {
             if (proc.isAlive) runCatching { proc.destroyForcibly() }
+            runCatching { proc.inputStream.close() }
+            drain.join(500)
+            spec.onWorkers(0)
         }
     }
 
@@ -287,7 +213,7 @@ class Aria2Runner(private val context: Context) : DownloadEngineRunner {
         19 -> "域名解析失败"
         23 -> "重定向过多"
         24 -> "HTTP 授权失败"
-        28 -> "选项非法或参数越界（如 -x > 16）"
+        28 -> "选项非法或参数越界"
         29 -> "服务器过载或维护中"
         32 -> "校验和失败"
         else -> "见 aria2 手册 EXIT STATUS"

@@ -419,7 +419,7 @@ fun DownloadEngineScreen(
                                 color = MaterialTheme.colorScheme.primary
                             )
                             TextButton(onClick = onOpenAnnouncement) {
-                                Text("查看 0.5.0.1 更新公告")
+                                Text("查看 ${EngineBuildInfo.TURBO_DL_VERSION} 更新公告")
                             }
                             EngineActionButton(
                                 selected = !engineOn,

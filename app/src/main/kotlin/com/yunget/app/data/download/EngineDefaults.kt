@@ -33,7 +33,7 @@ import dev.turbodl.core.TurboConfig
 object EngineDefaults {
 
     const val BLOCK_SIZE: Long = 16L * 1024 * 1024
-    const val MIN_SEGMENT_SIZE: Long = 64L * 1024
+    const val MIN_SEGMENT_SIZE: Long = 256L * 1024
     const val MAX_SEGMENTS_PER_TASK: Int = 0
     const val MAX_SPLITS_PER_SEGMENT: Int = 3
     const val CONNECT_TIMEOUT_MS: Long = 15_000L

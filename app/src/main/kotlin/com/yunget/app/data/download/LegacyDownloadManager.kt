@@ -464,6 +464,7 @@ class LegacyDownloadManager(
         // 由下方 Failed 分支统一回退到单流整文件下载。
         val customRunner = runner
         if (customRunner != null) {
+            var progressInitialized = false
             val outcome = customRunner.run(
                 DownloadEngineRunner.RunSpec(
                     taskId = id,
@@ -475,6 +476,10 @@ class LegacyDownloadManager(
                     resumeFrom = 0L,
                     speedLimitBytesPerSec = speedLimitProvider(),
                     onBytes = { delta, absolute ->
+                        if (!progressInitialized) {
+                            speedRecorder.reset((absolute - delta).coerceAtLeast(0L))
+                            progressInitialized = true
+                        }
                         speedLimiter.awaitAllow(delta)
                         // 任务已取消时不再更新进度（与内置引擎分支保持同一语义）。
                         if (isTaskActive()) {
@@ -756,6 +761,12 @@ class LegacyDownloadManager(
     private class SpeedRecorder {
         private var lastBytes = 0L
         private var lastTime = System.currentTimeMillis()
+
+        @Synchronized
+        fun reset(total: Long) {
+            lastBytes = total
+            lastTime = System.currentTimeMillis()
+        }
 
         @Synchronized
         fun onBytes(total: Long): Long? {

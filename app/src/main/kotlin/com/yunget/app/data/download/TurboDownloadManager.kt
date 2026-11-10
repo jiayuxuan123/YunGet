@@ -141,9 +141,9 @@ class TurboDownloadManager(
     // ---- 第二批：分片粒度 / 超时 / UA / HTTP 策略 ----
     // 默认值与 TurboConfig 的默认逐项一致，所以不传时行为与之前完全相同。
     private val blockSizeProvider: () -> Long = { 16L * 1024 * 1024 },
-    private val minSegmentSizeProvider: () -> Long = { 64L * 1024 },
+    private val minSegmentSizeProvider: () -> Long = { EngineDefaults.MIN_SEGMENT_SIZE },
     private val maxSegmentsPerTaskProvider: () -> Int = { 0 },
-    private val maxSplitsPerSegmentProvider: () -> Int = { 2 },
+    private val maxSplitsPerSegmentProvider: () -> Int = { EngineDefaults.MAX_SPLITS_PER_SEGMENT },
     private val connectTimeoutMsProvider: () -> Long = { 15_000L },
     private val readTimeoutMsProvider: () -> Long = { 30_000L },
     private val probeTimeoutMsProvider: () -> Long = { 6_000L },

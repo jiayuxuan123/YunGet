@@ -14,8 +14,8 @@ android {
         applicationId = "com.yunget.kernel.aria2"
         minSdk = 24
         targetSdk = 36
-        versionCode = 1
-        versionName = "1.37.0-1"
+        versionCode = 2
+        versionName = "2.8.3-1"
         ndk { abiFilters += "arm64-v8a" }
     }
     signingConfigs {
