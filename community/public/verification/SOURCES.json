@@ -1,0 +1,28 @@
+{
+  "package": "altcha",
+  "version": "3.5.0",
+  "license": "MIT",
+  "source": "https://github.com/altcha-org/altcha",
+  "files": [
+    {
+      "file": "altcha-3.5.0.js",
+      "bytes": 85378,
+      "sha256": "cfc55ae8f0bdf73470796976a840a4da5874f22292c6ce8387a63253bd9389b4"
+    },
+    {
+      "file": "altcha-3.5.0.css",
+      "bytes": 15402,
+      "sha256": "03622256effb4e962d0c1da9a59684cf237f541f290703934c07a97dabcbad47"
+    },
+    {
+      "file": "pbkdf2-3.5.0.js",
+      "bytes": 6540,
+      "sha256": "f2dcf92ba8cd81a7a6170c2c6181248359ddf5a6e35340c7472a313208273336"
+    },
+    {
+      "file": "zh-cn-3.5.0.js",
+      "bytes": 3452,
+      "sha256": "e82fd20ace9f57500182c7b5abd4a31c2ae7a4179299f495f6e8274baa966016"
+    }
+  ]
+}

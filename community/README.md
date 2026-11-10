@@ -19,7 +19,8 @@
 ## 安全边界
 
 - 普通用户没有密码；设置昵称时获得 30 天随机会话，网页端使用 `HttpOnly; Secure; SameSite=Lax` Cookie。
-- 提交昵称、反馈、回复和闲聊都经过 Turnstile 服务端 Siteverify。
+- 提交昵称、反馈、回复和闲聊都使用同域自托管 ALTCHA，服务端校验签名与计算结果；不调用第三方验证 API。
+- 验证结果有效期 5 分钟，按注册、反馈、回复与聊天分别绑定用途，并绑定当次来源。D1 唯一键原子消费，拒绝重复使用。
 - 写接口校验 `Origin`，限制请求体，使用参数化 D1 语句和服务端长度白名单。
 - `/admin*` 由 Cloudflare Access 拦截，Worker 再独立校验 `Cf-Access-Jwt-Assertion` 的签名、issuer、audience 和过期时间。
 - 管理员身份由 Cloudflare Access policy 绑定，不把邮箱或永久管理员密钥写进前端。
@@ -29,11 +30,15 @@
 
 ```powershell
 cd community
+npm ci --ignore-scripts
+npm run prepare:verification
 npm run check
 npm test
 npx --yes wrangler@4.158.0 deploy --dry-run
 ```
 
-浏览器回归：先运行 `node test/preview-server.mjs`，用 Playwright CLI 的 `run-code` 执行 `test/mobile-browser-check.mjs` 内容。该脚本只访问 `127.0.0.1:8801`，使用示例数据与本地验证码替身，绝不写入正式社区。覆盖窄屏、键盘视口、增量刷新、草稿、重试和开发者表单。
+浏览器界面回归：先运行 `node test/preview-server.mjs`，用 Playwright CLI 的 `run-code` 执行 `test/mobile-browser-check.mjs`。该脚本只访问 `127.0.0.1:8801`，使用示例数据和真实 ALTCHA 计算，覆盖窄屏、键盘视口、增量刷新、草稿、重试和开发者表单。
 
-`TURNSTILE_SECRET` 只通过 Worker secret 写入，不提交。`wrangler.jsonc` 中的资源 ID、Access audience 和公开 site key 由部署脚本写入。
+完整前后端联调：将配置复制到忽略的 `wrangler.local.jsonc`，移除 `routes` 并把 `PUBLIC_ORIGIN` 改为 `http://127.0.0.1:8803`，在 `.dev.vars` 配置测试签名密钥，执行本地 `schema.sql` 后启动 `wrangler dev --local --port 8803 --config wrangler.local.jsonc`。使用 `test/verification-browser-check.mjs` 验证真实 Worker、D1 与控件，绝不向正式社区写测试内容。
+
+`COMMUNITY_VERIFICATION_SECRET` 至少 32 字符，仅通过 Worker secret 写入，不提交。正式部署前先执行 `migrations/0001_self_hosted_verification.sql`。ALTCHA 3.5.0 和 altcha-lib 2.8.0 固定在锁文件中；客户端脚本、中文资源、样式和计算 Worker 都由 `public/verification/` 同域提供，保留 MIT 许可和来源摘要。

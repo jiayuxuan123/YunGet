@@ -4,6 +4,12 @@
   "main": "worker.mjs",
   "compatibility_date": "2026-11-09",
   "workers_dev": false,
+  "triggers": {"crons": ["17 * * * *"]},
+  "assets": {
+    "directory": "./public",
+    "binding": "ASSETS",
+    "run_worker_first": true
+  },
   "observability": {
     "enabled": true,
     "traces": {
@@ -14,8 +20,7 @@
   "vars": {
     "PUBLIC_ORIGIN": "https://community.yunget.yunl.us.ci",
     "ACCESS_ISSUER": "https://yuolui.cloudflareaccess.com",
-    "ACCESS_AUD": "3b47b45b6413d7659b13dc0a34cd6660d1aa4b9cd1dca1ea95dfccab30a95bb5",
-    "TURNSTILE_SITEKEY": "0x4AAAAAAF5poAcwb2D_ZwZK"
+    "ACCESS_AUD": "3b47b45b6413d7659b13dc0a34cd6660d1aa4b9cd1dca1ea95dfccab30a95bb5"
   },
   "d1_databases": [
     {

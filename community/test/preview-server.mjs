@@ -1,6 +1,8 @@
 // Local browser fixtures only. This process never uses D1, Access or production sessions.
 import http from 'node:http';
+import {readFile} from 'node:fs/promises';
 import {html, style, script} from '../web.mjs';
+import {consumeVerification, issueVerification, scopeForPath, verificationConfig} from '../verification.mjs';
 
 const now = Math.floor(Date.now() / 1000);
 const feedback = Array.from({length: 7}, (_, index) => ({
@@ -23,13 +25,17 @@ let writes = [];
 const announcements = [{id: 'local-announcement', title: '2.7.28：经典界面恢复与新版细化（示例）',
   body: '本地预览，非正式公告。\n\n- 经典界面和新版界面均可使用。\n- 字号与间距可以在主题页调整。\n- 反馈可以查看处理状态。\n\n[查看云取官网](https://yunget.yunl.us.ci/)\n\n' + '较长公告的正文应自然换行，所有内容都能滚动到达。\n'.repeat(12),
   date: '2026-11-09', pinned: true, important: true, published: true}];
-const turnstileStub = 'window.turnstile={render:(node,opts)=>{node.textContent="本地验证控件（测试）";setTimeout(()=>opts.callback("local-fixture-token"),20);return "local-widget";},remove:()=>{},reset:()=>{}};const callback=new URL(document.currentScript.src).searchParams.get("onload");if(callback)window[callback]();';
+const usedProofs=new Set();
+const verificationEnv={PUBLIC_ORIGIN:'http://127.0.0.1:8801',COMMUNITY_VERIFICATION_SECRET:crypto.randomUUID()+crypto.randomUUID(),DB:{prepare:()=>({bind(value){this.value=value;return this;},async run(){const fresh=!usedProofs.has(this.value);usedProofs.add(this.value);return {meta:{changes:Number(fresh)}};}})}};
 
 const server = http.createServer(async (request, response) => {
   const url = new URL(request.url, 'http://127.0.0.1');
   const path = url.pathname;
   const json = (body, status = 200) => {response.writeHead(status, {'Content-Type': 'application/json', 'Cache-Control': 'no-store'}); response.end(JSON.stringify(body));};
-  if (path === '/test/turnstile.js') {response.setHeader('Content-Type', 'text/javascript');response.end(turnstileStub);return;}
+  if (path.startsWith('/verification/') && /^\/verification\/[a-zA-Z0-9_.-]+$/.test(path) && !path.includes('..')) {
+    try {const bytes=await readFile(new URL('../public'+path,import.meta.url));response.setHeader('Content-Type',path.endsWith('.css')?'text/css':'text/javascript');response.end(bytes);}catch{response.writeHead(404);response.end();}return;
+  }
+  if (path === '/api/verification/challenge') {json(await issueVerification(new Request(verificationEnv.PUBLIC_ORIGIN+request.url),verificationEnv,url.searchParams.get('scope')));return;}
   if (request.method === 'POST' || request.method === 'PATCH') {
     let content = '';for await (const chunk of request) content += chunk;
     const body = JSON.parse(content || '{}');
@@ -40,13 +46,17 @@ const server = http.createServer(async (request, response) => {
       json({ok: true});return;
     }
     writes.push({path, body, key: request.headers['idempotency-key']});
+    if(path.startsWith('/api/')){
+      try{await consumeVerification(new Request(verificationEnv.PUBLIC_ORIGIN+path),verificationEnv,body.challenge,scopeForPath(path));}
+      catch(error){json({error:error.message},403);return;}
+    }
     if (failNextWrite) {failNextWrite = false;json({error: '模拟网络失败，内容保留'}, 503);return;}
     if (path === '/api/session') {identity = body.nickname;json({nickname: identity}, 201);return;}
     if (path === '/api/chat') messages.push({id: messages.at(-1).id + 1, nickname: identity, body: body.body, created_at: now});
     json({ok: true, id: 'local-created'}, 201);return;
   }
   if (path === '/test/writes') {json(writes);return;}
-  if (path === '/api/config') {json({version: '2.7.28', sitekey: 'local-test-key'});return;}
+  if (path === '/api/config') {json({version: '2.7.28', verification:verificationConfig});return;}
   if (path === '/api/session') {json({nickname: identity});return;}
   if (path === '/admin/api/session') {json({developer: true});return;}
   if (path.endsWith('/api/announcements')) {json({items: announcements});return;}

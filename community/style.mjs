@@ -156,8 +156,9 @@ input[type=checkbox] { width: 19px; height: 19px; flex: 0 0 auto; accent-color: 
 .developer-badge { color: var(--accent); background: var(--accent-soft); padding: 2px 6px; border-radius: 5px; font-size: 11px; }
 .reply-form { padding-top: var(--space-4); border-top: 1px solid var(--line); }
 .action-preview { background: var(--wash); border-radius: var(--control-radius); margin-block: var(--space-3); padding: var(--space-3); font-size: 14px; white-space: pre-wrap; overflow-wrap: anywhere; }
-.turnstile-wrap { margin-top: var(--space-4); min-height: 65px; max-width: 100%; }
-.turnstile-status { margin-top: var(--space-2); color: var(--muted); font-size: 13px; }
+altcha-widget { --altcha-color-base: var(--surface); --altcha-color-text: var(--ink); --altcha-color-neutral: var(--muted); --altcha-color-primary: var(--accent); --altcha-border-color: var(--line); --altcha-border-radius: 12px; width: 100%; }
+.verification-wrap { margin-top: var(--space-4); min-height: 65px; max-width: 100%; }
+.verification-status { margin-top: var(--space-2); color: var(--muted); font-size: 13px; }
 .toast { position: fixed; top: calc(env(safe-area-inset-top) + 12px); left: 50%; transform: translateX(-50%); max-width: min(480px, calc(100% - 24px)); z-index: 100; border-radius: var(--control-radius); padding: 10px 16px; color: var(--surface); background: var(--ink); box-shadow: var(--shadow); font-size: 14px; pointer-events: none; }
 .site-foot { display: flex; align-items: center; justify-content: center; flex-wrap: wrap; gap: var(--space-3); color: var(--muted); padding: var(--space-2) var(--space-4) max(var(--space-2), env(safe-area-inset-bottom)); font-size: 12px; }
 .site-foot a { min-height: 32px; display: inline-flex; align-items: center; color: var(--muted); text-decoration: none; }

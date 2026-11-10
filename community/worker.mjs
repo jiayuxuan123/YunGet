@@ -1,5 +1,6 @@
 import {createAdminVerifier} from './auth.mjs';
 import {html, style, script} from './web.mjs';
+import {consumeVerification, issueVerification, scopeForPath, verificationConfig, VerificationError} from './verification.mjs';
 
 const statuses = new Set(['new', 'planned', 'working', 'resolved', 'closed']);
 const categories = new Set(['bug', 'idea', 'question', 'other']);
@@ -57,7 +58,7 @@ function secureResponse(body, status = 200, extra = {}) {
     'Content-Type': 'application/json; charset=utf-8', 'Cache-Control': 'no-store',
     'X-Content-Type-Options': 'nosniff', 'Referrer-Policy': 'same-origin',
     'Strict-Transport-Security': 'max-age=31536000', 'X-Frame-Options': 'DENY',
-    'Content-Security-Policy': "default-src 'self'; script-src 'self' 'unsafe-inline' https://challenges.cloudflare.com https://static.cloudflareinsights.com; style-src 'self'; frame-src 'self' https://challenges.cloudflare.com; connect-src 'self' https://challenges.cloudflare.com https://static.cloudflareinsights.com; img-src 'self' data: https://challenges.cloudflare.com; object-src 'none'; base-uri 'none'; form-action 'self'; frame-ancestors 'none'",
+    'Content-Security-Policy': "default-src 'self'; script-src 'self'; style-src 'self'; worker-src 'self'; frame-src 'none'; connect-src 'self'; img-src 'self' data:; object-src 'none'; base-uri 'none'; form-action 'self'; frame-ancestors 'none'",
     ...extra,
   });
   return new Response(typeof body === 'string' ? body : JSON.stringify(body), {status, headers});
@@ -76,17 +77,9 @@ async function rate(request, env, action, limit, seconds) {
     .bind(key, now + seconds * 2).first();
   if (row.hits > limit) fail(429, '提交过于频繁，请稍后再试');
 }
-async function botCheck(request, env, body, fetchRemote) {
-  if (!env.TURNSTILE_SECRET || !env.TURNSTILE_SITEKEY) fail(503, '验证服务暂不可用');
-  const token = text(body.challenge, 2048, 1);
-  const result = await fetchRemote('https://challenges.cloudflare.com/turnstile/v0/siteverify', {
-    method: 'POST', signal: AbortSignal.timeout(8000),
-    body: new URLSearchParams({secret: env.TURNSTILE_SECRET, response: token,
-      remoteip: request.headers.get('CF-Connecting-IP') || ''}),
-  });
-  if (!result.ok) fail(503, '验证服务暂不可用');
-  const data = await result.json();
-  if (!data.success || data.hostname !== new URL(env.PUBLIC_ORIGIN).hostname || data.action !== 'community_write') fail(403, '验证已过期，请重新验证');
+async function botCheck(request, env, body) {
+  try { await consumeVerification(request, env, body.challenge, scopeForPath(new URL(request.url).pathname)); }
+  catch (error) { if (error instanceof VerificationError) fail(error.status, error.message); throw error; }
 }
 const feedbackFields = 'id,nickname,product,category,title,body,app_version,status,private,created_at,updated_at';
 function publicFeedback(row, owner) {
@@ -110,7 +103,19 @@ export function createHandler({fetchRemote = fetch, verifyAdmin = createAdminVer
       if (request.method === 'GET' && ['/', '/admin', '/chat'].includes(path)) return secureResponse(html, 200, {'Content-Type': 'text/html; charset=utf-8'});
       if (request.method === 'GET' && path === '/app.css') return secureResponse(style, 200, {'Content-Type': 'text/css; charset=utf-8', 'Cache-Control': 'public,max-age=300'});
       if (request.method === 'GET' && path === '/app.js') return secureResponse(script, 200, {'Content-Type': 'text/javascript; charset=utf-8', 'Cache-Control': 'public,max-age=300'});
-      if (request.method === 'GET' && path === '/api/config') return secureResponse({sitekey: env.TURNSTILE_SITEKEY || '', version: '2.7.28'});
+      if (request.method === 'GET' && path === '/api/config') return secureResponse({verification: verificationConfig, version: '2.7.28'});
+      if (request.method === 'GET' && path.startsWith('/verification/')) {
+        if (!env.ASSETS) fail(503, '验证资源暂不可用');
+        const resource = await env.ASSETS.fetch(request);
+        const headers = secureResponse('', resource.status, {'Content-Type': resource.headers.get('Content-Type') || 'text/plain', 'Cache-Control':resource.ok?'public,max-age=31536000,immutable':'no-store'}).headers;
+        return new Response(resource.body, {status:resource.status, headers});
+      }
+      if (request.method === 'GET' && path === '/api/verification/challenge') {
+        if (request.headers.get('Sec-Fetch-Site') === 'cross-site' || (request.headers.get('Origin') && request.headers.get('Origin') !== env.PUBLIC_ORIGIN)) fail(403, '请在社区页面内操作');
+        await rate(request, env, 'verification-challenge', 30, 60);
+        try { return secureResponse(await issueVerification(request, env, url.searchParams.get('scope'))); }
+        catch (error) { if (error instanceof VerificationError) fail(error.status, error.message); throw error; }
+      }
       if (request.method === 'GET' && path === '/api/announcements') {
         const {results} = await env.DB.prepare('SELECT id,title,body,date,pinned,important FROM announcements WHERE published=1 ORDER BY pinned DESC,date DESC,updated_at DESC LIMIT 40').all();
         return secureResponse({items: results.map(row => ({...row, pinned: Boolean(row.pinned), important: Boolean(row.important)}))}, 200, {'Cache-Control': 'public,max-age=15'});
@@ -248,6 +253,7 @@ export default {fetch: createHandler(), async scheduled(_controller, env) {
   await env.DB.batch([
     env.DB.prepare('DELETE FROM sessions WHERE expires_at<?').bind(stamp()),
     env.DB.prepare('DELETE FROM rate_limits WHERE expires_at<?').bind(stamp()),
+    env.DB.prepare('DELETE FROM used_verifications WHERE expires_at<?').bind(stamp()),
     env.DB.prepare('DELETE FROM messages WHERE created_at<?').bind(stamp() - 30 * 86400),
   ]);
 }};

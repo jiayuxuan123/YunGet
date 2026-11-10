@@ -48,6 +48,8 @@ output/
 /community/.wrangler/
 /community/.dev.vars
 /community/dist/
+/community/node_modules/
+/community/wrangler.local.jsonc
 
 # Local validation and review artifacts
 /_audit/

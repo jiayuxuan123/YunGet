@@ -57,51 +57,52 @@ function showFormError(form, error) {
 }
 function clearChallenge() {
   state.challengeRevision++;
-  if (state.widget!==null && window.turnstile) { try { window.turnstile.remove(state.widget); } catch {} }
+  if (state.widget) { try { state.widget.reset(); state.widget.remove(); } catch {} }
   state.widget=null; state.challenge=null;
 }
 let challengeLibrary;
-let challengeLibraryAttempt=0;
 function loadChallengeLibrary() {
   if (challengeLibrary) return challengeLibrary;
-  challengeLibrary=new Promise((resolve,reject)=>{
-    const tag=document.createElement('script');
-    const callback='yungetTurnstileLoaded'+(++challengeLibraryAttempt);
-    let settled=false;
-    const cleanup=()=>{clearTimeout(timer);delete window[callback];};
-    const failed=message=>{if(settled)return;settled=true;cleanup();tag.remove();challengeLibrary=null;reject(new Error(message));};
-    const timer=setTimeout(()=>failed('验证服务加载超时，请点击重试'),12000);
-    // The SDK's onload parameter signals API readiness for async loading.
-    window[callback]=()=>{if(settled)return;settled=true;cleanup();resolve();};
-    tag.src='https://challenges.cloudflare.com/turnstile/v0/api.js?render=explicit&onload='+callback; tag.async=true;
-    tag.onerror=()=>failed('验证服务未连接，请检查网络后重试');
-    document.head.append(tag);
-  });
+  const script=state.config?.verification?.script;
+  if(typeof script!=='string' || !script.startsWith('/verification/'))return Promise.reject(new Error('验证服务暂不可用'));
+  let timer;
+  challengeLibrary=Promise.race([
+    import(script).then(()=>customElements.whenDefined('altcha-widget')),
+    new Promise((_resolve,reject)=>{timer=setTimeout(()=>reject(new Error('验证资源加载超时，请点击重新验证')),12000);}),
+  ]).catch(error=>{challengeLibrary=null;throw error;}).finally(()=>clearTimeout(timer));
   return challengeLibrary;
 }
 async function mountChallenge() {
   clearChallenge(); const revision=state.modalRevision;const attempt=state.challengeRevision;
-  const target=modal.querySelector('.turnstile-wrap'); const note=modal.querySelector('.turnstile-status');
+  const target=modal.querySelector('.verification-wrap'); const note=modal.querySelector('.verification-status');
   if (!target) return;
   const current=()=>revision===state.modalRevision && attempt===state.challengeRevision && modal.open && target.isConnected;
   const report=message=>{if(note && current())note.textContent=message;};
-  if (!state.config?.sitekey) { report('验证服务暂不可用，请稍后重试'); return; }
-  report('正在连接验证服务…');
+  if (state.config?.verification?.provider!=='altcha') { report('验证服务暂不可用，请刷新页面'); return; }
+  report('正在加载验证…');
   try {
     await loadChallengeLibrary();
     if (!current()) return;
-    report('请完成人机验证');
-    state.widget=window.turnstile.render(target, {
-      sitekey:state.config.sitekey, action:'community_write', theme:state.theme==='system'?'auto':state.theme,
-      size:target.clientWidth<300?'compact':'flexible',
-      callback:token=>{if(current()){state.challenge=token;report('验证通过，可以提交');}},
-      'expired-callback':()=>{if(current()){state.challenge=null;report('验证已过期，请重新验证');}},
-      'error-callback':()=>{if(current()){state.challenge=null;report('验证未完成，可点击“重新验证”重试');}},
+    const widget=document.createElement('altcha-widget');
+    widget.setAttribute('challenge',state.config.verification.challengeUrl+'?scope='+encodeURIComponent(target.dataset.scope));
+    widget.setAttribute('language','zh-cn');widget.setAttribute('workers','1');widget.setAttribute('auto','off');
+    widget.addEventListener('load',()=>{
+      if(!current())return;
+      widget.configure({minDuration:0,timeout:20000,workers:1,humanInteractionSignature:false,auto:'off'});
+      widget.verify();
     });
+    widget.addEventListener('verified',event=>{if(current() && event.detail?.payload){state.challenge=event.detail.payload;report('验证通过，可以提交');}});
+    widget.addEventListener('statechange',event=>{
+      if(!current())return;
+      if(event.detail?.state==='verifying'){state.challenge=null;report('正在验证，请稍候…');}
+      if(event.detail?.state==='expired'){state.challenge=null;report('验证已过期，请重新验证');}
+      if(event.detail?.state==='error'){state.challenge=null;report('验证未完成，请点击重新验证');}
+    });
+    state.widget=widget;target.replaceChildren(widget);
   } catch(error) { report(error.message); }
 }
-function challengeMarkup() {
-  return '<div class="turnstile-wrap"></div><p class="turnstile-status" role="status"></p><button type="button" class="button button-quiet" data-retry-challenge>重新验证</button>';
+function challengeMarkup(scope) {
+  return '<div class="verification-wrap" data-scope="'+scope+'"></div><p class="verification-status" role="status"></p><button type="button" class="button button-quiet" data-retry-challenge>重新验证</button>';
 }
 function hideModal() {
   state.modalRevision++; state.modalBack=null; clearChallenge();
@@ -133,7 +134,7 @@ function updateIdentity() {
 }
 function openIdentity(continuation=null, back=null) {
   const nickname=(state.session?.nickname || '').replace(/·[a-f0-9]{4}$/, '');
-  openModal('设置社区昵称', '<form id="identity-form"><p class="form-note">普通用户只需昵称。开发者登录仅用于管理后台。</p><div class="field"><label for="nickname">昵称</label><input id="nickname" name="nickname" maxlength="24" required autocomplete="nickname" placeholder="想让大家怎么称呼你" value="'+esc(nickname)+'"></div>'+challengeMarkup()+'<div class="form-actions"><button type="submit" class="button button-primary">保存昵称</button></div></form>',{back});
+  openModal('设置社区昵称', '<form id="identity-form"><p class="form-note">普通用户只需昵称。开发者登录仅用于管理后台。</p><div class="field"><label for="nickname">昵称</label><input id="nickname" name="nickname" maxlength="24" required autocomplete="nickname" placeholder="想让大家怎么称呼你" value="'+esc(nickname)+'"></div>'+challengeMarkup('session')+'<div class="form-actions"><button type="submit" class="button button-primary">保存昵称</button></div></form>',{back});
   mountChallenge();
   document.getElementById('identity-form').onsubmit=async event=>{
     event.preventDefault(); const form=event.currentTarget;
@@ -151,7 +152,7 @@ function openIdentity(continuation=null, back=null) {
 }
 function verifyAction(action) {
   if(!state.session && !action.admin){openIdentity(()=>verifyAction(action),action.back);return;}
-  openModal(action.title,'<form id="verify-form"><p class="form-note">'+esc(action.admin?'确认后保存。':'验证后即可发送，已填写的内容仍然保留。')+'</p><div class="action-preview">'+esc(action.preview.slice(0,300))+'</div>'+(action.admin?'':challengeMarkup())+'<div class="form-actions"><button type="button" class="button" data-dismiss>返回修改</button><button class="button button-primary" type="submit">'+esc(action.title)+'</button></div></form>',{back:action.back});
+  openModal(action.title,'<form id="verify-form"><p class="form-note">'+esc(action.admin?'确认后保存。':'验证后即可发送，已填写的内容仍然保留。')+'</p><div class="action-preview">'+esc(action.preview.slice(0,300))+'</div>'+(action.admin?'':challengeMarkup(action.path.endsWith('/replies')?'reply':action.path==='/api/chat'?'chat':'feedback'))+'<div class="form-actions"><button type="button" class="button" data-dismiss>返回修改</button><button class="button button-primary" type="submit">'+esc(action.title)+'</button></div></form>',{back:action.back});
   if(!action.admin)mountChallenge();
   document.getElementById('verify-form').onsubmit=async event=>{
     event.preventDefault();const form=event.currentTarget;
@@ -377,7 +378,7 @@ try{const saved=localStorage.getItem('yunget-community-theme');if(['system','lig
 document.getElementById('theme').onclick=()=>{
   state.theme={system:'light',light:'dark',dark:'system'}[state.theme];updateTheme();
   try{localStorage.setItem('yunget-community-theme',state.theme);}catch{}
-  if(modal.querySelector('.turnstile-wrap'))mountChallenge();
+  if(modal.querySelector('.verification-wrap'))mountChallenge();
 };
 updateTheme();
 function fitViewport() {

@@ -6,7 +6,7 @@ import {createHandler} from '../worker.mjs';
 const env = {
   DB:{},
   PUBLIC_ORIGIN:'https://community.example.com',
-  TURNSTILE_SITEKEY:'test-sitekey',
+  COMMUNITY_VERIFICATION_SECRET:'local-unit-test-secret-only-01234567890123',
 };
 
 test('serves the community shell and static assets with restrictive headers', async () => {
@@ -41,11 +41,16 @@ test('rejects cross-origin writes before parsing or using the database', async (
   assert.deepEqual(await response.json(), {error:'请在社区页面内操作'});
 });
 
-test('exposes only the public Turnstile site key', async () => {
+test('exposes only same-origin verification configuration', async () => {
   const handle = createHandler({verifyAdmin:async()=>null});
   const response = await handle(new Request('https://community.example.com/api/config'), env);
   assert.equal(response.status, 200);
-  assert.deepEqual(await response.json(), {sitekey:'test-sitekey', version:'2.7.28'});
+  const config=await response.json();
+  assert.equal(config.verification.provider,'altcha');
+  assert.equal(config.verification.challengeUrl,'/api/verification/challenge');
+  assert.equal(config.verification.script,'/verification/sdk-3.5.0.mjs');
+  assert.equal('COMMUNITY_VERIFICATION_SECRET' in config,false);
+  assert.equal('sitekey' in config,false);
 });
 
 test('thread visibility is available to moderators and never exposes owner ids', async () => {

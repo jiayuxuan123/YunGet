@@ -7,8 +7,8 @@ async page => {
   page.on('pageerror', error => errors.push(error.message));
   await page.request.post(base + '/test/control', {data: {resetIdentity: true}});
   const previousWriteCount=(await (await page.request.get(base + '/test/writes')).json()).length;
-  const stub = await (await page.request.get(base + '/test/turnstile.js')).text();
-  await page.route('https://challenges.cloudflare.com/**', route => route.fulfill({contentType: 'text/javascript', body: stub}));
+  const external=[];
+  page.on('request',request=>{if(!request.url().startsWith(base)&&!request.url().startsWith('data:'))external.push(request.url());});
   const fit = async name => {
     const measurements = await page.evaluate(() => ({
       viewport: innerWidth, document: document.documentElement.scrollWidth,
@@ -128,5 +128,6 @@ async page => {
   await page.screenshot({animations: 'disabled', path: directory + '/admin-editor.png'});
   await page.getByRole('button', {name: '关闭', exact: true}).click();
   check(errors.length === 0, 'no uncaught application errors: ' + errors.join(', '));
+  check(external.length === 0, 'verification works without external script or service requests');
   return {checks, count: checks.length, errors};
 }
