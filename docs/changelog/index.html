@@ -54,7 +54,16 @@
 </div>
 </header>
 <main id="main">
-<div class="page-canvas" data-page="changelog"><section class="page-intro"><div class="wrap intro-grid"><h1>更新日志</h1><div class="intro-copy"><p>版本、日期与附件数量来自 GitHub Release 数据；应用内检查更新读取同一来源。</p><div class="page-actions"><a class="button button-primary" href="../download/index.html">下载当前版本<svg class="icon-arrow" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true"><path d="M5 12h14M13 6l6 6-6 6"/></svg></a><a class="button" href="https://github.com/jiayuxuan123/YunGet/releases">GitHub Releases<svg class="icon-arrow" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true"><path d="M5 12h14M13 6l6 6-6 6"/></svg></a></div></div></div></section><section class="section"><div class="wrap"><header class="section-head"><h2>最近发布</h2><p class="section-lead">完整发布说明保留在 GitHub；这里列出便于扫描的版本路线。</p></header><article class="release-row"><div class="release-id"><strong>v2.7.28</strong><span>2026-11-09</span></div><p>YunGet 2.7.28
+<div class="page-canvas" data-page="changelog"><section class="page-intro"><div class="wrap intro-grid"><h1>更新日志</h1><div class="intro-copy"><p>版本、日期与附件数量来自 GitHub Release 数据；应用内检查更新读取同一来源。</p><div class="page-actions"><a class="button button-primary" href="../download/index.html">下载当前版本<svg class="icon-arrow" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true"><path d="M5 12h14M13 6l6 6-6 6"/></svg></a><a class="button" href="https://github.com/jiayuxuan123/YunGet/releases">GitHub Releases<svg class="icon-arrow" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true"><path d="M5 12h14M13 6l6 6-6 6"/></svg></a></div></div></div></section><section class="section"><div class="wrap"><header class="section-head"><h2>最近发布</h2><p class="section-lead">完整发布说明保留在 GitHub；这里列出便于扫描的版本路线。</p></header><article class="release-row"><div class="release-id"><strong>v2.7.29</strong><span>2026-11-10</span></div><p>本次更新包含下载功能修复、TurboDL 0.5.0.2 引擎更新，以及自 2.7.28 发布以来的社区改进。
+下载功能
+· 修复 aria2 内核的连接数设置未完全生效的问题。此前即使设置更高的连接数，实际仍会被限制在 16；本版按设置使用 1–256 个连接。
+· 改善 aria2 暂停后继续下载的处理，重新启动任务时复用原有下载记录，减少重复传输。
+· 修正下载进度与速度统计。提前占用的文件空间不再计入已下载大小，继续下载时不再把暂停前的数据计入当前速度。
+· 下载页面读取 aria2 实际使用的连接数，使显示状态与内核运行情况保持一致。
+· 校正 aria2 内核安装包的版本信息，与内置的 aria2-next 2.8.3 保持一致。已安装且可用的内核可继续使用。
+TurboDL 引擎更新
+· 内置下载引擎升级至 TurboDL 0.5.0.2。
+· 调整…</p><a href="https://github.com/jiayuxuan123/YunGet/releases/tag/v2.7.29">发布页</a></article><article class="release-row"><div class="release-id"><strong>v2.7.28</strong><span>2026-11-09</span></div><p>YunGet 2.7.28
 版本：2.7.28（versionCode 76）。以下为相对 v2.7.27 的完整更新。
 修复
 · 修复经典界面只切换顶栏与字阶、主页面仍使用新版布局的问题。经典模式恢复 v2.7.26 的解析输入、网盘账号卡片、下载单列表、设置逐行卡片，以及分享和视频解析结果布局。
@@ -171,15 +180,7 @@
 · 可切换主账号、可给账号加备注、可删除（删掉主账号会自动提拔另一个）
 · 夸克、UC 等平台的取链会优先用刚刷新过的主账号，避免直链签名过期
 其他
-· 内置下载引擎升级至 TurboDL 0.2.4.0…</p><a href="https://github.com/jiayuxuan123/YunGet/releases/tag/v2.7.13">发布页</a></article><article class="release-row"><div class="release-id"><strong>v2.7.12</strong><span>2026-10-23</span></div><p>重要修复
-· 修正两个开关同时打开时，下载完成的文件可能是坏的
-  「下载中预先合并」和「收尾托管」是引擎高级参数里的两项。两者同时开启时，同一个文件区间会被两个不同的请求先后写入。如果两个请求恰好落到不同服务器，后写的内容会覆盖先写的。
-  表现是：文件大小正确，但内容损坏，且下载过程中不会报任何错。
-  现在只要「收尾托管」开着，就会自动停用「预先合并」。
-· 修正「HTTP 版本策略」选“自动”却实际走 HTTP/2
-  「HTTP 版本策略」默认就是“自动”，因此程序无法区分“你明确选了自动”和“你没设置过”。它只能用另一个开关——「强制 HTTP/1.1」——来决定，结果是你把这个开关关掉后，策略显示“自动”，实际生效的却是“允许 HTTP/2”。
-  HTTP/2 会把多个分片挤进同一条连接，多线程反而可能完全没有加速。
-  现在“自动”就是自动，不再被其他开关…</p><a href="https://github.com/jiayuxuan123/YunGet/releases/tag/v2.7.12">发布页</a></article></div></section></div></main>
+· 内置下载引擎升级至 TurboDL 0.2.4.0…</p><a href="https://github.com/jiayuxuan123/YunGet/releases/tag/v2.7.13">发布页</a></article></div></section></div></main>
 <footer class="site-footer">
 <div class="wrap footer-station">
 <div class="footer-stop"><span class="footer-node" aria-hidden="true"></span>
@@ -199,7 +200,7 @@
 <nav class="footer-nav" aria-label="页脚导航"><section class="footer-col"><h2>项目</h2><ul><li><a href="https://github.com/jiayuxuan123/YunGet">GitHub</a></li><li><a href="../download/index.html">下载</a></li><li><a href="index.html">更新日志</a></li><li><a href="https://github.com/jiayuxuan123/YunGet/issues">问题反馈</a></li></ul></section><section class="footer-col"><h2>文档</h2><ul><li><a href="../docs/readme/index.html">项目说明</a></li><li><a href="../docs/guide/index.html">使用说明</a></li><li><a href="../docs/faq/index.html">常见问题</a></li><li><a href="../docs/engines/index.html">下载引擎</a></li><li><a href="../docs/build/index.html">从源码构建</a></li></ul></section><section class="footer-col"><h2>插件</h2><ul><li><a href="../plugins/index.html">插件（市场与安装）</a></li><li><a href="../developers/index.html">开发者（怎么写）</a></li><li><a href="../docs/plugin-dev/index.html">写一个插件</a></li><li><a href="../docs/plugin-api/index.html">插件 ABI 参考</a></li><li><a href="../docs/plugin-publish/index.html">打包与发布</a></li><li><a href="../docs/plugin-security/index.html">插件安全模型</a></li></ul></section><section class="footer-col"><h2>协议与说明</h2><ul><li><a href="../legal/license/index.html">AGPL-3.0 原文</a></li><li><a href="../legal/notice/index.html">署名与致谢</a></li><li><a href="../legal/privacy/index.html">隐私说明</a></li><li><a href="../legal/terms/index.html">使用条款</a></li><li><a href="../support/index.html">支持开发</a></li></ul></section><section class="footer-col"><h2>相关</h2><ul><li><a href="https://github.com/CYQawa/YunX">上游 CYQawa/YunX</a></li><li><a href="https://github.com/jiayuxuan123/TurboDL">下载引擎 TurboDL</a></li><li><a href="https://github.com/jiayuxuan123/YunGet-Plugins">插件源 YunGet-Plugins</a></li><li><a href="../community/index.html">社区</a></li></ul></section></nav>
 </div>
 <div class="wrap footer-fine">
-<div class="footer-meta"><p>云取 YunGet v2.7.28 · AGPL-3.0 · 内置 TurboDL 0.5.0.1 · Android 7.0（API 24）</p><p>本项目是 CYQawa/YunX（云析）的二次开发版本，与上游作者无隐性关联。仅供个人学习与技术交流，请勿用于商业用途；下载内容的版权归原作者及相关权利人所有。</p></div>
+<div class="footer-meta"><p>云取 YunGet v2.7.29 · AGPL-3.0 · 内置 TurboDL 0.5.0.2 · Android 7.0（API 24）</p><p>本项目是 CYQawa/YunX（云析）的二次开发版本，与上游作者无隐性关联。仅供个人学习与技术交流，请勿用于商业用途；下载内容的版权归原作者及相关权利人所有。</p></div>
 <div class="footer-bottom">
 <span>云取 YunGet · ANDROID · OPEN SOURCE</span>
 <a href="https://github.com/jiayuxuan123/YunGet">GitHub / Source</a>
