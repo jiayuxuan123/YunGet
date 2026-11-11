@@ -20,7 +20,9 @@ class MediaTrackCancellationTest {
     @Test fun cancelInterruptsAnActualBlockedResponse() = runBlocking {
         val server = MockWebServer()
         val root = Files.createTempDirectory("media-track-cancel-").toFile()
-        server.enqueue(MockResponse().setBody("x".repeat(1024)).setBodyDelay(5, TimeUnit.SECONDS))
+        // Keep the response blocked long enough to test cancellation, but below
+        // MockWebServer's five-second shutdown budget so teardown cannot race.
+        server.enqueue(MockResponse().setBody("x".repeat(1024)).setBodyDelay(2, TimeUnit.SECONDS))
         server.start()
         val client = OkHttpClient.Builder().readTimeout(30, TimeUnit.SECONDS).build()
         try {

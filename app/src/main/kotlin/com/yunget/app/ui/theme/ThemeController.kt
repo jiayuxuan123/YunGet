@@ -33,6 +33,7 @@ import com.yunget.app.data.prefs.SettingsRepository
 object ThemeController {
 
     var showSettingDescriptions by mutableStateOf(false)
+    var anonymousAnalyticsEnabled by mutableStateOf(true)
         private set
 
     var autoUiDensity by mutableStateOf(true)
@@ -97,6 +98,7 @@ object ThemeController {
         if (initialized) return
         val s = SettingsRepository(context)
         showSettingDescriptions = s.showSettingDescriptions
+        anonymousAnalyticsEnabled = s.anonymousAnalyticsEnabled
         darkMode = s.darkMode
         colorMode = s.themeColorMode
         seedColor = s.themeSeedColor
@@ -120,16 +122,34 @@ object ThemeController {
     fun setDarkMode(context: Context, value: Int) {
         darkMode = value.coerceIn(0, 2)
         SettingsRepository(context).darkMode = darkMode
+        com.yunget.app.data.analytics.AnonymousAnalytics.track(
+            "theme_changed",
+            mapOf("theme" to when (darkMode) { 1 -> "light"; 2 -> "dark"; else -> "system" }),
+        )
     }
 
     fun setUiStyleMode(context: Context, value: Int) {
         uiStyleMode = value.coerceIn(0, 1)
         SettingsRepository(context).uiStyleMode = uiStyleMode
+        com.yunget.app.data.analytics.AnonymousAnalytics.track(
+            "theme_changed",
+            mapOf("ui_style" to if (uiStyleMode == 0) "classic" else "modern"),
+        )
     }
 
     fun setShowSettingDescriptions(context: Context, value: Boolean) {
         showSettingDescriptions = value
         SettingsRepository(context).showSettingDescriptions = value
+    }
+
+    fun setAnonymousAnalyticsEnabled(context: Context, value: Boolean) {
+        anonymousAnalyticsEnabled = value
+        SettingsRepository(context).anonymousAnalyticsEnabled = value
+        com.yunget.app.data.analytics.AnonymousAnalytics.setEnabled(context, value)
+    }
+
+    fun syncAnonymousAnalyticsState(value: Boolean) {
+        anonymousAnalyticsEnabled = value
     }
 
     /** 设置主题色模式并持久化（0=动态 / 1=默认 / 2=自定义） */

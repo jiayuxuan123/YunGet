@@ -12,6 +12,7 @@ import androidx.compose.ui.tooling.preview.Preview
 import com.android.tools.screenshot.PreviewTest
 import com.yunget.app.ui.navigation.MainTab
 import com.yunget.app.ui.screens.ResolveLandingPreviewContent
+import com.yunget.app.ui.screens.AnalyticsDisclosureDialog
 import com.yunget.app.ui.screens.SettingsPreviewContent
 import com.yunget.app.ui.screens.DrivePreviewContent
 import com.yunget.app.ui.screens.DownloadPreviewContent
@@ -165,6 +166,13 @@ fun DownloadsDark() = PreviewShell(MainTab.Download, dark = true) { DownloadPrev
 @Preview(name = "downloads-completed", widthDp = 412, heightDp = 892)
 @Composable
 fun DownloadsCompleted() = PreviewShell(MainTab.Download) { DownloadCompletedPreviewContent() }
+
+@PreviewTest
+@Preview(name = "analytics-disclosure", widthDp = 412, heightDp = 892)
+@Composable
+fun AnalyticsDisclosure() = FullScreenPreview {
+    AnalyticsDisclosureDialog(onFinished = {})
+}
 
 @PreviewTest
 @Preview(name = "classic-resolve", widthDp = 412, heightDp = 892)

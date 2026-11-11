@@ -5,6 +5,8 @@
 - `/`：反馈列表、提交反馈、公告和闲聊。
 - `/admin`：Cloudflare Access 保护的开发者后台。
 - `/api/announcements`：应用内公告读取接口。
+- `/api/analytics`：应用匿名事件批量上报；只接受白名单字段和专用请求头。
+- `/admin/analytics`：仅开发者可访问的匿名统计面板。
 - D1 `DB` 保存公告、反馈、回复、闲聊、匿名会话和限流记录。
 
 ## 手机界面
@@ -25,6 +27,7 @@
 - `/admin*` 由 Cloudflare Access 拦截，Worker 再独立校验 `Cf-Access-Jwt-Assertion` 的签名、issuer、audience 和过期时间。
 - 管理员身份由 Cloudflare Access policy 绑定，不把邮箱或永久管理员密钥写进前端。
 - 反馈、回复和闲聊列表页面使用文本转义，不把用户内容当作 HTML 渲染。
+- 匿名统计不保存原始安装 UUID：服务端使用 Worker 密钥计算 HMAC 摘要；事件不包含链接、文件名、账号、Cookie、二维码内容或 IP，默认保留 180 天。
 
 ## 本地检查
 

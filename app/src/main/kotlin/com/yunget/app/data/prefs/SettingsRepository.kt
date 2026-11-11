@@ -577,6 +577,16 @@ class SettingsRepository(context: Context) {
         get() = prefs.getBoolean("show_setting_descriptions", false)
         set(value) { prefs.edit().putBoolean("show_setting_descriptions", value).apply() }
 
+    /** 匿名统计只记录功能结果和匿名安装标识，可随时关闭；关闭后清空待发送队列。 */
+    var anonymousAnalyticsEnabled: Boolean
+        get() = prefs.getBoolean("anonymous_analytics_enabled", true)
+        set(value) { prefs.edit().putBoolean("anonymous_analytics_enabled", value).apply() }
+
+    /** 0 = 尚未展示匿名统计说明；版本号递增时可再次提示。 */
+    var anonymousAnalyticsNoticeVersion: Int
+        get() = prefs.getInt("anonymous_analytics_notice_version", 0)
+        set(value) { prefs.edit().putInt("anonymous_analytics_notice_version", value).apply() }
+
     var acceptPrereleaseUpdate: Boolean
         get() = prefs.getBoolean("accept_prerelease_update", false)
         set(value) { prefs.edit().putBoolean("accept_prerelease_update", value).apply() }

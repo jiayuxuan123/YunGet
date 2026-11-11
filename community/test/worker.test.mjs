@@ -53,6 +53,52 @@ test('exposes only same-origin verification configuration', async () => {
   assert.equal('sitekey' in config,false);
 });
 
+test('analytics dashboard is protected by developer auth and served as a separate page', async () => {
+  const denied = createHandler({verifyAdmin:async()=>null});
+  const deniedResponse = await denied(new Request('https://community.example.com/admin/analytics'), env);
+  assert.equal(deniedResponse.status, 401);
+
+  const handle = createHandler({verifyAdmin:async()=>({email:'developer@example.com'})});
+  const page = await handle(new Request('https://community.example.com/admin/analytics'), env);
+  assert.equal(page.status, 200);
+  assert.match(await page.text(), /云取匿名统计/);
+});
+
+test('analytics ingestion requires the dedicated app header before using the database', async () => {
+  const handle = createHandler({verifyAdmin:async()=>null});
+  const response = await handle(new Request('https://community.example.com/api/analytics', {
+    method:'POST',
+    headers:{'Content-Type':'application/json'},
+    body:'{}',
+  }), env);
+  assert.equal(response.status, 403);
+  assert.deepEqual(await response.json(), {error:'统计请求来源无效'});
+});
+
+test('analytics rejects oversized batches before inserting events', async () => {
+  const database = {
+    prepare:()=>({
+      bind(){return this;},
+      async first(){return {hits:1};},
+    }),
+  };
+  const handle = createHandler({verifyAdmin:async()=>null});
+  const response = await handle(new Request('https://community.example.com/api/analytics', {
+    method:'POST',
+    headers:{'Content-Type':'application/json','X-YunGet-Analytics':'1'},
+    body:JSON.stringify({
+      install_id:'10000000-0000-4000-8000-000000000001',
+      events:Array.from({length:21},(_,index)=>({
+        event_id:`20000000-0000-4000-8000-${String(index).padStart(12,'0')}`,
+        event:'app_open',
+        product:'yunget',
+      })),
+    }),
+  }), {...env, DB:database});
+  assert.equal(response.status, 422);
+  assert.deepEqual(await response.json(), {error:'统计事件数量无效'});
+});
+
 test('thread visibility is available to moderators and never exposes owner ids', async () => {
   const id='10000000-0000-4000-8000-000000000001';
   const row={id,author_id:'private-owner-id',nickname:'local-user',hidden:1,private:0,status:'new'};

@@ -11,6 +11,8 @@
          缺这条时进度通知仍能显示，但不会进入状态栏的实时进度区域。 -->
     <uses-permission android:name="android.permission.POST_PROMOTED_NOTIFICATIONS" />
     <uses-permission android:name="android.permission.INTERNET" />
+    <!-- 扫码解析只在相机取景和本机解码时使用相机，不上传画面。 -->
+    <uses-permission android:name="android.permission.CAMERA" />
     <!-- 锁屏保持下载：息屏时维持 Wi-Fi/CPU，避免长时间下载断连 -->
     <uses-permission android:name="android.permission.WAKE_LOCK" />
     <!-- 锁屏保持下载：允许引导用户将应用加入「忽略电池优化」白名单 -->
@@ -53,6 +55,11 @@
                 <category android:name="android.intent.category.LAUNCHER" />
             </intent-filter>
         </activity>
+
+        <activity
+            android:name=".ui.scanner.QrScannerActivity"
+            android:exported="false"
+            android:theme="@style/Theme.ComposeEmptyActivity" />
 
         <!-- 图标变体 1：经典图标（上游原项目风格，icon）；默认禁用，主题与外观页切换后启用 -->
         <activity-alias

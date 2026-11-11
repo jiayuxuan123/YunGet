@@ -36,6 +36,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.outlined.Article
 import androidx.compose.material.icons.outlined.ReceiptLong
 import androidx.compose.material.icons.outlined.Backup
+import androidx.compose.material.icons.outlined.Analytics
 import androidx.compose.material.icons.outlined.ChevronRight
 import androidx.compose.material.icons.outlined.Memory
 import androidx.compose.material.icons.outlined.SettingsSuggest
@@ -710,6 +711,28 @@ fun SettingsScreen(
         Spacer(modifier = Modifier.height(24.dp))
 
         SectionLabel("关于")
+        SettingsItem(
+            icon = Icons.Outlined.Analytics,
+            title = "匿名使用统计",
+            description = if (ThemeController.anonymousAnalyticsEnabled) {
+                "仅发送功能结果与匿名安装标识，不包含链接、文件名、账号或 Cookie"
+            } else {
+                "已关闭，不发送任何统计事件"
+            },
+            onClick = {
+                ThemeController.setAnonymousAnalyticsEnabled(
+                    context,
+                    !ThemeController.anonymousAnalyticsEnabled,
+                )
+            },
+            trailing = {
+                Switch(
+                    checked = ThemeController.anonymousAnalyticsEnabled,
+                    onCheckedChange = null,
+                )
+            },
+        )
+        Spacer(modifier = Modifier.height(8.dp))
         SettingsItem(
             icon = Icons.Outlined.Info,
             title = "关于云取",

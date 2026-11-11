@@ -31,7 +31,7 @@ android {
         // Android 7.0 发布于 2016 年，覆盖率早已 >99%。
         minSdk = 24
         targetSdk = 34
-        versionCode = 78
+        versionCode = 79
         // 2.7.10 内容：**原生（L2）插件在手机端暂时禁用**
         //  ① 移除整条 dex 加载链：AndroidNativePluginLoader、YunHostBridge、l2-providers 模块；
         //  ② 移除网盘 CloudProvider 抽象（CloudProvider.kt / Resolver / ShareRepository）
@@ -392,7 +392,7 @@ android {
         //  视频平台解析（微博/小红书/Pixiv）改为**引擎级原生插件** turbo-plugin-parser，
         //  与 HLS 插件同一套机制：只往 LINK_PARSER 注册解析器、往 PROTOCOL_HANDLER
         //  每平台声明一条，引擎内核对这三个平台一无所知。平台改版只需换这个插件。
-        versionName = "2.7.30"
+        versionName = "2.7.31"
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
     }
@@ -724,6 +724,12 @@ dependencies {
     implementation("androidx.media3:media3-ui:1.4.1")
     implementation("io.coil-kt.coil3:coil-compose:3.0.4")
     implementation("io.coil-kt.coil3:coil-network-okhttp:3.0.4")
+
+    // 扫码解析：相机预览和 QR 解码都留在本机，不调用云端识别服务。
+    implementation(libs.androidx.camera.camera2)
+    implementation(libs.androidx.camera.lifecycle)
+    implementation(libs.androidx.camera.view)
+    implementation(libs.zxing.core)
 
     // UI 统一使用原生 Material 3，不加载额外的 Cupertino 或背景模糊框架。
     implementation(libs.androidx.core.ktx)

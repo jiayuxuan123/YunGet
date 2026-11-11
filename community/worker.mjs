@@ -1,10 +1,21 @@
 import {createAdminVerifier} from './auth.mjs';
 import {html, style, script} from './web.mjs';
+import {analyticsHtml, analyticsScript, analyticsStyle} from './analytics.mjs';
 import {consumeVerification, issueVerification, scopeForPath, verificationConfig, VerificationError} from './verification.mjs';
 
 const statuses = new Set(['new', 'planned', 'working', 'resolved', 'closed']);
 const categories = new Set(['bug', 'idea', 'question', 'other']);
 const products = new Set(['yunget', 'turbodl']);
+const analyticsEvents = new Set([
+  'app_open', 'resolve_start', 'resolve_success', 'resolve_fail',
+  'download_queued', 'download_started', 'download_completed', 'download_failed',
+  'save_failed', 'qr_scan_success', 'theme_changed',
+]);
+const analyticsPropertyKeys = new Set([
+  'source', 'engine', 'error', 'kind', 'result', 'api', 'abi',
+  'size_bucket', 'duration_bucket', 'connections_bucket', 'ui_style', 'theme',
+  'file_kind', 'is_guest',
+]);
 const cookieName = '__Host-yunget-community';
 const sessionLife = 30 * 86400;
 
@@ -31,6 +42,17 @@ async function hash(value) {
   const bytes = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(value));
   return [...new Uint8Array(bytes)].map(byte => byte.toString(16).padStart(2, '0')).join('');
 }
+async function hmacHash(value, secret) {
+  const key = await crypto.subtle.importKey(
+    'raw',
+    new TextEncoder().encode(secret),
+    {name: 'HMAC', hash: 'SHA-256'},
+    false,
+    ['sign'],
+  );
+  const bytes = await crypto.subtle.sign('HMAC', key, new TextEncoder().encode(value));
+  return [...new Uint8Array(bytes)].map(byte => byte.toString(16).padStart(2, '0')).join('');
+}
 async function readJson(request) {
   if (!request.headers.get('Content-Type')?.startsWith('application/json')) fail(415, '请使用 JSON 提交');
   const reader = request.body?.getReader();
@@ -52,6 +74,23 @@ async function readJson(request) {
     if (!value || Array.isArray(value) || typeof value !== 'object') fail(400, '请求格式无效');
     return value;
   } catch { fail(400, '请求格式无效'); }
+}
+function analyticsProperties(value) {
+  if (value === undefined) return '{}';
+  if (!value || typeof value !== 'object' || Array.isArray(value)) fail(422, '统计属性无效');
+  const entries = Object.entries(value);
+  if (entries.length > 20) fail(422, '统计属性过多');
+  const clean = {};
+  for (const [key, raw] of entries) {
+    if (!analyticsPropertyKeys.has(key)) fail(422, `统计属性不支持：${key}`);
+    if (typeof raw === 'string') clean[key] = raw.trim().slice(0, 100);
+    else if (typeof raw === 'number' && Number.isFinite(raw)) clean[key] = raw;
+    else if (typeof raw === 'boolean') clean[key] = raw;
+    else fail(422, `统计属性格式无效：${key}`);
+  }
+  const output = JSON.stringify(clean);
+  if (output.length > 1600) fail(413, '统计属性过大');
+  return output;
 }
 function secureResponse(body, status = 200, extra = {}) {
   const headers = new Headers({
@@ -95,15 +134,23 @@ export function createHandler({fetchRemote = fetch, verifyAdmin = createAdminVer
     try {
       if (!env.PUBLIC_ORIGIN || !env.DB) fail(503, '服务正在配置');
       if (request.method !== 'GET' && request.method !== 'HEAD') {
-        if (request.headers.get('Origin') !== env.PUBLIC_ORIGIN) fail(403, '请在社区页面内操作');
+        const analyticsPost = path === '/api/analytics' && request.method === 'POST';
+        if (analyticsPost) {
+          if (request.headers.get('X-YunGet-Analytics') !== '1') fail(403, '统计请求来源无效');
+        } else if (request.headers.get('Origin') !== env.PUBLIC_ORIGIN) {
+          fail(403, '请在社区页面内操作');
+        }
         if (!['POST', 'PATCH', 'DELETE'].includes(request.method)) fail(405, '请求方法不支持');
       }
       const admin = isAdmin ? await verifyAdmin(request, env) : null;
       if (isAdmin && !admin) fail(401, '请先登录开发者账号');
       if (request.method === 'GET' && ['/', '/admin', '/chat'].includes(path)) return secureResponse(html, 200, {'Content-Type': 'text/html; charset=utf-8'});
+      if (request.method === 'GET' && path === '/admin/analytics') return secureResponse(analyticsHtml, 200, {'Content-Type': 'text/html; charset=utf-8'});
       if (request.method === 'GET' && path === '/app.css') return secureResponse(style, 200, {'Content-Type': 'text/css; charset=utf-8', 'Cache-Control': 'public,max-age=300'});
       if (request.method === 'GET' && path === '/app.js') return secureResponse(script, 200, {'Content-Type': 'text/javascript; charset=utf-8', 'Cache-Control': 'public,max-age=300'});
-      if (request.method === 'GET' && path === '/api/config') return secureResponse({verification: verificationConfig, version: '2.7.28'});
+      if (request.method === 'GET' && path === '/analytics.css') return secureResponse(analyticsStyle, 200, {'Content-Type': 'text/css; charset=utf-8', 'Cache-Control': 'public,max-age=300'});
+      if (request.method === 'GET' && path === '/analytics.js') return secureResponse(analyticsScript, 200, {'Content-Type': 'text/javascript; charset=utf-8', 'Cache-Control': 'public,max-age=300'});
+      if (request.method === 'GET' && path === '/api/config') return secureResponse({verification: verificationConfig, version: '2.7.31'});
       if (request.method === 'GET' && path.startsWith('/verification/')) {
         if (!env.ASSETS) fail(503, '验证资源暂不可用');
         const resource = await env.ASSETS.fetch(request);
@@ -120,7 +167,71 @@ export function createHandler({fetchRemote = fetch, verifyAdmin = createAdminVer
         const {results} = await env.DB.prepare('SELECT id,title,body,date,pinned,important FROM announcements WHERE published=1 ORDER BY pinned DESC,date DESC,updated_at DESC LIMIT 40').all();
         return secureResponse({items: results.map(row => ({...row, pinned: Boolean(row.pinned), important: Boolean(row.important)}))}, 200, {'Cache-Control': 'public,max-age=15'});
       }
+      if (request.method === 'POST' && path === '/api/analytics') {
+        await rate(request, env, 'analytics-ip', 60, 3600);
+        if (!env.COMMUNITY_VERIFICATION_SECRET) fail(503, '统计服务暂不可用');
+        const body = await readJson(request);
+        const installId = text(body.install_id, 64, 32);
+        if (!/^[a-f0-9-]{32,64}$/i.test(installId)) fail(422, '安装标识无效');
+        const installHash = await hmacHash(installId, env.COMMUNITY_VERIFICATION_SECRET);
+        await rate(request, env, `analytics-install-${installHash.slice(0, 24)}`, 400, 86400);
+        if (!Array.isArray(body.events) || body.events.length < 1 || body.events.length > 20) fail(422, '统计事件数量无效');
+        const statements = body.events.map((entry) => {
+          if (!entry || typeof entry !== 'object' || Array.isArray(entry)) fail(422, '统计事件格式无效');
+          const eventId = text(entry.event_id, 64, 32);
+          if (!/^[a-f0-9-]{32,64}$/i.test(eventId)) fail(422, '统计事件标识无效');
+          const event = enumValue(entry.event, analyticsEvents);
+          const product = enumValue(entry.product || 'yunget', products);
+          const appVersion = text(entry.app_version || '', 32, 0);
+          const platform = text(entry.platform || 'android', 24, 0);
+          return env.DB.prepare(
+            'INSERT INTO analytics_events(event_id,install_hash,event,product,app_version,platform,properties,created_at) VALUES(?,?,?,?,?,?,?,?) ON CONFLICT(event_id) DO NOTHING',
+          ).bind(eventId, installHash, event, product, appVersion, platform, analyticsProperties(entry.properties), stamp());
+        });
+        const results = await env.DB.batch(statements);
+        const accepted = results.reduce((sum, result) => sum + Number(result.meta?.changes || 0), 0);
+        return secureResponse({accepted}, 202);
+      }
       if (request.method === 'GET' && path === '/admin/api/session') return secureResponse({developer: true});
+      if (request.method === 'GET' && path === '/admin/api/analytics') {
+        const days = Math.max(1, Math.min(90, Number(url.searchParams.get('days')) || 30));
+        const since = stamp() - days * 86400;
+        const [summaryRow, daily, versions, events, errors, engines] = await Promise.all([
+          env.DB.prepare(`SELECT COUNT(*) AS events,COUNT(DISTINCT install_hash) AS installs,
+            COALESCE(SUM(CASE WHEN event='app_open' THEN 1 ELSE 0 END),0) AS app_opens,
+            COALESCE(SUM(CASE WHEN event='resolve_start' THEN 1 ELSE 0 END),0) AS resolve_starts,
+            COALESCE(SUM(CASE WHEN event='download_started' THEN 1 ELSE 0 END),0) AS download_starts,
+            COALESCE(SUM(CASE WHEN event='download_completed' THEN 1 ELSE 0 END),0) AS download_successes,
+            COALESCE(SUM(CASE WHEN event='download_failed' THEN 1 ELSE 0 END),0) AS download_failures,
+            COALESCE(SUM(CASE WHEN event='save_failed' THEN 1 ELSE 0 END),0) AS save_failures
+            FROM analytics_events WHERE created_at>=?`).bind(since).first(),
+          env.DB.prepare(`SELECT date(created_at,'unixepoch','localtime') AS day,
+            COUNT(DISTINCT install_hash) AS installs,COUNT(*) AS count
+            FROM analytics_events WHERE created_at>=? GROUP BY day ORDER BY day`).bind(since).all(),
+          env.DB.prepare(`SELECT app_version,COUNT(DISTINCT install_hash) AS installs,COUNT(*) AS count
+            FROM analytics_events WHERE created_at>=? GROUP BY app_version ORDER BY count DESC LIMIT 12`).bind(since).all(),
+          env.DB.prepare(`SELECT event,COUNT(*) AS count FROM analytics_events
+            WHERE created_at>=? GROUP BY event ORDER BY count DESC`).bind(since).all(),
+          env.DB.prepare(`SELECT COALESCE(json_extract(properties,'$.error'),'unknown') AS error,COUNT(*) AS count
+            FROM analytics_events WHERE created_at>=? AND event IN ('download_failed','save_failed')
+            GROUP BY error ORDER BY count DESC LIMIT 12`).bind(since).all(),
+          env.DB.prepare(`SELECT COALESCE(json_extract(properties,'$.engine'),'unknown') AS engine,COUNT(*) AS count
+            FROM analytics_events WHERE created_at>=? AND json_extract(properties,'$.engine') IS NOT NULL
+            GROUP BY engine ORDER BY count DESC LIMIT 12`).bind(since).all(),
+        ]);
+        const summary = Object.fromEntries(
+          Object.entries(summaryRow || {}).map(([key, value]) => [key, Number(value || 0)]),
+        );
+        return secureResponse({
+          days,
+          summary,
+          daily: daily.results,
+          versions: versions.results,
+          events: events.results,
+          errors: errors.results,
+          engines: engines.results,
+        });
+      }
       const owner = await session(request, env);
       if (request.method === 'GET' && path === '/api/session') return secureResponse({nickname: owner?.nickname || null});
       if (request.method === 'POST' && path === '/api/session') {
@@ -255,5 +366,6 @@ export default {fetch: createHandler(), async scheduled(_controller, env) {
     env.DB.prepare('DELETE FROM rate_limits WHERE expires_at<?').bind(stamp()),
     env.DB.prepare('DELETE FROM used_verifications WHERE expires_at<?').bind(stamp()),
     env.DB.prepare('DELETE FROM messages WHERE created_at<?').bind(stamp() - 30 * 86400),
+    env.DB.prepare('DELETE FROM analytics_events WHERE created_at<?').bind(stamp() - 180 * 86400),
   ]);
 }};

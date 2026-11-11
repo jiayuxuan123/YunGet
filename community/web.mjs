@@ -23,7 +23,7 @@ export const html = String.raw`<!doctype html>
     <div class="head-actions"><button id="theme" class="icon-button" type="button" aria-label="主题：跟随系统"></button><button id="identity" class="identity" type="button">设置昵称</button></div>
   </div></header>
   <main id="app" class="app-shell" tabindex="-1" aria-label="社区内容"><div class="loading" role="status">正在载入社区…</div></main>
-  <footer class="site-foot"><a href="https://yunget.yunl.us.ci/">云取官网</a><span aria-hidden="true">·</span><a href="/admin">开发者后台</a><span aria-hidden="true">·</span><a href="https://github.com/jiayuxuan123/YunGet/issues">GitHub Issues</a></footer>
+  <footer class="site-foot"><a href="https://yunget.yunl.us.ci/">云取官网</a><span aria-hidden="true">·</span><a href="/admin">开发者后台</a><span aria-hidden="true">·</span><a href="/admin/analytics">匿名统计</a><span aria-hidden="true">·</span><a href="https://github.com/jiayuxuan123/YunGet/issues">GitHub Issues</a></footer>
   <dialog id="modal" class="modal" aria-labelledby="modal-title"></dialog>
   <div id="toast" class="toast" role="status" aria-live="polite" hidden></div>
   <noscript>社区需要启用 JavaScript，也可以前往 GitHub Issues 反馈问题。</noscript>

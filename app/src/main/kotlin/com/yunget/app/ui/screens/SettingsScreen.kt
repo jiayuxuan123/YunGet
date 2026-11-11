@@ -55,6 +55,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.outlined.Article
 import androidx.compose.material.icons.automirrored.outlined.ReceiptLong
 import androidx.compose.material.icons.outlined.Backup
+import androidx.compose.material.icons.outlined.Analytics
 import androidx.compose.material.icons.outlined.ChevronRight
 import androidx.compose.material.icons.outlined.Memory
 import androidx.compose.material.icons.outlined.Bolt
@@ -692,6 +693,25 @@ fun SettingsScreen(
             }
             item(key = "settings_group_8") {
                 SettingsGroup(title = "关于与更新", description = "版本信息与项目支持") {
+                    SettingsItem(
+                        icon = Icons.Outlined.Analytics,
+                        title = "匿名使用统计",
+                        description = "仅记录功能结果和匿名安装标识，不包含链接、文件名、账号或 Cookie",
+                        onClick = {
+                            ThemeController.setAnonymousAnalyticsEnabled(
+                                context,
+                                !ThemeController.anonymousAnalyticsEnabled,
+                            )
+                        },
+                        checked = ThemeController.anonymousAnalyticsEnabled,
+                        trailing = {
+                            Switch(
+                                checked = ThemeController.anonymousAnalyticsEnabled,
+                                onCheckedChange = null,
+                            )
+                        },
+                    )
+                    SettingsDivider()
                     SettingsItem(
                         icon = Icons.Outlined.SystemUpdate,
                         title = "检查更新",

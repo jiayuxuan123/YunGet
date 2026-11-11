@@ -129,6 +129,7 @@ import com.yunget.app.ui.navigation.MainTab
 import com.yunget.app.ui.navigation.usesNavigationRail
 import com.yunget.app.ui.theme.motionTween
 import com.yunget.app.ui.screens.AboutScreen
+import com.yunget.app.ui.screens.AnalyticsDisclosureDialog
 import com.yunget.app.ui.screens.DownloadScreen
 import com.yunget.app.ui.screens.DriveScreen
 import com.yunget.app.ui.screens.OnboardingScreen
@@ -652,6 +653,9 @@ fun MainScreen(
     var communityUrl by rememberSaveable { mutableStateOf(CommunityApi.BASE_URL) }
     var showBatteryGuide by remember { mutableStateOf(false) }
     var batteryGuideShown by remember { mutableStateOf(false) }
+    var showAnalyticsDisclosure by rememberSaveable {
+        mutableStateOf(com.yunget.app.data.analytics.AnonymousAnalytics.needsDisclosure(context))
+    }
 
     // 解析页发起下载后，自动切换到「下载」Tab
     LaunchedEffect(resolveViewModel.downloadStarted) {
@@ -1325,10 +1329,16 @@ fun MainScreen(
         }
     }
 
+    if (showAnalyticsDisclosure) {
+        AnalyticsDisclosureDialog(
+            onFinished = { showAnalyticsDisclosure = false },
+        )
+    }
+
     // 本机密钥失效提示：只在「真的丢了密钥、凭证已被清空」时弹一次（标记由数据层写入）。
     // 这里**不可关闭**（onDismissRequest 为空）：用户必须看到「为什么突然要重新登录」，
     // 否则只会觉得账号莫名消失。
-    if (credentialLostNotice) {
+    if (credentialLostNotice && !showAnalyticsDisclosure) {
         AlertDialog(
             onDismissRequest = { },
             title = { Text(CredentialStore.LOST_TITLE) },

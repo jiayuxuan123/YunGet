@@ -80,7 +80,8 @@ object CredentialStore {
     internal const val LOST_TITLE = "登录状态已失效"
     internal const val LOST_MESSAGE =
         "本机加密密钥不可用（常见于修改锁屏密码、指纹或系统升级后），已保存的网盘登录凭证" +
-            "无法再解密，需要重新登录。"
+            "无法再解密，需要重新登录。应用只会清理失效的凭证，不需要清空全部数据。" +
+            "重新登录后可在“设置 → 导出网盘认证”保存加密备份，root 或换机时再导入。"
 
     /** 该异常是否属于「本机密钥故障」（区别于密文损坏、格式不支持等） */
     internal fun isKeyFailure(error: Throwable): Boolean = error is CredentialKeyException

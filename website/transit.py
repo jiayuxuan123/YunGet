@@ -294,14 +294,15 @@ def home(facts: dict, href) -> str:
             '<div class="feature-copy">'
             '<div class="detail-list">'
             "<div><strong>解析路径</strong><p>分享解析、文件选择和直链获取由设备上的应用发起；没有 YunGet 文件中转服务器。</p></div>"
+            "<div><strong>匿名统计</strong><p>首次使用会询问是否开启；只汇总功能结果、粗粒度大小/耗时和匿名安装摘要，可随时关闭。</p></div>"
             "<div><strong>凭证加密</strong><p>网盘 Cookie、token 等凭证使用 AES-256-GCM 加密，密钥由 Android Keystore 生成且不可导出。</p></div>"
             "<div><strong>仍然需要注意</strong><p>下载任务的请求头在应用数据库中以明文保存；导出日志也可能包含带签名的临时直链。</p></div>"
             "</div>"
             + _button("阅读完整隐私说明", href("legal-privacy"))
             + "</div>"
-            '<figure class="device-figure"><img src="{IMG:ui-2.7.28-settings-light}" width="720" height="1558" '
-            'loading="lazy" alt="YunGet 2.7.28 设置界面预览">'
-            "<figcaption>2.7.28 设置界面预览：目录、连接数与引擎选项，使用示例数据。</figcaption></figure>"
+            '<figure class="device-figure"><img src="{IMG:ui-2.7.31-settings-light}" width="720" height="1558" '
+            'loading="lazy" alt="YunGet 2.7.31 设置界面预览">'
+            "<figcaption>2.7.31 设置界面预览：目录、连接数与引擎选项，使用示例数据。</figcaption></figure>"
             "</div>",
         )
         + _section(
@@ -840,7 +841,8 @@ def legal(facts: dict, href) -> str:
             "数据边界摘要",
             "完整范围和例外以隐私说明原文为准。",
             '<div class="detail-list detail-columns">'
-            "<div><strong>没有统计与广告</strong><p>站点不加载分析脚本，应用没有广告 SDK。</p></div>"
+            "<div><strong>匿名统计可关闭</strong><p>首次使用会询问；只汇总功能结果和匿名安装摘要，不发送链接、文件名、账号、Cookie 或 IP。</p></div>"
+            "<div><strong>没有广告</strong><p>官网不加载分析脚本，应用没有广告 SDK。</p></div>"
             "<div><strong>没有自动日志上报</strong><p>诊断与崩溃信息保存在本地，导出需要手动操作。</p></div>"
             "<div><strong>凭证加密</strong><p>网盘凭证由 Android Keystore 保护的密钥加密。</p></div>"
             "<div><strong>请求头例外</strong><p>下载任务请求头在应用数据库中明文保存，详见隐私说明。</p></div>"

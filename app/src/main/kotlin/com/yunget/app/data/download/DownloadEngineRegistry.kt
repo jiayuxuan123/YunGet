@@ -135,8 +135,10 @@ object DownloadEngineRegistry {
      * 回退而不是抛异常：设置里存的是**字符串**，可能来自旧版本、或被用户改过。
      * 为了一个过期的设置值让应用起不来，代价远大于"静默用回默认引擎"。
      */
-    fun create(context: Context, id: String?): DownloadManager =
-        (find(id) ?: builtin.first()).create(context)
+    fun create(context: Context, id: String?): DownloadManager {
+        val provider = find(id) ?: builtin.first()
+        return AnalyticsDownloadManager(provider.create(context), provider.id)
+    }
 
     /** 默认引擎（清单里第一个）。 */
     fun default(): EngineProvider = builtin.first()

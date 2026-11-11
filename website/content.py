@@ -243,7 +243,7 @@ DOC_PAGES = [
         "key": "legal-privacy",
         "slug": "privacy",
         "title": "隐私说明",
-        "blurb": "网盘凭证存在哪、会发给谁，以及哪些数据从来不离开这台设备。",
+        "blurb": "网盘凭证存在哪、匿名统计会发送什么，以及哪些数据从来不离开这台设备。",
         "src": "docs/PRIVACY.md",
     },
     {

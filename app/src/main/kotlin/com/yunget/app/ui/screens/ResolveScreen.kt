@@ -41,6 +41,7 @@ import androidx.compose.material.icons.outlined.ErrorOutline
 import androidx.compose.material.icons.outlined.Link
 import androidx.compose.material.icons.outlined.KeyboardArrowDown
 import androidx.compose.material.icons.outlined.Key
+import androidx.compose.material.icons.outlined.QrCodeScanner
 import androidx.compose.material.icons.outlined.Download
 import androidx.compose.material.icons.outlined.ArrowForward
 import androidx.compose.material3.Button
@@ -84,6 +85,7 @@ import com.yunget.app.data.network.SharePlatform
 import com.yunget.app.ui.SnackbarController
 import com.yunget.app.ui.resolve.DownloadLinkDialog
 import com.yunget.app.ui.resolve.ShareDetailScreen
+import com.yunget.app.ui.scanner.rememberQrScanLauncher
 import com.yunget.app.ui.viewmodel.BaiduCloudViewModel
 import com.yunget.app.ui.viewmodel.BookmarkViewModel
 import com.yunget.app.ui.viewmodel.C139CloudViewModel
@@ -425,6 +427,15 @@ private fun ResolveInputContent(
         }
         Unit
     }
+    val launchQrScanner = rememberQrScanLauncher { text ->
+        onLinkChange(text)
+        ShareLinkParser.parse(text)?.pwd?.let(onPwdChange)
+        com.yunget.app.data.analytics.AnonymousAnalytics.track(
+            "qr_scan_success",
+            mapOf("kind" to if (ShareLinkParser.parse(text) != null) "share" else "other"),
+        )
+        SnackbarController.show("已识别二维码内容，确认后即可解析")
+    }
 
     ResolveLandingContent(
         link = link,
@@ -436,6 +447,7 @@ private fun ResolveInputContent(
         onClearLink = onClearLink,
         onClearPwd = onClearPwd,
         onPasteLink = pasteLink,
+        onScanQr = launchQrScanner,
         onTogglePassword = { showPassword = !showPassword },
         onResolve = { viewModel.startResolve(link, pwd) },
         modifier = Modifier.nestedScroll(scrollBehavior.nestedScrollConnection),
@@ -466,6 +478,7 @@ internal fun ResolveLandingContent(
     onClearLink: () -> Unit,
     onClearPwd: () -> Unit,
     onPasteLink: () -> Unit,
+    onScanQr: () -> Unit = {},
     onTogglePassword: () -> Unit,
     onResolve: () -> Unit,
     modifier: Modifier = Modifier,
@@ -537,6 +550,11 @@ internal fun ResolveLandingContent(
                             Icon(Icons.Outlined.ContentPaste, contentDescription = null, modifier = Modifier.size(20.dp))
                             Spacer(Modifier.width(8.dp))
                             Text("粘贴链接")
+                        }
+                        TextButton(onClick = onScanQr, modifier = Modifier.heightIn(min = 48.dp)) {
+                            Icon(Icons.Outlined.QrCodeScanner, contentDescription = null, modifier = Modifier.size(20.dp))
+                            Spacer(Modifier.width(8.dp))
+                            Text("扫码")
                         }
                         TextButton(
                             onClick = onTogglePassword,

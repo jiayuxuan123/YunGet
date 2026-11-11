@@ -36,6 +36,8 @@ cupertino = "3.3.1"
 # 1.0.2 只要 Kotlin 2.2.21 —— 与本项目已验证的 2.2.10 同属 2.2 分支，
 # 元数据版本一致（2.2.0），因此**不需要再抬工具链**就能用。
 backdrop = "1.0.2"
+camera = "1.6.2"
+zxing = "3.5.4"
 
 [plugins]
 android-application = { id = "com.android.application", version.ref = "agp" }
@@ -72,3 +74,9 @@ cupertino = { group = "io.github.robinpcrd", name = "cupertino", version.ref = "
 
 # 液态玻璃：背景采样 + 模糊 + 折射（Kyant0/AndroidLiquidGlass 的 Maven 产物）
 backdrop = { group = "io.github.kyant0", name = "backdrop", version.ref = "backdrop" }
+
+# 扫码解析：CameraX 本地取帧 + ZXing 本地解码，不上传相机画面。
+androidx-camera-camera2 = { group = "androidx.camera", name = "camera-camera2", version.ref = "camera" }
+androidx-camera-lifecycle = { group = "androidx.camera", name = "camera-lifecycle", version.ref = "camera" }
+androidx-camera-view = { group = "androidx.camera", name = "camera-view", version.ref = "camera" }
+zxing-core = { group = "com.google.zxing", name = "core", version.ref = "zxing" }

@@ -21,6 +21,7 @@ package com.yunget.app.ui.viewmodel
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateListOf
 import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.snapshotFlow
 import androidx.compose.runtime.setValue
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.ViewModelProvider
@@ -92,6 +93,7 @@ import com.yunget.app.ui.preview.PreviewLauncher
 import com.yunget.app.ui.preview.PreviewMedia
 import com.yunget.app.ui.preview.PreviewTypes
 import kotlinx.coroutines.coroutineScope
+import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.sync.Semaphore
 import kotlinx.coroutines.sync.withPermit
@@ -206,6 +208,60 @@ class ResolveViewModel(
 
     var uiState by mutableStateOf<ResolveUiState>(ResolveUiState.Idle)
         private set
+    private var telemetryAttemptActive = false
+    private var telemetryKind = "unknown"
+
+    init {
+        viewModelScope.launch {
+            snapshotFlow { uiState }.distinctUntilChanged().collect { state ->
+                if (!telemetryAttemptActive) return@collect
+                when (state) {
+                    is ResolveUiState.Detail -> {
+                        telemetryAttemptActive = false
+                        com.yunget.app.data.analytics.AnonymousAnalytics.track(
+                            "resolve_success",
+                            mapOf(
+                                "kind" to telemetryKind,
+                                "source" to currentPlatform.name.lowercase(),
+                                "is_guest" to isGuest,
+                            ),
+                        )
+                    }
+                    is ResolveUiState.Video -> {
+                        telemetryAttemptActive = false
+                        com.yunget.app.data.analytics.AnonymousAnalytics.track(
+                            "resolve_success",
+                            mapOf(
+                                "kind" to telemetryKind,
+                                "source" to state.result.platform.name.lowercase(),
+                                "is_guest" to true,
+                            ),
+                        )
+                    }
+                    is ResolveUiState.Error -> {
+                        telemetryAttemptActive = false
+                        com.yunget.app.data.analytics.AnonymousAnalytics.track(
+                            "resolve_fail",
+                            mapOf(
+                                "kind" to telemetryKind,
+                                "error" to com.yunget.app.data.analytics.analyticsErrorCategory(state.message),
+                            ),
+                        )
+                    }
+                    is ResolveUiState.Idle -> {
+                        if (telemetryKind == "direct") {
+                            telemetryAttemptActive = false
+                            com.yunget.app.data.analytics.AnonymousAnalytics.track(
+                                "resolve_success",
+                                mapOf("kind" to "direct", "is_guest" to true),
+                            )
+                        }
+                    }
+                    else -> Unit
+                }
+            }
+        }
+    }
 
     /**
      * 游客模式：本次解析没有携带任何登录凭据（列目录可用，下载/转存需登录）。
@@ -1363,6 +1419,21 @@ class ResolveViewModel(
     }
 
     fun startResolve(link: String, pwd: String?) {
+        telemetryAttemptActive = true
+        telemetryKind = when {
+            ShareLinkParser.parse(link) != null -> "share"
+            GitHubLinkParser.parse(link) != null -> "github"
+            C139KoulingParser.parse(link) != null ||
+                XunleiKouling.looksLikeKouling(link) ||
+                StarSeaApi.looksLikeCommand(link) -> "command"
+            VideoLinkParser.parse(link) != null -> "video"
+            extractDirectUrl(link) != null -> "direct"
+            else -> "unknown"
+        }
+        com.yunget.app.data.analytics.AnonymousAnalytics.track(
+            "resolve_start",
+            mapOf("kind" to telemetryKind),
+        )
         if (ShareLinkParser.parse(link) == null && C139KoulingParser.parse(link) == null &&
             GitHubLinkParser.parse(link) == null && (VideoLinkParser.parse(link) != null || extractDirectUrl(link) != null)) {
             viewModelScope.launch { uiState = ResolveUiState.Loading; resolveNonPanLink(link) }

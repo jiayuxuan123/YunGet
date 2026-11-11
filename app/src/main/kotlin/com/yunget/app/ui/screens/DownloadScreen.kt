@@ -33,6 +33,8 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.rememberLazyListState
+import androidx.compose.foundation.pager.HorizontalPager
+import androidx.compose.foundation.pager.rememberPagerState
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.selection.toggleable
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -71,7 +73,9 @@ import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.saveable.rememberSaveable
+import androidx.compose.runtime.snapshotFlow
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -114,6 +118,7 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.map
+import kotlinx.coroutines.launch
 
 /** 页面只观察列表结构；任务进度、实时速度和曲线各自在使用处订阅。 */
 @OptIn(ExperimentalMaterial3Api::class)
@@ -239,16 +244,21 @@ private fun DownloadPageContent(
     initialCompletedTab: Boolean = false,
 ) {
     val ui = LocalUiMetrics.current
+    val pagerState = rememberPagerState(
+        initialPage = if (initialCompletedTab) 1 else 0,
+        pageCount = { 2 },
+    )
+    val scope = rememberCoroutineScope()
     var completedTab by rememberSaveable { mutableStateOf(initialCompletedTab) }
     var collapsedFolders by rememberSaveable { mutableStateOf(emptyList<String>()) }
     val activeListState = rememberLazyListState()
     val completedListState = rememberLazyListState()
     val completedCount = listItems.count { it.isCompleted }
     val activeCount = listItems.size - completedCount
-    val (rootTasks, folderGroups) = remember(listItems, completedTab) {
-        val visible = listItems.filter { it.isCompleted == completedTab }
-        val (folders, roots) = visible.partition { it.fileName.contains('/') }
-        roots to folders.groupBy { it.fileName.substringBefore('/') }
+    LaunchedEffect(pagerState) {
+        snapshotFlow { pagerState.currentPage }.collect { page ->
+            completedTab = page == 1
+        }
     }
     Surface(modifier = modifier.fillMaxSize(), color = MaterialTheme.colorScheme.background) {
         Box(Modifier.fillMaxSize()) {
@@ -257,73 +267,49 @@ private fun DownloadPageContent(
                     completedTab = completedTab,
                     activeCount = activeCount,
                     completedCount = completedCount,
-                    onSelect = { completedTab = it },
+                    onSelect = { completed ->
+                        scope.launch {
+                            pagerState.animateScrollToPage(if (completed) 1 else 0)
+                        }
+                    },
                     modifier = Modifier.padding(horizontal = ui.space(14.dp), vertical = ui.space(4.dp)),
                 )
-                LazyColumn(
+                HorizontalPager(
+                    state = pagerState,
                     modifier = Modifier.weight(1f).fillMaxWidth(),
-                    state = if (completedTab) completedListState else activeListState,
-                    contentPadding = PaddingValues(
-                        start = ui.space(14.dp), end = ui.space(14.dp),
-                        top = ui.space(4.dp), bottom = ui.space(96.dp),
-                    ),
-                    verticalArrangement = Arrangement.spacedBy(ui.space(8.dp)),
+                    key = { it },
                 ) {
-                    if (listItems.isNotEmpty()) {
-                        item(key = "download_overview", contentType = "overview") {
-                            DownloadOverview(listItems, completedTab, stats, onPauseAll, onResumeAll, onDeleteAll)
-                        }
-                    }
-                    if (rootTasks.isEmpty() && folderGroups.isEmpty()) {
-                        item(key = "download_empty", contentType = "empty") {
-                            EmptyDownloadState(
-                                completedTab = completedTab,
-                                hasOtherTasks = if (completedTab) activeCount > 0 else completedCount > 0,
-                                onSwitchTab = { completedTab = !completedTab },
-                                onAdd = onAdd,
-                            )
-                        }
-                    }
-                    items(rootTasks, key = { "download:${it.id}" }, contentType = { "task" }) { task ->
-                        DownloadTaskItem(
-                            item = task, tasks = tasks, stats = stats,
-                            onPause = onPause, onResume = onResume, onOpen = onOpen,
-                            onInstall = onInstall, onDetails = onDetails, onRemove = onRemove,
-                            // 无入场动画，只响应真实排序、目录展开和任务移除的位置变化。
-                            modifier = Modifier.animateItem(
-                                fadeInSpec = null, fadeOutSpec = null, placementSpec = spatialDefault(),
-                            ),
-                        )
-                    }
-                    folderGroups.forEach { (folder, children) ->
-                        val expanded = folder !in collapsedFolders
-                        item(key = "folder:$folder", contentType = "folder") {
-                            DownloadFolderHeader(
-                                folder = folder, children = children, tasks = tasks, expanded = expanded,
-                                onToggle = {
-                                    collapsedFolders = if (expanded) collapsedFolders + folder
-                                    else collapsedFolders - folder
-                                },
-                                modifier = Modifier.animateItem(
-                                    fadeInSpec = null, fadeOutSpec = null, placementSpec = spatialDefault(),
-                                ),
-                            )
-                        }
-                        if (expanded) {
-                            // 子任务独立懒加载；展开大目录也不一次性组合全部任务。
-                            items(children, key = { "download:${it.id}" }, contentType = { "task" }) { task ->
-                                DownloadTaskItem(
-                                    item = task, tasks = tasks, stats = stats,
-                                    onPause = onPause, onResume = onResume, onOpen = onOpen,
-                                    onInstall = onInstall, onDetails = onDetails, onRemove = onRemove,
-                                    inFolder = true,
-                                    modifier = Modifier.animateItem(
-                                        fadeInSpec = null, fadeOutSpec = null, placementSpec = spatialDefault(),
-                                    ),
-                                )
+                    val pageCompleted = it == 1
+                    DownloadTaskPage(
+                        listItems = listItems,
+                        completedTab = pageCompleted,
+                        listState = if (pageCompleted) completedListState else activeListState,
+                        collapsedFolders = collapsedFolders,
+                        tasks = tasks,
+                        stats = stats,
+                        activeCount = activeCount,
+                        completedCount = completedCount,
+                        onToggleFolder = { folder ->
+                            collapsedFolders = if (folder in collapsedFolders) {
+                                collapsedFolders - folder
+                            } else {
+                                collapsedFolders + folder
                             }
-                        }
-                    }
+                        },
+                        onSwitchTab = {
+                            scope.launch { pagerState.animateScrollToPage(if (pageCompleted) 0 else 1) }
+                        },
+                        onAdd = onAdd,
+                        onPause = onPause,
+                        onResume = onResume,
+                        onOpen = onOpen,
+                        onInstall = onInstall,
+                        onDetails = onDetails,
+                        onRemove = onRemove,
+                        onPauseAll = onPauseAll,
+                        onResumeAll = onResumeAll,
+                        onDeleteAll = onDeleteAll,
+                    )
                 }
             }
             FloatingActionButton(
@@ -335,6 +321,99 @@ private fun DownloadPageContent(
                 elevation = FloatingActionButtonDefaults.elevation(0.dp, 0.dp, 0.dp, 0.dp),
             ) {
                 Icon(Icons.Filled.Add, contentDescription = "添加下载任务")
+            }
+        }
+    }
+}
+
+@Composable
+private fun DownloadTaskPage(
+    listItems: List<DownloadTaskListItem>,
+    completedTab: Boolean,
+    listState: androidx.compose.foundation.lazy.LazyListState,
+    collapsedFolders: List<String>,
+    tasks: StateFlow<List<DownloadTaskEntity>>,
+    stats: StateFlow<Map<Long, DownloadStats>>,
+    activeCount: Int,
+    completedCount: Int,
+    onToggleFolder: (String) -> Unit,
+    onSwitchTab: () -> Unit,
+    onAdd: () -> Unit,
+    onPause: (Long) -> Unit,
+    onResume: (Long) -> Unit,
+    onOpen: (Long) -> Unit,
+    onInstall: (Long) -> Unit,
+    onDetails: (Long) -> Unit,
+    onRemove: (Long) -> Unit,
+    onPauseAll: () -> Unit,
+    onResumeAll: () -> Unit,
+    onDeleteAll: () -> Unit,
+) {
+    val ui = LocalUiMetrics.current
+    val (rootTasks, folderGroups) = remember(listItems, completedTab) {
+        val visible = listItems.filter { it.isCompleted == completedTab }
+        val (folders, roots) = visible.partition { it.fileName.contains('/') }
+        roots to folders.groupBy { it.fileName.substringBefore('/') }
+    }
+    LazyColumn(
+        modifier = Modifier.fillMaxSize(),
+        state = listState,
+        contentPadding = PaddingValues(
+            start = ui.space(14.dp), end = ui.space(14.dp),
+            top = ui.space(4.dp), bottom = ui.space(96.dp),
+        ),
+        verticalArrangement = Arrangement.spacedBy(ui.space(8.dp)),
+    ) {
+        if (listItems.isNotEmpty()) {
+            item(key = "download_overview", contentType = "overview") {
+                DownloadOverview(listItems, completedTab, stats, onPauseAll, onResumeAll, onDeleteAll)
+            }
+        }
+        if (rootTasks.isEmpty() && folderGroups.isEmpty()) {
+            item(key = "download_empty", contentType = "empty") {
+                EmptyDownloadState(
+                    completedTab = completedTab,
+                    hasOtherTasks = if (completedTab) activeCount > 0 else completedCount > 0,
+                    onSwitchTab = onSwitchTab,
+                    onAdd = onAdd,
+                )
+            }
+        }
+        items(rootTasks, key = { "download:${it.id}" }, contentType = { "task" }) { task ->
+            DownloadTaskItem(
+                item = task, tasks = tasks, stats = stats,
+                onPause = onPause, onResume = onResume, onOpen = onOpen,
+                onInstall = onInstall, onDetails = onDetails, onRemove = onRemove,
+                // 无入场动画，只响应真实排序、目录展开和任务移除的位置变化。
+                modifier = Modifier.animateItem(
+                    fadeInSpec = null, fadeOutSpec = null, placementSpec = spatialDefault(),
+                ),
+            )
+        }
+        folderGroups.forEach { (folder, children) ->
+            val expanded = folder !in collapsedFolders
+            item(key = "folder:$folder", contentType = "folder") {
+                DownloadFolderHeader(
+                    folder = folder, children = children, tasks = tasks, expanded = expanded,
+                    onToggle = { onToggleFolder(folder) },
+                    modifier = Modifier.animateItem(
+                        fadeInSpec = null, fadeOutSpec = null, placementSpec = spatialDefault(),
+                    ),
+                )
+            }
+            if (expanded) {
+                // 子任务独立懒加载；展开大目录也不一次性组合全部任务。
+                items(children, key = { "download:${it.id}" }, contentType = { "task" }) { task ->
+                    DownloadTaskItem(
+                        item = task, tasks = tasks, stats = stats,
+                        onPause = onPause, onResume = onResume, onOpen = onOpen,
+                        onInstall = onInstall, onDetails = onDetails, onRemove = onRemove,
+                        inFolder = true,
+                        modifier = Modifier.animateItem(
+                            fadeInSpec = null, fadeOutSpec = null, placementSpec = spatialDefault(),
+                        ),
+                    )
+                }
             }
         }
     }

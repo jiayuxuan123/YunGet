@@ -23,6 +23,7 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
@@ -33,6 +34,7 @@ import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.outlined.ContentPaste
 import androidx.compose.material.icons.outlined.ErrorOutline
 import androidx.compose.material.icons.outlined.Link
+import androidx.compose.material.icons.outlined.QrCodeScanner
 import androidx.compose.material3.Button
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
@@ -86,6 +88,7 @@ import com.yunget.app.ui.viewmodel.ResolveViewModel
 import com.yunget.app.ui.viewmodel.UCCoudViewModel
 import com.yunget.app.ui.viewmodel.XunleiCloudViewModel
 import com.yunget.app.ui.classic.VideoResultSection
+import com.yunget.app.ui.scanner.rememberQrScanLauncher
 
 /**
  * 解析页：输入分享链接与提取码 → 解析 → 展示分享详情 → 获取下载直链。
@@ -367,6 +370,15 @@ internal fun ResolveInputContent(
 ) {
     val isLoading = state is ResolveUiState.Loading
     val context = LocalContext.current
+    val launchQrScanner = rememberQrScanLauncher { text ->
+        onLinkChange(text)
+        ShareLinkParser.parse(text)?.pwd?.let(onPwdChange)
+        com.yunget.app.data.analytics.AnonymousAnalytics.track(
+            "qr_scan_success",
+            mapOf("kind" to if (ShareLinkParser.parse(text) != null) "share" else "other"),
+        )
+        SnackbarController.show("已识别二维码内容，确认后即可解析")
+    }
 
     Column(
         modifier = Modifier
@@ -428,6 +440,15 @@ internal fun ResolveInputContent(
             singleLine = true,
             shape = MaterialTheme.shapes.large
         )
+
+        TextButton(
+            onClick = launchQrScanner,
+            modifier = Modifier.heightIn(min = 48.dp),
+        ) {
+            Icon(Icons.Outlined.QrCodeScanner, contentDescription = null, modifier = Modifier.size(20.dp))
+            Spacer(Modifier.width(8.dp))
+            Text("扫码填入链接")
+        }
 
         // 按钮文案随链接类型变化：网盘分享链接→「开始解析」；普通直链→「开始下载」
         val isDirect = ShareLinkParser.parse(link) == null && looksLikeDirectUrl(link)

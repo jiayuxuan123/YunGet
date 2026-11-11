@@ -25,6 +25,7 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.outlined.Delete
+import androidx.compose.material.icons.outlined.CheckCircle
 import androidx.compose.material.icons.outlined.InsertDriveFile
 import androidx.compose.material.icons.outlined.OpenInNew
 import androidx.compose.material.icons.outlined.Pause
@@ -142,6 +143,9 @@ internal fun DownloadTaskItem(
                     DownloadTaskStatus(item.status)
                 }
             }
+            if (item.isCompleted) {
+                DownloadCompletionBanner(item)
+            }
             DownloadTaskProgress(item.id, item.status, tasks, stats)
             DownloadTaskActions(
                 item = item,
@@ -152,6 +156,82 @@ internal fun DownloadTaskItem(
                 onRemove = onRemove,
                 onDetails = onDetails,
             )
+        }
+    }
+}
+
+internal data class DownloadCompletionHint(
+    val title: String,
+    val detail: String,
+    val available: Boolean,
+)
+
+internal fun downloadCompletionHint(fileName: String, hasSavedFile: Boolean): DownloadCompletionHint {
+    if (!hasSavedFile) {
+        return DownloadCompletionHint(
+            title = "任务已完成，但本地文件已不存在",
+            detail = "可删除这条记录；需要文件时请重新添加来源",
+            available = false,
+        )
+    }
+    return when {
+        fileName.endsWith(".apk", ignoreCase = true) -> DownloadCompletionHint(
+            title = "下载完成，可以安装",
+            detail = "安装包已保存到本地",
+            available = true,
+        )
+        PreviewTypes.kindOf(fileName) == PreviewKind.VIDEO -> DownloadCompletionHint(
+            title = "下载完成，可以预览",
+            detail = "视频文件已保存到本地",
+            available = true,
+        )
+        else -> DownloadCompletionHint(
+            title = "下载完成，可以打开",
+            detail = "文件已保存到本地",
+            available = true,
+        )
+    }
+}
+
+@Composable
+private fun DownloadCompletionBanner(item: DownloadTaskListItem) {
+    val hint = remember(item.fileName, item.hasSavedFile) {
+        downloadCompletionHint(item.fileName, item.hasSavedFile)
+    }
+    val container = if (hint.available) {
+        MaterialTheme.colorScheme.tertiaryContainer
+    } else {
+        MaterialTheme.colorScheme.surfaceContainerHigh
+    }
+    val content = if (hint.available) {
+        MaterialTheme.colorScheme.onTertiaryContainer
+    } else {
+        MaterialTheme.colorScheme.onSurfaceVariant
+    }
+    Surface(
+        modifier = Modifier.fillMaxWidth(),
+        color = container,
+        contentColor = content,
+        shape = RoundedCornerShape(10.dp),
+    ) {
+        Row(
+            modifier = Modifier.padding(horizontal = 10.dp, vertical = 8.dp),
+            horizontalArrangement = Arrangement.spacedBy(9.dp),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            Icon(
+                imageVector = Icons.Outlined.CheckCircle,
+                contentDescription = null,
+                modifier = Modifier.size(20.dp),
+            )
+            Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(2.dp)) {
+                Text(hint.title, style = MaterialTheme.typography.titleSmall)
+                Text(
+                    hint.detail,
+                    style = MaterialTheme.typography.bodySmall,
+                    color = content.copy(alpha = 0.82f),
+                )
+            }
         }
     }
 }
