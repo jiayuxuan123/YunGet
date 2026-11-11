@@ -43,6 +43,7 @@ interface DownloadManager {
      *
      * @param headers 请求头（Cookie/Referer/UA 等）；会被持久化，供进程重启后恢复下载使用
      * @param size 已知文件大小（字节）；-1 表示未知
+     * @param submission 来源账号、刷新引用与传输策略等非敏感上下文
      * @param onComplete 成功完成后的清理回调（如删除网盘临时转存文件）；失败/取消不触发
      */
     suspend fun enqueue(
@@ -57,6 +58,7 @@ interface DownloadManager {
         mergeAudioHeaders: Map<String, String> = emptyMap(),
         motionUrl: String = "",
         audioOnly: Boolean = false,
+        submission: DownloadSubmissionContext = DownloadSubmissionContext(),
         onComplete: suspend () -> Unit = {},
     ): Long
 

@@ -4,6 +4,10 @@ import android.content.Context
 import com.yunget.app.data.db.DownloadTaskEntity
 import com.yunget.app.data.network.HttpClients
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.CoroutineStart
+import kotlinx.coroutines.awaitCancellation
+import kotlinx.coroutines.coroutineScope
+import kotlinx.coroutines.launch
 import kotlinx.coroutines.ensureActive
 import kotlinx.coroutines.withContext
 import okhttp3.Request
@@ -69,9 +73,13 @@ internal object DownloadPostProcessor {
         json.keys().asSequence().associateWith { json.getString(it) }
     }
 
-    private suspend fun fetch(url: String, headers: Map<String, String>, output: File) {
+    internal suspend fun fetch(url: String, headers: Map<String, String>, output: File,
+        client: okhttp3.OkHttpClient = HttpClients.apiClient()): Unit = coroutineScope {
         val request = Request.Builder().url(url).apply { headers.forEach { (key, value) -> header(key, value) } }.build()
-        val call = HttpClients.apiClient().newCall(request)
+        val call = client.newCall(request)
+        val cancellation = launch(Dispatchers.Unconfined, start = CoroutineStart.UNDISPATCHED) {
+            try { awaitCancellation() } finally { call.cancel() }
+        }
         try {
             call.execute().use { response ->
                 if (!response.isSuccessful) throw IOException("媒体轨道下载失败：HTTP ${response.code}")
@@ -89,6 +97,9 @@ internal object DownloadPostProcessor {
                     if (body.contentLength() >= 0 && copied != body.contentLength()) throw IOException("媒体轨道不完整")
                 } }
             }
-        } finally { call.cancel() }
+        } catch (error: IOException) {
+            coroutineContext.ensureActive()
+            throw error
+        } finally { cancellation.cancel(); call.cancel() }
     }
 }

@@ -165,6 +165,7 @@ class LegacyDownloadManager(
         mergeAudioHeaders: Map<String, String>,
         motionUrl: String,
         audioOnly: Boolean,
+        submission: DownloadSubmissionContext,
         onComplete: suspend () -> Unit,
     ): Long {
         // 文件名兜底：空白时从 URL 推导，避免保存时变成时间戳
@@ -185,7 +186,9 @@ class LegacyDownloadManager(
                 mergeAudioHeadersJson = org.json.JSONObject(mergeAudioHeaders as Map<*, *>).toString(),
                 motionUrl = motionUrl,
                 audioOnly = audioOnly,
-
+                sourceAccountId = submission.sourceAccountId,
+                refreshReferenceJson = submission.refreshReferenceJson,
+                transferPolicyJson = submission.transferPolicyJson,
             )
         )
         // 保存请求头（Cookie/UA），暂停后恢复仍需携带

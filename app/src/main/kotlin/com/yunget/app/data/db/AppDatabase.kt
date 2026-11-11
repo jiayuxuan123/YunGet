@@ -11,7 +11,7 @@ import com.yunget.app.data.security.CredentialCipher
 
 @Database(
     entities = [QuarkAccountEntity::class, DownloadTaskEntity::class, UCAccountEntity::class, XunleiAccountEntity::class, BaiduAccountEntity::class, C139AccountEntity::class, Pan123AccountEntity::class, BookmarkEntity::class, Pan115AccountEntity::class, GuangYaAccountEntity::class, ILanzouAccountEntity::class, LanzouAccountEntity::class, PluginInstalledEntity::class, PluginSourceEntity::class],
-    version = 24,
+    version = 25,
     exportSchema = false
 )
 abstract class AppDatabase : RoomDatabase() {
@@ -108,6 +108,7 @@ abstract class AppDatabase : RoomDatabase() {
                         MIGRATION_20_21,
                         MIGRATION_21_22,
                         MIGRATION_22_23, MIGRATION_23_24,
+                        MIGRATION_24_25,
                     )
                     // 早期开发版（1-8）无可靠 schema；从 v9 起必须保留凭证和下载任务
                     .fallbackToDestructiveMigrationFrom(1, 2, 3, 4, 5, 6, 7, 8)
@@ -314,6 +315,53 @@ abstract class AppDatabase : RoomDatabase() {
                 db.execSQL("ALTER TABLE download_task ADD COLUMN mergeAudioHeadersJson TEXT NOT NULL DEFAULT '{}'")
                 db.execSQL("ALTER TABLE download_task ADD COLUMN motionUrl TEXT NOT NULL DEFAULT ''")
                 db.execSQL("ALTER TABLE download_task ADD COLUMN audioOnly INTEGER NOT NULL DEFAULT 0")
+            }
+        }
+
+        /**
+         * v25：下载任务持久化来源账号、可安全序列化的刷新/传输上下文，
+         * 以及网络下载后的处理、保存流水线状态。
+         *
+         * JSON 只保存非敏感引用；不得写入 Cookie、账号凭据或其实际值。
+         * 旧任务的 sourceAccountId 为空串，流水线默认停留在 NETWORK。
+         */
+        private val MIGRATION_24_25 = object : Migration(24, 25) {
+            override fun migrate(db: SupportSQLiteDatabase) {
+                if (!db.hasColumn("download_task", "sourceAccountId")) {
+                    db.execSQL(
+                        "ALTER TABLE `download_task` ADD COLUMN `sourceAccountId` TEXT NOT NULL DEFAULT ''"
+                    )
+                }
+                if (!db.hasColumn("download_task", "refreshReferenceJson")) {
+                    db.execSQL(
+                        "ALTER TABLE `download_task` ADD COLUMN `refreshReferenceJson` TEXT NOT NULL DEFAULT '{}'"
+                    )
+                }
+                if (!db.hasColumn("download_task", "transferPolicyJson")) {
+                    db.execSQL(
+                        "ALTER TABLE `download_task` ADD COLUMN `transferPolicyJson` TEXT NOT NULL DEFAULT '{}'"
+                    )
+                }
+                if (!db.hasColumn("download_task", "pipelineStage")) {
+                    db.execSQL(
+                        "ALTER TABLE `download_task` ADD COLUMN `pipelineStage` TEXT NOT NULL DEFAULT 'NETWORK'"
+                    )
+                }
+                if (!db.hasColumn("download_task", "completedCachePath")) {
+                    db.execSQL(
+                        "ALTER TABLE `download_task` ADD COLUMN `completedCachePath` TEXT NOT NULL DEFAULT ''"
+                    )
+                }
+                if (!db.hasColumn("download_task", "completedCacheSize")) {
+                    db.execSQL(
+                        "ALTER TABLE `download_task` ADD COLUMN `completedCacheSize` INTEGER NOT NULL DEFAULT 0"
+                    )
+                }
+                if (!db.hasColumn("download_task", "attemptGeneration")) {
+                    db.execSQL(
+                        "ALTER TABLE `download_task` ADD COLUMN `attemptGeneration` INTEGER NOT NULL DEFAULT 0"
+                    )
+                }
             }
         }
 

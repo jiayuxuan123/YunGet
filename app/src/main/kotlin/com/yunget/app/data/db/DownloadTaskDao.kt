@@ -43,6 +43,27 @@ interface DownloadTaskDao {
     @Query("UPDATE download_task SET status = :status WHERE id = :id")
     suspend fun updateStatus(id: Long, status: Int)
 
+    @Query("UPDATE download_task SET url = :url, requestHeadersJson = :headersJson WHERE id = :id AND attemptGeneration = :generation AND status = 1")
+    suspend fun replaceSource(id: Long, generation: Long, url: String, headersJson: String): Int
+
+    @Query("UPDATE download_task SET status = 3, savePath = :savePath, downloadedSize = :size, totalSize = :total, pipelineStage = 'SAVED', completedCachePath = '', completedCacheSize = 0 WHERE id = :id AND attemptGeneration = :generation AND status = 1")
+    suspend fun completeGeneration(id: Long, generation: Long, savePath: String, size: Long, total: Long): Int
+
+    @Query("UPDATE download_task SET status = 4, errorMsg = :errorMsg, pipelineStage = COALESCE(:stage, pipelineStage) WHERE id = :id AND attemptGeneration = :generation AND status = 1")
+    suspend fun failGeneration(id: Long, generation: Long, errorMsg: String, stage: String? = null): Int
+
+    @Query("UPDATE download_task SET pipelineStage = :stage, completedCachePath = :path, completedCacheSize = :size WHERE id = :id AND attemptGeneration = :generation AND status = 1")
+    suspend fun updatePipelineGeneration(id: Long, generation: Long, stage: String, path: String, size: Long): Int
+
+    @Query("UPDATE download_task SET status = 2, attemptGeneration = attemptGeneration + 1 WHERE id = :id AND status IN (0,1)")
+    suspend fun pauseActiveTask(id: Long): Int
+
+    @Query("UPDATE download_task SET downloadedSize = :bytes, totalSize = :total WHERE id = :id AND attemptGeneration = :generation AND status = 1 AND pipelineStage = 'NETWORK'")
+    suspend fun updateProgressGeneration(id: Long, generation: Long, bytes: Long, total: Long): Int
+
+    @Query("UPDATE download_task SET downloadedSize = :size, totalSize = :total, pipelineStage = 'PROCESSING', completedCachePath = :path, completedCacheSize = :size WHERE id = :id AND attemptGeneration = :generation AND status = 1")
+    suspend fun markDownloadedGeneration(id: Long, generation: Long, path: String, size: Long, total: Long): Int
+
     @Query("UPDATE download_task SET errorMsg = :errorMsg WHERE id = :id")
     suspend fun updateError(id: Long, errorMsg: String)
 
@@ -70,6 +91,36 @@ interface DownloadTaskDao {
     /** 持久化完成/删除后需清理的云端临时目录 ID（如夸克转存目录）。 */
     @Query("UPDATE download_task SET cleanupId = :cleanupId WHERE id = :id")
     suspend fun updateCleanupId(id: Long, cleanupId: String)
+
+    /** 更新任务来源账号与可安全持久化的刷新/传输策略。 */
+    @Query(
+        "UPDATE download_task SET sourceAccountId = :sourceAccountId, " +
+            "refreshReferenceJson = :refreshReferenceJson, " +
+            "transferPolicyJson = :transferPolicyJson WHERE id = :id"
+    )
+    suspend fun updateTransferContext(
+        id: Long,
+        sourceAccountId: String,
+        refreshReferenceJson: String,
+        transferPolicyJson: String,
+    )
+
+    /** 更新流水线阶段及完成缓存信息。 */
+    @Query(
+        "UPDATE download_task SET pipelineStage = :pipelineStage, " +
+            "completedCachePath = :completedCachePath, " +
+            "completedCacheSize = :completedCacheSize WHERE id = :id"
+    )
+    suspend fun updatePipelineStage(
+        id: Long,
+        pipelineStage: String,
+        completedCachePath: String,
+        completedCacheSize: Long,
+    )
+
+    /** 推进尝试代次；旧代次的异步回调不应再覆盖当前任务状态。 */
+    @Query("UPDATE download_task SET attemptGeneration = attemptGeneration + 1 WHERE id = :id")
+    suspend fun advanceGeneration(id: Long)
 
     /** 修正文件名（如探测到服务器 Content-Disposition 建议名，比 URL 末段的 UUID 可读）。 */
     @Query("UPDATE download_task SET fileName = :fileName WHERE id = :id")

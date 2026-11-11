@@ -9,7 +9,14 @@ import android.os.Environment
 import android.provider.Settings
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
+import androidx.compose.animation.AnimatedContent
+import androidx.compose.animation.SizeTransform
+import androidx.compose.animation.animateColorAsState
 import androidx.compose.animation.core.animateFloatAsState
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
+import androidx.compose.animation.scaleIn
+import androidx.compose.animation.togetherWith
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -82,6 +89,7 @@ import androidx.core.content.ContextCompat
 import androidx.core.content.FileProvider
 import com.yunget.app.data.db.DownloadTaskEntity
 import com.yunget.app.data.download.DownloadStats
+import com.yunget.app.data.download.TaskTransferPolicies
 import com.yunget.app.ui.SnackbarController
 import com.yunget.app.ui.components.FileNameText
 import com.yunget.app.ui.components.AppChoiceGroup
@@ -95,11 +103,13 @@ import com.yunget.app.ui.items.formatDownloadSize
 import com.yunget.app.ui.items.formatDownloadSpeed
 import com.yunget.app.ui.items.toDownloadListItem
 import com.yunget.app.ui.theme.effectsDefault
+import com.yunget.app.ui.theme.effectsFast
 import com.yunget.app.ui.theme.spatialDefault
 import com.yunget.app.ui.theme.LocalUiMetrics
 import com.yunget.app.ui.theme.spatialFast
 import com.yunget.app.ui.viewmodel.DownloadViewModel
 import java.io.File
+import java.util.Locale
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.distinctUntilChanged
@@ -578,7 +588,24 @@ internal fun DownloadTaskDetails(
             verticalArrangement = Arrangement.spacedBy(16.dp),
         ) {
             Text("任务详情", style = MaterialTheme.typography.titleLarge)
-            DownloadTaskStatus(current.status)
+            val pipelineStatusLabel = if (
+                current.status == DownloadTaskEntity.STATUS_DOWNLOADING ||
+                current.status == DownloadTaskEntity.STATUS_FAILED
+            ) {
+                when (current.pipelineStage) {
+                    "PROCESSING" -> if (current.status == DownloadTaskEntity.STATUS_FAILED) "处理失败" else "处理中"
+                    "SAVING" -> if (current.status == DownloadTaskEntity.STATUS_FAILED) "保存失败" else "保存中"
+                    "SAVE_FAILED" -> "保存失败"
+                    else -> null
+                }
+            } else {
+                null
+            }
+            if (pipelineStatusLabel != null) {
+                DownloadDetailStatus(current.status, pipelineStatusLabel)
+            } else {
+                DownloadTaskStatus(current.status)
+            }
             DownloadDetailField("文件名", current.fileName)
             val shown = if (current.totalSize > 0) current.downloadedSize.coerceIn(0, current.totalSize)
             else current.downloadedSize.coerceAtLeast(0)
@@ -588,12 +615,17 @@ internal fun DownloadTaskDetails(
                 else "已下载 ${formatDownloadSize(shown)} · 大小未知",
             )
             if (current.status == DownloadTaskEntity.STATUS_DOWNLOADING) DownloadLiveStatistics(id, stats)
+            DownloadDiagnosticsRows(id, stats)
             if (current.avgSpeed > 0) DownloadDetailField("平均速度", formatDownloadSpeed(current.avgSpeed))
             DownloadSpeedHistory(id, speedSeries)
             if (current.errorMsg.isNotBlank()) DownloadDetailField("失败原因", current.errorMsg, isError = true)
             DownloadDetailField("保存位置", current.savePath.ifBlank { "完成后保存到设置的下载目录" })
             DownloadDetailField("下载地址", current.url)
             if (current.platform.isNotBlank()) DownloadDetailField("来源", current.platform)
+            if (current.transferPolicyJson != "{}") {
+                val policyLabel = remember(current.transferPolicyJson) { TaskTransferPolicies.label(current.transferPolicyJson) }
+                DownloadDetailField("传输参数", policyLabel)
+            }
             HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
             DownloadTaskActions(
                 item = current.toDownloadListItem(),
@@ -620,6 +652,70 @@ private fun DownloadDetailField(label: String, value: String, isError: Boolean =
             )
         }
     }
+}
+
+@Composable
+private fun DownloadDetailStatus(status: Int, text: String) {
+    val colors = MaterialTheme.colorScheme
+    val container by animateColorAsState(
+        targetValue = when (status) {
+            DownloadTaskEntity.STATUS_DOWNLOADING -> colors.primaryContainer
+            DownloadTaskEntity.STATUS_FAILED -> colors.errorContainer
+            DownloadTaskEntity.STATUS_COMPLETED -> colors.tertiaryContainer
+            else -> colors.surfaceContainerHigh
+        },
+        animationSpec = effectsDefault(),
+        label = "downloadDetailStatusContainer",
+    )
+    val foreground by animateColorAsState(
+        targetValue = when (status) {
+            DownloadTaskEntity.STATUS_DOWNLOADING -> colors.onPrimaryContainer
+            DownloadTaskEntity.STATUS_FAILED -> colors.onErrorContainer
+            DownloadTaskEntity.STATUS_COMPLETED -> colors.onTertiaryContainer
+            else -> colors.onSurfaceVariant
+        },
+        animationSpec = effectsFast(),
+        label = "downloadDetailStatusForeground",
+    )
+    Surface(color = container, contentColor = foreground, shape = RoundedCornerShape(6.dp)) {
+        AnimatedContent(
+            targetState = text,
+            transitionSpec = {
+                (fadeIn(effectsDefault()) + scaleIn(spatialFast(), initialScale = 0.94f))
+                    .togetherWith(fadeOut(effectsFast()))
+                    .using(SizeTransform { _, _ -> spatialDefault() })
+            },
+            label = "downloadDetailStatus",
+        ) { displayedText ->
+            Text(
+                text = displayedText,
+                style = MaterialTheme.typography.labelMedium,
+                modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp),
+            )
+        }
+    }
+}
+
+@Composable
+private fun DownloadDiagnosticsRows(
+    id: Long,
+    stats: StateFlow<Map<Long, DownloadStats>>,
+) {
+    val diagnosticsFlow = remember(stats, id) {
+        stats.map { it[id]?.diagnostics }.distinctUntilChanged()
+    }
+    val diagnostics by diagnosticsFlow.collectAsState(initial = stats.value[id]?.diagnostics)
+    val current = diagnostics ?: return
+    DownloadDetailField("开始接收", formatDiagnosticsDuration(current.firstByteMillis))
+    DownloadDetailField("传输用时", formatDiagnosticsDuration(current.transferMillis))
+}
+
+private fun formatDiagnosticsDuration(millis: Long?): String {
+    if (millis == null) return "--"
+    val safeMillis = millis.coerceAtLeast(0L)
+    if (safeMillis < 1_000L) return "$safeMillis ms"
+    val seconds = String.format(Locale.ROOT, "%.1f", safeMillis / 1_000.0).removeSuffix(".0")
+    return "$seconds 秒"
 }
 
 /** 曲线仅在详情打开时订阅和创建，不在长列表中常驻图表。 */

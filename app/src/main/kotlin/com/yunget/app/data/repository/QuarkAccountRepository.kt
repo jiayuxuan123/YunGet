@@ -42,7 +42,8 @@ class QuarkAccountRepository(
 ) {
 
     /** 上次主动刷新 __puus 的时间戳（进程内；跨进程重启后首次下载会因间隔超时触发刷新） */
-    private var lastRefreshTs = 0L
+    private val lastRefreshByAccount = java.util.concurrent.ConcurrentHashMap<String, Long>()
+    private val refreshLocks = java.util.concurrent.ConcurrentHashMap<String, kotlinx.coroutines.sync.Mutex>()
 
     /** cookieSink 落库用独立作用域（非 UI 线程，避免阻塞 API 调用链） */
     private val sinkScope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
@@ -74,15 +75,28 @@ class QuarkAccountRepository(
      */
     suspend fun getFreshCookie(): String? {
         val acc = dao.getAccount() ?: return null
-        val need = System.currentTimeMillis() - lastRefreshTs > QuarkConstants.PUUS_REFRESH_INTERVAL_MS
-        if (!need) return acc.cookie
-        val refreshed = api.refreshSession(acc.cookie)
-        return if (refreshed != null) {
-            dao.upsert(acc.copy(cookie = refreshed, updatedAt = System.currentTimeMillis()))
-            lastRefreshTs = System.currentTimeMillis()
-            refreshed
-        } else {
-            acc.cookie
+        return getFreshCookie(acc.id)
+    }
+
+    /** Refresh the task's original owner, even after the primary account changes. */
+    suspend fun getFreshCookie(accountId: String, force: Boolean = false): String? {
+        val lock = refreshLocks.getOrPut(accountId) { kotlinx.coroutines.sync.Mutex() }
+        lock.lock()
+        try {
+            val acc = dao.getById(accountId) ?: return null
+            val now = System.currentTimeMillis()
+            if (!force && now - (lastRefreshByAccount[accountId] ?: 0L) <= QuarkConstants.PUUS_REFRESH_INTERVAL_MS) {
+                return acc.cookie
+            }
+            val refreshed = api.refreshSession(acc.cookie) ?: return acc.cookie
+            val current = dao.getById(accountId) ?: return null
+            // A late refresh must not resurrect a logged-out account or overwrite a new login.
+            if (current.cookie != acc.cookie) return current.cookie
+            dao.upsert(current.copy(cookie = refreshed, updatedAt = now))
+            lastRefreshByAccount[accountId] = now
+            return refreshed
+        } finally {
+            lock.unlock()
         }
     }
 
@@ -139,7 +153,7 @@ class QuarkAccountRepository(
         )
         if (primary) dao.setPrimary(id)
         // 重置刷新计时：新登录的 __puus 是新鲜的，避免立刻触发一次无谓刷新
-        lastRefreshTs = System.currentTimeMillis()
+        lastRefreshByAccount[id] = System.currentTimeMillis()
         return true
     }
 

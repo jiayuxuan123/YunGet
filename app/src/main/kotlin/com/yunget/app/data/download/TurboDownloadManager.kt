@@ -26,6 +26,7 @@ import kotlinx.coroutines.Job
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.cancel
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.ensureActive
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -48,6 +49,7 @@ data class DownloadStats(
     val chunkCount: Int = 0,
     /** 当前配置的连接上限；0 表示该引擎没有提供可展示的上限。 */
     val connectionLimit: Int = 0,
+    val diagnostics: DownloadDiagnostics? = null,
 ) {
     fun connectionSummary(): String = when {
         chunkCount > 0 && connectionLimit > 0 -> "$chunkCount/$connectionLimit 连接"
@@ -153,6 +155,45 @@ class TurboDownloadManager(
     private val httpVersionPolicyProvider: () -> Int = { 0 },
 ) : DownloadManager {
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
+    private val pipelinePermits = PipelinePermits(concurrencyProvider)
+    private val pipelineLeases = ConcurrentHashMap<Long, PipelinePermits.Lease>()
+    private val sdkGenerations = ConcurrentHashMap<Long, Long>()
+    private val turboGenerations = ConcurrentHashMap<Long, Long>()
+    private val submittedRequests = ConcurrentHashMap<Long, DownloadRequest>()
+    private val startJobs = ConcurrentHashMap<Long, kotlinx.coroutines.Job>()
+    private val stoppingJobs = ConcurrentHashMap<Long, kotlinx.coroutines.Job>()
+    private val pauseSerials = ConcurrentHashMap<Long, Long>()
+    private val saveJobs = ConcurrentHashMap<Long, kotlinx.coroutines.Job>()
+    private val controlLocks = ConcurrentHashMap<Long, Mutex>()
+    private val saveLock = Mutex()
+    private val sourceRefreshAttempts = ConcurrentHashMap<Long, Int>()
+    private val refreshJobs = ConcurrentHashMap<Long, kotlinx.coroutines.Job>()
+    private val sourceRefresher by lazy { QuarkTaskRefresher(context) }
+
+    private fun sdkStarted(id: Long, generation: Long) {
+        if (sdkGenerations.put(id, generation) == null) onTaskStarted(id)
+    }
+
+    private fun sdkFinished(id: Long, generation: Long? = sdkGenerations[id]) {
+        if (generation != null && sdkGenerations.remove(id, generation)) {
+            submittedRequests.remove(id)
+            pipelineLeases.remove(id)?.release()
+            onTaskFinished()
+        }
+    }
+
+    private fun clearSdkMapping(id: Long, generation: Long) {
+        val turboId = turboIds[id] ?: return
+        if (turboGenerations[turboId] != generation) return
+        if (turboIds.remove(id, turboId)) {
+            turboIdToRoomId.remove(turboId, id)
+            turboGenerations.remove(turboId)
+        }
+    }
+
+    private fun completedCache(task: DownloadTaskEntity): File? =
+        CompletedDownloadCache.resolve(task, context.cacheDir)
+
 
     /**
      * TurboDL 引导：装配 PluginHost + TurboClient + 基础插件。
@@ -842,6 +883,15 @@ class TurboDownloadManager(
         taskNames.clear()
         taskCallbacks.clear()
         turboOutputs.clear()
+        pipelineLeases.values.forEach { it.release() }
+        pipelineLeases.clear()
+        sdkGenerations.clear()
+        turboGenerations.clear()
+        submittedRequests.clear()
+        startJobs.clear()
+        saveJobs.clear()
+        refreshJobs.clear()
+        stoppingJobs.clear()
         Log.i(TAG, "manager shutdown 完成（引擎与连接池已释放）")
     }
 
@@ -863,13 +913,14 @@ class TurboDownloadManager(
         mergeAudioHeaders: Map<String, String>,
         motionUrl: String,
         audioOnly: Boolean,
+        submission: DownloadSubmissionContext,
         onComplete: suspend () -> Unit,
     ): Long {
         val safeName = fileName.ifBlank {
             url.substringAfterLast('/').substringBefore('?')
                 .ifBlank { "download_${System.currentTimeMillis()}" }
         }
-        Log.d(TAG, "enqueue: url=$url fileName=$safeName headers=${headers.keys} size=$size")
+        Log.d(TAG, "enqueue: platform=$platform size=$size headers=${headers.keys}")
         // 请求头持久化到 DB：进程重启后恢复下载仍能带上 Cookie/Referer，否则必定 403。
         val headersJson = if (headers.isNotEmpty()) JSONObject(headers as Map<*, *>).toString() else "{}"
         val id = dao.insert(
@@ -883,6 +934,12 @@ class TurboDownloadManager(
                 mergeAudioHeadersJson = org.json.JSONObject(mergeAudioHeaders as Map<*, *>).toString(),
                 motionUrl = motionUrl,
                 audioOnly = audioOnly,
+                sourceAccountId = submission.sourceAccountId,
+                refreshReferenceJson = submission.refreshReferenceJson,
+                transferPolicyJson = submission.transferPolicyJson.ifBlank { "{}" }.let { stored ->
+                    if (stored == "{}") TaskTransferPolicies.encode(buildConfig(), platform, submission.sourceAccountId)
+                    else stored
+                },
 
                 requestHeadersJson = headersJson,
                 totalSize = if (size > 0) size else 0L,
@@ -904,13 +961,27 @@ class TurboDownloadManager(
 
     /** 开始/恢复下载（断点续传）。 */
     override fun start(id: Long, headers: Map<String, String>) {
+        sourceRefreshAttempts.remove(id)
+        startTransfer(id, headers)
+    }
+
+    private fun startTransfer(id: Long, headers: Map<String, String>, requiredPauseSerial: Long? = null) {
         val effectiveHeaders = headers.ifEmpty { taskHeaders[id] ?: emptyMap() }
         Log.d(TAG, "start: id=$id headers=${effectiveHeaders.keys}")
         // 已在运行：忽略重复启动
-        if (turboIds.containsKey(id)) return
+        if (turboIds.containsKey(id) || startJobs[id]?.isActive == true) return
         refreshConfigIfChanged()
-        scope.launch {
-            val task = dao.get(id) ?: return@launch
+        val startJob = scope.launch(start = kotlinx.coroutines.CoroutineStart.LAZY) {
+          var admitted: PipelinePermits.Lease? = null
+          var generation: Long? = null
+          var submitted = false
+          try {
+            stoppingJobs[id]?.join()
+           controlLocks.getOrPut(id) { Mutex() }.withLock {
+            if (requiredPauseSerial != null && (pauseSerials[id] ?: 0L) != requiredPauseSerial) return@launch
+            if (turboIds.containsKey(id)) return@launch
+            saveJobs[id]?.let { old -> old.cancel(); old.join() }
+            var task = dao.get(id) ?: return@launch
             // 引擎任务分流：DB 里的 engineTaskId 非空说明这条任务由 Gopeed 引擎执行。
             // ★ 绝不能落到下面的 TurboDL 路径 —— 同一个 URL 会被两套引擎重复下载。
             // 走 DB 而不是内存索引：进程重启后索引是空的，而库里的记录还在。
@@ -919,6 +990,13 @@ class TurboDownloadManager(
                 resumeEngineTask(id, task.engineTaskId)
                 return@launch
             }
+            pipelineLeases.remove(id)?.release()
+            admitted = pipelinePermits.acquire()
+            pipelineLeases[id] = requireNotNull(admitted)
+            dao.advanceGeneration(id)
+            task = dao.get(id) ?: return@launch
+            generation = task.attemptGeneration
+             dao.updateStatus(id, DownloadTaskEntity.STATUS_DOWNLOADING)
             taskNames[id] = task.fileName
             // A retry starts a new attempt; keeping the previous failure text makes
             // the UI show "downloading" and an old error at the same time.
@@ -930,7 +1008,15 @@ class TurboDownloadManager(
             if (restoredHeaders.isNotEmpty()) taskHeaders[id] = restoredHeaders
             // 已知大小：优先内存缓存，其次 DB（避免重启后重复 probe）。
             val knownSize = taskSizes[id] ?: task.totalSize.takeIf { it > 0 } ?: -1L
-            onTaskStarted(id)
+            sdkStarted(id, task.attemptGeneration)
+            val cached = completedCache(task)
+            if (cached != null) {
+                dao.updateStatus(id, DownloadTaskEntity.STATUS_DOWNLOADING)
+                onTurboCompleted(id, cached, task.totalSize,
+                    alreadyProcessed = task.pipelineStage != "PROCESSING")
+                return@launch
+            }
+            dao.updatePipelineStage(id, "NETWORK", "", 0)
             // TurboDL 下到应用缓存，完成后再交 DownloadSaver 保存到公共目录。
             val out = File(turboCacheDir().apply { mkdirs() }, "task_${id}.part")
             turboOutputs[id] = out
@@ -939,25 +1025,45 @@ class TurboDownloadManager(
                 destination = out,
                 headers = restoredHeaders,
                 knownSize = knownSize,
-                connectionsOverride = threadProvider().coerceIn(1, SettingsRepository.MAX_DOWNLOAD_THREADS),
+                connectionsOverride = TaskTransferPolicies.connectionLimit(task.transferPolicyJson,
+                    threadProvider().coerceIn(1, SettingsRepository.MAX_DOWNLOAD_THREADS)),
                 // 稳定键 = Room 任务 id：使同一任务多次 submit 复用同一分片目录，
                 // 真正实现断点续传（暂停恢复 / 进程重启都从断点继续，而非从头下）。
                 stableKey = "room-$id",
                 mirrors = DownloadPostProcessor.mirrors(task, restoredHeaders),
             )
             dao.updateStatus(id, DownloadTaskEntity.STATUS_DOWNLOADING)
-            val turboId = client.submit(request)
+            submittedRequests[id] = request
+            val policy = TaskTransferPolicies.decode(task.transferPolicyJson)
+            val turboId = if (policy == null) client.submit(request) else client.submitWithPolicy(request, policy)
+            submitted = true
+            turboGenerations[turboId] = task.attemptGeneration
             turboIds.putIfAbsent(id, turboId)
             turboIdToRoomId.putIfAbsent(turboId, id)
             val stateAfterSubmit = client.progress.value[turboId]?.state
-            if (stateAfterSubmit == TaskState.COMPLETED ||
+            if ((stateAfterSubmit == TaskState.COMPLETED ||
                 stateAfterSubmit == TaskState.FAILED ||
-                stateAfterSubmit == TaskState.CANCELED
+                stateAfterSubmit == TaskState.CANCELED) && !sdkGenerations.containsKey(id)
             ) {
                 turboIds.remove(id, turboId)
                 turboIdToRoomId.remove(turboId, id)
             }
+           }
+          } catch (cancelled: kotlinx.coroutines.CancellationException) {
+            throw cancelled
+          } catch (error: Exception) {
+            generation?.let { dao.failGeneration(id, it, "启动下载失败") }
+            sdkFinished(id, generation)
+          } finally {
+            if (!submitted) {
+                sdkFinished(id, generation)
+                admitted?.let { lease -> pipelineLeases.remove(id, lease); lease.release() }
+            }
+            startJobs.remove(id, kotlin.coroutines.coroutineContext[kotlinx.coroutines.Job])
+          }
         }
+        startJobs[id] = startJob
+        startJob.start()
     }
 
     /** 暂停下载（保留断点）。 */
@@ -970,6 +1076,13 @@ class TurboDownloadManager(
             pauseEngineTask(id, engineId)
             return
         }
+        pauseSerials.merge(id, 1L, Long::plus)
+        submittedRequests.remove(id)
+        startJobs.remove(id)?.cancel()
+        refreshJobs.remove(id)?.cancel()
+        val oldSaveJob = saveJobs.remove(id)
+        oldSaveJob?.cancel()
+        val pausedGeneration = sdkGenerations[id]
         val turboId = turboIds.remove(id)
         if (turboId != null) turboIdToRoomId.remove(turboId)
         _stats.update { it - id }
@@ -978,18 +1091,25 @@ class TurboDownloadManager(
         // 取值优先级：引擎**当前计数器**（逐块更新，最新）→ 最近一次上报事件 → 上次写库值。
         val pauseAt = turboId?.let { client.progress.value[it]?.downloadedBytes }
             ?: lastSeenBytes[id] ?: lastDbWriteBytes[id]
-        scope.launch {
-            if (turboId != null) client.pause(turboId)
+        val stoppingJob = scope.launch(start = kotlinx.coroutines.CoroutineStart.LAZY) {
+            oldSaveJob?.join()
+            if (turboId != null) { client.pause(turboId); client.awaitSettled(turboId) }
             if (pauseAt != null) {
                 // 总大小不能写成 0：那会让列表上的「/ 221.1 MB」变成「/ 0 B」。
                 // 内存里没有就回读一次库里的原值。
                 val total = taskSizes[id]?.takeIf { it > 0 } ?: dao.get(id)?.totalSize ?: 0L
-                dao.updateProgress(id, DownloadTaskEntity.STATUS_PAUSED, pauseAt, total)
+                if (dao.get(id)?.status != DownloadTaskEntity.STATUS_COMPLETED) {
+                    dao.updateProgress(id, DownloadTaskEntity.STATUS_PAUSED, pauseAt, total)
+                }
             } else {
-                dao.updateStatus(id, DownloadTaskEntity.STATUS_PAUSED)
+                dao.pauseActiveTask(id)
             }
-            onTaskFinished()
+            dao.pauseActiveTask(id)
+            sdkFinished(id, pausedGeneration)
         }
+        stoppingJobs[id] = stoppingJob
+        stoppingJob.invokeOnCompletion { stoppingJobs.remove(id, stoppingJob) }
+        stoppingJob.start()
     }
 
     /** 删除任务（可选删除本地文件），并触发清理回调。 */
@@ -1007,6 +1127,11 @@ class TurboDownloadManager(
                     .onFailure { Log.e(TAG, "引擎任务删除失败：id=$id ${it.message}", it) }
             }
         }
+        pauseSerials.merge(id, 1L, Long::plus)
+        refreshJobs.remove(id)?.cancel()
+        startJobs.remove(id)?.cancel()
+        saveJobs.remove(id)?.cancel()
+        val removedGeneration = sdkGenerations[id]
         val turboId = turboIds.remove(id)
         if (turboId != null) turboIdToRoomId.remove(turboId)
         _stats.update { it - id }
@@ -1313,10 +1438,14 @@ class TurboDownloadManager(
         val roomId = turboIdToRoomId[ev.taskId]
             ?: recoverRoomIdFromCreatedEvent(ev)
             ?: return
+        if (turboIds[roomId]?.let { it != ev.taskId } == true) return
+        val generation = turboGenerations[ev.taskId] ?: sdkGenerations[roomId] ?: return
+        turboGenerations.putIfAbsent(ev.taskId, generation)
         when (ev) {
             is TurboEvent.Created -> Unit
             is TurboEvent.Progress -> {
                 val p = ev.progress
+                val details = client.taskDetails(ev.taskId)
                 // 【诊断】首字节耗时 = 从探测完成到第一批字节。若它很大而探测(见 Metadata 日志)很小，
                 // 说明慢在**首连接**（DNS / IPv6 路由 / TLS），而不是解析。
                 val metaAt = if (p.downloadedBytes > 0) metadataAtMs.remove(roomId) else null
@@ -1327,40 +1456,37 @@ class TurboDownloadManager(
                     it + (roomId to DownloadStats(
                         speed = p.speedBytesPerSec,
                         remainMillis = p.etaMillis,
-                        chunkCount = p.activeConnections.coerceAtLeast(0),
-                        connectionLimit = threadProvider().coerceAtLeast(1),
+                        chunkCount = (details?.takeIf { it.requestMetricsAvailable }?.activeRequests ?: p.activeConnections).coerceAtLeast(0),
+                        connectionLimit = details?.configuredConnections ?: threadProvider().coerceAtLeast(1),
+                        diagnostics = DownloadDiagnostics.from(details),
                     ))
                 }
                 // 进度写库节流：每任务至多每 800ms 或每增长 1MB 写一次，避免高频 launch+DB 竞争拖慢吞吐。
                 lastSeenBytes[roomId] = p.downloadedBytes
                 if (shouldWriteDb(roomId, p.downloadedBytes)) {
                     scope.launch {
-                        dao.updateProgress(
-                            roomId,
-                            DownloadTaskEntity.STATUS_DOWNLOADING,
-                            p.downloadedBytes,
-                            if (p.totalBytes > 0) p.totalBytes else 0L,
-                        )
+                        dao.updateProgressGeneration(roomId, generation, p.downloadedBytes,
+                            if (p.totalBytes > 0) p.totalBytes else 0L)
                     }
                 }
                 taskNames[roomId]?.let { name ->
                     notifyProgress(roomId, name, p.downloadedBytes, p.totalBytes)
                 }
             }
-            is TurboEvent.Completed -> scope.launch { onTurboCompleted(roomId, ev.file, ev.totalBytes) }
-            is TurboEvent.Failed -> scope.launch {
-                Log.e(TAG, "task $roomId failed: ${ev.reason}")
-                turboIds.remove(roomId)?.let { turboIdToRoomId.remove(it) }
-                _stats.update { it - roomId }
-                metadataAtMs.remove(roomId)
-                lastSeenBytes.remove(roomId)
-                dao.updateStatus(roomId, DownloadTaskEntity.STATUS_FAILED)
-                dao.updateError(roomId, DownloadRecoveryPolicy.displayFailure(ev.reason))
-                DiagLog.e(context, DiagLog.Category.DOWNLOAD, "下载失败：id=$roomId 原因=${ev.reason}")
-                if (DownloadRecoveryPolicy.shouldDiscardPartial(ev.reason)) {
-                    turboOutputs.remove(roomId)?.delete()
+            is TurboEvent.Completed -> {
+                _stats.update { stats -> stats[roomId]?.let { stats + (roomId to it.copy(speed = 0, chunkCount = 0, diagnostics = DownloadDiagnostics.from(client.taskDetails(ev.taskId)))) } ?: stats }
+                val job = scope.launch(start = kotlinx.coroutines.CoroutineStart.LAZY) {
+                    onTurboCompleted(roomId, ev.file, ev.totalBytes, generation = generation)
                 }
-                onTaskFinished()
+                saveJobs[roomId] = job
+                job.invokeOnCompletion { saveJobs.remove(roomId, job) }
+                job.start()
+            }
+            is TurboEvent.Failed -> {
+                val job = scope.launch(start = kotlinx.coroutines.CoroutineStart.LAZY) { onSdkFailure(roomId, ev, generation) }
+                refreshJobs[roomId] = job
+                job.invokeOnCompletion { refreshJobs.remove(roomId, job) }
+                job.start()
             }
             is TurboEvent.StateChanged -> {
                 if (ev.state == TaskState.PAUSED || ev.state == TaskState.CANCELED) {
@@ -1409,6 +1535,7 @@ class TurboDownloadManager(
     private fun recoverRoomIdFromCreatedEvent(ev: TurboEvent): Long? {
         if (ev !is TurboEvent.Created) return null
         val roomId = TurboTaskMapping.roomIdFromStableKey(ev.request.stableKey) ?: return null
+        if (submittedRequests[roomId] !== ev.request) return null
         turboIdToRoomId.putIfAbsent(ev.taskId, roomId)
         turboIds.putIfAbsent(roomId, ev.taskId)
         return roomId
@@ -1515,62 +1642,121 @@ class TurboDownloadManager(
     }
 
     /** TurboDL 下载完成：保存到公共目录（MediaStore/SAF）→ 更新状态 → 完成回调 → 清理。 */
-    private suspend fun onTurboCompleted(roomId: Long, downloadedFile: File, total: Long) {
+    private suspend fun onTurboCompleted(
+        roomId: Long,
+        downloadedFile: File,
+        total: Long,
+        alreadyProcessed: Boolean = false,
+        generation: Long? = null,
+    ) {
         val task = dao.get(roomId) ?: return
-        if (task.status != DownloadTaskEntity.STATUS_DOWNLOADING) return
+        val expectedGeneration = generation ?: task.attemptGeneration
+        if (task.status != DownloadTaskEntity.STATUS_DOWNLOADING || task.attemptGeneration != expectedGeneration) return
+        val operation = kotlin.coroutines.coroutineContext
+        var committedPath: String? = null
+        var unregisteredProcessed: File? = null
         try {
-            val file = DownloadPostProcessor.process(context, task, downloadedFile)
-            if (dao.get(roomId)?.status != DownloadTaskEntity.STATUS_DOWNLOADING) return
-            if (!storagePermissionProvider()) {
-                // 未授权：保留临时文件，标为失败供重试保存（不删）。
-                turboIds.remove(roomId)?.let { turboIdToRoomId.remove(it) }
-                _stats.update { it - roomId }
-                lastSeenBytes.remove(roomId)
-                dao.updateStatus(roomId, DownloadTaskEntity.STATUS_FAILED)
-                dao.updateError(roomId, "未授予存储权限，无法保存到下载目录（已保留临时文件，可重试）")
-                DiagLog.e(context, DiagLog.Category.STORAGE, "保存失败：未授予存储权限 id=$roomId")
-                onTaskFinished()
+          if (!alreadyProcessed && dao.markDownloadedGeneration(roomId, expectedGeneration,
+              downloadedFile.canonicalPath, downloadedFile.length(), maxOf(total, downloadedFile.length())) == 0) return
+          saveLock.withLock {
+            kotlinx.coroutines.currentCoroutineContext().ensureActive()
+            val file = if (alreadyProcessed) downloadedFile else DownloadPostProcessor.process(context, task, downloadedFile)
+            unregisteredProcessed = file.takeIf { it != downloadedFile }
+            kotlinx.coroutines.currentCoroutineContext().ensureActive()
+            val latest = dao.get(roomId) ?: return
+            if (latest.status != DownloadTaskEntity.STATUS_DOWNLOADING || latest.attemptGeneration != expectedGeneration) return
+            if (dao.updatePipelineGeneration(roomId, expectedGeneration, "SAVING", file.canonicalPath, file.length()) == 0) return
+            unregisteredProcessed = null
+            if (!storagePermissionProvider()) throw IllegalStateException("未授予存储权限")
+            val savedPath = withContext(Dispatchers.IO) {
+                DownloadSaver.save(context, task.fileName, file, saveDirProvider()) { operation.isActive }
+            } ?: throw IllegalStateException("保存失败")
+            committedPath = savedPath
+            kotlinx.coroutines.currentCoroutineContext().ensureActive()
+            val actualSize = file.length()
+            val finalTotal = actualSize
+            if (dao.completeGeneration(roomId, expectedGeneration, savedPath, actualSize, finalTotal) == 0) {
+                withContext(Dispatchers.IO) { DownloadSaver.delete(context, savedPath) }
+                committedPath = null
                 return
             }
-            val savedPath = withContext(Dispatchers.IO) {
-                DownloadSaver.save(context, task.fileName, file, saveDirProvider())
-            } ?: throw IllegalStateException("保存到下载目录失败")
-            lastSeenBytes.remove(roomId)
-            // 完成时用**实际落盘大小**修正进度记录。
-            // 进度是节流写库的（每 800ms / 每 1MB），最后一段增量可能压根没写进去，
-            // 只写 status 的话界面就会显示「已完成 · 18.0/18.1 MB · 99%」——
-            // 状态说完成、百分比说没完成，自相矛盾。以实际文件为准，
-            // 并让 totalSize 不小于它，保证完成后恒为 100%。
-            val actualSize = file.length()
-            val finalTotal = if (file != downloadedFile) actualSize else maxOf(if (total > 0) total else 0L, actualSize)
-            dao.complete(roomId, DownloadTaskEntity.STATUS_COMPLETED, savedPath, actualSize, finalTotal)
-            Log.d(TAG, "onTurboCompleted: id=$roomId saved=$savedPath size=$actualSize total=$finalTotal")
-            // 完成也要落盘：用户说"文件不对"时，这行给出落盘路径与实际字节数，
-            // 是判断"下载坏了"还是"保存坏了"的第一手依据。
-            DiagLog.i(
-                context, DiagLog.Category.DOWNLOAD,
-                "下载完成：id=$roomId 实际=$actualSize 期望=$finalTotal 路径=$savedPath"
-            )
-            // 保存成功才清理：临时文件 + 网盘临时转存回调。
-            turboIds.remove(roomId)?.let { turboIdToRoomId.remove(it) }
+            committedPath = null
+            clearSdkMapping(roomId, expectedGeneration)
             _stats.update { it - roomId }
             metadataAtMs.remove(roomId)
             turboOutputs.remove(roomId)?.delete()
-            file.delete()
-            // 处理器插件（P16 的 FileHandler 挂载点）：文件已落盘才交给它们，
-            // 失败只记日志、不影响"下载已完成"。
+            if (file != downloadedFile) file.delete()
+            sourceRefreshAttempts.remove(roomId)
             dispatchToFileHandlers(task, savedPath, actualSize)
-            taskCallbacks.remove(roomId)?.let { cb -> runCatching { cb() } }
-            onTaskFinished()
-        } catch (e: Exception) {
-            Log.e(TAG, "onTurboCompleted save failed id=$roomId: ${e.message}", e)
-            // 保存失败：保留临时文件与回调，标为失败供用户重试保存（不删文件、不清理回调）。
-            turboIds.remove(roomId)?.let { turboIdToRoomId.remove(it) }
+            taskCallbacks.remove(roomId)?.let { callback -> runCatching { callback() } }
+            DiagLog.i(context, DiagLog.Category.DOWNLOAD, "下载完成：id=$roomId 实际=$actualSize")
+          }
+        } catch (cancelled: kotlinx.coroutines.CancellationException) {
+            committedPath?.let { path -> withContext(kotlinx.coroutines.NonCancellable + Dispatchers.IO) { DownloadSaver.delete(context, path) } }
+            throw cancelled
+        } catch (error: Exception) {
+            committedPath?.let { path -> withContext(kotlinx.coroutines.NonCancellable + Dispatchers.IO) { DownloadSaver.delete(context, path) } }
+            if (!operation.isActive) throw kotlinx.coroutines.CancellationException("保存已取消", error)
+            val latest = dao.get(roomId)
+            if (latest != null && latest.attemptGeneration == expectedGeneration && latest.status == DownloadTaskEntity.STATUS_DOWNLOADING) {
+                val saveFailed = latest.pipelineStage == "SAVING" || latest.pipelineStage == "SAVE_FAILED"
+                dao.failGeneration(roomId, expectedGeneration,
+                    if (saveFailed) "保存失败，已保留文件，可重试保存"
+                    else "处理失败，已保留原始文件，可重试处理",
+                    if (saveFailed) "SAVE_FAILED" else null)
+            }
+            clearSdkMapping(roomId, expectedGeneration)
             _stats.update { it - roomId }
-            dao.updateStatus(roomId, DownloadTaskEntity.STATUS_FAILED)
-            dao.updateError(roomId, (e.message ?: "保存失败") + "（已保留临时文件，可重试）")
-            DiagLog.e(context, DiagLog.Category.STORAGE, "保存到相册/目录失败：id=$roomId", e)
-            onTaskFinished()
+            DiagLog.e(context, DiagLog.Category.STORAGE, "保存失败：id=$roomId", error)
+        } finally {
+            unregisteredProcessed?.let { file ->
+                withContext(kotlinx.coroutines.NonCancellable + Dispatchers.IO) { file.delete() }
+            }
+            sdkFinished(roomId, expectedGeneration)
+        }
+    }
+
+    private suspend fun onSdkFailure(roomId: Long, event: TurboEvent.Failed, generation: Long) {
+        val pauseSerial = pauseSerials[roomId] ?: 0L
+        try {
+            client.awaitSettled(event.taskId)
+            val task = dao.get(roomId) ?: return
+            if (task.attemptGeneration != generation || task.status != DownloadTaskEntity.STATUS_DOWNLOADING ||
+                turboIds[roomId] != event.taskId) return
+            val status = client.taskDetails(event.taskId)?.lastHttpStatus
+            val expired = status in setOf(401, 403, 410) ||
+                (status == null && event.reason.contains("授权/时效"))
+            if (expired && task.sourceAccountId.isNotBlank() &&
+                QuarkRefreshReference.decode(task.refreshReferenceJson) != null &&
+                sourceRefreshAttempts.putIfAbsent(roomId, 1) == null) {
+                val headers = taskHeaders[roomId] ?: parseHeadersJson(task.requestHeadersJson)
+                val renewed = try {
+                    sourceRefresher.refresh(task, headers)
+                } catch (cancelled: kotlinx.coroutines.CancellationException) {
+                    throw cancelled
+                } catch (_: Exception) { null }
+                if (renewed != null && (pauseSerials[roomId] ?: 0L) == pauseSerial &&
+                    turboIds[roomId] == event.taskId &&
+                    dao.replaceSource(roomId, generation, renewed.link.downloadUrl,
+                        JSONObject(renewed.headers as Map<*, *>).toString()) > 0) {
+                    taskHeaders[roomId] = renewed.headers
+                    clearSdkMapping(roomId, generation)
+                    sdkFinished(roomId, generation)
+                    DiagLog.i(context, DiagLog.Category.DOWNLOAD, "下载地址已更新，从有效断点继续：id=$roomId")
+                    startTransfer(roomId, renewed.headers, requiredPauseSerial = pauseSerial)
+                    return
+                }
+            }
+            if (turboIds[roomId] != event.taskId) return
+            clearSdkMapping(roomId, generation)
+            _stats.update { it - roomId }
+            metadataAtMs.remove(roomId)
+            lastSeenBytes.remove(roomId)
+            dao.failGeneration(roomId, generation, DownloadRecoveryPolicy.displayFailure(event.reason))
+            if (DownloadRecoveryPolicy.shouldDiscardPartial(event.reason)) turboOutputs.remove(roomId)?.delete()
+            DiagLog.e(context, DiagLog.Category.DOWNLOAD, "下载失败：id=$roomId HTTP=${status ?: 0}")
+        } finally {
+            sdkFinished(roomId, generation)
         }
     }
 

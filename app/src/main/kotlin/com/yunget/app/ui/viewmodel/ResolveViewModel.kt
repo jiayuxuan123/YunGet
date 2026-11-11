@@ -225,6 +225,8 @@ class ResolveViewModel(
      * 直链签名有时效，不能等用户点「下载」时再去取。
      */
     private var pendingAltLinks: List<Pair<DownloadLink, String>> = emptyList()
+    private val quarkRefreshReferences = LinkedHashMap<String, com.yunget.app.data.download.QuarkRefreshReference>()
+    private val quarkRefreshOwners = HashMap<String, String>()
 
     var downloadError by mutableStateOf<String?>(null)
     private set
@@ -2092,10 +2094,27 @@ class ResolveViewModel(
         file: ShareFile,
         credential: String
     ): Result<DownloadLink> {
-        if (!noSaveDownloadProvider()) return repo.getShareDownloadLink(session, file, credential)
-        val noSave = repo.getShareDownloadLinkWithoutSave(session, file, credential)
-        if (noSave.isSuccess || currentPlatform != SharePlatform.QUARK) return noSave
-        return repo.getShareDownloadLink(session, file, credential)
+        val passwordAtResolve = currentPwd
+        val ownerAtResolve = if (repo is QuarkResolveRepository) accountRepository.getAccount()
+            ?.takeIf { it.cookie == credential }?.id.orEmpty() else ""
+        val result = if (!noSaveDownloadProvider()) {
+            repo.getShareDownloadLink(session, file, credential)
+        } else {
+            val noSave = repo.getShareDownloadLinkWithoutSave(session, file, credential)
+            if (noSave.isSuccess || repo !is QuarkResolveRepository) noSave
+            else repo.getShareDownloadLink(session, file, credential)
+        }
+        if (repo is QuarkResolveRepository) result.onSuccess { link ->
+            if (quarkRefreshReferences.size >= 32) {
+                val oldest = quarkRefreshReferences.keys.first()
+                quarkRefreshReferences.remove(oldest)
+                quarkRefreshOwners.remove(oldest)
+            }
+            quarkRefreshReferences[link.downloadUrl] = com.yunget.app.data.download.QuarkRefreshReference.from(
+                session, file, passwordAtResolve, if (link.cleanupDirFid != null) link.fid else "")
+            quarkRefreshOwners[link.downloadUrl] = ownerAtResolve
+        }
+        return result
     }
 
     /** 获取文件下载直链（各平台实现不同：夸克免转存优先（失败回退转存）/ UC 直接取 / 迅雷转存后取详情直链；GitHub 直接构造 URL） */
@@ -2461,7 +2480,15 @@ class ResolveViewModel(
             headers = headers,
             size = link.size,
             platform = platform,
-            altSources = altSources
+            altSources = altSources,
+            submission = if (isQuark && !isGuestLink) {
+                val owner = accountRepository.getAccount()?.takeIf { it.cookie == effectiveCredential }
+                com.yunget.app.data.download.DownloadSubmissionContext(
+                    sourceAccountId = quarkRefreshOwners.remove(link.downloadUrl)?.takeIf { it.isNotBlank() }
+                        ?: owner?.id.orEmpty(),
+                    refreshReferenceJson = quarkRefreshReferences.remove(link.downloadUrl)?.encode() ?: "{}",
+                )
+            } else com.yunget.app.data.download.DownloadSubmissionContext(),
         ) {
             // 下载完成（master 版通过 onComplete 回调）：清理网盘临时转存目录；失败/取消不触发
             val dirFid = link.cleanupDirFid

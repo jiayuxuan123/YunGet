@@ -31,7 +31,9 @@ import android.util.Log
 import androidx.annotation.RequiresApi
 import java.io.File
 import java.io.FileOutputStream
+import java.io.IOException
 import java.io.OutputStream
+import kotlinx.coroutines.CancellationException
 
 private const val TAG = "YunGet-DL"
 
@@ -55,9 +57,13 @@ class DownloadDestination internal constructor(
     /** 打开目标输出流；失败返回 null，由调用方按失败处理（此时应 abort） */
     fun open(): OutputStream? = runCatching { openStream() }.getOrNull()
 
-    /** 写入完成且大小校验通过后调用（MediaStore 置 IS_PENDING=0；其余实现为 no-op） */
+    /**
+     * 写入完成且大小校验通过后调用（MediaStore 置 IS_PENDING=0；其余实现为 no-op）。
+     *
+     * 提交失败必须向上抛出，由 [DownloadSaver.save] 或直接使用目标的调用方负责 abort。
+     */
     fun commit() {
-        runCatching { onCommit() }.onFailure { Log.e(TAG, "提交下载目标失败: ${it.message}") }
+        onCommit()
     }
 
     /** 失败/取消：删除半成品，避免残留不可见的占位数据 */
@@ -122,18 +128,53 @@ object DownloadSaver {
     /**
      * 保存文件到下载目录（小文件/一次性拷贝场景，如 HLS 转码流）。
      * 内部即 [openDestination] + 拷贝 + commit，失败自动 abort 半成品。
+     * @param shouldContinue 返回 false 时取消保存；流关闭后、commit 前还会再检查一次
      * @return 保存成功后的标识（MediaStore uri 字符串 / SAF 文档 uri / 文件绝对路径）；失败返回 null
      */
-    fun save(context: Context, fileName: String, source: File, targetDirUri: String? = null): String? {
+    fun save(
+        context: Context,
+        fileName: String,
+        source: File,
+        targetDirUri: String? = null,
+        shouldContinue: () -> Boolean = { true }
+    ): String? {
         val dest = openDestination(context, fileName, targetDirUri) ?: return null
-        return try {
-            val out = dest.open() ?: throw IllegalStateException("无法打开下载目标")
-            out.use { o -> source.inputStream().use { it.copyTo(o, COPY_BUFFER_SIZE) } }
-            dest.commit()
-            dest.path
-        } catch (e: Exception) {
+        return saveToDestination(dest, source, shouldContinue) { e ->
             Log.e(TAG, "保存异常（$fileName）: ${e.message}")
-            dest.abort()
+        }
+    }
+
+    /**
+     * [save] 的目标级执行核心：先关闭输出流，再提交目标。
+     * 任一步失败都只 abort 当前这次创建的目标，避免把半成品留在 MediaStore/SAF/文件目录。
+     */
+    internal fun saveToDestination(
+        destination: DownloadDestination,
+        source: File,
+        shouldContinue: () -> Boolean = { true },
+        onFailure: (Exception) -> Unit
+    ): String? {
+        return try {
+            val out = destination.open() ?: throw IllegalStateException("无法打开下载目标")
+            out.use { o ->
+                source.inputStream().use { input ->
+                    val buffer = ByteArray(COPY_BUFFER_SIZE)
+                    while (true) {
+                        if (!shouldContinue()) throw CancellationException("保存已取消")
+                        val read = input.read(buffer)
+                        if (read < 0) break
+                        if (!shouldContinue()) throw CancellationException("保存已取消")
+                        o.write(buffer, 0, read)
+                    }
+                }
+            }
+            if (!shouldContinue()) throw CancellationException("保存已取消")
+            destination.commit()
+            destination.path
+        } catch (e: Exception) {
+            destination.abort()
+            if (e is CancellationException) throw e
+            onFailure(e)
             null
         }
     }
@@ -255,11 +296,12 @@ object DownloadSaver {
                     path = uri.toString(),
                     openStream = { resolver.openOutputStream(uri) },
                     onCommit = {
-                        resolver.update(
+                        val updated = resolver.update(
                             uri,
                             ContentValues().apply { put(MediaStore.Downloads.IS_PENDING, 0) },
                             null, null
                         )
+                        ensureMediaStoreCommit(updated)
                     },
                     onAbort = { resolver.delete(uri, null, null) }
                 )
@@ -268,6 +310,13 @@ object DownloadSaver {
             }
         }
         return null
+    }
+
+    /** MediaStore 只有实际更新到记录才算提交成功；update 返回 0 时必须走失败清理。 */
+    internal fun ensureMediaStoreCommit(updatedRows: Int) {
+        if (updatedRows <= 0) {
+            throw IOException("MediaStore 提交失败：update 返回 $updatedRows")
+        }
     }
 
     /** 传统文件路径目标（Android 9-）：createNewFile 原子占位，占用失败则换候选名 */

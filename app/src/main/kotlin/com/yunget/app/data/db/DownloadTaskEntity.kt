@@ -65,7 +65,28 @@ data class DownloadTaskEntity(
     val motionUrl: String = "",
     @ColumnInfo(defaultValue = "0")
     val audioOnly: Boolean = false,
-    val createTime: Long = System.currentTimeMillis()
+    val createTime: Long = System.currentTimeMillis(),
+    /** 来源账号 ID；空串表示旧任务或没有绑定账号。 */
+    @ColumnInfo(defaultValue = "''")
+    val sourceAccountId: String = "",
+    /** 刷新下载地址所需的非敏感引用；不得包含 Cookie 或账号凭据。 */
+    @ColumnInfo(defaultValue = "'{}'")
+    val refreshReferenceJson: String = "{}",
+    /** 下载/处理/保存策略；不得包含 Cookie 或账号凭据。 */
+    @ColumnInfo(defaultValue = "'{}'")
+    val transferPolicyJson: String = "{}",
+    /** NETWORK / PROCESSING / SAVING / SAVE_FAILED / SAVED；旧任务默认 NETWORK。 */
+    @ColumnInfo(defaultValue = "'NETWORK'")
+    val pipelineStage: String = "NETWORK",
+    /** 保存完成后的缓存路径；空串表示尚未产出。 */
+    @ColumnInfo(defaultValue = "''")
+    val completedCachePath: String = "",
+    /** 保存完成后的缓存大小（字节）。 */
+    @ColumnInfo(defaultValue = "0")
+    val completedCacheSize: Long = 0,
+    /** 每次重新尝试时递增，用于丢弃旧尝试的迟到回调。 */
+    @ColumnInfo(defaultValue = "0")
+    val attemptGeneration: Long = 0
 ) {
     companion object {
         const val STATUS_PENDING = 0

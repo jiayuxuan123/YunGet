@@ -75,18 +75,68 @@ class DatabaseMigrationContractTest {
 
     /** 从实体源码里抽出字段名集合（@ColumnInfo 未改名时，属性名即列名）。 */
     private fun entityFieldsOf(table: String): Set<String>? {
-        val file = dbDir.listFiles { f -> f.name.endsWith("Entity.kt") }
-            ?.firstOrNull { f ->
-                Regex("""@Entity\(tableName\s*=\s*"${Regex.escape(table)}"""").containsMatchIn(f.readText())
-            } ?: return null
-        val src = file.readText()
-        // 只取主构造参数区（@Entity data class XxxEntity( ... )）
-        val ctor = src.substringAfter("data class", "").substringAfter('(', "")
-            .substringBeforeLast(')')
+        val src = entitySourceOf(table) ?: return null
+        val ctor = entityConstructorOf(src)
         return Regex("""^\s*val\s+(\w+)\s*:""", RegexOption.MULTILINE)
             .findAll(ctor)
             .map { it.groupValues[1] }
             .toSet()
+    }
+
+    private fun entitySourceOf(table: String): String? =
+        dbDir.listFiles { f -> f.name.endsWith("Entity.kt") }
+            ?.firstOrNull { f ->
+                Regex("""@Entity\(tableName\s*=\s*"${Regex.escape(table)}"""").containsMatchIn(f.readText())
+            }?.readText()
+
+    /** 按括号层级截取 data class 的主构造参数区，避免字段默认值里的 `)` 提前截断。 */
+    private fun entityConstructorOf(src: String): String {
+        val afterClass = src.substringAfter("data class", "")
+        val open = afterClass.indexOf('(')
+        if (open < 0) return ""
+        var depth = 0
+        for (i in open until afterClass.length) {
+            when (afterClass[i]) {
+                '(' -> depth++
+                ')' -> {
+                    depth--
+                    if (depth == 0) return afterClass.substring(open + 1, i)
+                }
+            }
+        }
+        return ""
+    }
+
+    /** 从实体源码里抽出带默认值的 @ColumnInfo 字段：列名 → Room 默认值表达式。 */
+    private fun entityColumnDefaultsOf(table: String): Map<String, String> {
+        val src = entitySourceOf(table) ?: return emptyMap()
+        val ctor = entityConstructorOf(src)
+        return Regex(
+            """@ColumnInfo\(defaultValue\s*=\s*"([^"]*)"\)\s*val\s+(\w+)\s*:""",
+            RegexOption.DOT_MATCHES_ALL,
+        ).findAll(ctor).associate { it.groupValues[2] to it.groupValues[1] }
+    }
+
+    /** 截取单个迁移的 migrate 方法体，供版本专属契约检查使用。 */
+    private fun migrationBody(name: String): String =
+        Regex(
+            """private val ${Regex.escape(name)} = object : Migration\([^)]*\) \{([\s\S]*?)\n        \}\n""",
+        ).find(appDatabaseSrc.replace("\r\n", "\n"))?.groupValues?.get(1) ?: ""
+
+    /** 从 ALTER 语句里抽出新增列及其 DEFAULT 表达式。 */
+    private fun addedColumnDefaults(source: String): Map<Pair<String, String>, String> {
+        val re = Regex(
+            """ALTER\s+TABLE\s+`?(\w+)`?\s+ADD\s+COLUMN\s+`?(\w+)`?\s+([^"]*)""",
+            RegexOption.IGNORE_CASE,
+        )
+        val defaultRe = Regex(
+            """\bDEFAULT\s+('(?:''|[^'])*'|[^\s"]+)""",
+            RegexOption.IGNORE_CASE,
+        )
+        return re.findAll(source).mapNotNull { m ->
+            val defaultValue = defaultRe.find(m.groupValues[3])?.groupValues?.get(1) ?: return@mapNotNull null
+            (m.groupValues[1] to m.groupValues[2]) to defaultValue
+        }.toMap()
     }
 
     /** 建表 SQL 的列名集合（跳过 PRIMARY KEY(...) 之类的表级约束）。 */
@@ -212,5 +262,50 @@ class DatabaseMigrationContractTest {
             } else null
         }.toList()
         assertTrue(problems.joinToString("\n"), problems.isEmpty())
+    }
+
+    @Test
+    fun v24To25DownloadTaskColumnsMatchEntityDefaultValues() {
+        val migrationSource = migrationBody("MIGRATION_24_25")
+        assertTrue(
+            "没有解析到 MIGRATION_24_25 —— 迁移声明格式已变化，测试需要同步",
+            migrationSource.isNotBlank(),
+        )
+        val allMigrationDefaults = addedColumnDefaults(migrationSource)
+        assertTrue(
+            "MIGRATION_24_25 只应修改 download_task",
+            allMigrationDefaults.keys.all { (table, _) -> table == "download_task" },
+        )
+        val actualDefaults = allMigrationDefaults
+            .mapKeys { (key, _) -> key.second }
+        val expectedDefaults = mapOf(
+            "sourceAccountId" to "''",
+            "refreshReferenceJson" to "'{}'",
+            "transferPolicyJson" to "'{}'",
+            "pipelineStage" to "'NETWORK'",
+            "completedCachePath" to "''",
+            "completedCacheSize" to "0",
+            "attemptGeneration" to "0",
+        )
+        assertEquals(
+            "MIGRATION_24_25 的新增列或默认值与约定不一致",
+            expectedDefaults,
+            actualDefaults,
+        )
+
+        val entityDefaults = entityColumnDefaultsOf("download_task")
+        val problems = expectedDefaults.mapNotNull { (column, migrationDefault) ->
+            val entityDefault = entityDefaults[column]
+            if (entityDefault != migrationDefault) {
+                "列 `$column` 默认值不一致：ALTER=$migrationDefault，Entity=$entityDefault"
+            } else {
+                null
+            }
+        }
+        assertTrue(
+            "MIGRATION_24_25 的 DEFAULT 必须与实体 @ColumnInfo(defaultValue) 完全一致，否则 Room 升级校验失败。\n" +
+                problems.joinToString("\n"),
+            problems.isEmpty(),
+        )
     }
 }
