@@ -11,11 +11,12 @@ data class DownloadDiagnostics(
 ) {
     companion object {
         fun from(details: TaskTransferDetails?): DownloadDiagnostics? {
-            if (details == null || !details.requestMetricsAvailable) return null
+            if (details == null) return null
+            if (!details.requestMetricsAvailable && details.lastHttpStatus == null && details.failureStage == null) return null
             return DownloadDiagnostics(
-                firstByteMillis = details.timeToFirstByteMs,
-                probeMillis = details.probeMs,
-                transferMillis = details.transferMs,
+                firstByteMillis = details.timeToFirstByteMs.takeIf { details.requestMetricsAvailable },
+                probeMillis = details.probeMs.takeIf { details.requestMetricsAvailable } ?: 0,
+                transferMillis = details.transferMs.takeIf { details.requestMetricsAvailable } ?: 0,
                 lastHttpStatus = details.lastHttpStatus,
                 failureStage = details.failureStage?.name?.lowercase(),
             )
