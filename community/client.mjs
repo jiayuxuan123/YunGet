@@ -1,3 +1,4 @@
+import {socialScript} from './social-client.mjs';
 export const script = String.raw`const state = {
   session: null, admin: false, config: null, view: '', revision: 0, filter: '', mine: false,
   feedback: [], page: 0, more: false, feedbackBusy: false, feedbackDraft: {},
@@ -129,6 +130,7 @@ function updateIdentity() {
   button.textContent=state.session?.nickname || (state.admin?'开发者':'设置昵称');
   button.dataset.guest=String(!state.session && !state.admin);
   button.setAttribute('aria-label',state.session?'修改社区昵称':'设置社区昵称');
+  document.querySelectorAll('.admin-only').forEach(node=>{node.hidden=!state.admin;});
   const hint=document.getElementById('chat-identity');
   if(hint)hint.textContent=state.session?'以 '+state.session.nickname+' 发送':'无需开发者登录，首次发送时设置昵称';
 }
@@ -143,16 +145,17 @@ function openIdentity(continuation=null, back=null) {
     const revision=state.modalRevision;
     try {
       const result=await write('/api/session',{nickname:form.elements.namedItem('nickname').value,challenge:state.challenge});
-      state.session={nickname:result.nickname}; updateIdentity();
+      const {recoveryCode,...identity}=result;state.session=identity;updateIdentity();
       if(revision!==state.modalRevision)return;
-      hideModal(); if(continuation)continuation(); else toast('昵称已保存');
+      hideModal();if(recoveryCode){offerRecovery(recoveryCode,continuation);return;}if(continuation)continuation();else toast('昵称已保存');
     } catch(error){if(revision===state.modalRevision){showFormError(form,error);mountChallenge();}}
     finally {button.disabled=false;}
   };
 }
 function verifyAction(action) {
   if(!state.session && !action.admin){openIdentity(()=>verifyAction(action),action.back);return;}
-  openModal(action.title,'<form id="verify-form"><p class="form-note">'+esc(action.admin?'确认后保存。':'验证后即可发送，已填写的内容仍然保留。')+'</p><div class="action-preview">'+esc(action.preview.slice(0,300))+'</div>'+(action.admin?'':challengeMarkup(action.path.endsWith('/replies')?'reply':action.path==='/api/chat'?'chat':'feedback'))+'<div class="form-actions"><button type="button" class="button" data-dismiss>返回修改</button><button class="button button-primary" type="submit">'+esc(action.title)+'</button></div></form>',{back:action.back});
+  const preview=String(action.preview ?? action.body?.body ?? '').slice(0,300);
+  openModal(action.title,'<form id="verify-form"><p class="form-note">'+esc(action.admin?'确认后保存。':'验证后即可发送，已填写的内容仍然保留。')+'</p>'+(preview?'<div class="action-preview">'+esc(preview)+'</div>':'')+(action.admin?'':challengeMarkup(action.path.includes('/account/')?'session':(action.path.endsWith('/replies')||action.path.endsWith('/comments'))?'reply':action.path==='/api/chat'?'chat':'feedback'))+'<div class="form-actions"><button type="button" class="button" data-dismiss>返回修改</button><button class="button button-primary" type="submit">'+esc(action.title)+'</button></div></form>',{back:action.back});
   if(!action.admin)mountChallenge();
   document.getElementById('verify-form').onsubmit=async event=>{
     event.preventDefault();const form=event.currentTarget;
@@ -160,15 +163,19 @@ function verifyAction(action) {
     const button=form.querySelector('[type=submit]');button.disabled=true;
     const revision=state.modalRevision;
     try {
-      await write(action.path,{...action.body,challenge:state.challenge},action.key);
+      const result=await write(action.path,{...action.body,challenge:state.challenge},action.key);
       if(revision===state.modalRevision)hideModal();
-      await action.done(); toast(action.success);
+      await action.done(result); toast(action.success);
     } catch(error) {
       if(revision!==state.modalRevision)return;
       if(error.status===401 && !action.admin){state.session=null;updateIdentity();openIdentity(()=>verifyAction(action),action.back);return;}
       showFormError(form,error); if(!action.admin)mountChallenge();
     } finally {button.disabled=false;}
   };
+  if(action.autoSubmit){const revision=state.modalRevision,started=Date.now();const timer=setInterval(()=>{
+    if(!modal.open||revision!==state.modalRevision||Date.now()-started>25000){clearInterval(timer);return;}
+    if(action.admin||state.challenge){clearInterval(timer);const form=document.getElementById('verify-form');if(!form||form.querySelector('[type=submit]').disabled)return;if(form.requestSubmit)form.requestSubmit();else form.dispatchEvent(new Event('submit',{cancelable:true}));}
+  },120);}
 }
 function field(name,label,options={}) {
   return '<div class="field '+(options.full?'full':'')+'"><label for="'+name+'">'+label+'</label><input id="'+name+'" name="'+name+'" '+(options.required?'required':'')+' maxlength="'+(options.max || 100)+'" '+(options.min?'minlength="'+options.min+'"':'')+' placeholder="'+esc(options.placeholder || '')+'"></div>';
@@ -308,7 +315,7 @@ async function loadAdmin() {
   const [feedback,announcements,messages]=await Promise.all([request('/admin/api/feedback'),request('/admin/api/announcements'),request('/admin/api/chat')]);
   if(revision!==state.revision)return;
   state.adminAnnouncements=announcements.items;
-  app.innerHTML=viewHead('开发者后台','处理反馈，发布公告。','<a class="button" href="/">公开社区</a>')+'<div class="admin-grid"><section class="admin-panel"><h2>反馈队列</h2>'+(feedback.items.length?feedback.items.map(feedbackRow).join(''):'<p class="form-note">暂无反馈。</p>')+'</section><section class="admin-panel"><h2>公告管理</h2><button class="button button-primary" data-action="new-announcement">'+icon('plus')+'新建公告</button>'+announcements.items.map(item=>'<article class="admin-item"><header><strong>'+esc(item.title)+'</strong><span>'+esc(item.date)+'</span></header><p class="form-note">'+(item.published?'已发布':'草稿')+(item.pinned?' · 置顶':'')+'</p><button class="button" data-edit-announcement="'+esc(item.id)+'">编辑</button></article>').join('')+'</section><section class="admin-panel"><h2>闲聊管理</h2>'+messages.items.map(item=>'<article class="admin-item"><header><strong>'+esc(item.nickname)+'</strong><time>'+dateText(item.created_at)+'</time></header><p class="thread-body">'+esc(item.body)+'</p><button type="button" class="button" data-moderate-message="'+esc(item.id)+'" data-hidden="'+String(Boolean(item.hidden))+'">'+(item.hidden?'恢复显示':'隐藏消息')+'</button></article>').join('')+'</section></div>';
+  app.innerHTML=viewHead('开发者后台','管理社区、反馈与公告。','<div class="admin-tools"><a class="button" href="#feed">社区与帖子</a><a class="button" href="/admin/analytics">匿名统计</a><a class="button" href="#chat">旧闲聊</a><a class="button" href="/">公开社区</a></div>')+'<div class="admin-grid"><section class="admin-panel"><h2>反馈队列</h2>'+(feedback.items.length?feedback.items.map(feedbackRow).join(''):'<p class="form-note">暂无反馈。</p>')+'</section><section class="admin-panel"><h2>公告管理</h2><button class="button button-primary" data-action="new-announcement">'+icon('plus')+'新建公告</button>'+announcements.items.map(item=>'<article class="admin-item"><header><strong>'+esc(item.title)+'</strong><span>'+esc(item.date)+'</span></header><p class="form-note">'+(item.published?'已发布':'草稿')+(item.pinned?' · 置顶':'')+'</p><button class="button" data-edit-announcement="'+esc(item.id)+'">编辑</button></article>').join('')+'</section><section class="admin-panel"><h2>闲聊管理</h2>'+messages.items.map(item=>'<article class="admin-item"><header><strong>'+esc(item.nickname)+'</strong><time>'+dateText(item.created_at)+'</time></header><p class="thread-body">'+esc(item.body)+'</p><button type="button" class="button" data-moderate-message="'+esc(item.id)+'" data-hidden="'+String(Boolean(item.hidden))+'">'+(item.hidden?'恢复显示':'隐藏消息')+'</button></article>').join('')+'</section></div>';
 }
 function openAnnouncementEditor(item=null) {
   const saved=state.announcementDraft;
@@ -331,7 +338,7 @@ async function loadView() {
   if(state.view==='admin')return loadAdmin();
 }
 function routeView() {
-  const hash=location.hash.slice(1);return ['feedback','announcements','chat'].includes(hash)?hash:isAdminPage?'admin':location.pathname==='/chat'?'chat':'feedback';
+  const hash=location.hash.slice(1);if(hash.startsWith('post/'))return 'post';return ['feed','feedback','announcements','chat','notifications','profile','mine'].includes(hash)?hash:isAdminPage?'admin':location.pathname==='/notifications'?'notifications':location.pathname==='/profile'?'profile':location.pathname==='/chat'?'chat':'feed';
 }
 async function switchView(view) {
   state.revision++;threadRequest++;state.view=view;hideModal();
@@ -401,10 +408,10 @@ document.addEventListener('visibilitychange',()=>{if(!document.hidden && state.v
 async function init() {
   try {
     const [config,session]=await Promise.all([request('/api/config'),request('/api/session')]);state.config=config;
-    state.session=session.nickname?{nickname:session.nickname}:null;
+    state.session=session.nickname?session:null;
     if(isAdminPage){await request('/admin/api/session');state.admin=true;}
     updateIdentity();await switchView(routeView());
   } catch(error){app.innerHTML='<div class="empty"><h1>社区暂未连接</h1><p>'+esc(error.message)+'</p><button type="button" id="retry-init" class="button">重新连接</button></div>';document.getElementById('retry-init').onclick=init;}
 }
 init();
-`;
+`+socialScript;

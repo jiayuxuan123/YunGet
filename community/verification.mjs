@@ -24,7 +24,9 @@ function secret(env) {
   return env.COMMUNITY_VERIFICATION_SECRET;
 }
 export function scopeForPath(path) {
-  if (path === '/api/session') return 'session';
+  if (path === '/api/session' || ['/api/account/recover', '/api/account/recovery'].includes(path)) return 'session';
+  if (path === '/api/posts') return 'feedback';
+  if (/^\/api\/posts\/p_[a-f0-9]{32}\/comments$/.test(path)) return 'reply';
   if (path === '/api/feedback') return 'feedback';
   if (path === '/api/chat') return 'chat';
   if (/^\/api\/feedback\/[a-f0-9-]{36}\/replies$/.test(path)) return 'reply';

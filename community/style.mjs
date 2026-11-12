@@ -1,3 +1,4 @@
+import {socialStyle} from './social-style.mjs';
 export const style = String.raw`:root {
   color-scheme: light;
   --canvas: #f7f9fc; --surface: #ffffff; --wash: #edf2f8; --ink: #1c2738;
@@ -226,4 +227,4 @@ altcha-widget { --altcha-color-base: var(--surface); --altcha-color-text: var(--
   @keyframes sheet-in { from { transform: translateY(24px); opacity: .6; } to { transform: translateY(0); opacity: 1; } }
   @keyframes scrim-in { from { background: transparent; } to { background: var(--scrim); } }
 }
-`;
+`+socialStyle;

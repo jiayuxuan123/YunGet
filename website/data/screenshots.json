@@ -1,6 +1,6 @@
 {
-  "version": "2.7.31",
-  "source": "Production Compose previews; illustrative data; not device captures",
+  "version": "2.7.33",
+  "source": "Production Compose previews and local production-browser captures; illustrative data; not device captures",
   "screens": [
     {
       "title": "解析链接",
@@ -53,6 +53,35 @@
       "title": "匿名统计说明",
       "light": {
         "file": "ui-2.7.31-privacy.webp",
+        "width": 720,
+        "height": 1558
+      }
+    },
+    {
+      "title": "社区帖子与投票",
+      "light": {
+        "file": "ui-2.7.33-post.webp",
+        "width": 720,
+        "height": 1558
+      }
+    },
+    {
+      "title": "社区深色信息流",
+      "light": {
+        "file": "ui-2.7.33-post.webp",
+        "width": 720,
+        "height": 1558
+      },
+      "dark": {
+        "file": "ui-2.7.33-feed.webp",
+        "width": 720,
+        "height": 1558
+      }
+    },
+    {
+      "title": "社区通知",
+      "light": {
+        "file": "ui-2.7.33-notifications.webp",
         "width": 720,
         "height": 1558
       }

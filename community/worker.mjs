@@ -3,11 +3,13 @@ import {html, style, script} from './web.mjs';
 import {analyticsHtml, analyticsScript, analyticsStyle} from './analytics.mjs';
 import {analyticsEvents, analyticsProperties, readAnalytics} from './analytics-data.mjs';
 import {consumeVerification, issueVerification, scopeForPath, verificationConfig, VerificationError} from './verification.mjs';
+import {createAccounts} from './accounts.mjs';
+import {createSocial} from './social.mjs';
 
 const statuses = new Set(['new', 'planned', 'working', 'resolved', 'closed']);
 const categories = new Set(['bug', 'idea', 'question', 'other']);
 const products = new Set(['yunget', 'turbodl']);
-const cookieName = '__Host-yunget-community';
+const cookieName = '__Host-' + 'yunget-community';
 const sessionLife = 30 * 86400;
 
 class HttpError extends Error {
@@ -71,17 +73,13 @@ function secureResponse(body, status = 200, extra = {}) {
     'Content-Type': 'application/json; charset=utf-8', 'Cache-Control': 'no-store',
     'X-Content-Type-Options': 'nosniff', 'Referrer-Policy': 'same-origin',
     'Strict-Transport-Security': 'max-age=31536000', 'X-Frame-Options': 'DENY',
-    'Content-Security-Policy': "default-src 'self'; script-src 'self'; style-src 'self'; worker-src 'self'; frame-src 'none'; connect-src 'self'; img-src 'self' data:; object-src 'none'; base-uri 'none'; form-action 'self'; frame-ancestors 'none'",
+    'Content-Security-Policy': "default-src 'self'; script-src 'self'; style-src 'self'; worker-src 'self'; frame-src 'none'; connect-src 'self'; img-src 'self' data: blob:; object-src 'none'; base-uri 'none'; form-action 'self'; frame-ancestors 'none'",
     ...extra,
   });
   return new Response(typeof body === 'string' ? body : JSON.stringify(body), {status, headers});
 }
-async function session(request, env) {
-  const token = request.headers.get('Cookie')?.split(';').map(item => item.trim()).find(item => item.startsWith(`${cookieName}=`))?.slice(cookieName.length + 1);
-  if (!token || !/^[a-f0-9]{64}$/.test(token)) return null;
-  const id = await hash(token);
-  return env.DB.prepare('SELECT id_hash, nickname FROM sessions WHERE id_hash = ? AND expires_at > ?').bind(id, stamp()).first();
-}
+const accounts = createAccounts({fail, text, hash, stamp, secureResponse});
+const session = accounts.session;
 async function rate(request, env, action, limit, seconds) {
   const now = stamp();
   const identifier = await hash(`${new URL(env.PUBLIC_ORIGIN).host}:${request.headers.get('CF-Connecting-IP') || 'unknown'}:${Math.floor(now / 86400)}`);
@@ -99,6 +97,7 @@ function publicFeedback(row, owner) {
   const {author_id, hidden, ...output} = row;
   return {...output, mine: Boolean(owner && author_id === owner.id_hash), private: Boolean(row.private)};
 }
+const social = createSocial({fail, text, readJson, secureResponse, stamp, rate, botCheck, uniqueKey});
 
 export function createHandler({fetchRemote = fetch, verifyAdmin = createAdminVerifier()} = {}) {
   return async function handle(request, env) {
@@ -118,7 +117,7 @@ export function createHandler({fetchRemote = fetch, verifyAdmin = createAdminVer
       }
       const admin = isAdmin ? await verifyAdmin(request, env) : null;
       if (isAdmin && !admin) fail(401, '请先登录开发者账号');
-      if (request.method === 'GET' && ['/', '/admin', '/chat'].includes(path)) return secureResponse(html, 200, {'Content-Type': 'text/html; charset=utf-8'});
+      if (request.method === 'GET' && ['/', '/admin', '/chat', '/notifications', '/feed', '/profile'].includes(path)) return secureResponse(html, 200, {'Content-Type': 'text/html; charset=utf-8'});
       if (request.method === 'GET' && path === '/admin/analytics') return secureResponse(analyticsHtml, 200, {'Content-Type': 'text/html; charset=utf-8'});
       if (request.method === 'GET' && path === '/app.css') return secureResponse(style, 200, {'Content-Type': 'text/css; charset=utf-8', 'Cache-Control': 'public,max-age=300'});
       if (request.method === 'GET' && path === '/app.js') return secureResponse(script, 200, {'Content-Type': 'text/javascript; charset=utf-8', 'Cache-Control': 'public,max-age=300'});
@@ -179,22 +178,25 @@ export function createHandler({fetchRemote = fetch, verifyAdmin = createAdminVer
         return secureResponse(await readAnalytics(env.DB, {days: rawDays, version}));
       }
       const owner = await session(request, env);
-      if (request.method === 'GET' && path === '/api/session') return secureResponse({nickname: owner?.nickname || null});
+      if (request.method === 'GET' && path === '/api/session') return await accounts.who(request, env, owner);
       if (request.method === 'POST' && path === '/api/session') {
         await rate(request, env, 'session', 10, 600);
         const body = await readJson(request);
         await botCheck(request, env, body, fetchRemote);
-        const nickname = text(body.nickname || '访客', 24);
-        if (/(官方|管理员|开发者)/.test(nickname)) fail(422, '请使用个人昵称');
-        if (owner) {
-          await env.DB.prepare('UPDATE sessions SET nickname=? WHERE id_hash=?').bind(nickname, owner.id_hash).run();
-          return secureResponse({nickname});
-        }
-        const token = [...crypto.getRandomValues(new Uint8Array(32))].map(byte => byte.toString(16).padStart(2, '0')).join('');
-        const name = `${nickname}·${token.slice(0, 4)}`;
-        await env.DB.prepare('INSERT INTO sessions(id_hash,nickname,expires_at) VALUES(?,?,?)').bind(await hash(token), name, stamp() + sessionLife).run();
-        return secureResponse({nickname: name}, 201, {'Set-Cookie': `${cookieName}=${token}; Path=/; Max-Age=${sessionLife}; HttpOnly; Secure; SameSite=Lax`});
+        return await accounts.register(env, owner, body.nickname);
       }
+      if (path.startsWith('/api/account/') && request.method === 'POST') {
+        if (path === '/api/account/logout') return await accounts.logout(env, owner);
+        if (!['/api/account/recover', '/api/account/recovery'].includes(path)) fail(404, '接口不存在');
+        await rate(request, env, 'account', 10, 600);
+        const body = await readJson(request);
+        await botCheck(request, env, body);
+        if (path === '/api/account/recover') return await accounts.recover(env, body);
+        if (!owner) fail(401, '请先建立社区身份');
+        return await accounts.newRecovery(env, owner);
+      }
+      const socialResponse = await social.handle(request, env, {owner, admin});
+      if (socialResponse) return socialResponse;
       if (request.method === 'GET' && (path === '/api/feedback' || path === '/admin/api/feedback')) {
         const page = Math.max(0, Math.min(10000, Number(url.searchParams.get('page')) || 0));
         const status = url.searchParams.get('status');

@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import vm from 'node:vm';
 import test from 'node:test';
-import {script} from '../web.mjs';
+import {script, style} from '../web.mjs';
 
 test('the served browser module parses independently of its string wrapper', () => {
   assert.doesNotThrow(() => new vm.Script(script));
@@ -18,4 +18,13 @@ test('untrusted content remains escaped in feedback, chat and announcement links
   assert.ok(!formatted.includes('href="javascript:'));
   assert.ok(!formatted.includes('<script>'));
   assert.match(formatted, /href="https:\/\/example.com\/"/);
+});
+
+test('developer and mobile navigation expose every management destination', () => {
+  assert.match(script, /class="admin-tools"/);
+  assert.match(script, /href="\/admin\/analytics"/);
+  assert.match(script, /href="#feed"/);
+  assert.match(script, /href="#chat"/);
+  assert.match(script, /旧闲聊/);
+  assert.match(style, /\.social-community \.primary-nav button\{[^}]*align-items:center/);
 });

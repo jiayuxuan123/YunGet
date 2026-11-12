@@ -26,6 +26,7 @@ import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.outlined.Bookmarks
+import androidx.compose.material.icons.outlined.Notifications
 import androidx.compose.material3.LargeTopAppBar
 import androidx.compose.material3.TopAppBar
 import androidx.compose.foundation.layout.Spacer
@@ -650,7 +651,9 @@ fun MainScreen(
     // 首次下载引导：锁屏保持下载默认开启，但新用户未加入「忽略电池优化」白名单 →引导一次
     var showAnnouncement by rememberSaveable { mutableStateOf(false) }
     var showCommunity by rememberSaveable { mutableStateOf(false) }
+    var communityFromAnnouncement by rememberSaveable { mutableStateOf(false) }
     var communityUrl by rememberSaveable { mutableStateOf(CommunityApi.BASE_URL) }
+    val communityUnread = com.yunget.app.ui.screens.rememberCommunityUnread(active = !showCommunity)
     var showBatteryGuide by remember { mutableStateOf(false) }
     var batteryGuideShown by remember { mutableStateOf(false) }
     var showAnalyticsDisclosure by rememberSaveable {
@@ -852,7 +855,16 @@ fun MainScreen(
     Box(modifier = Modifier.fillMaxSize()) {
     // 顶部可折叠大标题（竖屏 / 横屏共用）
     val topBarContent: @Composable () -> Unit = {
-        MainAppBar(currentTab, scrollBehavior) { showBookmarks = true }
+        MainAppBar(
+            currentTab, scrollBehavior,
+            onBookmarks = { showBookmarks = true },
+            onNotifications = {
+                communityUrl = CommunityApi.notificationsUrl
+                communityFromAnnouncement = false
+                showCommunity = true
+            },
+            unreadNotifications = communityUnread,
+        )
     }
     // Tab 内容区（竖屏 / 横屏共用）：每个页面独立保存状态，切换 Tab 再切回来不丢失；带 Material3 过渡动画（按 Tab 顺序决定方向）
     val tabContent: @Composable () -> Unit = {
@@ -1182,11 +1194,13 @@ fun MainScreen(
             onBack = { showAnnouncement = false },
             onOpenCommunity = {
                 communityUrl = CommunityApi.BASE_URL
+                communityFromAnnouncement = true
                 showAnnouncement = false
                 showCommunity = true
             },
             onOpenDeveloper = {
                 communityUrl = CommunityApi.developerUrl
+                communityFromAnnouncement = true
                 showAnnouncement = false
                 showCommunity = true
             },
@@ -1203,7 +1217,7 @@ fun MainScreen(
             initialUrl = communityUrl,
             onBack = {
                 showCommunity = false
-                showAnnouncement = true
+                showAnnouncement = communityFromAnnouncement
             },
         )
     }
@@ -1359,15 +1373,29 @@ internal fun MainAppBar(
     tab: MainTab,
     scrollBehavior: androidx.compose.material3.TopAppBarScrollBehavior? = null,
     onBookmarks: () -> Unit = {},
+    onNotifications: () -> Unit = {},
+    unreadNotifications: Int = 0,
 ) {
     val title = if (tab == MainTab.Resolve) "云取" else tab.title
     val actions: @Composable RowScope.() -> Unit = {
         if (tab == MainTab.Resolve) {
-            androidx.compose.material3.FilledTonalIconButton(onClick = onBookmarks) {
+            androidx.compose.material3.IconButton(onClick = onBookmarks) {
                 Icon(Icons.Outlined.Bookmarks, contentDescription = "收藏网盘链接")
             }
-            Spacer(Modifier.size(12.dp))
+            Spacer(Modifier.size(4.dp))
         }
+        androidx.compose.material3.FilledTonalIconButton(onClick = onNotifications) {
+            androidx.compose.material3.BadgedBox(
+                badge = {
+                    if (unreadNotifications > 0) androidx.compose.material3.Badge {
+                        Text(if (unreadNotifications > 99) "99+" else unreadNotifications.toString())
+                    }
+                }
+            ) {
+                Icon(androidx.compose.material.icons.Icons.Outlined.Notifications, contentDescription = "社区通知")
+            }
+        }
+        Spacer(Modifier.size(12.dp))
     }
     if (LocalAppUiStyle.current == AppUiStyle.CLASSIC) {
         LargeTopAppBar(
