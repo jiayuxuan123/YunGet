@@ -54,7 +54,15 @@
 </div>
 </header>
 <main id="main">
-<div class="page-canvas" data-page="changelog"><section class="page-intro"><div class="wrap intro-grid"><h1>更新日志</h1><div class="intro-copy"><p>版本、日期与附件数量来自 GitHub Release 数据；应用内检查更新读取同一来源。</p><div class="page-actions"><a class="button button-primary" href="../download/index.html">下载当前版本<svg class="icon-arrow" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true"><path d="M5 12h14M13 6l6 6-6 6"/></svg></a><a class="button" href="https://github.com/jiayuxuan123/YunGet/releases">GitHub Releases<svg class="icon-arrow" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true"><path d="M5 12h14M13 6l6 6-6 6"/></svg></a></div></div></div></section><section class="section"><div class="wrap"><header class="section-head"><h2>最近发布</h2><p class="section-lead">完整发布说明保留在 GitHub；这里列出便于扫描的版本路线。</p></header><article class="release-row"><div class="release-id"><strong>v2.7.32</strong><span>2026-11-12</span></div><p>本版在 2.7.31 的基础上修复解析请求和匿名统计中的问题，内置 TurboDL 保持 0.5.0.3。
+<div class="page-canvas" data-page="changelog"><section class="page-intro"><div class="wrap intro-grid"><h1>更新日志</h1><div class="intro-copy"><p>版本、日期与附件数量来自 GitHub Release 数据；应用内检查更新读取同一来源。</p><div class="page-actions"><a class="button button-primary" href="../download/index.html">下载当前版本<svg class="icon-arrow" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true"><path d="M5 12h14M13 6l6 6-6 6"/></svg></a><a class="button" href="https://github.com/jiayuxuan123/YunGet/releases">GitHub Releases<svg class="icon-arrow" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true"><path d="M5 12h14M13 6l6 6-6 6"/></svg></a></div></div></div></section><section class="section"><div class="wrap"><header class="section-head"><h2>最近发布</h2><p class="section-lead">完整发布说明保留在 GitHub；这里列出便于扫描的版本路线。</p></header><article class="release-row"><div class="release-id"><strong>v2.7.33</strong><span>2026-11-12</span></div><p>云取 2.7.33
+版本：2.7.33（versionCode 81），内置 TurboDL 0.5.0.4。本版相对 2.7.32 更新社区、通知、启动图标和下载引擎的限流恢复。
+社区与通知
+· 「公告与社区」升级为可直接使用的社区。普通用户设置昵称后获得独立公开 UID，可发布帖子、评论、回复、点赞和参与投票。
+· 帖子最多添加 4 张图片，图片在浏览器内压缩后上传；投票支持 2–6 个选项，每名用户只能投一票，并可在截止前更改。
+· 信息流支持讨论、提问、建议、问题四类内容；长评论按游标分批加载，不会一次拉取全部记录。
+· 社区回复、反馈处理进度和公告会进入通知列表。主界面收藏按钮左移，原位置改为独立通知入口，并显示未读数量。
+· 开发者后台增加手机可用的顶部入口：社区与帖子、匿名统计、旧闲聊和公开社区，不再依赖桌面侧栏。
+· 「我的」页面增加旧闲聊入口，手机端可直接…</p><a href="https://github.com/jiayuxuan123/YunGet/releases/tag/v2.7.33">发布页</a></article><article class="release-row"><div class="release-id"><strong>v2.7.32</strong><span>2026-11-12</span></div><p>本版在 2.7.31 的基础上修复解析请求和匿名统计中的问题，内置 TurboDL 保持 0.5.0.3。
 解析与保存
 · 开始新解析或返回输入页时取消上一轮解析，减少旧请求覆盖新页面的情况。
 · 解析过程中主动取消的请求不再按普通解析失败处理。
@@ -181,10 +189,7 @@ TurboDL 引擎更新
 · 只提交过一次提取码却被拒绝时才提示&quot;提取码错误&quot;；没有提交过提取码则提示&quot;该分享需要提取码，请填写后重试&quot;，不再一律说成提取码错误。
 · 分享文件夹翻页被拒绝或触发限流时，保留已经加载出来的文件，不再把整个列表判为失败（2.7.17 已包含）。
 测试
-新增一条用例，覆盖&quot;分享页是否停在提取码表单&quot;的判定。该判定是解锁流程的入口。</p><a href="https://github.com/jiayuxuan123/YunGet/releases/tag/v2.7.18">发布页</a></article><article class="release-row"><div class="release-id"><strong>v2.7.17</strong><span>2026-10-28</span></div><p>修复
-· 修正网盘分享文件夹的翻页请求。分享页已经解锁后，翻页时再带一次提取码会被判为&quot;密码错误&quot;，现在会先去掉提取码重试。
-· 已经加载出文件列表后，如果后续翻页被拒绝或触发限流，保留已加载的内容，不再把整个列表判为失败并弹出&quot;提取码错误&quot;。
-· 打开分享的第一页就失败时，仍会给出对应原因：提取码错误、请求过于频繁、或解析失败。</p><a href="https://github.com/jiayuxuan123/YunGet/releases/tag/v2.7.17">发布页</a></article></div></section></div></main>
+新增一条用例，覆盖&quot;分享页是否停在提取码表单&quot;的判定。该判定是解锁流程的入口。</p><a href="https://github.com/jiayuxuan123/YunGet/releases/tag/v2.7.18">发布页</a></article></div></section></div></main>
 <footer class="site-footer">
 <div class="wrap footer-station">
 <div class="footer-stop"><span class="footer-node" aria-hidden="true"></span>
@@ -204,7 +209,7 @@ TurboDL 引擎更新
 <nav class="footer-nav" aria-label="页脚导航"><section class="footer-col"><h2>项目</h2><ul><li><a href="https://github.com/jiayuxuan123/YunGet">GitHub</a></li><li><a href="../download/index.html">下载</a></li><li><a href="index.html">更新日志</a></li><li><a href="https://github.com/jiayuxuan123/YunGet/issues">问题反馈</a></li></ul></section><section class="footer-col"><h2>文档</h2><ul><li><a href="../docs/readme/index.html">项目说明</a></li><li><a href="../docs/guide/index.html">使用说明</a></li><li><a href="../docs/faq/index.html">常见问题</a></li><li><a href="../docs/engines/index.html">下载引擎</a></li><li><a href="../docs/build/index.html">从源码构建</a></li></ul></section><section class="footer-col"><h2>插件</h2><ul><li><a href="../plugins/index.html">插件（市场与安装）</a></li><li><a href="../developers/index.html">开发者（怎么写）</a></li><li><a href="../docs/plugin-dev/index.html">写一个插件</a></li><li><a href="../docs/plugin-api/index.html">插件 ABI 参考</a></li><li><a href="../docs/plugin-publish/index.html">打包与发布</a></li><li><a href="../docs/plugin-security/index.html">插件安全模型</a></li></ul></section><section class="footer-col"><h2>协议与说明</h2><ul><li><a href="../legal/license/index.html">AGPL-3.0 原文</a></li><li><a href="../legal/notice/index.html">署名与致谢</a></li><li><a href="../legal/privacy/index.html">隐私说明</a></li><li><a href="../legal/terms/index.html">使用条款</a></li><li><a href="../support/index.html">支持开发</a></li></ul></section><section class="footer-col"><h2>相关</h2><ul><li><a href="https://github.com/CYQawa/YunX">上游 CYQawa/YunX</a></li><li><a href="https://github.com/jiayuxuan123/TurboDL">下载引擎 TurboDL</a></li><li><a href="https://github.com/jiayuxuan123/YunGet-Plugins">插件源 YunGet-Plugins</a></li><li><a href="../community/index.html">社区</a></li></ul></section></nav>
 </div>
 <div class="wrap footer-fine">
-<div class="footer-meta"><p>云取 YunGet v2.7.32 · AGPL-3.0 · 内置 TurboDL 0.5.0.3 · Android 7.0（API 24）</p><p>本项目是 CYQawa/YunX（云析）的二次开发版本，与上游作者无隐性关联。仅供个人学习与技术交流，请勿用于商业用途；下载内容的版权归原作者及相关权利人所有。</p></div>
+<div class="footer-meta"><p>云取 YunGet v2.7.33 · AGPL-3.0 · 内置 TurboDL 0.5.0.4 · Android 7.0（API 24）</p><p>本项目是 CYQawa/YunX（云析）的二次开发版本，与上游作者无隐性关联。仅供个人学习与技术交流，请勿用于商业用途；下载内容的版权归原作者及相关权利人所有。</p></div>
 <div class="footer-bottom">
 <span>云取 YunGet · ANDROID · OPEN SOURCE</span>
 <a href="https://github.com/jiayuxuan123/YunGet">GitHub / Source</a>
