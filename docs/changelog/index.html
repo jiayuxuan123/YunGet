@@ -54,7 +54,16 @@
 </div>
 </header>
 <main id="main">
-<div class="page-canvas" data-page="changelog"><section class="page-intro"><div class="wrap intro-grid"><h1>更新日志</h1><div class="intro-copy"><p>版本、日期与附件数量来自 GitHub Release 数据；应用内检查更新读取同一来源。</p><div class="page-actions"><a class="button button-primary" href="../download/index.html">下载当前版本<svg class="icon-arrow" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true"><path d="M5 12h14M13 6l6 6-6 6"/></svg></a><a class="button" href="https://github.com/jiayuxuan123/YunGet/releases">GitHub Releases<svg class="icon-arrow" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true"><path d="M5 12h14M13 6l6 6-6 6"/></svg></a></div></div></div></section><section class="section"><div class="wrap"><header class="section-head"><h2>最近发布</h2><p class="section-lead">完整发布说明保留在 GitHub；这里列出便于扫描的版本路线。</p></header><article class="release-row"><div class="release-id"><strong>v2.7.33</strong><span>2026-11-12</span></div><p>云取 2.7.33
+<div class="page-canvas" data-page="changelog"><section class="page-intro"><div class="wrap intro-grid"><h1>更新日志</h1><div class="intro-copy"><p>版本、日期与附件数量来自 GitHub Release 数据；应用内检查更新读取同一来源。</p><div class="page-actions"><a class="button button-primary" href="../download/index.html">下载当前版本<svg class="icon-arrow" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true"><path d="M5 12h14M13 6l6 6-6 6"/></svg></a><a class="button" href="https://github.com/jiayuxuan123/YunGet/releases">GitHub Releases<svg class="icon-arrow" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true"><path d="M5 12h14M13 6l6 6-6 6"/></svg></a></div></div></div></section><section class="section"><div class="wrap"><header class="section-head"><h2>最近发布</h2><p class="section-lead">完整发布说明保留在 GitHub；这里列出便于扫描的版本路线。</p></header><article class="release-row"><div class="release-id"><strong>v2.7.34</strong><span>2026-11-12</span></div><p>云取 2.7.34
+版本：2.7.34（versionCode 82），内置 TurboDL 0.5.0.5。本版修复下载失败时诊断信息丢失，并改善社区统计后台对旧事件的显示。
+下载诊断
+· 分片请求一旦开始接收响应，就标记为“传输”阶段；服务器如果在返回首字节前限流，不会再误标成“探测”。
+· TurboDL 会保留最近一次真实 HTTP 错误码。限流失败显示具体的 429 或 503，授权/时效失败显示具体的 401、403 或 410。
+· 应用即使没有完整的请求耗时指标，也会保留可用的 HTTP 状态和失败阶段，不再把整条诊断丢弃。
+· 任务结束时清理状态缓存，避免长期运行时不断累积。
+社区统计后台
+· 新版本失败事件会显示真实 HTTP 状态和传输阶段。
+· 旧版只保存“429/503”或“401/403/410”合并类别时，后台明确显示为“类别”…</p><a href="https://github.com/jiayuxuan123/YunGet/releases/tag/v2.7.34">发布页</a></article><article class="release-row"><div class="release-id"><strong>v2.7.33</strong><span>2026-11-12</span></div><p>云取 2.7.33
 版本：2.7.33（versionCode 81），内置 TurboDL 0.5.0.4。本版相对 2.7.32 更新社区、通知、启动图标和下载引擎的限流恢复。
 社区与通知
 · 「公告与社区」升级为可直接使用的社区。普通用户设置昵称后获得独立公开 UID，可发布帖子、评论、回复、点赞和参与投票。
@@ -183,13 +192,7 @@ TurboDL 引擎更新
 · 连接失效后的等待时间没有按上一版说明生效：应用侧的默认值仍是 60 秒，覆盖了引擎改成 30 秒的新默认值。现在应用默认值与引擎一致。
 · 这一组默认值原来在设置项、设置页&quot;恢复默认&quot;、以及测试里各写了一份，改引擎时三处不会一起动。现在只有一处来源，测试直接与引擎默认值比对，下次再漂移会立刻被测出来。
 说明
-· 已手动改过&quot;读超时&quot;的用户仍保留自己的设置，不受影响。</p><a href="https://github.com/jiayuxuan123/YunGet/releases/tag/v2.7.19">发布页</a></article><article class="release-row"><div class="release-id"><strong>v2.7.18</strong><span>2026-10-29</span></div><p>修复
-· 个人网盘下载文件和文件夹时，取链接前漏掉了一步&quot;提交提取码&quot;，服务端因此返回&quot;请输入密码&quot;，界面上却显示成&quot;提取码错误&quot;——而用户根本没有输入过提取码。现在会按浏览器的方式先提交提取码再取链接。
-· 分享链接里自带提取码时（链接末尾带 pwd 参数），现在会识别出来。此前这一步被丢掉，只能按&quot;无提取码&quot;流程取链接，必然失败。
-· 只提交过一次提取码却被拒绝时才提示&quot;提取码错误&quot;；没有提交过提取码则提示&quot;该分享需要提取码，请填写后重试&quot;，不再一律说成提取码错误。
-· 分享文件夹翻页被拒绝或触发限流时，保留已经加载出来的文件，不再把整个列表判为失败（2.7.17 已包含）。
-测试
-新增一条用例，覆盖&quot;分享页是否停在提取码表单&quot;的判定。该判定是解锁流程的入口。</p><a href="https://github.com/jiayuxuan123/YunGet/releases/tag/v2.7.18">发布页</a></article></div></section></div></main>
+· 已手动改过&quot;读超时&quot;的用户仍保留自己的设置，不受影响。</p><a href="https://github.com/jiayuxuan123/YunGet/releases/tag/v2.7.19">发布页</a></article></div></section></div></main>
 <footer class="site-footer">
 <div class="wrap footer-station">
 <div class="footer-stop"><span class="footer-node" aria-hidden="true"></span>
@@ -209,7 +212,7 @@ TurboDL 引擎更新
 <nav class="footer-nav" aria-label="页脚导航"><section class="footer-col"><h2>项目</h2><ul><li><a href="https://github.com/jiayuxuan123/YunGet">GitHub</a></li><li><a href="../download/index.html">下载</a></li><li><a href="index.html">更新日志</a></li><li><a href="https://github.com/jiayuxuan123/YunGet/issues">问题反馈</a></li></ul></section><section class="footer-col"><h2>文档</h2><ul><li><a href="../docs/readme/index.html">项目说明</a></li><li><a href="../docs/guide/index.html">使用说明</a></li><li><a href="../docs/faq/index.html">常见问题</a></li><li><a href="../docs/engines/index.html">下载引擎</a></li><li><a href="../docs/build/index.html">从源码构建</a></li></ul></section><section class="footer-col"><h2>插件</h2><ul><li><a href="../plugins/index.html">插件（市场与安装）</a></li><li><a href="../developers/index.html">开发者（怎么写）</a></li><li><a href="../docs/plugin-dev/index.html">写一个插件</a></li><li><a href="../docs/plugin-api/index.html">插件 ABI 参考</a></li><li><a href="../docs/plugin-publish/index.html">打包与发布</a></li><li><a href="../docs/plugin-security/index.html">插件安全模型</a></li></ul></section><section class="footer-col"><h2>协议与说明</h2><ul><li><a href="../legal/license/index.html">AGPL-3.0 原文</a></li><li><a href="../legal/notice/index.html">署名与致谢</a></li><li><a href="../legal/privacy/index.html">隐私说明</a></li><li><a href="../legal/terms/index.html">使用条款</a></li><li><a href="../support/index.html">支持开发</a></li></ul></section><section class="footer-col"><h2>相关</h2><ul><li><a href="https://github.com/CYQawa/YunX">上游 CYQawa/YunX</a></li><li><a href="https://github.com/jiayuxuan123/TurboDL">下载引擎 TurboDL</a></li><li><a href="https://github.com/jiayuxuan123/YunGet-Plugins">插件源 YunGet-Plugins</a></li><li><a href="../community/index.html">社区</a></li></ul></section></nav>
 </div>
 <div class="wrap footer-fine">
-<div class="footer-meta"><p>云取 YunGet v2.7.33 · AGPL-3.0 · 内置 TurboDL 0.5.0.4 · Android 7.0（API 24）</p><p>本项目是 CYQawa/YunX（云析）的二次开发版本，与上游作者无隐性关联。仅供个人学习与技术交流，请勿用于商业用途；下载内容的版权归原作者及相关权利人所有。</p></div>
+<div class="footer-meta"><p>云取 YunGet v2.7.34 · AGPL-3.0 · 内置 TurboDL 0.5.0.5 · Android 7.0（API 24）</p><p>本项目是 CYQawa/YunX（云析）的二次开发版本，与上游作者无隐性关联。仅供个人学习与技术交流，请勿用于商业用途；下载内容的版权归原作者及相关权利人所有。</p></div>
 <div class="footer-bottom">
 <span>云取 YunGet · ANDROID · OPEN SOURCE</span>
 <a href="https://github.com/jiayuxuan123/YunGet">GitHub / Source</a>
