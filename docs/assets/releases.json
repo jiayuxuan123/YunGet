@@ -1,58 +1,110 @@
 {
   "repo": "jiayuxuan123/YunGet",
   "latest": {
-    "tag": "v2.7.31",
-    "name": "YunGet 2.7.31",
-    "published": "2026-11-11T15:51:28Z",
+    "tag": "v2.7.32",
+    "name": "云取 2.7.32：内核管理与解析、统计修复",
+    "published": "2026-11-12T04:49:34Z",
     "prerelease": false,
-    "url": "https://github.com/jiayuxuan123/YunGet/releases/tag/v2.7.31",
-    "summary": "云取 2.7.31\n版本：`2.7.31`（`versionCode 79`），内置 TurboDL `0.5.0.3`。本版增加下载完成提示、左右滑动切换列表、扫码解析和可关闭的匿名使用统计。\n下载列表\n· 完成后按文件类型显示明确提示：APK 显示“下载完成，可以安装”，视频显示“可以预览”，普通文件显示“可以打开”。\n· 已完成任务如果没有本地文件，会显示“本地文件已不存在”，不再提供无效的打开或安装操作。\n· 下载页支持左右滑动切换“下载”和“已完成”，顶部标签同步当前页面；两页分别保留滚动位置。\n· 右侧、详情、删除、批量暂停/开始和文件夹展开等现有入口保持不变。\n扫码解析\n· 新版和经典解析页都增加“扫码”入口。\n· 扫描结果只填入解析框，确认后仍由原有分享链接、直链和视频解析流程处理。\n· 相机画面只在设备本机解码，不上传；权限被拒绝时可再次授权或打开系统设置。\n匿名使用统计…",
+    "url": "https://github.com/jiayuxuan123/YunGet/releases/tag/v2.7.32",
+    "summary": "本版在 2.7.31 的基础上修复解析请求和匿名统计中的问题，内置 TurboDL 保持 0.5.0.3。\r\n解析与保存\r\n· 开始新解析或返回输入页时取消上一轮解析，减少旧请求覆盖新页面的情况。\r\n· 解析过程中主动取消的请求不再按普通解析失败处理。\r\n· 保存文件时区分存储权限失效和空间不足，分别提示重新选择目录或释放空间；有效缓存继续保留，可重试保存。\r\n可选内核管理\r\n· 下载引擎页增加 aria2 快捷卸载与安装包清理，卸载需要在系统界面确认。\r\n· Gopeed 移除内核时一并清理临时安装包；下载任务、断点和个人文件保留。\r\n· 相关任务仍在下载或等待执行、内核仍在安装时会阻止移除。可选内核可在之后重新下载安装。\r\n匿名统计修复\r\n· 修复不足一批的事件可能长时间未发送的问题；剩余事件会继续发送。\r\n· 修复发送前删除本地记录导致断网或进程退出时丢失事件的问题，改为收到服务端确…",
     "assets": [
       {
-        "name": "0-YunGet-2.7.31-universal.apk",
-        "size": 29849389,
-        "url": "https://github.com/jiayuxuan123/YunGet/releases/download/v2.7.31/0-YunGet-2.7.31-universal.apk",
+        "name": "0-YunGet-2.7.32-universal.apk",
+        "size": 29869148,
+        "url": "https://github.com/jiayuxuan123/YunGet/releases/download/v2.7.32/0-YunGet-2.7.32-universal.apk",
         "downloads": 0,
-        "sha256": "c2dfb1355c9c07b087dfb7e5957c38c2058c3494c4e5d43fa756b4f26aa4a056"
+        "sha256": "900be83a0f1cd868fae0ad1c7bf1602dca5a603d2e4912d991625cc5f8985962"
       },
       {
         "name": "SHA256SUMS.txt",
         "size": 482,
-        "url": "https://github.com/jiayuxuan123/YunGet/releases/download/v2.7.31/SHA256SUMS.txt",
+        "url": "https://github.com/jiayuxuan123/YunGet/releases/download/v2.7.32/SHA256SUMS.txt",
         "downloads": 0,
-        "sha256": "89e473d8b84a109a0782a007f4c8a3ec20fd6644d71a2f9fc2e2c065f1bb66ea"
+        "sha256": "ad2359b7ae30a5005a183d4cc3bb44030f75127f31a282081d3ea23666d0c495"
       },
       {
-        "name": "YunGet-2.7.31-arm64-v8a.apk",
-        "size": 28534991,
-        "url": "https://github.com/jiayuxuan123/YunGet/releases/download/v2.7.31/YunGet-2.7.31-arm64-v8a.apk",
+        "name": "YunGet-2.7.32-arm64-v8a.apk",
+        "size": 28554761,
+        "url": "https://github.com/jiayuxuan123/YunGet/releases/download/v2.7.32/YunGet-2.7.32-arm64-v8a.apk",
         "downloads": 0,
-        "sha256": "ae78e6cea64698287890af979bfd30a311604f78f4a85d3b68752bff27d19697"
+        "sha256": "d169b164fd792222304534ed9ae06cca0b3dcd328f00a078d6531d5f7862a1ca"
       },
       {
-        "name": "YunGet-2.7.31-armeabi-v7a.apk",
-        "size": 28501957,
-        "url": "https://github.com/jiayuxuan123/YunGet/releases/download/v2.7.31/YunGet-2.7.31-armeabi-v7a.apk",
+        "name": "YunGet-2.7.32-armeabi-v7a.apk",
+        "size": 28521714,
+        "url": "https://github.com/jiayuxuan123/YunGet/releases/download/v2.7.32/YunGet-2.7.32-armeabi-v7a.apk",
         "downloads": 0,
-        "sha256": "1374f7711c3fc6bd38bc1c6ba7a28dd3ad4009358420246f084cb201e0099bdc"
+        "sha256": "53bcca4443f8924d49652438427407cda8d482d94faa1eaeb35a94e0e955112d"
       },
       {
-        "name": "YunGet-2.7.31-x86_64.apk",
-        "size": 28548012,
-        "url": "https://github.com/jiayuxuan123/YunGet/releases/download/v2.7.31/YunGet-2.7.31-x86_64.apk",
+        "name": "YunGet-2.7.32-x86_64.apk",
+        "size": 28567776,
+        "url": "https://github.com/jiayuxuan123/YunGet/releases/download/v2.7.32/YunGet-2.7.32-x86_64.apk",
         "downloads": 0,
-        "sha256": "574ce28dd43a735da0843fea2432e75946553dcc3eca23032f92330faf34fbe6"
+        "sha256": "190a20dc74c322181588e18d8604f7adf06fee123e3788cbb08ab10c485b15e2"
       },
       {
         "name": "YunGet-aria2-kernel-arm64-v8a.apk",
         "size": 8136975,
-        "url": "https://github.com/jiayuxuan123/YunGet/releases/download/v2.7.31/YunGet-aria2-kernel-arm64-v8a.apk",
+        "url": "https://github.com/jiayuxuan123/YunGet/releases/download/v2.7.32/YunGet-aria2-kernel-arm64-v8a.apk",
         "downloads": 0,
         "sha256": "7e67c1aa1b251d395abca50f772cc9a859f8787fe0ca59eb17422bd3f2495f26"
       }
     ]
   },
   "releases": [
+    {
+      "tag": "v2.7.32",
+      "name": "云取 2.7.32：内核管理与解析、统计修复",
+      "published": "2026-11-12T04:49:34Z",
+      "prerelease": false,
+      "url": "https://github.com/jiayuxuan123/YunGet/releases/tag/v2.7.32",
+      "summary": "本版在 2.7.31 的基础上修复解析请求和匿名统计中的问题，内置 TurboDL 保持 0.5.0.3。\r\n解析与保存\r\n· 开始新解析或返回输入页时取消上一轮解析，减少旧请求覆盖新页面的情况。\r\n· 解析过程中主动取消的请求不再按普通解析失败处理。\r\n· 保存文件时区分存储权限失效和空间不足，分别提示重新选择目录或释放空间；有效缓存继续保留，可重试保存。\r\n可选内核管理\r\n· 下载引擎页增加 aria2 快捷卸载与安装包清理，卸载需要在系统界面确认。\r\n· Gopeed 移除内核时一并清理临时安装包；下载任务、断点和个人文件保留。\r\n· 相关任务仍在下载或等待执行、内核仍在安装时会阻止移除。可选内核可在之后重新下载安装。\r\n匿名统计修复\r\n· 修复不足一批的事件可能长时间未发送的问题；剩余事件会继续发送。\r\n· 修复发送前删除本地记录导致断网或进程退出时丢失事件的问题，改为收到服务端确…",
+      "assets": [
+        {
+          "name": "0-YunGet-2.7.32-universal.apk",
+          "size": 29869148,
+          "url": "https://github.com/jiayuxuan123/YunGet/releases/download/v2.7.32/0-YunGet-2.7.32-universal.apk",
+          "downloads": 0,
+          "sha256": "900be83a0f1cd868fae0ad1c7bf1602dca5a603d2e4912d991625cc5f8985962"
+        },
+        {
+          "name": "SHA256SUMS.txt",
+          "size": 482,
+          "url": "https://github.com/jiayuxuan123/YunGet/releases/download/v2.7.32/SHA256SUMS.txt",
+          "downloads": 0,
+          "sha256": "ad2359b7ae30a5005a183d4cc3bb44030f75127f31a282081d3ea23666d0c495"
+        },
+        {
+          "name": "YunGet-2.7.32-arm64-v8a.apk",
+          "size": 28554761,
+          "url": "https://github.com/jiayuxuan123/YunGet/releases/download/v2.7.32/YunGet-2.7.32-arm64-v8a.apk",
+          "downloads": 0,
+          "sha256": "d169b164fd792222304534ed9ae06cca0b3dcd328f00a078d6531d5f7862a1ca"
+        },
+        {
+          "name": "YunGet-2.7.32-armeabi-v7a.apk",
+          "size": 28521714,
+          "url": "https://github.com/jiayuxuan123/YunGet/releases/download/v2.7.32/YunGet-2.7.32-armeabi-v7a.apk",
+          "downloads": 0,
+          "sha256": "53bcca4443f8924d49652438427407cda8d482d94faa1eaeb35a94e0e955112d"
+        },
+        {
+          "name": "YunGet-2.7.32-x86_64.apk",
+          "size": 28567776,
+          "url": "https://github.com/jiayuxuan123/YunGet/releases/download/v2.7.32/YunGet-2.7.32-x86_64.apk",
+          "downloads": 0,
+          "sha256": "190a20dc74c322181588e18d8604f7adf06fee123e3788cbb08ab10c485b15e2"
+        },
+        {
+          "name": "YunGet-aria2-kernel-arm64-v8a.apk",
+          "size": 8136975,
+          "url": "https://github.com/jiayuxuan123/YunGet/releases/download/v2.7.32/YunGet-aria2-kernel-arm64-v8a.apk",
+          "downloads": 0,
+          "sha256": "7e67c1aa1b251d395abca50f772cc9a859f8787fe0ca59eb17422bd3f2495f26"
+        }
+      ]
+    },
     {
       "tag": "v2.7.31",
       "name": "YunGet 2.7.31",
@@ -65,42 +117,42 @@
           "name": "0-YunGet-2.7.31-universal.apk",
           "size": 29849389,
           "url": "https://github.com/jiayuxuan123/YunGet/releases/download/v2.7.31/0-YunGet-2.7.31-universal.apk",
-          "downloads": 0,
+          "downloads": 183,
           "sha256": "c2dfb1355c9c07b087dfb7e5957c38c2058c3494c4e5d43fa756b4f26aa4a056"
         },
         {
           "name": "SHA256SUMS.txt",
           "size": 482,
           "url": "https://github.com/jiayuxuan123/YunGet/releases/download/v2.7.31/SHA256SUMS.txt",
-          "downloads": 0,
+          "downloads": 2,
           "sha256": "89e473d8b84a109a0782a007f4c8a3ec20fd6644d71a2f9fc2e2c065f1bb66ea"
         },
         {
           "name": "YunGet-2.7.31-arm64-v8a.apk",
           "size": 28534991,
           "url": "https://github.com/jiayuxuan123/YunGet/releases/download/v2.7.31/YunGet-2.7.31-arm64-v8a.apk",
-          "downloads": 0,
+          "downloads": 745,
           "sha256": "ae78e6cea64698287890af979bfd30a311604f78f4a85d3b68752bff27d19697"
         },
         {
           "name": "YunGet-2.7.31-armeabi-v7a.apk",
           "size": 28501957,
           "url": "https://github.com/jiayuxuan123/YunGet/releases/download/v2.7.31/YunGet-2.7.31-armeabi-v7a.apk",
-          "downloads": 0,
+          "downloads": 5,
           "sha256": "1374f7711c3fc6bd38bc1c6ba7a28dd3ad4009358420246f084cb201e0099bdc"
         },
         {
           "name": "YunGet-2.7.31-x86_64.apk",
           "size": 28548012,
           "url": "https://github.com/jiayuxuan123/YunGet/releases/download/v2.7.31/YunGet-2.7.31-x86_64.apk",
-          "downloads": 0,
+          "downloads": 10,
           "sha256": "574ce28dd43a735da0843fea2432e75946553dcc3eca23032f92330faf34fbe6"
         },
         {
           "name": "YunGet-aria2-kernel-arm64-v8a.apk",
           "size": 8136975,
           "url": "https://github.com/jiayuxuan123/YunGet/releases/download/v2.7.31/YunGet-aria2-kernel-arm64-v8a.apk",
-          "downloads": 0,
+          "downloads": 13,
           "sha256": "7e67c1aa1b251d395abca50f772cc9a859f8787fe0ca59eb17422bd3f2495f26"
         }
       ]
@@ -117,7 +169,7 @@
           "name": "0-YunGet-2.7.30-universal.apk",
           "size": 27763716,
           "url": "https://github.com/jiayuxuan123/YunGet/releases/download/v2.7.30/0-YunGet-2.7.30-universal.apk",
-          "downloads": 47,
+          "downloads": 58,
           "sha256": "e79a534926206325ea8c5620545721446900138d385a264d372a4d9db55c64bd"
         },
         {
@@ -131,7 +183,7 @@
           "name": "YunGet-2.7.30-arm64-v8a.apk",
           "size": 26512008,
           "url": "https://github.com/jiayuxuan123/YunGet/releases/download/v2.7.30/YunGet-2.7.30-arm64-v8a.apk",
-          "downloads": 159,
+          "downloads": 165,
           "sha256": "3f6610b0c093809a5398d94aad11755719fd2090e2d25f00f714d42368c9f4ca"
         },
         {
@@ -152,7 +204,7 @@
           "name": "YunGet-aria2-kernel-arm64-v8a.apk",
           "size": 8136975,
           "url": "https://github.com/jiayuxuan123/YunGet/releases/download/v2.7.30/YunGet-aria2-kernel-arm64-v8a.apk",
-          "downloads": 3,
+          "downloads": 6,
           "sha256": "6bc913d7aff2577e054546c524942c2c9995399fe14bd55b83c3235936f28bce"
         }
       ]
@@ -169,7 +221,7 @@
           "name": "0-YunGet-2.7.29-universal.apk",
           "size": 27705564,
           "url": "https://github.com/jiayuxuan123/YunGet/releases/download/v2.7.29/0-YunGet-2.7.29-universal.apk",
-          "downloads": 524,
+          "downloads": 525,
           "sha256": "a921eb47054820acc30ae99cf457fd33d324be6f72dc4789a28d972a5314abb6"
         },
         {
@@ -183,7 +235,7 @@
           "name": "YunGet-2.7.29-arm64-v8a.apk",
           "size": 26453858,
           "url": "https://github.com/jiayuxuan123/YunGet/releases/download/v2.7.29/YunGet-2.7.29-arm64-v8a.apk",
-          "downloads": 1299,
+          "downloads": 1302,
           "sha256": "0b6f3e8de08108b0dbab72a2ecda41c94157613f0751c400767ff9704ab50fe0"
         },
         {
@@ -221,7 +273,7 @@
           "name": "0-YunGet-2.7.28-universal.apk",
           "size": 27703829,
           "url": "https://github.com/jiayuxuan123/YunGet/releases/download/v2.7.28/0-YunGet-2.7.28-universal.apk",
-          "downloads": 861,
+          "downloads": 862,
           "sha256": "c942fc420e81f10226c85fd51764c9d0bdea38d5372d8b2ced7ab270f1db96b5"
         },
         {
@@ -235,7 +287,7 @@
           "name": "YunGet-2.7.28-arm64-v8a.apk",
           "size": 26452114,
           "url": "https://github.com/jiayuxuan123/YunGet/releases/download/v2.7.28/YunGet-2.7.28-arm64-v8a.apk",
-          "downloads": 1519,
+          "downloads": 1521,
           "sha256": "39089b5c8d3edadc7cbd9cc6783e745f9bfed4a35e94b9533a7951230a168851"
         },
         {
@@ -377,7 +429,7 @@
           "name": "0-YunGet-2.7.25-universal.apk",
           "size": 28007327,
           "url": "https://github.com/jiayuxuan123/YunGet/releases/download/v2.7.25/0-YunGet-2.7.25-universal.apk",
-          "downloads": 2701,
+          "downloads": 2702,
           "sha256": "46c9e3bfc536f6159d33fe73bfafe0c64f9919f64cf8e8a5c27c80e2587d77a9"
         },
         {
@@ -450,7 +502,7 @@
           "name": "app-x86_64-release.apk",
           "size": 23805953,
           "url": "https://github.com/jiayuxuan123/YunGet/releases/download/v2.7.24/app-x86_64-release.apk",
-          "downloads": 6,
+          "downloads": 7,
           "sha256": "77c03c6b83d080f2809403e995a7d89cc12b86ce3aaf3f66ec33678d3f31981b"
         },
         {
@@ -474,14 +526,14 @@
           "name": "0-universal-release.apk",
           "size": 33140146,
           "url": "https://github.com/jiayuxuan123/YunGet/releases/download/v2.7.23/0-universal-release.apk",
-          "downloads": 3204,
+          "downloads": 3205,
           "sha256": "c06f3341eae4a3beb58e1aeac77cb45db06e33fbfc1d9f7ec2c0092af4bbb104"
         },
         {
           "name": "app-arm64-v8a-release.apk",
           "size": 31888418,
           "url": "https://github.com/jiayuxuan123/YunGet/releases/download/v2.7.23/app-arm64-v8a-release.apk",
-          "downloads": 163,
+          "downloads": 165,
           "sha256": "a867b82936909befdfaa078c73c0c5d8382292d81197f4c0e942740f83dd5782"
         },
         {
@@ -638,7 +690,7 @@
           "name": "YunGet-2.7.14-release.apk",
           "size": 33111457,
           "url": "https://github.com/jiayuxuan123/YunGet/releases/download/v2.7.14/YunGet-2.7.14-release.apk",
-          "downloads": 2777,
+          "downloads": 2778,
           "sha256": "63cb5594aa36d40c845e82bd812fa35eecef205cb370c197f6a0c57884bedb3f"
         }
       ]
@@ -672,7 +724,7 @@
           "name": "YunGet-2.7.12-release.apk",
           "size": 32843196,
           "url": "https://github.com/jiayuxuan123/YunGet/releases/download/v2.7.12/YunGet-2.7.12-release.apk",
-          "downloads": 5116,
+          "downloads": 5117,
           "sha256": "3291ae7baf0b373978c4dc849c106baf33d424a1585f37d4c5c424c76beb8ed2"
         }
       ]
@@ -827,23 +879,6 @@
           "url": "https://github.com/jiayuxuan123/YunGet/releases/download/v2.7.3/YunGet-2.7.3-release.apk",
           "downloads": 466,
           "sha256": "2affb2e8958b8b147606aacd7c77815d238133c9e820e5110c41aebff8475767"
-        }
-      ]
-    },
-    {
-      "tag": "v2.7.2",
-      "name": "YunGet 2.7.2：修 OOM（下载时内存用满导致的崩溃）",
-      "published": "2026-10-10T04:29:33Z",
-      "prerelease": false,
-      "url": "https://github.com/jiayuxuan123/YunGet/releases/tag/v2.7.2",
-      "summary": "YunGet 2.7.2：修 OOM（下载时内存用满导致的崩溃）\n问题\n崩溃日志：\n两处容易看错的地方：\n**一是崩在了 Okio Watchdog 线程上。** 那只是\"受害者\"——它只是想在 socket 超时时关掉连接，\n结果连 64 字节都分配不出来。真正的原因在别处。\n**二是 268435456 这个数字。** 它是 256MiB，正好等于 Android 给这个应用的堆上限，\n也正好等于 256 × 1MB。这不是巧合。\n根因\n引擎每个在飞连接分配一个读缓冲，缓冲大小是固定的 **1MB**。这个数看着不大，乘上连接数就大了——\n而我在 2.6.22 那一版（提交 71d402e）把线程上限从 128 提到了**引擎支持的 256**：\n缓冲都是**活对象**（正被下载协程引用），GC 一个都回收不掉，所以是\"占满\"而不是\"垃圾太多\"。\n触发条件很普通：**线程数调到高 +…",
-      "assets": [
-        {
-          "name": "YunGet-2.7.2-release.apk",
-          "size": 31588032,
-          "url": "https://github.com/jiayuxuan123/YunGet/releases/download/v2.7.2/YunGet-2.7.2-release.apk",
-          "downloads": 531,
-          "sha256": "38681a358c8ca14f2c661a072a3382cd8ab26e8c89ceda23f03bf863fe5933d7"
         }
       ]
     }
