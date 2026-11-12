@@ -21,7 +21,6 @@ package com.yunget.app.ui.viewmodel
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateListOf
 import androidx.compose.runtime.mutableStateOf
-import androidx.compose.runtime.snapshotFlow
 import androidx.compose.runtime.setValue
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.ViewModelProvider
@@ -92,8 +91,8 @@ import com.yunget.app.ui.preview.PreviewKind
 import com.yunget.app.ui.preview.PreviewLauncher
 import com.yunget.app.ui.preview.PreviewMedia
 import com.yunget.app.ui.preview.PreviewTypes
+import kotlinx.coroutines.ensureActive
 import kotlinx.coroutines.coroutineScope
-import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.sync.Semaphore
 import kotlinx.coroutines.sync.withPermit
@@ -206,62 +205,23 @@ class ResolveViewModel(
     private val videoParseRepository: VideoParseRepository? = VideoParseRepository()
 ) : ViewModel() {
 
-    var uiState by mutableStateOf<ResolveUiState>(ResolveUiState.Idle)
-        private set
-    private var telemetryAttemptActive = false
-    private var telemetryKind = "unknown"
-
-    init {
-        viewModelScope.launch {
-            snapshotFlow { uiState }.distinctUntilChanged().collect { state ->
-                if (!telemetryAttemptActive) return@collect
-                when (state) {
-                    is ResolveUiState.Detail -> {
-                        telemetryAttemptActive = false
-                        com.yunget.app.data.analytics.AnonymousAnalytics.track(
-                            "resolve_success",
-                            mapOf(
-                                "kind" to telemetryKind,
-                                "source" to currentPlatform.name.lowercase(),
-                                "is_guest" to isGuest,
-                            ),
-                        )
-                    }
-                    is ResolveUiState.Video -> {
-                        telemetryAttemptActive = false
-                        com.yunget.app.data.analytics.AnonymousAnalytics.track(
-                            "resolve_success",
-                            mapOf(
-                                "kind" to telemetryKind,
-                                "source" to state.result.platform.name.lowercase(),
-                                "is_guest" to true,
-                            ),
-                        )
-                    }
-                    is ResolveUiState.Error -> {
-                        telemetryAttemptActive = false
-                        com.yunget.app.data.analytics.AnonymousAnalytics.track(
-                            "resolve_fail",
-                            mapOf(
-                                "kind" to telemetryKind,
-                                "error" to com.yunget.app.data.analytics.analyticsErrorCategory(state.message),
-                            ),
-                        )
-                    }
-                    is ResolveUiState.Idle -> {
-                        if (telemetryKind == "direct") {
-                            telemetryAttemptActive = false
-                            com.yunget.app.data.analytics.AnonymousAnalytics.track(
-                                "resolve_success",
-                                mapOf("kind" to "direct", "is_guest" to true),
-                            )
-                        }
-                    }
-                    else -> Unit
-                }
+    private val resolveTelemetry = com.yunget.app.data.analytics.ResolveTelemetryTracker { name, properties ->
+        com.yunget.app.data.analytics.AnonymousAnalytics.track(name, properties)
+    }
+    private var resolveJob: kotlinx.coroutines.Job? = null
+    private var resolveState by mutableStateOf<ResolveUiState>(ResolveUiState.Idle)
+    var uiState: ResolveUiState
+        get() = resolveState
+        private set(value) {
+            resolveState = value
+            when (value) {
+                is ResolveUiState.Detail -> resolveTelemetry.finish(true, sourceOverride = currentPlatform.name.lowercase())
+                is ResolveUiState.Video -> resolveTelemetry.finish(true, sourceOverride = value.result.platform.name.lowercase())
+                is ResolveUiState.Error -> resolveTelemetry.finish(false, value.message)
+                is ResolveUiState.Idle -> resolveTelemetry.inputReady()
+                else -> Unit
             }
         }
-    }
 
     /**
      * 游客模式：本次解析没有携带任何登录凭据（列目录可用，下载/转存需登录）。
@@ -1315,7 +1275,10 @@ class ResolveViewModel(
     /** 开始解析：链接 → token →（密码）→ 根目录列表 */
     private suspend fun resolveNonPanLink(link: String) {
         val byPlugin = runCatching { downloadManager.parseByPlugins(link) }
-            .onFailure { android.util.Log.w("YunGet", "插件解析失败（回退内置）：${it.message}") }
+            .onFailure {
+                if (it is kotlinx.coroutines.CancellationException) throw it
+                android.util.Log.w("YunGet", "插件解析失败（回退内置）：${it.message}")
+            }
             .getOrNull()
         if (byPlugin != null && byPlugin.medias.isNotEmpty()) {
             uiState = ResolveUiState.Video(byPlugin.toVideoParseResult())
@@ -1330,8 +1293,8 @@ class ResolveViewModel(
 
         val direct = extractDirectUrl(link)
         if (direct != null) {
-            uiState = ResolveUiState.Idle
             enqueueDirectDownload(direct)
+            uiState = ResolveUiState.Idle
             return
         }
         uiState = ResolveUiState.Error("无法识别分享链接")
@@ -1355,6 +1318,8 @@ class ResolveViewModel(
             uiState = ResolveUiState.Video(result)
         } catch (e: com.yunget.app.data.network.video.VideoParseException) {
             uiState = ResolveUiState.Error(e.userMessage())
+        } catch (e: kotlinx.coroutines.CancellationException) {
+            throw e
         } catch (e: Throwable) {
             uiState = ResolveUiState.Error(e.message ?: "解析失败")
         }
@@ -1418,25 +1383,35 @@ class ResolveViewModel(
         isFetchingDownloadLink = false
     }
 
+    private fun launchResolve(block: suspend kotlinx.coroutines.CoroutineScope.() -> Unit): kotlinx.coroutines.Job =
+        viewModelScope.launch {
+            try { block() }
+            catch (cancelled: kotlinx.coroutines.CancellationException) { throw cancelled }
+            catch (error: Exception) {
+                kotlin.coroutines.coroutineContext.ensureActive()
+                uiState = ResolveUiState.Error(error.message ?: "解析失败，请稍后重试")
+            }
+        }
+
     fun startResolve(link: String, pwd: String?) {
-        telemetryAttemptActive = true
-        telemetryKind = when {
-            ShareLinkParser.parse(link) != null -> "share"
-            GitHubLinkParser.parse(link) != null -> "github"
-            C139KoulingParser.parse(link) != null ||
-                XunleiKouling.looksLikeKouling(link) ||
-                StarSeaApi.looksLikeCommand(link) -> "command"
-            VideoLinkParser.parse(link) != null -> "video"
+        resolveJob?.cancel()
+        val share = ShareLinkParser.parse(link)
+        val video = VideoLinkParser.parse(link)
+        val githubLink = GitHubLinkParser.parse(link)
+        val kind = when {
+            share != null -> "share"
+            githubLink != null -> "github"
+            C139KoulingParser.parse(link) != null || XunleiKouling.looksLikeKouling(link) || StarSeaApi.looksLikeCommand(link) -> "command"
+            video != null -> "video"
             extractDirectUrl(link) != null -> "direct"
             else -> "unknown"
         }
-        com.yunget.app.data.analytics.AnonymousAnalytics.track(
-            "resolve_start",
-            mapOf("kind" to telemetryKind),
-        )
+        val source = share?.platform?.name?.lowercase() ?: video?.platform?.name?.lowercase()
+            ?: if (githubLink != null) "github" else if (kind == "direct") "direct" else "unknown"
+        resolveTelemetry.begin(kind, source)
         if (ShareLinkParser.parse(link) == null && C139KoulingParser.parse(link) == null &&
             GitHubLinkParser.parse(link) == null && (VideoLinkParser.parse(link) != null || extractDirectUrl(link) != null)) {
-            viewModelScope.launch { uiState = ResolveUiState.Loading; resolveNonPanLink(link) }
+            resolveJob = launchResolve { uiState = ResolveUiState.Loading; resolveNonPanLink(link) }
             return
         }
 
@@ -1450,7 +1425,7 @@ class ResolveViewModel(
             startGitHubResolve(github)
             return
         }
-        viewModelScope.launch {
+        resolveJob = launchResolve {
             uiState = ResolveUiState.Loading
             // 口令兜底（既不是分享链接、也不是 GitHub 链接）：
             // ① 139 云盘口令：先换成官方分享链接，后续完全复用普通 139 分享链路；
@@ -1491,7 +1466,7 @@ class ResolveViewModel(
             if (parsed == null) {
                 // 口令服务给不出结果时，把最近一次服务的具体原因带出去，而不是只报“无法识别”。
                 uiState = ResolveUiState.Error(commandError ?: "无法识别分享链接")
-                return@launch
+                return@launchResolve
             }
             // 口令已换成真实分享链接：收藏 / 复制 / 重新解析都用它，而不是原始口令
             currentLink = effectiveLink
@@ -1505,6 +1480,7 @@ class ResolveViewModel(
             val repo = currentRepo()
             repo.createSession(effectiveLink, effectivePwd, credential)
                 .onSuccess { s ->
+                    kotlin.coroutines.coroutineContext.ensureActive()
                     session = s
                     currentDirFid = currentDefaultDirFid()
                     dirStack.clear()
@@ -1512,6 +1488,7 @@ class ResolveViewModel(
                     loadFiles(s, currentDirFid, credential, repo)
                 }
                 .onFailure { e ->
+                    kotlin.coroutines.coroutineContext.ensureActive()
                     val msg = e.message ?: "解析失败"
                     // 游客模式失败时补一句可执行的引导，而不是只抛服务端原文
                     uiState = ResolveUiState.Error(
@@ -1619,15 +1596,16 @@ class ResolveViewModel(
         githubBadges = emptyMap()
         dirStack.clear()
         pathNames = emptyList()
-        viewModelScope.launch {
+        resolveJob = launchResolve {
             uiState = ResolveUiState.Loading
             when (linkType) {
                 is GitHubLinkType.Repository -> {
                     currentLink = "https://github.com/${linkType.owner}/${linkType.repo}"
                     val repo = githubApi?.getRepo(linkType.owner, linkType.repo)
+                    kotlin.coroutines.coroutineContext.ensureActive()
                     if (repo == null) {
                         uiState = ResolveUiState.Error("无法获取仓库信息：${linkType.owner}/${linkType.repo}")
-                        return@launch
+                        return@launchResolve
                     }
                     session = ShareSession(shareId = "github:${repo.fullName}", stoken = "", title = repo.fullName)
                     currentGitHubRepo = repo
@@ -2069,6 +2047,8 @@ class ResolveViewModel(
 
     /** 返回输入页 */
     fun backToInput() {
+        resolveTelemetry.cancel()
+        resolveJob?.cancel()
         session = null
         downloadLink = null
         currentLink = null
@@ -2610,9 +2590,11 @@ class ResolveViewModel(
     ) {
         repo.listFiles(s, dirFid, credential)
             .onSuccess { files ->
+                kotlin.coroutines.coroutineContext.ensureActive()
                 uiState = ResolveUiState.Detail(s, files)
             }
             .onFailure { e ->
+                kotlin.coroutines.coroutineContext.ensureActive()
                 uiState = ResolveUiState.Error(e.message ?: "获取文件列表失败")
             }
     }

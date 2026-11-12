@@ -79,6 +79,9 @@ interface DownloadManager {
      */
     fun shutdown() { /* 默认无操作 */ }
 
+    /** Only coarse terminal diagnostics; implementations without HTTP metrics return null. */
+    fun terminalDiagnostics(id: Long): DownloadDiagnostics? = null
+
     // ---------- 引擎专有：链接解析（默认不支持）----------
 
     /**

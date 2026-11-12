@@ -25,6 +25,19 @@ object Aria2KernelProvisioner {
     private val signatureFlags get() = if (Build.VERSION.SDK_INT >= 28)
         PackageManager.GET_SIGNING_CERTIFICATES else PackageManager.GET_SIGNATURES
 
+    fun isInstalled(context: Context): Boolean = runCatching {
+        context.packageManager.getPackageInfo(PACKAGE, 0)
+        true
+    }.getOrDefault(false)
+
+    @Suppress("DEPRECATION")
+    fun uninstallIntent(): Intent = Intent(Intent.ACTION_UNINSTALL_PACKAGE,
+        android.net.Uri.parse("package:$PACKAGE")).putExtra(Intent.EXTRA_RETURN_RESULT, true)
+
+    suspend fun clearInstallerCache(context: Context): Long = downloadMutex.withLock {
+        withContext(Dispatchers.IO) { KernelCleanup.aria2Cache(context.cacheDir) }
+    }
+
     @Suppress("DEPRECATION")
     private fun signatures(info: PackageInfo): Set<String> =
         (if (Build.VERSION.SDK_INT >= 28) info.signingInfo?.apkContentsSigners else info.signatures)

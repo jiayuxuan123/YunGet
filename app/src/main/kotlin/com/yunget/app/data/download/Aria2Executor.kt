@@ -66,6 +66,10 @@ object Aria2Executor {
     /** 读缓存的可用性；从未探测过返回 null。 */
     fun cachedAvailability(): Boolean? = cachedAvailability
 
+    fun refreshInstallation(context: Context) {
+        cachedAvailability = if (binaryPath(context) == null) false else null
+    }
+
     /** 记录一次探测结果（[probe] 内部调用）。 */
     private fun rememberAvailability(available: Boolean) {
         cachedAvailability = available

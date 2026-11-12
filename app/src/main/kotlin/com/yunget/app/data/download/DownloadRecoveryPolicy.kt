@@ -10,6 +10,19 @@ package com.yunget.app.data.download
  * may discard it.
  */
 internal object DownloadRecoveryPolicy {
+    fun processingFailure(error: Throwable, saving: Boolean): String {
+        if (!saving) return "处理失败，已保留原始文件，可重试处理"
+        val causes = generateSequence(error) { it.cause }.take(8).toList()
+        val text = causes.joinToString(" ") { it.message.orEmpty() }.lowercase()
+        return when {
+            causes.any { it is SecurityException } || text.contains("permission denied") || text.contains("存储权限") ->
+                "保存失败：存储权限不可用。请重新选择保存目录后重试，完整文件已保留"
+            text.contains("enospc") || text.contains("no space left") || text.contains("空间不足") ->
+                "保存失败：存储空间不足。请释放空间后重试，完整文件已保留"
+            else -> "保存失败，已保留文件，可重试保存"
+        }
+    }
+
     fun displayFailure(reason: String): String = when {
         reason.contains("Cannot verify existing download progress", ignoreCase = true) ->
             "无法验证已保存的下载进度，原数据已保留。请重新解析链接后重试。"

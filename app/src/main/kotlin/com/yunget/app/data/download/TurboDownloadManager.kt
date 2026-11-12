@@ -240,6 +240,13 @@ class TurboDownloadManager(
     /** 实时统计（UI）*/
     private val _stats = MutableStateFlow<Map<Long, DownloadStats>>(emptyMap())
     override val stats: StateFlow<Map<Long, DownloadStats>> = _stats.asStateFlow()
+    private val terminalDetails = object : LinkedHashMap<Long, DownloadDiagnostics>() {
+        override fun removeEldestEntry(eldest: MutableMap.MutableEntry<Long, DownloadDiagnostics>?) = size > 128
+    }
+
+    override fun terminalDiagnostics(id: Long): DownloadDiagnostics? = synchronized(terminalDetails) {
+        terminalDetails[id]
+    }
 
     /** 任务列表（Room Flow 直通）*/
     override val tasks: Flow<List<DownloadTaskEntity>> = dao.observeAll()
@@ -1442,7 +1449,7 @@ class TurboDownloadManager(
         val generation = turboGenerations[ev.taskId] ?: sdkGenerations[roomId] ?: return
         turboGenerations.putIfAbsent(ev.taskId, generation)
         when (ev) {
-            is TurboEvent.Created -> Unit
+            is TurboEvent.Created -> synchronized(terminalDetails) { terminalDetails.remove(roomId); Unit }
             is TurboEvent.Progress -> {
                 val p = ev.progress
                 val details = client.taskDetails(ev.taskId)
@@ -1701,8 +1708,7 @@ class TurboDownloadManager(
             if (latest != null && latest.attemptGeneration == expectedGeneration && latest.status == DownloadTaskEntity.STATUS_DOWNLOADING) {
                 val saveFailed = latest.pipelineStage == "SAVING" || latest.pipelineStage == "SAVE_FAILED"
                 dao.failGeneration(roomId, expectedGeneration,
-                    if (saveFailed) "保存失败，已保留文件，可重试保存"
-                    else "处理失败，已保留原始文件，可重试处理",
+                    DownloadRecoveryPolicy.processingFailure(error, saveFailed),
                     if (saveFailed) "SAVE_FAILED" else null)
             }
             clearSdkMapping(roomId, expectedGeneration)
@@ -1723,7 +1729,8 @@ class TurboDownloadManager(
             val task = dao.get(roomId) ?: return
             if (task.attemptGeneration != generation || task.status != DownloadTaskEntity.STATUS_DOWNLOADING ||
                 turboIds[roomId] != event.taskId) return
-            val status = client.taskDetails(event.taskId)?.lastHttpStatus
+            val failedDetails = client.taskDetails(event.taskId)
+            val status = failedDetails?.lastHttpStatus
             val expired = status in setOf(401, 403, 410) ||
                 (status == null && event.reason.contains("授权/时效"))
             if (expired && task.sourceAccountId.isNotBlank() &&
@@ -1752,6 +1759,9 @@ class TurboDownloadManager(
             _stats.update { it - roomId }
             metadataAtMs.remove(roomId)
             lastSeenBytes.remove(roomId)
+            DownloadDiagnostics.from(failedDetails)?.let { details ->
+                synchronized(terminalDetails) { terminalDetails[roomId] = details }
+            }
             dao.failGeneration(roomId, generation, DownloadRecoveryPolicy.displayFailure(event.reason))
             if (DownloadRecoveryPolicy.shouldDiscardPartial(event.reason)) turboOutputs.remove(roomId)?.delete()
             DiagLog.e(context, DiagLog.Category.DOWNLOAD, "下载失败：id=$roomId HTTP=${status ?: 0}")

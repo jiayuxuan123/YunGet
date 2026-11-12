@@ -31,4 +31,11 @@ class AnalyticsBucketsTest {
         assertEquals(false, analyticsConsentAllowsSending(false, 1))
         assertEquals(true, analyticsConsentAllowsSending(true, 1))
     }
+
+    @Test
+    fun numbersInByteCountsAndFileIdsAreNotHttpStatusCodes() {
+        assertEquals("short_read", analyticsErrorCategory("短读：接收 1401024 / 2041040 字节"))
+        assertEquals("other", analyticsErrorCategory("job 429001 failed"))
+        assertEquals("network", analyticsErrorCategory("TLS handshake failed"))
+    }
 }

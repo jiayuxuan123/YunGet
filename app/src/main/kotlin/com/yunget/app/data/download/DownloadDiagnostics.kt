@@ -6,6 +6,8 @@ data class DownloadDiagnostics(
     val firstByteMillis: Long?,
     val probeMillis: Long,
     val transferMillis: Long,
+    val lastHttpStatus: Int? = null,
+    val failureStage: String? = null,
 ) {
     companion object {
         fun from(details: TaskTransferDetails?): DownloadDiagnostics? {
@@ -14,6 +16,8 @@ data class DownloadDiagnostics(
                 firstByteMillis = details.timeToFirstByteMs,
                 probeMillis = details.probeMs,
                 transferMillis = details.transferMs,
+                lastHttpStatus = details.lastHttpStatus,
+                failureStage = details.failureStage?.name?.lowercase(),
             )
         }
     }

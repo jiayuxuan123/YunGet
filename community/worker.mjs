@@ -1,21 +1,12 @@
 import {createAdminVerifier} from './auth.mjs';
 import {html, style, script} from './web.mjs';
 import {analyticsHtml, analyticsScript, analyticsStyle} from './analytics.mjs';
+import {analyticsEvents, analyticsProperties, readAnalytics} from './analytics-data.mjs';
 import {consumeVerification, issueVerification, scopeForPath, verificationConfig, VerificationError} from './verification.mjs';
 
 const statuses = new Set(['new', 'planned', 'working', 'resolved', 'closed']);
 const categories = new Set(['bug', 'idea', 'question', 'other']);
 const products = new Set(['yunget', 'turbodl']);
-const analyticsEvents = new Set([
-  'app_open', 'resolve_start', 'resolve_success', 'resolve_fail',
-  'download_queued', 'download_started', 'download_completed', 'download_failed',
-  'save_failed', 'qr_scan_success', 'theme_changed',
-]);
-const analyticsPropertyKeys = new Set([
-  'source', 'engine', 'error', 'kind', 'result', 'api', 'abi',
-  'size_bucket', 'duration_bucket', 'connections_bucket', 'ui_style', 'theme',
-  'file_kind', 'is_guest',
-]);
 const cookieName = '__Host-yunget-community';
 const sessionLife = 30 * 86400;
 
@@ -75,23 +66,6 @@ async function readJson(request) {
     return value;
   } catch { fail(400, '请求格式无效'); }
 }
-function analyticsProperties(value) {
-  if (value === undefined) return '{}';
-  if (!value || typeof value !== 'object' || Array.isArray(value)) fail(422, '统计属性无效');
-  const entries = Object.entries(value);
-  if (entries.length > 20) fail(422, '统计属性过多');
-  const clean = {};
-  for (const [key, raw] of entries) {
-    if (!analyticsPropertyKeys.has(key)) fail(422, `统计属性不支持：${key}`);
-    if (typeof raw === 'string') clean[key] = raw.trim().slice(0, 100);
-    else if (typeof raw === 'number' && Number.isFinite(raw)) clean[key] = raw;
-    else if (typeof raw === 'boolean') clean[key] = raw;
-    else fail(422, `统计属性格式无效：${key}`);
-  }
-  const output = JSON.stringify(clean);
-  if (output.length > 1600) fail(413, '统计属性过大');
-  return output;
-}
 function secureResponse(body, status = 200, extra = {}) {
   const headers = new Headers({
     'Content-Type': 'application/json; charset=utf-8', 'Cache-Control': 'no-store',
@@ -150,7 +124,7 @@ export function createHandler({fetchRemote = fetch, verifyAdmin = createAdminVer
       if (request.method === 'GET' && path === '/app.js') return secureResponse(script, 200, {'Content-Type': 'text/javascript; charset=utf-8', 'Cache-Control': 'public,max-age=300'});
       if (request.method === 'GET' && path === '/analytics.css') return secureResponse(analyticsStyle, 200, {'Content-Type': 'text/css; charset=utf-8', 'Cache-Control': 'public,max-age=300'});
       if (request.method === 'GET' && path === '/analytics.js') return secureResponse(analyticsScript, 200, {'Content-Type': 'text/javascript; charset=utf-8', 'Cache-Control': 'public,max-age=300'});
-      if (request.method === 'GET' && path === '/api/config') return secureResponse({verification: verificationConfig, version: '2.7.31'});
+      if (request.method === 'GET' && path === '/api/config') return secureResponse({verification: verificationConfig, version: '2.7.32'});
       if (request.method === 'GET' && path.startsWith('/verification/')) {
         if (!env.ASSETS) fail(503, '验证资源暂不可用');
         const resource = await env.ASSETS.fetch(request);
@@ -183,10 +157,14 @@ export function createHandler({fetchRemote = fetch, verifyAdmin = createAdminVer
           const event = enumValue(entry.event, analyticsEvents);
           const product = enumValue(entry.product || 'yunget', products);
           const appVersion = text(entry.app_version || '', 32, 0);
-          const platform = text(entry.platform || 'android', 24, 0);
+          const platform = enumValue(entry.platform || 'android', new Set(['android', 'jvm', 'other']));
+          if (appVersion && !/^\d+(?:\.\d+){2,3}$/.test(appVersion)) fail(422, '统计版本无效');
+          let props;
+          try { props = analyticsProperties(entry.properties); }
+          catch { fail(422, '统计属性值无效'); }
           return env.DB.prepare(
             'INSERT INTO analytics_events(event_id,install_hash,event,product,app_version,platform,properties,created_at) VALUES(?,?,?,?,?,?,?,?) ON CONFLICT(event_id) DO NOTHING',
-          ).bind(eventId, installHash, event, product, appVersion, platform, analyticsProperties(entry.properties), stamp());
+          ).bind(eventId, installHash, event, product, appVersion, platform, props, stamp());
         });
         const results = await env.DB.batch(statements);
         const accepted = results.reduce((sum, result) => sum + Number(result.meta?.changes || 0), 0);
@@ -194,43 +172,11 @@ export function createHandler({fetchRemote = fetch, verifyAdmin = createAdminVer
       }
       if (request.method === 'GET' && path === '/admin/api/session') return secureResponse({developer: true});
       if (request.method === 'GET' && path === '/admin/api/analytics') {
-        const days = Math.max(1, Math.min(90, Number(url.searchParams.get('days')) || 30));
-        const since = stamp() - days * 86400;
-        const [summaryRow, daily, versions, events, errors, engines] = await Promise.all([
-          env.DB.prepare(`SELECT COUNT(*) AS events,COUNT(DISTINCT install_hash) AS installs,
-            COALESCE(SUM(CASE WHEN event='app_open' THEN 1 ELSE 0 END),0) AS app_opens,
-            COALESCE(SUM(CASE WHEN event='resolve_start' THEN 1 ELSE 0 END),0) AS resolve_starts,
-            COALESCE(SUM(CASE WHEN event='download_started' THEN 1 ELSE 0 END),0) AS download_starts,
-            COALESCE(SUM(CASE WHEN event='download_completed' THEN 1 ELSE 0 END),0) AS download_successes,
-            COALESCE(SUM(CASE WHEN event='download_failed' THEN 1 ELSE 0 END),0) AS download_failures,
-            COALESCE(SUM(CASE WHEN event='save_failed' THEN 1 ELSE 0 END),0) AS save_failures
-            FROM analytics_events WHERE created_at>=?`).bind(since).first(),
-          env.DB.prepare(`SELECT date(created_at,'unixepoch','localtime') AS day,
-            COUNT(DISTINCT install_hash) AS installs,COUNT(*) AS count
-            FROM analytics_events WHERE created_at>=? GROUP BY day ORDER BY day`).bind(since).all(),
-          env.DB.prepare(`SELECT app_version,COUNT(DISTINCT install_hash) AS installs,COUNT(*) AS count
-            FROM analytics_events WHERE created_at>=? GROUP BY app_version ORDER BY count DESC LIMIT 12`).bind(since).all(),
-          env.DB.prepare(`SELECT event,COUNT(*) AS count FROM analytics_events
-            WHERE created_at>=? GROUP BY event ORDER BY count DESC`).bind(since).all(),
-          env.DB.prepare(`SELECT COALESCE(json_extract(properties,'$.error'),'unknown') AS error,COUNT(*) AS count
-            FROM analytics_events WHERE created_at>=? AND event IN ('download_failed','save_failed')
-            GROUP BY error ORDER BY count DESC LIMIT 12`).bind(since).all(),
-          env.DB.prepare(`SELECT COALESCE(json_extract(properties,'$.engine'),'unknown') AS engine,COUNT(*) AS count
-            FROM analytics_events WHERE created_at>=? AND json_extract(properties,'$.engine') IS NOT NULL
-            GROUP BY engine ORDER BY count DESC LIMIT 12`).bind(since).all(),
-        ]);
-        const summary = Object.fromEntries(
-          Object.entries(summaryRow || {}).map(([key, value]) => [key, Number(value || 0)]),
-        );
-        return secureResponse({
-          days,
-          summary,
-          daily: daily.results,
-          versions: versions.results,
-          events: events.results,
-          errors: errors.results,
-          engines: engines.results,
-        });
+        const rawDays = Number(url.searchParams.get('days') || 30);
+        if (!Number.isInteger(rawDays) || rawDays < 1 || rawDays > 90) fail(422, '统计周期无效');
+        const version = url.searchParams.get('version') || undefined;
+        if (version && !/^\d+(?:\.\d+){2,3}$/.test(version)) fail(422, '版本筛选无效');
+        return secureResponse(await readAnalytics(env.DB, {days: rawDays, version}));
       }
       const owner = await session(request, env);
       if (request.method === 'GET' && path === '/api/session') return secureResponse({nickname: owner?.nickname || null});

@@ -3,7 +3,7 @@
   "private": true,
   "type": "module",
   "scripts": {
-    "check": "node --check worker.mjs && node --check auth.mjs && node --check web.mjs && node --check style.mjs && node --check client.mjs && node --check verification.mjs",
+    "check": "node --check worker.mjs && node --check auth.mjs && node --check web.mjs && node --check style.mjs && node --check client.mjs && node --check verification.mjs && node --check analytics.mjs && node --check analytics-data.mjs",
     "test": "node --test test/*.test.mjs",
     "prepare:verification": "node scripts/prepare-verification.mjs"
   },

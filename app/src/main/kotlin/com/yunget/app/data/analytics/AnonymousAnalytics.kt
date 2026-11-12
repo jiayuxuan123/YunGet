@@ -5,17 +5,15 @@ import android.os.Build
 import com.yunget.app.data.community.CommunityApi
 import com.yunget.app.data.prefs.SettingsRepository
 import java.util.UUID
-import java.util.concurrent.TimeUnit
-import java.util.concurrent.atomic.AtomicBoolean
 import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.CoroutineExceptionHandler
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.launch
-import okhttp3.MediaType.Companion.toMediaType
-import okhttp3.OkHttpClient
-import okhttp3.Request
-import okhttp3.RequestBody.Companion.toRequestBody
-import org.json.JSONArray
+import kotlinx.coroutines.Job
+import kotlinx.coroutines.channels.Channel
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.isActive
 import org.json.JSONObject
 
 /**
@@ -27,55 +25,68 @@ import org.json.JSONObject
  */
 object AnonymousAnalytics {
     const val DISCLOSURE_VERSION = 1
-    private val endpoint get() = CommunityApi.analyticsUrl
     private const val PREFS = "anonymous_analytics"
     private const val KEY_INSTALL_ID = "install_id"
     private const val KEY_PENDING = "pending"
-    private const val MAX_PENDING = 100
-    private const val MAX_BATCH = 8
-    private const val FLUSH_INTERVAL_MS = 60_000L
+    private val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO + CoroutineExceptionHandler { _, _ ->
+        // Telemetry failure must never interrupt parsing or downloading.
+    })
+    private val wake = Channel<Unit>(Channel.CONFLATED)
+    private var worker: Job? = null
+    private var queue: AnalyticsQueue? = null
+    private var uploader: AnalyticsUpload? = null
+    private var appContext: Context? = null
+    private var appVersion = ""
 
-    private val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
-    private val client = OkHttpClient.Builder()
-        .connectTimeout(8, TimeUnit.SECONDS)
-        .readTimeout(10, TimeUnit.SECONDS)
-        .writeTimeout(10, TimeUnit.SECONDS)
-        .build()
-    private val mediaType = "application/json; charset=utf-8".toMediaType()
-    private val flushing = AtomicBoolean(false)
-
-    @Volatile private var context: Context? = null
-    @Volatile private var enabled = true
-    @Volatile private var appVersion = ""
-    @Volatile private var lastFlushAt = 0L
-
-    fun initialize(context: Context) {
-        if (this.context != null) return
+    @Synchronized fun initialize(context: Context) {
+        if (appContext != null) return
         val app = context.applicationContext
-        this.context = app
-        val settings = SettingsRepository(app)
-        enabled = analyticsConsentAllowsSending(
-            settings.anonymousAnalyticsEnabled,
-            settings.anonymousAnalyticsNoticeVersion,
-        )
+        val preferences = app.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
+        val pending = AnalyticsQueue(object : AnalyticsQueueStore {
+            override fun read() = preferences.getString(KEY_PENDING, null)
+            override fun write(value: String) { preferences.edit().putString(KEY_PENDING, value).commit() }
+            override fun clear() { preferences.edit().clear().commit() }
+        })
         appVersion = runCatching {
             app.packageManager.getPackageInfo(app.packageName, 0).versionName.orEmpty()
         }.getOrDefault("")
-        if (enabled) scope.launch { flush() }
+        queue = pending
+        appContext = app
+        val settings = SettingsRepository(app)
+        changeEnabled(analyticsConsentAllowsSending(settings.anonymousAnalyticsEnabled, settings.anonymousAnalyticsNoticeVersion))
     }
 
-    fun setEnabled(context: Context, value: Boolean) {
+    @Synchronized fun setEnabled(context: Context, value: Boolean) {
         initialize(context)
-        enabled = value
-        if (value) {
-            scope.launch { flush() }
-            return
-        }
-        prefs()?.edit()?.clear()?.apply()
+        val settings = SettingsRepository(context)
+        changeEnabled(analyticsConsentAllowsSending(value, settings.anonymousAnalyticsNoticeVersion))
     }
 
-    fun needsDisclosure(context: Context): Boolean =
-        SettingsRepository(context).anonymousAnalyticsNoticeVersion < DISCLOSURE_VERSION
+    private fun changeEnabled(enabled: Boolean) {
+        worker?.cancel()
+        uploader?.cancel()
+        queue?.setEnabled(enabled)
+        if (!enabled) { worker = null; return }
+        worker = scope.launch {
+            for (signal in wake) {
+                delay(500)
+                while (isActive) {
+                    val batch = queue?.peek() ?: break
+                    val sender = synchronized(this@AnonymousAnalytics) {
+                        uploader ?: AnalyticsUpload(checkNotNull(queue), AnalyticsUpload.client(), CommunityApi.analyticsUrl)
+                            .also { uploader = it }
+                    }
+                    val identity = synchronized(this@AnonymousAnalytics) {
+                        if (queue?.isCurrent(batch) == true) installId() else null
+                    } ?: break
+                    if (!sender.send(batch, identity)) delay(60_000)
+                }
+            }
+        }
+        wake.trySend(Unit)
+    }
+
+    fun needsDisclosure(context: Context) = SettingsRepository(context).anonymousAnalyticsNoticeVersion < DISCLOSURE_VERSION
 
     fun completeDisclosure(context: Context, allowed: Boolean) {
         val settings = SettingsRepository(context)
@@ -86,115 +97,24 @@ object AnonymousAnalytics {
     }
 
     fun track(event: String, properties: Map<String, Any> = emptyMap()) {
-        if (!enabled || context == null) return
+        val pending = queue ?: return
+        val ticket = pending.ticket() ?: return
         scope.launch {
-            enqueue(event, properties)
-            val pending = pendingCount()
-            val now = System.currentTimeMillis()
-            if (pending >= 8 || now - lastFlushAt >= FLUSH_INTERVAL_MS) flush()
-        }
-    }
-
-    private fun prefs() = context?.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
-
-    private fun installId(): String {
-        val preferences = prefs() ?: return UUID.randomUUID().toString()
-        preferences.getString(KEY_INSTALL_ID, null)?.let { return it }
-        val created = UUID.randomUUID().toString()
-        preferences.edit().putString(KEY_INSTALL_ID, created).apply()
-        return created
-    }
-
-    @Synchronized
-    private fun enqueue(event: String, properties: Map<String, Any>) {
-        val preferences = prefs() ?: return
-        val queue = readQueue(preferences.getString(KEY_PENDING, null))
-        if (queue.length() >= MAX_PENDING) queue.remove(0)
-        val payload = JSONObject()
-            .put("event_id", UUID.randomUUID().toString())
-            .put("event", event)
-            .put("product", "yunget")
-            .put("app_version", appVersion)
-            .put("platform", "android")
-            .put(
-                "properties",
-                JSONObject().apply {
+            val payload = JSONObject().put("event_id", UUID.randomUUID().toString())
+                .put("event", event).put("product", "yunget").put("app_version", appVersion)
+                .put("platform", "android").put("properties", JSONObject().apply {
+                    put("schema_version", 2)
                     put("api", Build.VERSION.SDK_INT)
-                    put("abi", Build.SUPPORTED_ABIS.firstOrNull().orEmpty())
-                    properties.forEach { (key, value) ->
-                        when (value) {
-                            is String, is Number, is Boolean -> put(key, value)
-                        }
-                    }
-                },
-            )
-        queue.put(payload)
-        preferences.edit().putString(KEY_PENDING, queue.toString()).apply()
-    }
-
-    @Synchronized
-    private fun pendingCount(): Int = readQueue(prefs()?.getString(KEY_PENDING, null)).length()
-
-    @Synchronized
-    private fun takeBatch(): Pair<JSONArray, List<String>> {
-        val preferences = prefs() ?: return JSONArray() to emptyList()
-        val queue = readQueue(preferences.getString(KEY_PENDING, null))
-        val batch = JSONArray()
-        val ids = mutableListOf<String>()
-        val remaining = JSONArray()
-        for (index in 0 until queue.length()) {
-            val event = queue.optJSONObject(index) ?: continue
-            if (batch.length() < MAX_BATCH) {
-                batch.put(event)
-                event.optString("event_id").takeIf { it.isNotBlank() }?.let(ids::add)
-            } else {
-                remaining.put(event)
-            }
-        }
-        preferences.edit().putString(KEY_PENDING, remaining.toString()).apply()
-        return batch to ids
-    }
-
-    @Synchronized
-    private fun restoreFailedBatch(batch: JSONArray) {
-        val preferences = prefs() ?: return
-        val current = readQueue(preferences.getString(KEY_PENDING, null))
-        val restored = JSONArray()
-        for (index in 0 until batch.length()) batch.optJSONObject(index)?.let(restored::put)
-        for (index in 0 until current.length()) current.optJSONObject(index)?.let(restored::put)
-        while (restored.length() > MAX_PENDING) restored.remove(restored.length() - 1)
-        preferences.edit().putString(KEY_PENDING, restored.toString()).apply()
-    }
-
-    private fun flush() {
-        if (!enabled || context == null || !flushing.compareAndSet(false, true)) return
-        var batch = JSONArray()
-        try {
-            val taken = takeBatch()
-            batch = taken.first
-            if (batch.length() == 0) return
-            val body = JSONObject()
-                .put("install_id", installId())
-                .put("events", batch)
-                .toString()
-                .toRequestBody(mediaType)
-            val request = Request.Builder()
-                .url(endpoint)
-                .header("X-YunGet-Analytics", "1")
-                .post(body)
-                .build()
-            client.newCall(request).execute().use { response ->
-                if (!response.isSuccessful) restoreFailedBatch(batch)
-            }
-            lastFlushAt = System.currentTimeMillis()
-        } catch (_: Throwable) {
-            if (batch.length() > 0) restoreFailedBatch(batch)
-        } finally {
-            flushing.set(false)
+                    put("abi", Build.SUPPORTED_ABIS.firstOrNull() ?: "unknown")
+                    properties.forEach { (key, value) -> if (value is String || value is Number || value is Boolean) put(key, value) }
+                })
+            if (pending.enqueue(ticket, payload)) wake.trySend(Unit)
         }
     }
 
-    private fun readQueue(raw: String?): JSONArray = runCatching {
-        if (raw.isNullOrBlank()) JSONArray() else JSONArray(raw)
-    }.getOrElse { JSONArray() }
+    @Synchronized private fun installId(): String {
+        val prefs = checkNotNull(appContext).getSharedPreferences(PREFS, Context.MODE_PRIVATE)
+        prefs.getString(KEY_INSTALL_ID, null)?.let { return it }
+        return UUID.randomUUID().toString().also { prefs.edit().putString(KEY_INSTALL_ID, it).commit() }
+    }
 }

@@ -19,6 +19,7 @@
     <uses-permission android:name="android.permission.REQUEST_IGNORE_BATTERY_OPTIMIZATIONS" />
     <!-- APK 安装：Android 8+ 检查「安装未知来源应用」权限需要 -->
     <uses-permission android:name="android.permission.REQUEST_INSTALL_PACKAGES" />
+    <uses-permission android:name="android.permission.REQUEST_DELETE_PACKAGES" />
     <!-- Android 9- 写公共 Download 目录需要（10 走 MediaStore，legacy 模式回退也需要） -->
     <uses-permission
         android:name="android.permission.WRITE_EXTERNAL_STORAGE"

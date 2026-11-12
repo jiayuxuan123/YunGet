@@ -20,6 +20,9 @@
 package com.yunget.app.ui.screens
 
 import android.Manifest
+import com.yunget.app.data.db.AppDatabase
+import com.yunget.app.data.download.Aria2KernelProvisioner
+import com.yunget.app.data.download.KernelCleanup
 import androidx.activity.compose.BackHandler
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
@@ -178,6 +181,29 @@ fun DownloadEngineScreen(
     var engineVersion by remember { mutableStateOf("") }
     var notice by remember { mutableStateOf("") }
     var failure by remember { mutableStateOf<String?>(null) }
+    var aria2Installed by remember { mutableStateOf(false) }
+    var showKernelRemoval by remember { mutableStateOf<String?>(null) }
+    val aria2UninstallLauncher = rememberLauncherForActivityResult(ActivityResultContracts.StartActivityForResult()) {
+        scope.launch {
+            val remains = withContext(Dispatchers.IO) {
+                Aria2Executor.refreshInstallation(context)
+                Aria2KernelProvisioner.isInstalled(context)
+            }
+            aria2Installed = remains
+            aria2Result = null
+            if (!remains) {
+                if (builtinImpl == "aria2") {
+                    settings.downloadEngineId = DownloadEngineRegistry.default().id
+                    builtinImpl = settings.downloadEngineId
+                }
+                notice = "aria2 可选内核已卸载，任务与已下载文件保留"
+            } else notice = "aria2 内核仍保留，未完成卸载"
+        }
+    }
+    LaunchedEffect(Unit) {
+        aria2Installed = withContext(Dispatchers.IO) { Aria2KernelProvisioner.isInstalled(context) }
+    }
+
 
     // 「所有文件访问」（Android 11+）与运行时存储权限（Android 10-）：从系统设置返回时要刷新
     var allFilesReady by remember { mutableStateOf(PermissionState.allFilesAccessGranted()) }
@@ -188,6 +214,12 @@ fun DownloadEngineScreen(
     DisposableEffect(lifecycleOwner) {
         val observer = LifecycleEventObserver { _, event ->
             if (event == Lifecycle.Event.ON_RESUME) {
+                scope.launch {
+                    aria2Installed = withContext(Dispatchers.IO) {
+                        Aria2Executor.refreshInstallation(context)
+                        Aria2KernelProvisioner.isInstalled(context)
+                    }
+                }
                 allFilesReady = PermissionState.allFilesAccessGranted()
                 legacyStorageReady = !PermissionState.engineStoragePermissionPending(context)
                 engineChoice = settings.downloadEngine
@@ -521,6 +553,17 @@ fun DownloadEngineScreen(
                                     }) { Text("取消内核下载") }
                                 }
 
+                                FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                                    TextButton(
+                                        onClick = { showKernelRemoval = "aria2" },
+                                        enabled = !busy && !aria2Checking,
+                                    ) {
+                                        Icon(Icons.Outlined.Delete, contentDescription = null, modifier = Modifier.size(18.dp))
+                                        Spacer(Modifier.width(6.dp))
+                                        Text(if (aria2Installed) "卸载 aria2 内核" else "清理 aria2 安装包")
+                                    }
+                                }
+
                                 // aria2 可用性检测：先确认"这台设备能不能跑"再切过去，
                                 // 结果含确切失败原因（ENOENT / EACCES / ENOEXEC 语义完全不同）。
                                 Button(
@@ -769,25 +812,8 @@ fun DownloadEngineScreen(
                                             Text("重启引擎")
                                         }
                                     }
-                                    TextButton(onClick = {
-                                        action {
-                                            withContext(Dispatchers.IO) {
-                                                // uninstall 不允许在运行中删（Go core 还占着 .so），先停掉
-                                                GopeedEngine.stop()
-                                                GopeedEngine.uninstall(context)
-                                            }
-                                            refreshSoInfo()
-                                            // 内核没了就不能再用引擎下载：顺手切回内置，避免"设置说在用引擎、
-                                            // 实际跑的是内置下载器"的错位
-                                            if (engineChoice == SettingsRepository.ENGINE_GOPEED) {
-                                                settings.downloadEngine = SettingsRepository.ENGINE_BUILTIN
-                                                engineChoice = SettingsRepository.ENGINE_BUILTIN
-                                                notice = "内核已删除，已自动切回内置分片下载器"
-                                            } else {
-                                                notice = "内核已删除"
-                                            }
-                                            failure = GopeedEngine.lastError
-                                        }
+                                    TextButton(enabled = !busy && !KernelProvisioner.isRunning(), onClick = {
+                                        showKernelRemoval = "gopeed"
                                     }) {
                                         Icon(
                                             Icons.Outlined.Delete,
@@ -856,6 +882,46 @@ fun DownloadEngineScreen(
 
     // ③ 进度弹窗：网上取包到导入完成的全过程都在这里，**点空白/返回键都关不掉**
     //（只有「取消」和终态的「关闭」能走），免得用户手滑把 25MB 的下载甩掉
+    showKernelRemoval?.let { kernel ->
+        val gopeed = kernel == "gopeed"
+        AlertDialog(
+            onDismissRequest = { showKernelRemoval = null },
+            title = { Text(if (gopeed) "移除 Gopeed 内核？" else if (aria2Installed) "卸载 aria2 内核？" else "清理 aria2 安装包？") },
+            text = { Text(if (gopeed) {
+                "删除导入的内核和临时安装包，保留任务、断点与下载文件。使用过的内核需重启应用才能完全释放内存。以后可重新下载内核。"
+            } else if (aria2Installed) {
+                "清理应用中的安装包缓存，然后打开系统卸载确认。任务、断点与下载文件保留，以后可重新安装。"
+            } else "仅清理 aria2 的安装包和未完成的内核下载，不删除下载任务或个人文件。") },
+            confirmButton = {
+                TextButton(onClick = {
+                    showKernelRemoval = null
+                    action {
+                        val tasks = AppDatabase.get(context).downloadTaskDao().getAllOnce()
+                        if (((gopeed || aria2Installed) && KernelCleanup.blockedByTasks(tasks, gopeed)) || KernelProvisioner.isRunning()) {
+                            notice = "请先暂停相关下载或等待内核安装结束，再移除内核"
+                        } else if (gopeed) {
+                            val bytes = withContext(Dispatchers.IO) {
+                                GopeedEngine.stop()
+                                GopeedEngine.uninstall(context)
+                                KernelCleanup.gopeedPackages(context.getExternalFilesDir(null) ?: context.filesDir)
+                            }
+                            refreshSoInfo()
+                            settings.downloadEngine = SettingsRepository.ENGINE_BUILTIN
+                            engineChoice = SettingsRepository.ENGINE_BUILTIN
+                            notice = "Gopeed 内核已移除，任务与下载文件保留；清理安装缓存 ${bytes / 1024} KiB"
+                        } else {
+                            val bytes = Aria2KernelProvisioner.clearInstallerCache(context)
+                            aria2Installer = null
+                            notice = "已清理 aria2 安装缓存 ${bytes / 1024} KiB"
+                            if (aria2Installed) aria2UninstallLauncher.launch(Aria2KernelProvisioner.uninstallIntent())
+                        }
+                    }
+                }) { Text(if (gopeed) "移除内核" else if (aria2Installed) "清理并卸载" else "清理安装包") }
+            },
+            dismissButton = { TextButton(onClick = { showKernelRemoval = null }) { Text("取消") } },
+        )
+    }
+
     KernelProgressDialog(
         phase = provisionPhase,
         onCancel = { KernelProvisioner.cancel() },
