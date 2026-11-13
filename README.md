@@ -4,9 +4,9 @@
 >
 > **本项目是 [CYQawa/YunX（云析）](https://github.com/CYQawa/YunX) 的二次开发版本**，在其协议与架构基础上进行功能扩展，并将下载能力逐步迁移至独立的 [TurboDL](https://github.com/jiayuxuan123/TurboDL) 下载引擎。遵循 GNU AGPL-3.0 协议开源。
 
-本次更新修复下载失败时 HTTP 状态和失败阶段丢失的问题，并让匿名统计后台正确区分旧版合并错误类别，详见[2.7.34 完整更新日志](engineering/releases/2.7.34.md)。
+本次更新修复下载页连接数长期显示 0，以及部分旧版本升级时下载任务表迁移失败的问题，详见[2.7.35 完整更新日志](engineering/releases/2.7.35.md)。
 
-当前版本 **2.7.34**（versionCode 82）· Android 7.0+（minSdk 24，targetSdk 34）· 内置 TurboDL 0.5.0.5
+当前版本 **2.7.35**（versionCode 83）· Android 7.0+（minSdk 24，targetSdk 34）· 内置 TurboDL 0.5.0.6
 
 **官网**：[jiayuxuan123.github.io/YunGet](https://jiayuxuan123.github.io/YunGet/) —— 下载、使用说明、常见问题、隐私与条款
 
@@ -21,6 +21,13 @@
 - 本项目在上游协议解析、网盘功能和 Android 应用结构基础上进行了二次开发。
 - 下载能力已迁移到独立的 [TurboDL](https://github.com/jiayuxuan123/TurboDL) SDK：日常的直链下载走它，HLS 通过它的插件机制接入。项目早期自己写的那套下载实现仍留在代码里，作为可选的兜底引擎。
 - **赞赏渠道说明**：应用内「支持开发」页的赞赏码仅面向**本二次开发版本**的维护；若想支持上游原项目作者，请移步 [上游仓库](https://github.com/CYQawa/YunX) 的捐赠渠道，避免权益混淆。
+
+## 2.7.35 更新
+
+- TurboDL 升级至 `0.5.0.6`，插件路由下载现在也会上报活动连接、请求、字节和 HTTP 状态。
+- 路由下载继续使用客户端全局连接预算，不会因多任务而绕过总连接上限。
+- 数据库升级至版本 26，重新整理旧版下载任务表，保留下载进度、账号、收藏、插件和社区身份。
+- 迁移复制任务数校验失败时回滚并保留原数据库，不再要求清除软件数据。
 
 ## 2.7.34 更新
 

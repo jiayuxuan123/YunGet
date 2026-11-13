@@ -11,7 +11,7 @@ import com.yunget.app.data.security.CredentialCipher
 
 @Database(
     entities = [QuarkAccountEntity::class, DownloadTaskEntity::class, UCAccountEntity::class, XunleiAccountEntity::class, BaiduAccountEntity::class, C139AccountEntity::class, Pan123AccountEntity::class, BookmarkEntity::class, Pan115AccountEntity::class, GuangYaAccountEntity::class, ILanzouAccountEntity::class, LanzouAccountEntity::class, PluginInstalledEntity::class, PluginSourceEntity::class],
-    version = 25,
+    version = 26,
     exportSchema = false
 )
 abstract class AppDatabase : RoomDatabase() {
@@ -109,6 +109,7 @@ abstract class AppDatabase : RoomDatabase() {
                         MIGRATION_21_22,
                         MIGRATION_22_23, MIGRATION_23_24,
                         MIGRATION_24_25,
+                        MIGRATION_25_26,
                     )
                     // 早期开发版（1-8）无可靠 schema；从 v9 起必须保留凭证和下载任务
                     .fallbackToDestructiveMigrationFrom(1, 2, 3, 4, 5, 6, 7, 8)
@@ -502,6 +503,11 @@ abstract class AppDatabase : RoomDatabase() {
                         "PRIMARY KEY(`id`))"
                 )
             }
+        }
+
+        /** v26: normalize legacy download columns/defaults while retaining every task and account. */
+        private val MIGRATION_25_26 = object : Migration(25, 26) {
+            override fun migrate(db: SupportSQLiteDatabase) = DownloadTaskTableRepair.migrate(db)
         }
 
         /** 列是否存在：迁移里加列前先探测，避免「重复加列」把升级路径炸掉。 */

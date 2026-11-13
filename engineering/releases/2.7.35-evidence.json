@@ -1,0 +1,22 @@
+{
+  "version": "2.7.35",
+  "versionCode": 83,
+  "turboDlVersion": "0.5.0.6",
+  "targetedTests": [
+    {
+      "suite": "DownloadTaskTableRepairSqliteTest",
+      "tests": 2,
+      "failures": 0,
+      "skipped": 0
+    }
+  ],
+  "sdkTests": [
+    {
+      "suite": "RoutedHttpTelemetryTest",
+      "tests": 3,
+      "failures": 0,
+      "skipped": 0
+    }
+  ],
+  "notes": "Emergency patch: targeted tests and release artifact verification only; no connected Android device was available."
+}
