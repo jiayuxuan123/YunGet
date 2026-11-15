@@ -21,7 +21,7 @@
 <link rel="preload" href="../assets/fonts/schibsted-grotesk-latin.woff2" as="font" type="font/woff2" crossorigin>
 <!-- 主题在样式表之前落地；内容本身不依赖脚本显隐。 -->
 <script>document.documentElement.classList.add("js");try{var t=localStorage.getItem("theme");if(t==="light"||t==="dark")document.documentElement.setAttribute("data-theme",t)}catch(e){}</script>
-<link rel="stylesheet" href="../assets/site.1b5de69f.css">
+<link rel="stylesheet" href="../assets/site.4a0986f8.css">
 </head>
 <body class="brand-yunget" data-page="changelog" data-kind="inner">
 <a class="skip" href="#main">跳到正文</a>
@@ -54,7 +54,17 @@
 </div>
 </header>
 <main id="main">
-<div class="page-canvas" data-page="changelog"><section class="page-intro"><div class="wrap intro-grid"><h1>更新日志</h1><div class="intro-copy"><p>版本、日期与附件数量来自 GitHub Release 数据；应用内检查更新读取同一来源。</p><div class="page-actions"><a class="button button-primary" href="../download/index.html">下载当前版本<svg class="icon-arrow" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true"><path d="M5 12h14M13 6l6 6-6 6"/></svg></a><a class="button" href="https://github.com/jiayuxuan123/YunGet/releases">GitHub Releases<svg class="icon-arrow" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true"><path d="M5 12h14M13 6l6 6-6 6"/></svg></a></div></div></div></section><section class="section"><div class="wrap"><header class="section-head"><h2>最近发布</h2><p class="section-lead">完整发布说明保留在 GitHub；这里列出便于扫描的版本路线。</p></header><article class="release-row"><div class="release-id"><strong>v2.7.36</strong><span>2026-11-15</span></div><p>版本：2.7.36（versionCode 84），内置 TurboDL 0.5.0.6。
+<div class="page-canvas" data-page="changelog"><section class="page-intro"><div class="wrap intro-grid"><h1>更新日志</h1><div class="intro-copy"><p>版本、日期与附件数量来自 GitHub Release 数据；应用内检查更新读取同一来源。</p><div class="page-actions"><a class="button button-primary" href="../download/index.html">下载当前版本<svg class="icon-arrow" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true"><path d="M5 12h14M13 6l6 6-6 6"/></svg></a><a class="button" href="https://github.com/jiayuxuan123/YunGet/releases">GitHub Releases<svg class="icon-arrow" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true"><path d="M5 12h14M13 6l6 6-6 6"/></svg></a></div></div></div></section><section class="section"><div class="wrap"><header class="section-head"><h2>最近发布</h2><p class="section-lead">完整发布说明保留在 GitHub；这里列出便于扫描的版本路线。</p></header><article class="release-row"><div class="release-id"><strong>v2.7.37</strong><span>2026-11-15</span></div><p>版本：2.7.37（versionCode 85），内置 TurboDL 0.5.0.6。
+本版处理新增网盘登录入口和官网网页登录兼容性问题，同时补齐两个官网的现代浏览体验与浏览器侧工具。
+网盘登录修复
+· 小飞机网盘：未登录时点击网盘卡片现在进入账号登录页，不再先打开个人文件页后提示“请先登录”。
+· 阿里云盘：登录入口改为官方登录地址，并使用桌面浏览器 User-Agent、第三方 Cookie 和多窗口支持。
+· 腾讯微云、PikPak：使用相同的桌面 WebView 环境，避免只渲染登录壳页或友情链接。
+· 天翼云盘、联通沃盘、城通网盘继续使用各自可用的登录入口。
+官网升级
+· 两个官网加入 View Transition 页面切换、移动端安全区域适配和长页面 content-visibility。
+· 两个官网下载页新增浏览器链接助手：
+· 云取链接助手：复制当前…</p><a href="https://github.com/jiayuxuan123/YunGet/releases/tag/v2.7.37">发布页</a></article><article class="release-row"><div class="release-id"><strong>v2.7.36</strong><span>2026-11-15</span></div><p>版本：2.7.36（versionCode 84），内置 TurboDL 0.5.0.6。
 本版修复用户反馈的 139 分享下载、持续 503 和社区高峰期限流问题，收紧匿名统计存储，并补齐多个网盘入口和自动诊断导出。
 139 分享下载
 · 139 分享直链补充官方 Referer，避免 OBS 返回 download_... 占位文件或错误页。
@@ -197,16 +207,7 @@ TurboDL 引擎更新
 · 默认开启 AdaptiveConcurrencyMode.DOWNWARD，先以用户配置线程数满速起跑，平稳后自动按需收敛多余连接，彻底消除小文件启动速度慢的缺陷；
 · 修复多任务调度与并发分片供给逻辑。
 2. 修复分享解析与目标文件续传边缘情况。
-3. 纯净 Android 端发布，保持单一框架演进。</p><a href="https://github.com/jiayuxuan123/YunGet/releases/tag/v2.7.22">发布页</a></article><article class="release-row"><div class="release-id"><strong>v2.7.21</strong><span>2026-10-31</span></div><p>云取 YunGet 2.7.21 把 Android 端内嵌引擎同步到 TurboDL 0.3.0.0。
-下载引擎
-· 同步 0.3.0.0 的调度与资源预算重做：公平任务槽、全局连接预算接口、懒启动 worker、动态分片供给。
-· 修复目标文件被删除后旧进度复活、收尾托管越界写入、预热误读整文件、暂停后 await 旧结果、暂停/取消竞态、完成 Job 泄漏等隐性缺陷。
-· 桌面 JVM 使用直接 ByteBuffer；Android/Dalvik 自动回落堆缓冲，手机端内存策略不放宽。
-· 手机端现有 UI、默认线程数与下载行为不变；全局连接预算暂未在设置页暴露。
-验证
-· :app:assembleRelease 成功。
-· :app:verifyApkVersion 通过：versionCode 69 / versionName 2.7.21。
-· :app:tes…</p><a href="https://github.com/jiayuxuan123/YunGet/releases/tag/v2.7.21">发布页</a></article></div></section></div></main>
+3. 纯净 Android 端发布，保持单一框架演进。</p><a href="https://github.com/jiayuxuan123/YunGet/releases/tag/v2.7.22">发布页</a></article></div></section></div></main>
 <footer class="site-footer">
 <div class="wrap footer-station">
 <div class="footer-stop"><span class="footer-node" aria-hidden="true"></span>
@@ -226,7 +227,7 @@ TurboDL 引擎更新
 <nav class="footer-nav" aria-label="页脚导航"><section class="footer-col"><h2>项目</h2><ul><li><a href="https://github.com/jiayuxuan123/YunGet">GitHub</a></li><li><a href="../download/index.html">下载</a></li><li><a href="index.html">更新日志</a></li><li><a href="https://github.com/jiayuxuan123/YunGet/issues">问题反馈</a></li></ul></section><section class="footer-col"><h2>文档</h2><ul><li><a href="../docs/readme/index.html">项目说明</a></li><li><a href="../docs/guide/index.html">使用说明</a></li><li><a href="../docs/faq/index.html">常见问题</a></li><li><a href="../docs/engines/index.html">下载引擎</a></li><li><a href="../docs/build/index.html">从源码构建</a></li></ul></section><section class="footer-col"><h2>插件</h2><ul><li><a href="../plugins/index.html">插件（市场与安装）</a></li><li><a href="../developers/index.html">开发者（怎么写）</a></li><li><a href="../docs/plugin-dev/index.html">写一个插件</a></li><li><a href="../docs/plugin-api/index.html">插件 ABI 参考</a></li><li><a href="../docs/plugin-publish/index.html">打包与发布</a></li><li><a href="../docs/plugin-security/index.html">插件安全模型</a></li></ul></section><section class="footer-col"><h2>协议与说明</h2><ul><li><a href="../legal/license/index.html">AGPL-3.0 原文</a></li><li><a href="../legal/notice/index.html">署名与致谢</a></li><li><a href="../legal/privacy/index.html">隐私说明</a></li><li><a href="../legal/terms/index.html">使用条款</a></li><li><a href="../support/index.html">支持开发</a></li></ul></section><section class="footer-col"><h2>相关</h2><ul><li><a href="https://github.com/CYQawa/YunX">上游 CYQawa/YunX</a></li><li><a href="https://github.com/jiayuxuan123/TurboDL">下载引擎 TurboDL</a></li><li><a href="https://github.com/jiayuxuan123/YunGet-Plugins">插件源 YunGet-Plugins</a></li><li><a href="../community/index.html">社区</a></li></ul></section></nav>
 </div>
 <div class="wrap footer-fine">
-<div class="footer-meta"><p>云取 YunGet v2.7.36 · AGPL-3.0 · 内置 TurboDL 0.5.0.6 · Android 7.0（API 24）</p><p>本项目是 CYQawa/YunX（云析）的二次开发版本，与上游作者无隐性关联。仅供个人学习与技术交流，请勿用于商业用途；下载内容的版权归原作者及相关权利人所有。</p></div>
+<div class="footer-meta"><p>云取 YunGet v2.7.37 · AGPL-3.0 · 内置 TurboDL 0.5.0.6 · Android 7.0（API 24）</p><p>本项目是 CYQawa/YunX（云析）的二次开发版本，与上游作者无隐性关联。仅供个人学习与技术交流，请勿用于商业用途；下载内容的版权归原作者及相关权利人所有。</p></div>
 <div class="footer-bottom">
 <span>云取 YunGet · ANDROID · OPEN SOURCE</span>
 <a href="https://github.com/jiayuxuan123/YunGet">GitHub / Source</a>
