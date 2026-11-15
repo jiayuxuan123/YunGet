@@ -133,6 +133,7 @@ fun ResolveScreen(
     bookmarkViewModel: BookmarkViewModel,
     /** 点快捷方式网格的「管理」：切到收藏页 */
     onOpenBookmarks: () -> Unit,
+    onOpenExternalWeb: (platform: String, url: String) -> Unit = { _, _ -> },
     modifier: Modifier = Modifier
 ) {
     if (com.yunget.app.ui.theme.LocalAppUiStyle.current == com.yunget.app.ui.theme.AppUiStyle.CLASSIC) {
@@ -292,6 +293,7 @@ fun ResolveScreen(
                 when (it) {
                     is ResolveUiState.Detail -> "detail"
                     is ResolveUiState.Video -> "video"
+                    is ResolveUiState.OpenWeb -> "web"
                     is ResolveUiState.Loading -> "loading"
                     else -> "input"
                 }
@@ -334,6 +336,21 @@ fun ResolveScreen(
                     onBack = { viewModel.backToInput() },
                     onDownloadAll = { viewModel.downloadAllVideoMedia() },
                 )
+                is ResolveUiState.OpenWeb -> Column(
+                    modifier = Modifier.fillMaxSize().padding(24.dp),
+                    verticalArrangement = Arrangement.Center,
+                ) {
+                    Text(s.title, style = MaterialTheme.typography.headlineSmall)
+                    Text(
+                        "该网盘使用应用内官方网页连接器。登录后可浏览文件，网页触发的下载会交给云取。",
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        modifier = Modifier.padding(top = 10.dp, bottom = 20.dp),
+                    )
+                    Button(onClick = { onOpenExternalWeb(s.platform, s.url) }) {
+                        Text("打开应用内网页")
+                    }
+                }
 
                 else -> ResolveInputContent(
                     viewModel = viewModel,
@@ -724,6 +741,8 @@ private fun platformLabel(platform: SharePlatform): String = when (platform) {
     SharePlatform.GUANGYA -> "光鸭云盘"
     SharePlatform.ILANZOU -> "蓝奏云优享版"
     SharePlatform.LANZOU -> "蓝奏云"
+    SharePlatform.FEIJIPAN -> "小飞机网盘"
+    SharePlatform.CTFILE -> "城通网盘"
     SharePlatform.GITHUB -> "GitHub"
 }
 

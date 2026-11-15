@@ -638,6 +638,23 @@ fun MainScreen(
     val ilanzouAccounts by ilanzouViewModel.allAccounts.collectAsState()
     val lanzouAccounts by lanzouViewModel.allAccounts.collectAsState()
     var showAccountManager by rememberSaveable { mutableStateOf(false) }
+    var externalLoginPlatform by rememberSaveable { mutableStateOf<String?>(null) }
+    var externalBrowsePlatform by rememberSaveable { mutableStateOf<String?>(null) }
+    var externalBrowseUrl by rememberSaveable { mutableStateOf<String?>(null) }
+    var externalAccountRefresh by remember { mutableStateOf(0) }
+    val externalAccountStore = remember(context) {
+        com.yunget.app.data.account.ExternalAccountStore(context)
+    }
+    val externalFeijipan = remember(externalAccountRefresh, externalAccountStore) {
+        externalAccountStore.load("feijipan")
+    }
+    val externalCtfile = remember(externalAccountRefresh, externalAccountStore) {
+        externalAccountStore.load("ctfile")
+    }
+    val externalWebAccounts = remember(externalAccountRefresh, externalAccountStore) {
+        listOf("aliyun", "tianyi", "weiyun", "wopan", "pikpak")
+            .associateWith { externalAccountStore.load(it) }
+    }
     val ucAccount by ucViewModel.ucAccount.collectAsState()
     val xunleiAccount by xunleiViewModel.xunleiAccount.collectAsState()
     val baiduAccount by baiduViewModel.baiduAccount.collectAsState()
@@ -899,7 +916,11 @@ fun MainScreen(
                         ilanzouCloudViewModel,
                         lanzouCloudViewModel,
                         bookmarkViewModel = bookmarkViewModel,
-                        onOpenBookmarks = { showBookmarks = true }
+                        onOpenBookmarks = { showBookmarks = true },
+                        onOpenExternalWeb = { platform, url ->
+                            externalBrowseUrl = url
+                            externalBrowsePlatform = platform
+                        },
                     )
                     MainTab.Drive -> DriveScreen(
                         scrollBehavior = scrollBehavior,
@@ -956,7 +977,18 @@ fun MainScreen(
                         onILanzouLogin = { showILanzouLogin = true },
                         onILanzouLogout = { ilanzouViewModel.logout() },
                         onLanzouLogin = { showLanzouLogin = true },
-                        onLanzouLogout = { lanzouViewModel.logout() }
+                        onLanzouLogout = { lanzouViewModel.logout() },
+                        externalAccountLabels = buildMap {
+                            externalFeijipan?.let { put("feijipan", it.nickname) }
+                            externalCtfile?.let { put("ctfile", it.nickname) }
+                            externalWebAccounts.forEach { (id, account) ->
+                                account?.let { put(id, it.nickname) }
+                            }
+                        },
+                        onOpenExternalDrive = { platform ->
+                            externalBrowseUrl = null
+                            externalBrowsePlatform = platform
+                        },
                     )
                     MainTab.Download -> DownloadScreen(scrollBehavior, downloadViewModel)
                     MainTab.Settings -> SettingsScreen(
@@ -1132,6 +1164,78 @@ fun MainScreen(
                     "lanzou", "蓝奏云",
                     lanzouAccounts.map { com.yunget.app.ui.items.MultiAccountRow(it.id, it.remark, it.nickname, it.isPrimary) },
                 ),
+                com.yunget.app.ui.screens.PlatformAccounts(
+                    "feijipan", "小飞机网盘",
+                    listOfNotNull(
+                        externalFeijipan?.let {
+                            com.yunget.app.ui.items.MultiAccountRow(
+                                id = "primary",
+                                remark = "",
+                                nickname = it.nickname,
+                                isPrimary = true,
+                            )
+                        }
+                    ),
+                    openable = true,
+                ),
+                com.yunget.app.ui.screens.PlatformAccounts(
+                    "ctfile", "城通网盘",
+                    listOfNotNull(
+                        externalCtfile?.let {
+                            com.yunget.app.ui.items.MultiAccountRow(
+                                id = "primary",
+                                remark = "",
+                                nickname = it.nickname,
+                                isPrimary = true,
+                            )
+                        }
+                    ),
+                ),
+                com.yunget.app.ui.screens.PlatformAccounts(
+                    "aliyun", "阿里云盘",
+                    listOfNotNull(externalWebAccounts["aliyun"]?.let {
+                        com.yunget.app.ui.items.MultiAccountRow(
+                            "primary", "", it.nickname, true,
+                        )
+                    }),
+                    openable = true,
+                ),
+                com.yunget.app.ui.screens.PlatformAccounts(
+                    "tianyi", "天翼云盘",
+                    listOfNotNull(externalWebAccounts["tianyi"]?.let {
+                        com.yunget.app.ui.items.MultiAccountRow(
+                            "primary", "", it.nickname, true,
+                        )
+                    }),
+                    openable = true,
+                ),
+                com.yunget.app.ui.screens.PlatformAccounts(
+                    "weiyun", "腾讯微云",
+                    listOfNotNull(externalWebAccounts["weiyun"]?.let {
+                        com.yunget.app.ui.items.MultiAccountRow(
+                            "primary", "", it.nickname, true,
+                        )
+                    }),
+                    openable = true,
+                ),
+                com.yunget.app.ui.screens.PlatformAccounts(
+                    "wopan", "联通沃盘",
+                    listOfNotNull(externalWebAccounts["wopan"]?.let {
+                        com.yunget.app.ui.items.MultiAccountRow(
+                            "primary", "", it.nickname, true,
+                        )
+                    }),
+                    openable = true,
+                ),
+                com.yunget.app.ui.screens.PlatformAccounts(
+                    "pikpak", "PikPak",
+                    listOfNotNull(externalWebAccounts["pikpak"]?.let {
+                        com.yunget.app.ui.items.MultiAccountRow(
+                            "primary", "", it.nickname, true,
+                        )
+                    }),
+                    openable = true,
+                ),
             ),
             onBack = { showAccountManager = false },
             onSelectPrimary = { platform, id ->
@@ -1146,6 +1250,7 @@ fun MainScreen(
                     "guangya" -> guangyaViewModel.setPrimary(id)
                     "ilanzou" -> ilanzouViewModel.setPrimary(id)
                     "lanzou" -> lanzouViewModel.setPrimary(id)
+                    "feijipan", "ctfile", "aliyun", "tianyi", "weiyun", "wopan", "pikpak" -> Unit
                 }
             },
             onDeleteAccount = { platform, id ->
@@ -1160,6 +1265,10 @@ fun MainScreen(
                     "guangya" -> guangyaViewModel.removeAccount(id)
                     "ilanzou" -> ilanzouViewModel.removeAccount(id)
                     "lanzou" -> lanzouViewModel.removeAccount(id)
+                    "feijipan", "ctfile", "aliyun", "tianyi", "weiyun", "wopan", "pikpak" -> {
+                        externalAccountStore.delete(platform)
+                        externalAccountRefresh++
+                    }
                 }
             },
             // 从账号管理页直接再加一个号：先关掉这一页，再打开对应平台的登录页。
@@ -1178,9 +1287,81 @@ fun MainScreen(
                     "guangya" -> showGuangYaLogin = true
                     "ilanzou" -> showILanzouLogin = true
                     "lanzou" -> showLanzouLogin = true
+                    "feijipan", "ctfile", "aliyun", "tianyi", "weiyun", "wopan", "pikpak" ->
+                        externalLoginPlatform = platform
+                }
+            },
+            onOpenAccount = { platform, _ ->
+                if (platform == "feijipan") {
+                    showAccountManager = false
+                    externalBrowsePlatform = "feijipan"
+                } else if (platform in setOf("ctfile", "aliyun", "tianyi", "weiyun", "wopan", "pikpak")) {
+                    showAccountManager = false
+                    externalBrowseUrl = null
+                    externalBrowsePlatform = platform
                 }
             },
         )
+    }
+
+    AnimatedVisibility(
+        visible = externalLoginPlatform != null,
+        enter = fadeIn(effectsDefault()) + scaleIn(motionTween(220), initialScale = 0.96f),
+        exit = fadeOut(effectsFast()) + scaleOut(motionTween(160), targetScale = 0.96f),
+        modifier = Modifier.fillMaxSize(),
+    ) {
+        externalLoginPlatform?.let { platform ->
+            com.yunget.app.ui.login.ExternalDriveLoginScreen(
+                platform = platform,
+                downloadManager = downloadManager,
+                onBack = { externalLoginPlatform = null },
+                onSaved = {
+                    externalLoginPlatform = null
+                    externalAccountRefresh++
+                    showAccountManager = true
+                },
+                onDownloaded = {
+                    externalLoginPlatform = null
+                    currentTab = MainTab.Download
+                },
+            )
+        }
+    }
+
+    AnimatedVisibility(
+        visible = externalBrowsePlatform != null,
+        enter = fadeIn(effectsDefault()) + scaleIn(motionTween(220), initialScale = 0.96f),
+        exit = fadeOut(effectsFast()) + scaleOut(motionTween(160), targetScale = 0.96f),
+        modifier = Modifier.fillMaxSize(),
+    ) {
+        if (externalBrowsePlatform == "feijipan") {
+            com.yunget.app.ui.screens.FeijipanBrowserScreen(
+                downloadManager = downloadManager,
+                onBack = { externalBrowsePlatform = null },
+                onDownloaded = {
+                    externalBrowsePlatform = null
+                    currentTab = MainTab.Download
+                },
+            )
+        } else {
+            externalBrowsePlatform?.let { platform ->
+                com.yunget.app.ui.login.ExternalDriveLoginScreen(
+                    platform = platform,
+                    downloadManager = downloadManager,
+                    initialUrl = externalBrowseUrl,
+                    onBack = {
+                        externalBrowsePlatform = null
+                        externalBrowseUrl = null
+                    },
+                    onSaved = { externalAccountRefresh++ },
+                    onDownloaded = {
+                        externalBrowsePlatform = null
+                        externalBrowseUrl = null
+                        currentTab = MainTab.Download
+                    },
+                )
+            }
+        }
     }
 
     // 公告与社区

@@ -20,7 +20,10 @@
 package com.yunget.app.data.network
 
 /** 网盘平台 */
-enum class SharePlatform { QUARK, UC, XUNLEI, BAIDU, C139, PAN123, PAN115, GUANGYA, ILANZOU, LANZOU, GITHUB }
+enum class SharePlatform {
+    QUARK, UC, XUNLEI, BAIDU, C139, PAN123, PAN115, GUANGYA, ILANZOU, LANZOU,
+    FEIJIPAN, CTFILE, GITHUB
+}
 
 /**
  * 解析结果：share_id + 提取码 + 平台。
@@ -73,6 +76,13 @@ object ShareLinkParser {
     private val pwdInLanzouUrlRegex = Regex("""[?&](?:pwd|pass|passcode|password)=([A-Za-z0-9]+)""", RegexOption.IGNORE_CASE)
     private val pwdInUrlRegex = Regex("""[?&]pwd=([A-Za-z0-9]+)""")
     private val pwdInTextRegex = Regex("""(?:提取码|访问码|密码)[：:]\s*([A-Za-z0-9]{4,8})""")
+    private val feijipanShareRegex = Regex("""(?:^|[/.])feiji(?:pan|x)\.com/s/([A-Za-z0-9]{4,64})""", RegexOption.IGNORE_CASE)
+    private val feijipanCodeRegex = Regex("""[?&](?:code|pwd|password|passcode)=([A-Za-z0-9]{4})""", RegexOption.IGNORE_CASE)
+    private val ctfileShareRegex = Regex(
+        """(?:^|[/.])(?:ctfile\.(?:com|net|cc|cn)|545c\.com)/(?:f|file)/([A-Za-z0-9]+(?:[-_][A-Za-z0-9]+)*)""",
+        RegexOption.IGNORE_CASE,
+    )
+    private val ctfileCodeRegex = Regex("""[?&](?:p|pwd|password|passcode)=([A-Za-z0-9]{4})""", RegexOption.IGNORE_CASE)
 
     fun parse(text: String): ParsedShare? {
         val url = urlRegex.find(text.trim())?.value
@@ -145,6 +155,18 @@ object ShareLinkParser {
             val pwd = pwdInUrlRegex.find(url)?.groupValues?.getOrNull(1)
                 ?: pwdInTextRegex.find(text)?.groupValues?.getOrNull(1)
             return ParsedShare(shareId = sid, pwd = pwd, platform = SharePlatform.GUANGYA)
+        }
+        // 小飞机网盘：匿名分享，提取码参数通常为 code/pwd
+        feijipanShareRegex.find(url)?.groupValues?.getOrNull(1)?.let { sid ->
+            val pwd = feijipanCodeRegex.find(url)?.groupValues?.getOrNull(1)
+                ?: pwdInTextRegex.find(text)?.groupValues?.getOrNull(1)
+            return ParsedShare(shareId = sid, pwd = pwd, platform = SharePlatform.FEIJIPAN)
+        }
+        // 城通网盘：当前支持 /f/ 单文件，其他类型交给仓库给出明确提示
+        ctfileShareRegex.find(url)?.groupValues?.getOrNull(1)?.let { id ->
+            val pwd = ctfileCodeRegex.find(url)?.groupValues?.getOrNull(1)
+                ?: pwdInTextRegex.find(text)?.groupValues?.getOrNull(1)
+            return ParsedShare(shareId = "f/$id", pwd = pwd, platform = SharePlatform.CTFILE)
         }
         // 蓝奏云优享版链接：https://{ilanzou-host}/s/{shareId}（先于蓝奏云判断，避免混淆）
         ilanzouShareIdRegex.find(url)?.groupValues?.getOrNull(1)?.let { sid ->

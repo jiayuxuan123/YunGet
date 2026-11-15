@@ -84,8 +84,6 @@ CREATE TABLE IF NOT EXISTS analytics_events (
   created_at INTEGER NOT NULL
 );
 CREATE INDEX IF NOT EXISTS analytics_events_time ON analytics_events(created_at);
-CREATE INDEX IF NOT EXISTS analytics_events_install ON analytics_events(install_hash, created_at);
-CREATE INDEX IF NOT EXISTS analytics_events_name ON analytics_events(event, created_at);
 
 
 CREATE TABLE IF NOT EXISTS community_accounts (

@@ -96,4 +96,20 @@ class ShareLinkParserTest {
             assertEquals("参数名 $param 应被识别", "a1B2", parsed.pwd)
         }
     }
+
+    @Test
+    fun parsesNewPublicSharePlatforms() {
+        val feiji = ShareLinkParser.parse("https://www.feijipan.com/s/AbCd1234?code=a1B2")!!
+        assertEquals(SharePlatform.FEIJIPAN, feiji.platform)
+        assertEquals("AbCd1234", feiji.shareId)
+        assertEquals("a1B2", feiji.pwd)
+
+        val feijix = ShareLinkParser.parse("https://feijix.com/s/AbCd1234")!!
+        assertEquals(SharePlatform.FEIJIPAN, feijix.platform)
+
+        val ctfile = ShareLinkParser.parse("https://url67.ctfile.com/f/65712267-17569899321195-e8ce7f?p=5577")!!
+        assertEquals(SharePlatform.CTFILE, ctfile.platform)
+        assertEquals("f/65712267-17569899321195-e8ce7f", ctfile.shareId)
+        assertEquals("5577", ctfile.pwd)
+    }
 }

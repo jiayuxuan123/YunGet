@@ -99,6 +99,35 @@ test('analytics rejects oversized batches before inserting events', async () => 
   assert.deepEqual(await response.json(), {error:'统计事件数量无效'});
 });
 
+test('production rate limiting uses the edge cache before D1', async () => {
+  const values = new Map();
+  const cache = {
+    async match(request) {
+      const value = values.get(request.url);
+      return value === undefined ? undefined : new Response(String(value));
+    },
+    async put(request, response) {
+      values.set(request.url, Number(await response.text()));
+    },
+  };
+  let d1Prepares = 0;
+  const database = {prepare(){d1Prepares++; throw new Error('D1 should not be used for rate limiting');}};
+  const handle = createHandler({verifyAdmin:async()=>null});
+  const request = () => new Request('https://community.example.com/api/analytics', {
+    method:'POST',
+    headers:{'Content-Type':'application/json','X-YunGet-Analytics':'1'},
+    body:'{}',
+  });
+  for (let index = 0; index < 60; index++) {
+    const response = await handle(request(), {...env, DB:database, RATE_CACHE:cache});
+    assert.equal(response.status, 422);
+  }
+  const limited = await handle(request(), {...env, DB:database, RATE_CACHE:cache});
+  assert.equal(limited.status, 429);
+  assert.equal(d1Prepares, 0);
+  assert.equal(values.size, 1);
+});
+
 test('thread visibility is available to moderators and never exposes owner ids', async () => {
   const id='10000000-0000-4000-8000-000000000001';
   const row={id,author_id:'private-owner-id',nickname:'local-user',hidden:1,private:0,status:'new'};

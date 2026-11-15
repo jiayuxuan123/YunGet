@@ -7,7 +7,7 @@ export const analyticsEvents = new Set([
 
 const words = values => new Set(values.split(' '));
 const properties = {
-  source: words('unknown other direct quark uc xunlei baidu pan123 c139 pan115 guangya ilanzou lanzou github douyin weibo xiaohongshu bilibili kuaishou acfun pixiv'),
+  source: words('unknown other direct quark uc xunlei baidu pan123 c139 pan115 guangya ilanzou lanzou feijipan ctfile github douyin weibo xiaohongshu bilibili kuaishou acfun pixiv'),
   engine: words('turbodl legacy aria2 gopeed other unknown'),
   error: words('unknown auth gone rate_limited checksum storage timeout cancelled network other tls range short_read html permission processing'),
   kind: words('unknown share command github direct video other'),
@@ -39,7 +39,7 @@ export function analyticsProperties(value) {
   return JSON.stringify(clean);
 }
 
-export async function readAnalytics(db, {days = 30, version, now = Math.floor(Date.now() / 1000)} = {}) {
+export async function readAnalytics(db, {days = 7, version, now = Math.floor(Date.now() / 1000)} = {}) {
   const offset = 8 * 3600;
   const since = Math.floor((now + offset) / 86400) * 86400 - offset - (days - 1) * 86400;
   const clause = 'created_at>=? AND created_at<=?' + (version ? ' AND app_version=?' : '');
@@ -93,6 +93,6 @@ export async function readAnalytics(db, {days = 30, version, now = Math.floor(Da
   });
   return {
     days, version: version || null, timezone: 'Asia/Shanghai', summary, daily, versions, events, errors, engines, sources,
-    methodology: '完成占比按已上报的完成/失败结果计算，排除取消；它不是文件下载成功率。开始次数含旧版恢复，事件接收日期不等于发生日期。2.7.31 缺少来源及精确错误码，未知项不补造。',
+    methodology: '完成占比按已上报的完成/失败结果计算，排除取消；它不是文件下载成功率。原始匿名事件仅保留最近 7 天，统计按接收时间归日。2.7.31 缺少来源及精确错误码，未知项不补造。',
   };
 }

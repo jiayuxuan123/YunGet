@@ -33,6 +33,7 @@ import androidx.lifecycle.viewModelScope
 import com.yunget.app.data.download.DownloadManager
 import com.yunget.app.data.download.DownloadPlatform
 import com.yunget.app.data.network.C139Api
+import com.yunget.app.data.network.C139DownloadPolicy
 import com.yunget.app.data.network.C139Constants
 import com.yunget.app.data.network.model.ShareExpire
 import com.yunget.app.data.network.model.ShareFile
@@ -246,10 +247,7 @@ class C139CloudViewModel(
     // ---------- 单文件操作 ----------
 
     /** 139 下载直链的请求头（OBS 直链，UA + Referer） */
-    private fun downloadHeaders(): Map<String, String> = mapOf(
-        "User-Agent" to C139Constants.PC_UA,
-        "Referer" to "https://yun.139.com/"
-    )
+    private fun downloadHeaders(): Map<String, String> = C139DownloadPolicy.headers()
 
     /**
      * 递归收集文件夹内所有文件（保持目录结构）。
@@ -341,10 +339,7 @@ class C139CloudViewModel(
                     // 139 getDownloadUrl 响应不含 name → 用列表里的文件名（与分享链接下载一致，避免 fileId 乱码）
                     fileName = file.fname.ifBlank { link.filename },
                     size = link.size,
-                    headers = mapOf(
-                        "User-Agent" to C139Constants.PC_UA,
-                        "Referer" to "https://yun.139.com/"
-                    )
+                    headers = C139DownloadPolicy.headers()
                 )
                 downloadLink = link // 弹下载确认弹窗（长按直链可复制）
             } catch (e: Exception) {

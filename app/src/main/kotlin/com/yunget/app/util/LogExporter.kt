@@ -89,6 +89,8 @@ object LogExporter {
             writer.write("系统：Android ${Build.VERSION.RELEASE}（SDK ${Build.VERSION.SDK_INT}）\n")
             writer.write("\n")
 
+            DiagnosticRuntime.appendSnapshot(writer, context)
+
             writer.write("\n")
             writer.write("========== 错误汇总 ==========\n")
             // 错误单独放最前面：用户说"有问题"时，这一节是第一个该看的。
@@ -147,6 +149,10 @@ object LogExporter {
                 writer.write(structured)
             }
 
+            writer.write("\n")
+            writer.write("========== 自动发现的诊断文件 ==========\n")
+            writeDiscoveredDiagnosticFiles(writer, context)
+
             // ---------- 运行日志：当前应用进程（logcat 按 pid 过滤，只保留本应用） ----------
             // 注意：这一段**放在落盘日志之后**。实测在 OnePlus/ColorOS/Android 16 上，
             // logcat 的环形缓冲只保留数秒，用户按提示操作时这里往往一行本应用日志都没有
@@ -188,6 +194,33 @@ object LogExporter {
             }
             ?: emptyList()
     }.getOrDefault(emptyList())
+
+    private fun writeDiscoveredDiagnosticFiles(writer: OutputStreamWriter, context: Context) {
+        val knownFiles = DiagLog.Category.entries.mapTo(mutableSetOf()) { it.fileName } +
+            setOf("errors.log")
+        val files = runCatching {
+            context.filesDir.walkTopDown()
+                .filter { it.isFile && (it.extension == "log" || it.extension == "txt") }
+                .filterNot { it.relativeTo(context.filesDir).path.substringBefore(File.separator) == "crash" }
+                .filterNot { it.name in knownFiles }
+                .sortedBy { it.path }
+                .take(50)
+                .toList()
+        }.getOrDefault(emptyList())
+        if (files.isEmpty()) {
+            writer.write("（没有额外诊断文件）\n")
+            return
+        }
+        for (file in files) {
+            writer.write("\n----- ${file.relativeTo(context.filesDir)} (${file.length()} bytes) -----\n")
+            val text = runCatching {
+                if (file.length() <= MAX_CRASH_REPORT_BYTES) file.readText()
+                else file.readText().take(MAX_CRASH_REPORT_BYTES) + "\n…（已截断）"
+            }.getOrElse { "（读取失败：${it.message}）" }
+            writer.write(DiagLog.redact(text))
+            writer.write("\n")
+        }
+    }
 
     /** 执行 logcat 命令并写入 writer（仅保留最近 MAX_LINES 行） */
     private fun dumpLogcat(writer: OutputStreamWriter, command: List<String>) {

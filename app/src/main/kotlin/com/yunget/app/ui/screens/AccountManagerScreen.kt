@@ -86,6 +86,7 @@ fun AccountManagerScreen(
      *   是新增还是覆盖。多账号做完了却没有新增的入口，等于只做了一半。
      */
     onAddAccount: (platformId: String) -> Unit = {},
+    onOpenAccount: (platformId: String, accountId: String) -> Unit = { _, _ -> },
     modifier: Modifier = Modifier,
 ) {
     BackHandler { onBack() }
@@ -134,6 +135,7 @@ fun AccountManagerScreen(
                         onSelectPrimary = { id -> onSelectPrimary(p.platformId, id) },
                         onDelete = { id -> onDeleteAccount(p.platformId, id) },
                         onAdd = { onAddAccount(p.platformId) },
+                        onOpen = { onOpenAccount(p.platformId, p.accounts.firstOrNull()?.id.orEmpty()) },
                     )
                 }
             }
@@ -176,6 +178,7 @@ data class PlatformAccounts(
     val platformId: String,
     val displayName: String,
     val accounts: List<MultiAccountRow>,
+    val openable: Boolean = false,
 )
 
 @Composable
@@ -184,6 +187,7 @@ private fun PlatformCard(
     onSelectPrimary: (String) -> Unit,
     onDelete: (String) -> Unit,
     onAdd: () -> Unit,
+    onOpen: () -> Unit,
 ) {
     Card(
         modifier = Modifier.fillMaxWidth(),
@@ -223,6 +227,11 @@ private fun PlatformCard(
                 onSelectPrimary = onSelectPrimary,
                 onDelete = onDelete,
             )
+            if (platform.openable) {
+                TextButton(onClick = onOpen, modifier = Modifier.fillMaxWidth()) {
+                    Text("浏览个人文件")
+                }
+            }
             Spacer(Modifier.height(8.dp))
             AddAccountButton(onAdd)
         }

@@ -308,6 +308,8 @@ private fun platformShortLabel(platform: String): String? = when (platform) {
     "GUANGYA" -> "光鸭"
     "ILANZOU" -> "优享"
     "LANZOU" -> "蓝奏"
+    "FEIJIPAN" -> "小飞机"
+    "CTFILE" -> "城通"
     "GITHUB" -> "GitHub"
     else -> null
 }

@@ -850,7 +850,7 @@ private fun DeleteAllConfirmDialog(
                 if (hasCompletedFile) {
                     DeleteLocalFileOption(deleteLocal) { deleteLocal = it }
                     Text(
-                        "勾选后会同时删除已保存的文件，无法恢复。",
+                        "勾选后会同时删除已保存的文件或整个文件夹，无法恢复。",
                         style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                     )
@@ -880,7 +880,7 @@ private fun DeleteLocalFileOption(checked: Boolean, onCheckedChange: (Boolean) -
         horizontalArrangement = Arrangement.spacedBy(8.dp),
     ) {
         Checkbox(checked = checked, onCheckedChange = null)
-        Text("同时删除本地文件", style = MaterialTheme.typography.bodyMedium, modifier = Modifier.weight(1f))
+        Text("同时删除本地文件或文件夹", style = MaterialTheme.typography.bodyMedium, modifier = Modifier.weight(1f))
     }
 }
 
@@ -983,7 +983,7 @@ private fun DeleteConfirmDialog(
                 }
                 Text(
                     text = if (hasLocalFile) {
-                        "勾选后将一并删除已保存的本地文件，且不可恢复。"
+                        "勾选后将一并删除已保存的本地文件或整个文件夹，且不可恢复。"
                     } else if (task.status == DownloadTaskEntity.STATUS_COMPLETED) {
                         "该任务没有已完成的本地文件。"
                     } else {

@@ -42,6 +42,8 @@ object DownloadPlatform {
     const val ILANZOU = "ilanzou"
     /** 蓝奏云 */
     const val LANZOU = "lanzou"
+    const val FEIJIPAN = "feijipan"
+    const val CTFILE = "ctfile"
     /** 磁力链接（BT）：只能交给 Gopeed 引擎，内置分片下载器不支持 */
     const val MAGNET = "magnet"
     /** GitHub 仓库/Release 下载 */

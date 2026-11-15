@@ -80,10 +80,22 @@ function secureResponse(body, status = 200, extra = {}) {
 }
 const accounts = createAccounts({fail, text, hash, stamp, secureResponse});
 const session = accounts.session;
+export const ANALYTICS_RETENTION_DAYS = 7;
 async function rate(request, env, action, limit, seconds) {
   const now = stamp();
   const identifier = await hash(`${new URL(env.PUBLIC_ORIGIN).host}:${request.headers.get('CF-Connecting-IP') || 'unknown'}:${Math.floor(now / 86400)}`);
   const key = `${action}:${identifier}:${Math.floor(now / seconds)}`;
+  const cache = env.RATE_CACHE || globalThis.caches?.default;
+  if (cache && typeof cache.match === 'function' && typeof cache.put === 'function') {
+    const cacheRequest = new Request(`https://${new URL(env.PUBLIC_ORIGIN).host}/__rate/${encodeURIComponent(key)}`, {method: 'GET'});
+    const cached = await cache.match(cacheRequest);
+    const hits = Number(cached ? await cached.text() : 0) + 1;
+    if (hits > limit) fail(429, '提交过于频繁，请稍后再试');
+    await cache.put(cacheRequest, new Response(String(hits), {
+      headers: {'Content-Type': 'text/plain', 'Cache-Control': `max-age=${seconds}, immutable`},
+    }));
+    return;
+  }
   const row = await env.DB.prepare('INSERT INTO rate_limits(bucket,hits,expires_at) VALUES(?,1,?) ON CONFLICT(bucket) DO UPDATE SET hits=hits+1 RETURNING hits')
     .bind(key, now + seconds * 2).first();
   if (row.hits > limit) fail(429, '提交过于频繁，请稍后再试');
@@ -123,7 +135,7 @@ export function createHandler({fetchRemote = fetch, verifyAdmin = createAdminVer
       if (request.method === 'GET' && path === '/app.js') return secureResponse(script, 200, {'Content-Type': 'text/javascript; charset=utf-8', 'Cache-Control': 'public,max-age=300'});
       if (request.method === 'GET' && path === '/analytics.css') return secureResponse(analyticsStyle, 200, {'Content-Type': 'text/css; charset=utf-8', 'Cache-Control': 'public,max-age=300'});
       if (request.method === 'GET' && path === '/analytics.js') return secureResponse(analyticsScript, 200, {'Content-Type': 'text/javascript; charset=utf-8', 'Cache-Control': 'public,max-age=300'});
-      if (request.method === 'GET' && path === '/api/config') return secureResponse({verification: verificationConfig, version: '2.7.32'});
+      if (request.method === 'GET' && path === '/api/config') return secureResponse({verification: verificationConfig, version: '2.7.36'});
       if (request.method === 'GET' && path.startsWith('/verification/')) {
         if (!env.ASSETS) fail(503, '验证资源暂不可用');
         const resource = await env.ASSETS.fetch(request);
@@ -171,8 +183,8 @@ export function createHandler({fetchRemote = fetch, verifyAdmin = createAdminVer
       }
       if (request.method === 'GET' && path === '/admin/api/session') return secureResponse({developer: true});
       if (request.method === 'GET' && path === '/admin/api/analytics') {
-        const rawDays = Number(url.searchParams.get('days') || 30);
-        if (!Number.isInteger(rawDays) || rawDays < 1 || rawDays > 90) fail(422, '统计周期无效');
+        const rawDays = Number(url.searchParams.get('days') || ANALYTICS_RETENTION_DAYS);
+        if (!Number.isInteger(rawDays) || rawDays < 1 || rawDays > ANALYTICS_RETENTION_DAYS) fail(422, '统计周期无效');
         const version = url.searchParams.get('version') || undefined;
         if (version && !/^\d+(?:\.\d+){2,3}$/.test(version)) fail(422, '版本筛选无效');
         return secureResponse(await readAnalytics(env.DB, {days: rawDays, version}));
@@ -309,11 +321,12 @@ export function createHandler({fetchRemote = fetch, verifyAdmin = createAdminVer
 }
 
 export default {fetch: createHandler(), async scheduled(_controller, env) {
+  const now = stamp();
   await env.DB.batch([
-    env.DB.prepare('DELETE FROM sessions WHERE expires_at<?').bind(stamp()),
-    env.DB.prepare('DELETE FROM rate_limits WHERE expires_at<?').bind(stamp()),
-    env.DB.prepare('DELETE FROM used_verifications WHERE expires_at<?').bind(stamp()),
-    env.DB.prepare('DELETE FROM messages WHERE created_at<?').bind(stamp() - 30 * 86400),
-    env.DB.prepare('DELETE FROM analytics_events WHERE created_at<?').bind(stamp() - 180 * 86400),
+    env.DB.prepare('DELETE FROM sessions WHERE expires_at<?').bind(now),
+    env.DB.prepare('DELETE FROM rate_limits WHERE expires_at<?').bind(now),
+    env.DB.prepare('DELETE FROM used_verifications WHERE expires_at<?').bind(now),
+    env.DB.prepare('DELETE FROM messages WHERE created_at<?').bind(now - 30 * 86400),
+    env.DB.prepare('DELETE FROM analytics_events WHERE created_at<?').bind(now - ANALYTICS_RETENTION_DAYS * 86400),
   ]);
 }};

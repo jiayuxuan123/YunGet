@@ -33,6 +33,7 @@ class YunGetApp : Application() {
         // 网络日志拦截器需要上下文（读「诊断模式」开关）。
         // 放在最前面：之后任何一次 apiClient() 都会带上它。
         com.yunget.app.data.network.HttpClients.appContext = this.applicationContext
+        com.yunget.app.util.DiagnosticRuntime.install(this.applicationContext)
         // 共享内核的两个出口：HTTP 客户端与日志。内核不依赖 Android，
         // 由这里把应用已配置好的网络栈与 logcat 装进去（内核默认是裸客户端/丢弃日志）。
         com.yunget.app.data.network.CoreHttp.install {

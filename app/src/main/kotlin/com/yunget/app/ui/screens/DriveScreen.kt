@@ -220,6 +220,9 @@ fun DriveScreen(
     /** 蓝奏云登录/退出 */
     onLanzouLogin: () -> Unit = {},
     onLanzouLogout: () -> Unit = {},
+    /** 文析同源缺口平台的已登录昵称：小飞机、城通、阿里、天翼、微云、沃盘、PikPak。 */
+    externalAccountLabels: Map<String, String?> = emptyMap(),
+    onOpenExternalDrive: (String) -> Unit = {},
     modifier: Modifier = Modifier
 ) {
     if (com.yunget.app.ui.theme.LocalAppUiStyle.current == com.yunget.app.ui.theme.AppUiStyle.CLASSIC) {
@@ -451,6 +454,76 @@ fun DriveScreen(
                 else -> ({ showLanzouSheet = true })
             },
             { showLanzouSheet = true }, onLanzouLogin
+        ),
+        DriveEntry(
+            DriveAccount(
+                "feijipan", "小飞机网盘", "登录后浏览个人文件与下载", "飞",
+                externalAccountLabels["feijipan"] != null,
+            ),
+            null,
+            { onOpenExternalDrive("feijipan") },
+            null,
+            { onOpenExternalDrive("feijipan") },
+        ),
+        DriveEntry(
+            DriveAccount(
+                "ctfile", "城通网盘", "登录后使用网页文件管理与下载", "城",
+                externalAccountLabels["ctfile"] != null,
+            ),
+            null,
+            { onOpenExternalDrive("ctfile") },
+            null,
+            { onOpenExternalDrive("ctfile") },
+        ),
+        DriveEntry(
+            DriveAccount(
+                "aliyun", "阿里云盘", "登录后浏览文件与下载", "阿",
+                externalAccountLabels["aliyun"] != null,
+            ),
+            null,
+            { onOpenExternalDrive("aliyun") },
+            null,
+            { onOpenExternalDrive("aliyun") },
+        ),
+        DriveEntry(
+            DriveAccount(
+                "tianyi", "天翼云盘", "登录后浏览文件与下载", "翼",
+                externalAccountLabels["tianyi"] != null,
+            ),
+            null,
+            { onOpenExternalDrive("tianyi") },
+            null,
+            { onOpenExternalDrive("tianyi") },
+        ),
+        DriveEntry(
+            DriveAccount(
+                "weiyun", "腾讯微云", "登录后浏览文件与下载", "微",
+                externalAccountLabels["weiyun"] != null,
+            ),
+            null,
+            { onOpenExternalDrive("weiyun") },
+            null,
+            { onOpenExternalDrive("weiyun") },
+        ),
+        DriveEntry(
+            DriveAccount(
+                "wopan", "联通沃盘", "登录后浏览文件与下载", "沃",
+                externalAccountLabels["wopan"] != null,
+            ),
+            null,
+            { onOpenExternalDrive("wopan") },
+            null,
+            { onOpenExternalDrive("wopan") },
+        ),
+        DriveEntry(
+            DriveAccount(
+                "pikpak", "PikPak", "登录后浏览文件与下载", "P",
+                externalAccountLabels["pikpak"] != null,
+            ),
+            null,
+            { onOpenExternalDrive("pikpak") },
+            null,
+            { onOpenExternalDrive("pikpak") },
         ),
     )
 

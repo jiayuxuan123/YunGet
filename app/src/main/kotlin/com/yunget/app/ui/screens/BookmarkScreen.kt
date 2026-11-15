@@ -770,6 +770,12 @@ internal fun bookmarkPlatformLabel(platform: String): String = when (platform) {
     "C139" -> "139网盘"
     "PAN123" -> "123云盘"
     "PAN115" -> "115网盘"
+    "GUANGYA" -> "光鸭云盘"
+    "ILANZOU" -> "蓝奏云优享版"
+    "LANZOU" -> "蓝奏云"
+    "FEIJIPAN" -> "小飞机网盘"
+    "CTFILE" -> "城通网盘"
+    "GITHUB" -> "GitHub"
     else -> "网盘"
 }
 

@@ -61,7 +61,7 @@ internal fun analyticsHttpStatus(raw: String): Int? {
 }
 
 private val analyticsSources = setOf("quark", "uc", "xunlei", "baidu", "pan123", "c139", "pan115",
-    "guangya", "ilanzou", "lanzou", "github", "douyin", "weibo", "xiaohongshu", "bilibili",
+    "guangya", "ilanzou", "lanzou", "feijipan", "ctfile", "github", "douyin", "weibo", "xiaohongshu", "bilibili",
     "kuaishou", "acfun", "pixiv", "direct", "other", "unknown")
 
 internal fun analyticsSource(platform: String, url: String = ""): String {

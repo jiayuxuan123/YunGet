@@ -33,6 +33,7 @@ import com.yunget.app.data.download.DownloadPlatform
 import com.yunget.app.data.download.DownloadSource
 import com.yunget.app.data.network.BaiduConstants
 import com.yunget.app.data.network.C139Constants
+import com.yunget.app.data.network.C139DownloadPolicy
 import com.yunget.app.data.network.C139KoulingParser
 import com.yunget.app.data.network.GuangYaConstants
 import com.yunget.app.data.network.ILanzouConstants
@@ -68,6 +69,8 @@ import com.yunget.app.data.repository.BaiduAccountRepository
 import com.yunget.app.data.repository.BaiduResolveRepository
 import com.yunget.app.data.repository.C139AccountRepository
 import com.yunget.app.data.repository.C139ResolveRepository
+import com.yunget.app.data.repository.CtfileResolveRepository
+import com.yunget.app.data.repository.FeijipanResolveRepository
 import com.yunget.app.data.repository.GuangYaAccountRepository
 import com.yunget.app.data.repository.GuangYaResolveRepository
 import com.yunget.app.data.repository.LanzouAccountRepository
@@ -105,6 +108,7 @@ sealed interface ResolveUiState {
     data object Loading : ResolveUiState
     data class Detail(val session: ShareSession, val files: List<ShareFile>) : ResolveUiState
     data class Error(val message: String) : ResolveUiState
+    data class OpenWeb(val platform: String, val url: String, val title: String) : ResolveUiState
 
     /** 视频解析结果（抖音/小红书/快手/微博/AcFun/B站/Pixiv，与网盘流程互不干扰） */
     data class Video(val result: VideoParseResult) : ResolveUiState
@@ -202,11 +206,16 @@ class ResolveViewModel(
      * null = 视频解析不可用（仅测试或未注入时）：解析入口会原样退回网盘/GitHub 流程。
      * 放在构造最后并带默认值，避免破坏既有构造点与测试。
      */
-    private val videoParseRepository: VideoParseRepository? = VideoParseRepository()
+    private val videoParseRepository: VideoParseRepository? = VideoParseRepository(),
+    private val feijipanResolveRepository: FeijipanResolveRepository = FeijipanResolveRepository(),
+    private val ctfileResolveRepository: CtfileResolveRepository = CtfileResolveRepository(),
 ) : ViewModel() {
 
     private val resolveTelemetry = com.yunget.app.data.analytics.ResolveTelemetryTracker { name, properties ->
         com.yunget.app.data.analytics.AnonymousAnalytics.track(name, properties)
+    }
+    private val externalAccounts by lazy {
+        com.yunget.app.data.account.ExternalAccountStore(appContext)
     }
     private var resolveJob: kotlinx.coroutines.Job? = null
     private var resolveState by mutableStateOf<ResolveUiState>(ResolveUiState.Idle)
@@ -969,6 +978,13 @@ class ResolveViewModel(
         SharePlatform.XUNLEI -> xunleiAccountRepository.getAccount()?.accessToken
         SharePlatform.BAIDU -> baiduAccountRepository.getAccount()?.cookie
         SharePlatform.C139 -> c139AccountRepository.getAccount()?.cookie
+        SharePlatform.FEIJIPAN ->
+            externalAccounts.load("feijipan")?.payload.orEmpty()
+        SharePlatform.CTFILE -> {
+            val payload = externalAccounts.load("ctfile")?.payload.orEmpty()
+            runCatching { org.json.JSONObject(payload).optString("cookie") }
+                .getOrDefault("")
+        }
         SharePlatform.PAN123 -> pan123AccountRepository.getAccount()?.accessToken
         SharePlatform.PAN115 -> pan115AccountRepository.getAccount()?.cookie
         SharePlatform.GUANGYA -> guangyaAccountRepository.ensureAccessToken()
@@ -1042,6 +1058,8 @@ class ResolveViewModel(
         SharePlatform.XUNLEI -> xunleiResolveRepository
         SharePlatform.BAIDU -> baiduResolveRepository
         SharePlatform.C139 -> c139ResolveRepository
+        SharePlatform.FEIJIPAN -> feijipanResolveRepository
+        SharePlatform.CTFILE -> ctfileResolveRepository
         SharePlatform.PAN123 -> pan123ResolveRepository
         SharePlatform.PAN115 -> pan115ResolveRepository
         SharePlatform.GUANGYA -> guangyaResolveRepository
@@ -1055,6 +1073,8 @@ class ResolveViewModel(
         SharePlatform.XUNLEI -> "0"
         SharePlatform.BAIDU -> ""
         SharePlatform.C139 -> "0"
+        SharePlatform.FEIJIPAN -> "root"
+        SharePlatform.CTFILE -> "0"
         SharePlatform.PAN123 -> "0"
         SharePlatform.PAN115 -> Pan115Constants.ROOT_CID
         SharePlatform.GUANGYA -> ""
@@ -1069,6 +1089,8 @@ class ResolveViewModel(
         SharePlatform.XUNLEI -> "迅雷网盘"
         SharePlatform.BAIDU -> "百度网盘"
         SharePlatform.C139 -> "139 网盘"
+        SharePlatform.FEIJIPAN -> "小飞机网盘"
+        SharePlatform.CTFILE -> "城通网盘"
         SharePlatform.PAN123 -> "123云盘"
         SharePlatform.PAN115 -> "115网盘"
         SharePlatform.GUANGYA -> "光鸭云盘"
@@ -1274,6 +1296,10 @@ class ResolveViewModel(
 
     /** 开始解析：链接 → token →（密码）→ 根目录列表 */
     private suspend fun resolveNonPanLink(link: String) {
+        externalWebPlatformForLink(link)?.let { (platform, title) ->
+            uiState = ResolveUiState.OpenWeb(platform, link.substringBefore('#'), title)
+            return
+        }
         val byPlugin = runCatching { downloadManager.parseByPlugins(link) }
             .onFailure {
                 if (it is kotlinx.coroutines.CancellationException) throw it
@@ -1298,6 +1324,22 @@ class ResolveViewModel(
             return
         }
         uiState = ResolveUiState.Error("无法识别分享链接")
+    }
+
+    private fun externalWebPlatformForLink(raw: String): Pair<String, String>? {
+        val url = runCatching { java.net.URI(raw.trim()) }.getOrNull() ?: return null
+        val host = url.host?.lowercase() ?: return null
+        return when {
+            host == "pan.wo.cn" || host.endsWith(".pan.wo.cn") -> "wopan" to "联通沃盘"
+            host == "www.alipan.com" || host == "alipan.com" ||
+                host == "www.aliyundrive.com" || host == "aliyundrive.com" ->
+                "aliyun" to "阿里云盘"
+            host == "cloud.189.cn" || host.endsWith(".cloud.189.cn") -> "tianyi" to "天翼云盘"
+            host == "www.weiyun.com" || host == "weiyun.com" -> "weiyun" to "腾讯微云"
+            host == "mypikpak.com" || host == "www.mypikpak.com" ||
+                host == "pikpak.com" || host == "www.pikpak.com" -> "pikpak" to "PikPak"
+            else -> null
+        }
     }
 
     /**
@@ -1389,6 +1431,12 @@ class ResolveViewModel(
             catch (cancelled: kotlinx.coroutines.CancellationException) { throw cancelled }
             catch (error: Exception) {
                 kotlin.coroutines.coroutineContext.ensureActive()
+                com.yunget.app.util.DiagLog.e(
+                    appContext,
+                    com.yunget.app.util.DiagLog.Category.RESOLVE,
+                    "链接解析失败：platform=${currentPlatform.name.lowercase()}",
+                    error,
+                )
                 uiState = ResolveUiState.Error(error.message ?: "解析失败，请稍后重试")
             }
         }
@@ -2390,7 +2438,16 @@ class ResolveViewModel(
                 "Cookie" to credential,
                 "User-Agent" to BaiduConstants.UA_NETDISK
             )
-            SharePlatform.C139 -> mapOf("User-Agent" to C139Constants.PC_UA)
+            SharePlatform.C139 -> C139DownloadPolicy.headers()
+            SharePlatform.FEIJIPAN -> mapOf(
+                "User-Agent" to "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 Chrome/131.0.0.0 Safari/537.36",
+                "Origin" to "https://www.feijipan.com",
+                "Referer" to "https://www.feijipan.com/"
+            )
+            SharePlatform.CTFILE -> mapOf(
+                "User-Agent" to "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 Chrome/131.0.0.0 Safari/537.36",
+                "Referer" to "https://www.ctfile.com/"
+            )
             // 115：CDN 同时校验登录 Cookie 与取链响应下发的 900 秒 CDN Cookie，
             // 缺任一直接 403 no cookie value（文档 §4.3），因此两份 Cookie 拼接后一起发；
             // UA 必须是客户端串（与取链一致），浏览器 UA 会被判「网页端」拒发大文件直链（抓包 bug/115/）
@@ -2476,6 +2533,8 @@ class ResolveViewModel(
         val isGuangYa = currentPlatform == SharePlatform.GUANGYA
         val isILanzou = currentPlatform == SharePlatform.ILANZOU
         val isLanzou = currentPlatform == SharePlatform.LANZOU
+        val isFeijipan = currentPlatform == SharePlatform.FEIJIPAN
+        val isCtfile = currentPlatform == SharePlatform.CTFILE
         val isQuark = currentPlatform == SharePlatform.QUARK
         // 下载来源平台：按平台应用下载线程数设置
         val platform = when {
@@ -2488,6 +2547,8 @@ class ResolveViewModel(
             isGuangYa -> DownloadPlatform.GUANGYA
             isILanzou -> DownloadPlatform.ILANZOU
             isLanzou -> DownloadPlatform.LANZOU
+            isFeijipan -> DownloadPlatform.FEIJIPAN
+            isCtfile -> DownloadPlatform.CTFILE
             else -> DownloadPlatform.QUARK
         }
         // 【关键修复】夸克/UC 共用 __puus：取链与下载必须用同一份已刷新 Cookie（AlistGo/alist#830 类缺陷）

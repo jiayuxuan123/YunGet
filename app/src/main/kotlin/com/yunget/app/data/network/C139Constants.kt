@@ -46,6 +46,9 @@ object C139Constants {
     /** 分享专用 host（§9/§12：share-kd-njs.yun.139.com） */
     const val SHARE_BASE = "https://share-kd-njs.yun.139.com"
 
+    /** OBS signed download links require the official web Referer, otherwise 139 may return a placeholder. */
+    const val DOWNLOAD_REFERER = "https://yun.139.com/"
+
     /** 分享列目录（§7/§15 share 类型；7.13+ 请求/响应加密，§14） */
     const val SHARE_LIST_URL = "$SHARE_BASE/yun-share/richlifeApp/devapp/IOutLink/getOutLinkInfoV6"
 

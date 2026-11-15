@@ -167,6 +167,7 @@ class TurboDownloadManager(
     private val controlLocks = ConcurrentHashMap<Long, Mutex>()
     private val saveLock = Mutex()
     private val sourceRefreshAttempts = ConcurrentHashMap<Long, Int>()
+    private val rateLimitUntil = ConcurrentHashMap<Long, Long>()
     private val refreshJobs = ConcurrentHashMap<Long, kotlinx.coroutines.Job>()
     private val sourceRefresher by lazy { QuarkTaskRefresher(context) }
 
@@ -887,6 +888,7 @@ class TurboDownloadManager(
         turboIdToRoomId.clear()
         taskHeaders.clear()
         taskSizes.clear()
+        rateLimitUntil.clear()
         taskNames.clear()
         taskCallbacks.clear()
         turboOutputs.clear()
@@ -968,6 +970,16 @@ class TurboDownloadManager(
 
     /** 开始/恢复下载（断点续传）。 */
     override fun start(id: Long, headers: Map<String, String>) {
+        val until = rateLimitUntil[id]
+        if (until != null && until > System.currentTimeMillis()) {
+            val status = terminalDetails[id]?.lastHttpStatus
+            scope.launch {
+                dao.updateError(id, RateLimitCooldown.message(status, until))
+            }
+            Log.w(TAG, "start blocked by source cooldown: id=$id remaining=${until - System.currentTimeMillis()}ms")
+            return
+        }
+        if (until != null) rateLimitUntil.remove(id, until)
         sourceRefreshAttempts.remove(id)
         startTransfer(id, headers)
     }
@@ -1144,6 +1156,7 @@ class TurboDownloadManager(
         _stats.update { it - id }
         taskHeaders.remove(id)
         taskSizes.remove(id)
+        rateLimitUntil.remove(id)
         lastSeenBytes.remove(id)
         lastDbWriteTs.remove(id)
         lastDbWriteBytes.remove(id)
@@ -1481,6 +1494,7 @@ class TurboDownloadManager(
                 }
             }
             is TurboEvent.Completed -> {
+                rateLimitUntil.remove(roomId)
                 _stats.update { stats -> stats[roomId]?.let { stats + (roomId to it.copy(speed = 0, chunkCount = 0, diagnostics = DownloadDiagnostics.from(client.taskDetails(ev.taskId)))) } ?: stats }
                 val job = scope.launch(start = kotlinx.coroutines.CoroutineStart.LAZY) {
                     onTurboCompleted(roomId, ev.file, ev.totalBytes, generation = generation)
@@ -1694,6 +1708,7 @@ class TurboDownloadManager(
             turboOutputs.remove(roomId)?.delete()
             if (file != downloadedFile) file.delete()
             sourceRefreshAttempts.remove(roomId)
+            rateLimitUntil.remove(roomId)
             dispatchToFileHandlers(task, savedPath, actualSize)
             taskCallbacks.remove(roomId)?.let { callback -> runCatching { callback() } }
             DiagLog.i(context, DiagLog.Category.DOWNLOAD, "下载完成：id=$roomId 实际=$actualSize")
@@ -1762,7 +1777,15 @@ class TurboDownloadManager(
             DownloadDiagnostics.from(failedDetails)?.let { details ->
                 synchronized(terminalDetails) { terminalDetails[roomId] = details }
             }
-            dao.failGeneration(roomId, generation, DownloadRecoveryPolicy.displayFailure(event.reason))
+            val failureText = if (RateLimitCooldown.applies(event.reason, status)) {
+                val until = System.currentTimeMillis() + RateLimitCooldown.DURATION_MS
+                rateLimitUntil[roomId] = until
+                RateLimitCooldown.message(status, until)
+            } else {
+                rateLimitUntil.remove(roomId)
+                DownloadRecoveryPolicy.displayFailure(event.reason)
+            }
+            dao.failGeneration(roomId, generation, failureText)
             if (DownloadRecoveryPolicy.shouldDiscardPartial(event.reason)) turboOutputs.remove(roomId)?.delete()
             DiagLog.e(context, DiagLog.Category.DOWNLOAD, "下载失败：id=$roomId HTTP=${status ?: 0}")
         } finally {
