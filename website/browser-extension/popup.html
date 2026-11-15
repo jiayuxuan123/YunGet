@@ -1,0 +1,113 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>云取链接助手</title>
+  <style>
+    :root {
+      color-scheme: light dark;
+      --paper: #f4f0e6;
+      --surface: #faf7ef;
+      --ink: #17201c;
+      --muted: #58645d;
+      --line: #b8b4a6;
+      --route: #24745a;
+      --route-ink: #fff;
+      --signal: #e4623c;
+    }
+    @media (prefers-color-scheme: dark) {
+      :root {
+        --paper: #131c18;
+        --surface: #19251f;
+        --ink: #f2eee3;
+        --muted: #aebbb4;
+        --line: #58675f;
+        --route: #72c6a2;
+        --route-ink: #102219;
+        --signal: #ff8a64;
+      }
+    }
+    * { box-sizing: border-box; }
+    body {
+      width: 360px;
+      min-height: 250px;
+      margin: 0;
+      padding: 18px;
+      background:
+        linear-gradient(135deg, color-mix(in srgb, var(--route) 9%, transparent), transparent 45%),
+        var(--paper);
+      color: var(--ink);
+      font: 14px/1.55 "Schibsted Grotesk", "Microsoft YaHei", "PingFang SC", sans-serif;
+    }
+    h1 { margin: 0; font-size: 20px; letter-spacing: -0.03em; }
+    .eyebrow {
+      margin: 0 0 4px;
+      color: var(--route);
+      font-size: 11px;
+      font-weight: 800;
+      letter-spacing: 0.14em;
+    }
+    .current {
+      margin-top: 16px;
+      padding: 13px;
+      border: 1px solid var(--line);
+      background: var(--surface);
+    }
+    .provider { color: var(--signal); font-size: 12px; font-weight: 750; }
+    .url {
+      display: -webkit-box;
+      margin: 6px 0 0;
+      overflow: hidden;
+      font-family: "Cascadia Mono", Consolas, monospace;
+      font-size: 11px;
+      overflow-wrap: anywhere;
+      -webkit-box-orient: vertical;
+      -webkit-line-clamp: 4;
+    }
+    .actions { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin-top: 12px; }
+    button, .site-link {
+      min-height: 40px;
+      border: 1px solid var(--line);
+      background: var(--surface);
+      color: var(--ink);
+      font: inherit;
+      font-weight: 700;
+      text-align: center;
+      text-decoration: none;
+      cursor: pointer;
+    }
+    button:hover, .site-link:hover { border-color: var(--route); }
+    button:focus-visible, .site-link:focus-visible {
+      outline: 3px solid var(--signal);
+      outline-offset: 2px;
+    }
+    .primary { border-color: var(--route); background: var(--route); color: var(--route-ink); }
+    .site-link { display: grid; place-items: center; }
+    .status { min-height: 20px; margin: 10px 0 0; color: var(--route); font-size: 12px; }
+    .recent { margin-top: 14px; }
+    .recent h2 { margin: 0 0 7px; font-size: 12px; text-transform: uppercase; letter-spacing: 0.1em; }
+    .recent ul { display: grid; gap: 5px; margin: 0; padding: 0; list-style: none; }
+    .recent button { width: 100%; min-height: 32px; padding: 5px 8px; overflow: hidden; text-align: left; text-overflow: ellipsis; white-space: nowrap; }
+    .empty { color: var(--muted); font-size: 12px; }
+  </style>
+</head>
+<body>
+  <p class="eyebrow">YUNGET · LINK RELAY</p>
+  <h1>云取链接助手</h1>
+  <section class="current" aria-label="当前页面">
+    <div class="provider" id="provider">正在读取当前页面</div>
+    <p class="url" id="url">…</p>
+  </section>
+  <div class="actions">
+    <button class="primary" id="copy" type="button">复制当前链接</button>
+    <a class="site-link" href="https://yunget.yunl.us.ci/" target="_blank" rel="noopener">打开云取官网</a>
+  </div>
+  <p class="status" id="status" aria-live="polite"></p>
+  <section class="recent" aria-labelledby="recent-title">
+    <h2 id="recent-title">最近复制</h2>
+    <ul id="recent-list"><li class="empty">还没有记录。</li></ul>
+  </section>
+  <script src="popup.js"></script>
+</body>
+</html>

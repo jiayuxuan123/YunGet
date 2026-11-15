@@ -1,0 +1,24 @@
+{
+  "manifest_version": 3,
+  "name": "云取链接助手",
+  "version": "1.0.0",
+  "description": "复制当前页面链接，识别常见网盘来源，并保存最近使用的分享链接。",
+  "permissions": [
+    "tabs",
+    "storage"
+  ],
+  "action": {
+    "default_title": "云取链接助手",
+    "default_popup": "popup.html",
+    "default_icon": {
+      "16": "icons/icon-16.png",
+      "48": "icons/icon-48.png",
+      "128": "icons/icon-128.png"
+    }
+  },
+  "icons": {
+    "16": "icons/icon-16.png",
+    "48": "icons/icon-48.png",
+    "128": "icons/icon-128.png"
+  }
+}

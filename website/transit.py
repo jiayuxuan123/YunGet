@@ -435,6 +435,21 @@ def download(facts: dict, href) -> str:
             ),
         )
         + _section(
+            "浏览器链接助手",
+            "在电脑浏览器里先把分享链接整理好，再粘贴到云取。扩展不上传链接，也不读取网页正文。",
+            '<div class="extension-offer">'
+            '<div><span class="status status-ready">Manifest V3</span>'
+            "<h3>云取链接助手</h3>"
+            "<p>复制当前标签页链接，按域名识别常见网盘，并在浏览器本地保留最近 5 条记录。</p></div>"
+            '<div class="extension-actions">'
+            '<a class="button button-primary" href="{ASSET:extensions/yunget-link-relay.zip}" download>'
+            "下载扩展 ZIP</a>"
+            '<a class="text-link" href="https://developer.chrome.com/docs/extensions/get-started/tutorial/hello-world#load-unpacked">'
+            "查看加载未打包扩展的官方步骤</a>"
+            "</div></div>",
+            "extension",
+        )
+        + _section(
             "历史版本",
             "历史列表只用于核对；新安装优先使用当前版本。",
             '<details class="history-drawer"><summary>展开最近 10 次发布</summary>'

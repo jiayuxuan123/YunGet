@@ -160,6 +160,16 @@ class Site:
             return rel(page["dir"], "assets/" + src.name)
         raise FileNotFoundError(f"assets/ 里没有 {name}.*，但内容里引用了 {{IMG:{name}}}")
 
+    def asset_file(self, page: dict, relative_path: str) -> str:
+        """Resolve a nested asset while keeping its directory structure."""
+        candidate = (self.assets_dir / relative_path).resolve()
+        root = self.assets_dir.resolve()
+        if root not in candidate.parents or not candidate.is_file():
+            raise FileNotFoundError(
+                f"assets/ 里没有 {relative_path}，但内容里引用了 {{ASSET:{relative_path}}}"
+            )
+        return rel(page["dir"], "assets/" + relative_path.replace("\\", "/"))
+
     # ---- 头部 / 导航 / 页脚 ----
 
     def head(self, page: dict) -> str:
@@ -338,6 +348,11 @@ class Site:
         body = re.sub(
             r"\{IMG:([a-zA-Z0-9_.-]+)\}",
             lambda m: self.asset(page, m.group(1)),
+            body,
+        )
+        body = re.sub(
+            r"\{ASSET:([a-zA-Z0-9_./-]+)\}",
+            lambda m: self.asset_file(page, m.group(1)),
             body,
         )
         crumbs = page.get("breadcrumb")

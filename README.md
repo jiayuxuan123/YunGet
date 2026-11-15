@@ -4,9 +4,9 @@
 >
 > **本项目是 [CYQawa/YunX（云析）](https://github.com/CYQawa/YunX) 的二次开发版本**，在其协议与架构基础上进行功能扩展，并将下载能力逐步迁移至独立的 [TurboDL](https://github.com/jiayuxuan123/TurboDL) 下载引擎。遵循 GNU AGPL-3.0 协议开源。
 
-本次更新修复 139 分享下载占位文件、持续 503 时反复重试，并重写社区存储与限流机制，详见[2.7.36 完整更新日志](engineering/releases/2.7.36.md)。
+本次更新修复新增网盘的登录入口、官网网页登录兼容性，并为两个官网加入浏览器链接助手与现代导航体验，详见[2.7.37 完整更新日志](engineering/releases/2.7.37.md)。
 
-当前版本 **2.7.36**（versionCode 84）· Android 7.0+（minSdk 24，targetSdk 34）· 内置 TurboDL 0.5.0.6
+当前版本 **2.7.37**（versionCode 85）· Android 7.0+（minSdk 24，targetSdk 34）· 内置 TurboDL 0.5.0.6
 
 **官网**：[jiayuxuan123.github.io/YunGet](https://jiayuxuan123.github.io/YunGet/) —— 下载、使用说明、常见问题、隐私与条款
 
@@ -21,6 +21,13 @@
 - 本项目在上游协议解析、网盘功能和 Android 应用结构基础上进行了二次开发。
 - 下载能力已迁移到独立的 [TurboDL](https://github.com/jiayuxuan123/TurboDL) SDK：日常的直链下载走它，HLS 通过它的插件机制接入。项目早期自己写的那套下载实现仍留在代码里，作为可选的兜底引擎。
 - **赞赏渠道说明**：应用内「支持开发」页的赞赏码仅面向**本二次开发版本**的维护；若想支持上游原项目作者，请移步 [上游仓库](https://github.com/CYQawa/YunX) 的捐赠渠道，避免权益混淆。
+
+## 2.7.37 更新
+
+- 修复小飞机网盘未登录时错误进入浏览页的问题，现在会先打开账号登录页。
+- 阿里云盘登录页改用官方登录地址并启用桌面浏览器 UA；腾讯微云、PikPak 同步调整 WebView 登录环境。
+- 官网下载页新增 `YunGet 链接助手` 浏览器扩展下载，并支持跨页面 View Transition、长页面渲染隔离和更清晰的移动端导航。
+- 保留 2.7.36 的 139、限流、日志诊断、网盘入口和社区存储修复。
 
 ## 2.7.36 更新
 

@@ -4,6 +4,7 @@ import android.webkit.CookieManager
 import android.webkit.URLUtil
 import android.webkit.WebSettings
 import android.webkit.WebView
+import android.webkit.WebChromeClient
 import android.webkit.WebViewClient
 import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.layout.Arrangement
@@ -48,17 +49,25 @@ import kotlinx.coroutines.launch
 import org.json.JSONObject
 import java.net.URLDecoder
 
-private data class WebDrive(val title: String, val url: String)
+private data class WebDrive(
+    val title: String,
+    val url: String,
+    val desktopUserAgent: Boolean = false,
+)
 
 private fun webDrive(platform: String): WebDrive? = when (platform) {
     "ctfile" -> WebDrive("城通网盘", "https://www.ctfile.com/")
-    "aliyun" -> WebDrive("阿里云盘", "https://www.alipan.com/")
+    "aliyun" -> WebDrive("阿里云盘", "https://www.alipan.com/sign/in", desktopUserAgent = true)
     "tianyi" -> WebDrive("天翼云盘", "https://cloud.189.cn/web/login.html")
-    "weiyun" -> WebDrive("腾讯微云", "https://www.weiyun.com/")
+    "weiyun" -> WebDrive("腾讯微云", "https://www.weiyun.com/", desktopUserAgent = true)
     "wopan" -> WebDrive("联通沃盘", "https://pan.wo.cn/")
-    "pikpak" -> WebDrive("PikPak", "https://mypikpak.com/")
+    "pikpak" -> WebDrive("PikPak", "https://mypikpak.com/", desktopUserAgent = true)
     else -> null
 }
+
+private const val DESKTOP_WEB_USER_AGENT =
+    "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 " +
+        "(KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36"
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -187,7 +196,17 @@ fun ExternalDriveLoginScreen(
                 WebView(context).apply {
                     settings.javaScriptEnabled = true
                     settings.domStorageEnabled = true
+                    settings.databaseEnabled = true
+                    settings.javaScriptCanOpenWindowsAutomatically = true
+                    settings.setSupportMultipleWindows(true)
+                    settings.mixedContentMode = WebSettings.MIXED_CONTENT_COMPATIBILITY_MODE
                     settings.cacheMode = WebSettings.LOAD_DEFAULT
+                    if (web?.desktopUserAgent == true) {
+                        settings.userAgentString = DESKTOP_WEB_USER_AGENT
+                    }
+                    CookieManager.getInstance().setAcceptCookie(true)
+                    CookieManager.getInstance().setAcceptThirdPartyCookies(this, true)
+                    webChromeClient = WebChromeClient()
                     webViewClient = WebViewClient()
                     setDownloadListener { url, userAgent, contentDisposition, mimeType, _ ->
                         val cookie = CookieManager.getInstance().getCookie(url).orEmpty()

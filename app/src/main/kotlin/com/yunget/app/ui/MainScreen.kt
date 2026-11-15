@@ -989,6 +989,10 @@ fun MainScreen(
                             externalBrowseUrl = null
                             externalBrowsePlatform = platform
                         },
+                        onLoginExternalDrive = { platform ->
+                            externalBrowseUrl = null
+                            externalLoginPlatform = platform
+                        },
                     )
                     MainTab.Download -> DownloadScreen(scrollBehavior, downloadViewModel)
                     MainTab.Settings -> SettingsScreen(

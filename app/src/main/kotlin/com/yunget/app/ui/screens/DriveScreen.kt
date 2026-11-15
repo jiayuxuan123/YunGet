@@ -223,6 +223,7 @@ fun DriveScreen(
     /** 文析同源缺口平台的已登录昵称：小飞机、城通、阿里、天翼、微云、沃盘、PikPak。 */
     externalAccountLabels: Map<String, String?> = emptyMap(),
     onOpenExternalDrive: (String) -> Unit = {},
+    onLoginExternalDrive: (String) -> Unit = {},
     modifier: Modifier = Modifier
 ) {
     if (com.yunget.app.ui.theme.LocalAppUiStyle.current == com.yunget.app.ui.theme.AppUiStyle.CLASSIC) {
@@ -463,7 +464,7 @@ fun DriveScreen(
             null,
             { onOpenExternalDrive("feijipan") },
             null,
-            { onOpenExternalDrive("feijipan") },
+            { onLoginExternalDrive("feijipan") },
         ),
         DriveEntry(
             DriveAccount(
@@ -473,7 +474,7 @@ fun DriveScreen(
             null,
             { onOpenExternalDrive("ctfile") },
             null,
-            { onOpenExternalDrive("ctfile") },
+            { onLoginExternalDrive("ctfile") },
         ),
         DriveEntry(
             DriveAccount(
@@ -483,7 +484,7 @@ fun DriveScreen(
             null,
             { onOpenExternalDrive("aliyun") },
             null,
-            { onOpenExternalDrive("aliyun") },
+            { onLoginExternalDrive("aliyun") },
         ),
         DriveEntry(
             DriveAccount(
@@ -493,7 +494,7 @@ fun DriveScreen(
             null,
             { onOpenExternalDrive("tianyi") },
             null,
-            { onOpenExternalDrive("tianyi") },
+            { onLoginExternalDrive("tianyi") },
         ),
         DriveEntry(
             DriveAccount(
@@ -503,7 +504,7 @@ fun DriveScreen(
             null,
             { onOpenExternalDrive("weiyun") },
             null,
-            { onOpenExternalDrive("weiyun") },
+            { onLoginExternalDrive("weiyun") },
         ),
         DriveEntry(
             DriveAccount(
@@ -513,7 +514,7 @@ fun DriveScreen(
             null,
             { onOpenExternalDrive("wopan") },
             null,
-            { onOpenExternalDrive("wopan") },
+            { onLoginExternalDrive("wopan") },
         ),
         DriveEntry(
             DriveAccount(
@@ -523,7 +524,7 @@ fun DriveScreen(
             null,
             { onOpenExternalDrive("pikpak") },
             null,
-            { onOpenExternalDrive("pikpak") },
+            { onLoginExternalDrive("pikpak") },
         ),
     )
 
