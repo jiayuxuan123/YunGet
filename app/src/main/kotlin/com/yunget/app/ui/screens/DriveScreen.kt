@@ -865,25 +865,48 @@ private fun DriveListContent(
 
 @Composable
 private fun DriveOverview(loggedInCount: Int, platformCount: Int, onManageAccounts: (() -> Unit)?) {
-    Card(
-        Modifier.fillMaxWidth(), shape = RoundedCornerShape(24.dp),
-        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.primaryContainer)
+    Surface(
+        modifier = Modifier.fillMaxWidth(),
+        shape = RoundedCornerShape(18.dp),
+        color = MaterialTheme.colorScheme.primaryContainer,
     ) {
-        Column(Modifier.padding(20.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
-            Text("网盘账号", style = MaterialTheme.typography.titleLarge, color = MaterialTheme.colorScheme.onPrimaryContainer)
-            Text("$loggedInCount 个平台已登录 · 共 $platformCount 个平台", style = MaterialTheme.typography.bodyLarge, color = MaterialTheme.colorScheme.onPrimaryContainer)
-            Text(
-                if (loggedInCount == 0) "选择平台登录，开始浏览与下载" else "点击平台浏览文件，在更多菜单中查看账号",
-                style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onPrimaryContainer
-            )
+        Row(
+            modifier = Modifier.fillMaxWidth().padding(14.dp),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(12.dp),
+        ) {
+            Surface(
+                modifier = Modifier.size(42.dp),
+                shape = RoundedCornerShape(13.dp),
+                color = MaterialTheme.colorScheme.primary.copy(alpha = 0.12f),
+                contentColor = MaterialTheme.colorScheme.primary,
+            ) {
+                Box(contentAlignment = Alignment.Center) {
+                    Icon(Icons.Outlined.Cloud, contentDescription = null, modifier = Modifier.size(23.dp))
+                }
+            }
+            Column(modifier = Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(3.dp)) {
+                Text(
+                    "$loggedInCount / $platformCount 个平台已登录",
+                    style = MaterialTheme.typography.titleSmall,
+                    fontWeight = FontWeight.SemiBold,
+                    color = MaterialTheme.colorScheme.onPrimaryContainer,
+                )
+                Text(
+                    if (loggedInCount == 0) "选择平台登录后浏览与下载" else "浏览文件或管理账号",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onPrimaryContainer.copy(alpha = 0.78f),
+                )
+            }
             if (onManageAccounts != null) {
                 FilledTonalButton(
-                    onClick = onManageAccounts, modifier = Modifier.fillMaxWidth().heightIn(min = 48.dp),
-                    shape = RoundedCornerShape(16.dp)
+                    onClick = onManageAccounts,
+                    modifier = Modifier.heightIn(min = 44.dp),
+                    shape = RoundedCornerShape(12.dp),
                 ) {
-                    Icon(Icons.Outlined.ManageAccounts, null, Modifier.size(20.dp))
-                    Spacer(Modifier.width(8.dp))
-                    Text("管理全部账号")
+                    Icon(Icons.Outlined.ManageAccounts, null, Modifier.size(18.dp))
+                    Spacer(Modifier.width(6.dp))
+                    Text("管理", style = MaterialTheme.typography.labelLarge)
                 }
             }
         }

@@ -62,6 +62,10 @@ object DownloadEngineRegistry {
         /** 一句话说明（设置页用）。 */
         val description: String
 
+        /** 该引擎真实具备的能力；界面不得用引擎名猜测。 */
+        val capabilities: DownloadEngineCapabilities
+            get() = DownloadEngineCapabilities()
+
         /**
          * 当前设备/当前安装状态下是否可用。
          *
@@ -173,6 +177,13 @@ internal object TurboDlEngineProvider : DownloadEngineRegistry.EngineProvider {
     override val displayName = "TurboDL（默认）"
     override val description =
         "多线程 Range 分片、工作窃取、限流退避、插件路由（HLS）、断点续传与现场诊断。"
+    override val capabilities = DownloadEngineCapabilities(
+        authenticatedHttp = true,
+        rangedRequests = true,
+        hls = true,
+        sourceFailover = true,
+        liveDiagnostics = true,
+    )
 
     override fun create(context: Context): DownloadManager =
         EngineManagerFactory.createTurboDl(context)
@@ -183,7 +194,13 @@ internal object LegacyEngineProvider : DownloadEngineRegistry.EngineProvider {
     override val id = "legacy"
     override val displayName = "内置引擎（兼容模式）"
     override val description =
-        "项目早期的自适应下载引擎。保留作为 TurboDL 异常时的兜底；不支持现场诊断。"
+        "项目早期的自适应下载引擎。支持带头请求、HLS、断点续传和镜像轮换，作为无外部内核时的稳定兜底。"
+    override val capabilities = DownloadEngineCapabilities(
+        authenticatedHttp = true,
+        rangedRequests = true,
+        hls = true,
+        sourceFailover = true,
+    )
 
     override fun create(context: Context): DownloadManager =
         EngineManagerFactory.createLegacy(context)
@@ -200,7 +217,13 @@ internal object Aria2EngineProvider : DownloadEngineRegistry.EngineProvider {
     override val id = "aria2"
     override val displayName = "aria2 原生引擎（实验）"
     override val description =
-        "内置官方 aria2c（仅 arm64）。多协议、成熟稳定；不支持现场诊断，小文件不分片。"
+        "可选 aria2-next 内核（仅 arm64）。带头 Range、HLS 和镜像轮换；内核缺失时安全降级到兼容单流。"
+    override val capabilities = DownloadEngineCapabilities(
+        authenticatedHttp = true,
+        rangedRequests = true,
+        hls = true,
+        sourceFailover = true,
+    )
 
     /**
      * 可用性取决于 ABI 与"二进制在不在 APK 里"。
@@ -210,14 +233,15 @@ internal object Aria2EngineProvider : DownloadEngineRegistry.EngineProvider {
      * 那次探测同时充当这里的可用性来源）。未探测过时按 ABI 判断——
      * 至少能挡住"非 arm64 设备"这个最常见的情况，不会给出误导性的"可用"。
      */
-    override fun isAvailable(): Boolean = Aria2Executor.cachedAvailability() ?: Aria2Executor.isSupportedAbi()
+    override fun isAvailable(): Boolean = Aria2Executor.cachedAvailability() == true
 
     override fun unavailableReason(): String = when {
         !Aria2Executor.isSupportedAbi() ->
             "本机不是 arm64 设备，aria2 二进制只能运行在 arm64 上。"
+        Aria2Executor.cachedAvailability() == null ->
+            "尚未完成 aria2 可用性检测。先下载并安装可选内核，再点一次「检测 aria2 是否可用」。"
         else ->
-            "aria2 可执行文件不在 APK 内（打包时未启用 useLegacyPackaging）。" +
-                "请改用 TurboDL 或内置引擎。"
+            "aria2 内核未安装、版本不匹配或不可执行；任务仍可安全降级到兼容引擎。"
     }
 
     override fun create(context: Context): DownloadManager =

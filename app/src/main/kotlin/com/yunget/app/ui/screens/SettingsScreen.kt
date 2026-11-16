@@ -351,6 +351,22 @@ fun SettingsScreen(
         }
     }
 
+    // 引擎页是独立全屏页面。这里直接返回，避免设置页列表、弹窗和引擎页同时组合
+    // 在同一个页面容器里；部分机型会把后绘制的 Scaffold 裁掉或停在上一页动画中。
+    if (showDownloadEngine) {
+        DownloadEngineScreen(
+            onBack = {
+                showDownloadEngine = false
+                engineChoice = settingsRepo.downloadEngine
+            },
+            onOpenAnnouncement = {
+                showDownloadEngine = false
+                onAnnouncementClick()
+            }
+        )
+        return
+    }
+
     val activeConns = activeConnectionsProvider()
     Box(
         modifier = modifier.fillMaxSize().nestedScroll(scrollBehavior.nestedScrollConnection),
@@ -366,6 +382,13 @@ fun SettingsScreen(
         ) {
             item(key = "download_overview") {
                 SettingsOverview(threads = threads, concurrent = maxConcurrent, isGopeed = engineChoice == SettingsRepository.ENGINE_GOPEED)
+            }
+            item(key = "settings_quick_actions") {
+                SettingsQuickActions(
+                    onEngine = { showDownloadEngine = true },
+                    onTheme = onThemeClick,
+                    onLogs = onLogViewClick,
+                )
             }
             item(key = "settings_group_0") {
                 SettingsGroup(title = "下载任务", description = "保存位置、并发与速度") {
@@ -1499,19 +1522,6 @@ fun SettingsScreen(
         EngineAdvancedScreen(onBack = { showEngineAdvanced = false })
     }
 
-    if (showDownloadEngine) {
-        DownloadEngineScreen(
-            onBack = {
-                showDownloadEngine = false
-                engineChoice = settingsRepo.downloadEngine
-            },
-            onOpenAnnouncement = {
-                showDownloadEngine = false
-                onAnnouncementClick()
-            }
-        )
-    }
-
     // 插件页：独立全屏页（JS 脚本的导入/启停/运行状态/详情/卸载）。
     // 副标题走的是仓库的 Flow，卸载与启停会自己反映到上面那一行，这里不必回读设置。
     if (showPlugins) {
@@ -1756,6 +1766,51 @@ private fun SettingsOverview(threads: Int, concurrent: Int, isGopeed: Boolean) {
 }
 
 @Composable
+private fun SettingsQuickActions(
+    onEngine: () -> Unit,
+    onTheme: () -> Unit,
+    onLogs: () -> Unit,
+) {
+    Row(
+        modifier = Modifier.fillMaxWidth(),
+        horizontalArrangement = Arrangement.spacedBy(8.dp),
+    ) {
+        SettingsQuickAction(Icons.Outlined.Memory, "下载引擎", onEngine, Modifier.weight(1f))
+        SettingsQuickAction(Icons.Outlined.Palette, "主题外观", onTheme, Modifier.weight(1f))
+        SettingsQuickAction(Icons.AutoMirrored.Outlined.ReceiptLong, "实时日志", onLogs, Modifier.weight(1f))
+    }
+}
+
+@Composable
+private fun SettingsQuickAction(
+    icon: ImageVector,
+    label: String,
+    onClick: () -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    Surface(
+        onClick = onClick,
+        modifier = modifier.heightIn(min = 62.dp),
+        shape = RoundedCornerShape(14.dp),
+        color = MaterialTheme.colorScheme.surfaceContainerLow,
+    ) {
+        Column(
+            modifier = Modifier.fillMaxWidth().padding(horizontal = 8.dp, vertical = 10.dp),
+            horizontalAlignment = Alignment.CenterHorizontally,
+            verticalArrangement = Arrangement.spacedBy(4.dp),
+        ) {
+            Icon(icon, contentDescription = null, modifier = Modifier.size(21.dp), tint = MaterialTheme.colorScheme.primary)
+            Text(
+                label,
+                style = MaterialTheme.typography.labelMedium,
+                color = MaterialTheme.colorScheme.onSurface,
+                maxLines = 1,
+            )
+        }
+    }
+}
+
+@Composable
 private fun SettingsGroup(
     title: String,
     description: String,
@@ -1911,6 +1966,13 @@ internal fun SettingsPreviewContent() {
         verticalArrangement = Arrangement.spacedBy(ui.space(14.dp))
     ) {
         item { SettingsOverview(threads = 16, concurrent = 3, isGopeed = false) }
+        item {
+            SettingsQuickActions(
+                onEngine = {},
+                onTheme = {},
+                onLogs = {},
+            )
+        }
         item {
             SettingsGroup("下载任务", "保存位置、并发与速度") {
                 SettingsItem(Icons.Outlined.FolderOpen, "下载保存目录", "系统默认 Download", {}, valueText = "Download")

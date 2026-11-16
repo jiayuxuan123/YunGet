@@ -17,6 +17,8 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.RowScope
+import androidx.compose.foundation.pager.HorizontalPager
+import androidx.compose.foundation.pager.rememberPagerState
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.fillMaxHeight
@@ -53,11 +55,14 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.saveable.rememberSaveableStateHolder
+import androidx.compose.runtime.snapshotFlow
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalHapticFeedback
+import androidx.compose.ui.hapticfeedback.HapticFeedbackType
 import androidx.compose.ui.text.font.FontWeight
 import androidx.lifecycle.viewmodel.compose.viewModel
 import android.Manifest
@@ -221,6 +226,7 @@ fun MainScreen(
     val saveableStateHolder = rememberSaveableStateHolder()
 
     val context = LocalContext.current
+    val haptic = LocalHapticFeedback.current
     val scope = rememberCoroutineScope()
     // 横屏时使用侧边导航栏（NavigationRail），竖屏保持底部导航栏（NavigationBar）
     val configuration = LocalConfiguration.current
@@ -884,22 +890,27 @@ fun MainScreen(
         )
     }
     // Tab 内容区（竖屏 / 横屏共用）：每个页面独立保存状态，切换 Tab 再切回来不丢失；带 Material3 过渡动画（按 Tab 顺序决定方向）
+    val tabPager = rememberPagerState(initialPage = currentTab.ordinal) { MainTab.entries.size }
+    LaunchedEffect(currentTab) {
+        if (tabPager.settledPage != currentTab.ordinal) {
+            tabPager.animateScrollToPage(currentTab.ordinal)
+        }
+    }
+    LaunchedEffect(tabPager) {
+        // 只在整个翻页动画停稳后回写 Tab。若观察 currentPage，跨两个页面时会
+        // 被中间页短暂抢占，动画会在网盘/下载等中间页提前停下。
+        snapshotFlow { tabPager.settledPage }.collect { page ->
+            val pageTab = MainTab.entries[page]
+            if (currentTab != pageTab) currentTab = pageTab
+        }
+    }
     val tabContent: @Composable () -> Unit = {
-        AnimatedContent(
-            targetState = currentTab,
-            transitionSpec = {
-                // 根据 Tab 顺序决定滑动方向：向右切（新Tab在右边）→ 新页从右滑入；向左切反向
-                val forward = targetState.ordinal > initialState.ordinal
-                if (forward) {
-                    (fadeIn(effectsDefault()) + slideInHorizontally(spatialDefault()) { it / 12 })
-                        .togetherWith(fadeOut(effectsFast()) + slideOutHorizontally(spatialFast()) { -it / 12 })
-                } else {
-                    (fadeIn(effectsDefault()) + slideInHorizontally(spatialDefault()) { -it / 12 })
-                        .togetherWith(fadeOut(effectsFast()) + slideOutHorizontally(spatialFast()) { it / 12 })
-                }
-            },
-            label = "mainTab"
-        ) { tab ->
+        HorizontalPager(
+            state = tabPager,
+            modifier = Modifier.fillMaxSize(),
+            key = { page -> MainTab.entries[page] },
+        ) { page ->
+            val tab = MainTab.entries[page]
             saveableStateHolder.SaveableStateProvider(tab) {
                 when (tab) {
                     MainTab.Resolve -> ResolveScreen(
@@ -1039,7 +1050,10 @@ fun MainScreen(
             Row(modifier = Modifier.fillMaxSize()) {
                 MainNavigationRail(
                     currentTab = currentTab,
-                    onTabSelected = { currentTab = it }
+                    onTabSelected = {
+                        if (it != currentTab) haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
+                        currentTab = it
+                    }
                 )
                 Column(
                     modifier = Modifier
@@ -1071,7 +1085,10 @@ fun MainScreen(
             bottomBar = {
                 MainBottomBar(
                     currentTab = currentTab,
-                    onTabSelected = { currentTab = it }
+                    onTabSelected = {
+                        if (it != currentTab) haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
+                        currentTab = it
+                    }
                 )
             }
         ) { innerPadding ->
@@ -1562,14 +1579,39 @@ internal fun MainAppBar(
     unreadNotifications: Int = 0,
 ) {
     val title = if (tab == MainTab.Resolve) "云取" else tab.title
+    val haptic = LocalHapticFeedback.current
+    val animatedTitle: @Composable () -> Unit = {
+        AnimatedContent(
+            targetState = title,
+            transitionSpec = {
+                (fadeIn(effectsFast()) + slideInHorizontally(effectsFast()) { it / 10 })
+                    .togetherWith(
+                        fadeOut(effectsFast()) + slideOutHorizontally(effectsFast()) { -it / 10 }
+                    )
+            },
+            label = "mainAppBarTitle",
+        ) { text ->
+            Text(
+                text = text,
+                style = MaterialTheme.typography.titleLarge,
+                fontWeight = FontWeight.SemiBold,
+            )
+        }
+    }
     val actions: @Composable RowScope.() -> Unit = {
         if (tab == MainTab.Resolve) {
-            androidx.compose.material3.IconButton(onClick = onBookmarks) {
+            androidx.compose.material3.IconButton(onClick = {
+                haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
+                onBookmarks()
+            }) {
                 Icon(Icons.Outlined.Bookmarks, contentDescription = "收藏网盘链接")
             }
             Spacer(Modifier.size(4.dp))
         }
-        androidx.compose.material3.FilledTonalIconButton(onClick = onNotifications) {
+        androidx.compose.material3.FilledTonalIconButton(onClick = {
+            haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
+            onNotifications()
+        }) {
             androidx.compose.material3.BadgedBox(
                 badge = {
                     if (unreadNotifications > 0) androidx.compose.material3.Badge {
@@ -1601,22 +1643,13 @@ internal fun MainAppBar(
     } else {
         Column(Modifier.fillMaxWidth().background(MaterialTheme.colorScheme.surface)) {
             TopAppBar(
-                title = {
-                    Text(
-                        text = title,
-                        style = MaterialTheme.typography.titleLarge,
-                        fontWeight = FontWeight.SemiBold,
-                    )
-                },
+                title = animatedTitle,
                 actions = actions,
                 scrollBehavior = scrollBehavior,
                 colors = TopAppBarDefaults.topAppBarColors(
                     containerColor = MaterialTheme.colorScheme.surface,
                     scrolledContainerColor = MaterialTheme.colorScheme.surface,
                 ),
-            )
-            HorizontalDivider(
-                color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.72f)
             )
         }
     }

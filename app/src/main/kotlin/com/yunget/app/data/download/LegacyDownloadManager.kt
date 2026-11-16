@@ -135,6 +135,9 @@ class LegacyDownloadManager(
     /** 任务请求头（Cookie/UA），暂停后恢复仍需使用 */
     private val taskHeaders = ConcurrentHashMap<Long, Map<String, String>>()
 
+    /** 主源 + 备选镜像及其专属请求头；重试时按顺序轮换。 */
+    private val taskSources = ConcurrentHashMap<Long, List<DownloadSource>>()
+
     /** 已知文件大小（API 返回，避免探测失败）；-1 表示未知 */
     private val taskSizes = ConcurrentHashMap<Long, Long>()
 
@@ -193,6 +196,13 @@ class LegacyDownloadManager(
         )
         // 保存请求头（Cookie/UA），暂停后恢复仍需携带
         if (headers.isNotEmpty()) taskHeaders[id] = headers
+        taskSources[id] = buildList {
+            add(DownloadSource(url, headers))
+            if (fallbackUrl.isNotBlank() && fallbackUrl != url) add(DownloadSource(fallbackUrl, headers))
+            altSources.forEach { source ->
+                if (none { it.url == source.url }) add(source)
+            }
+        }
         if (size > 0) taskSizes[id] = size
         taskCallbacks[id] = onComplete
         start(id, headers)
@@ -332,6 +342,7 @@ class LegacyDownloadManager(
         downloader.cancelCalls(id)
         _stats.update { it - id }
         taskHeaders.remove(id)
+        taskSources.remove(id)
         // 删除任务同样触发清理回调（如删除网盘临时转存文件）：
         // 用户放弃下载时云盘里已转存的临时文件也应一并清理
         val cleanup = taskCallbacks.remove(id)
@@ -374,8 +385,17 @@ class LegacyDownloadManager(
      * 同时负责「最大同时下载任务数」并发许可的获取/释放。
      */
     private suspend fun runTaskWithRetry(id: Long, headers: Map<String, String>) {
+        val task = dao.get(id) ?: return
+        val restoredHeaders = headers.ifEmpty {
+            taskHeaders[id] ?: runCatching {
+                val json = org.json.JSONObject(task.requestHeadersJson)
+                json.keys().asSequence().associateWith { json.getString(it) }
+            }.getOrDefault(emptyMap())
+        }
+        val sources = taskSources[id] ?: DownloadSourcePlan.forTask(task, restoredHeaders).also { taskSources[id] = it }
         var attempts = 0
         val maxRetries = retryCountProvider().coerceIn(0, 10)
+        val maxAttempts = maxOf(maxRetries + 1, sources.size).coerceAtMost(12)
         while (true) {
             // 并发许可：排队等待，直到有空闲下载槽位（或任务被暂停/取消）
             awaitConcurrencySlot()
@@ -383,16 +403,20 @@ class LegacyDownloadManager(
             activeDownloads.incrementAndGet()
             try {
                 try {
-                    runTask(id, headers)
+                    val source = sources[attempts % sources.size]
+                    if (sources.size > 1) {
+                        Log.d(TAG, "runTaskWithRetry: id=$id source=${attempts % sources.size + 1}/${sources.size}")
+                    }
+                    runTask(id, source.url, source.headers)
                     return
                 } catch (e: CancellationException) {
                     throw e
                 } catch (e: Exception) {
                     attempts++
-                    if (isTaskActive() && attempts <= maxRetries) {
-                        Log.d(TAG, "runTaskWithRetry: id=$id 失败，自动重试 $attempts/$maxRetries：${e.message}")
+                    if (isTaskActive() && attempts < maxAttempts) {
+                        Log.d(TAG, "runTaskWithRetry: id=$id 失败，自动重试 $attempts/${maxAttempts - 1}：${e.message}")
                         // 逐次递增延迟，避免失败风暴
-                        delay(1200L * attempts)
+                        delay(900L * attempts)
                     } else {
                         throw e
                     }
@@ -403,7 +427,7 @@ class LegacyDownloadManager(
         }
     }
 
-    private suspend fun runTask(id: Long, headers: Map<String, String>) {
+    private suspend fun runTask(id: Long, sourceUrl: String, headers: Map<String, String>) {
         // 协程已被取消（暂停/删除）：直接退出，不写状态
         if (!isTaskActive()) return
         val task = dao.get(id) ?: return
@@ -411,23 +435,23 @@ class LegacyDownloadManager(
         Log.d(TAG, "runTask: id=$id fileName=${task.fileName}")
 
         // HLS（m3u8 转码流，如 UC play）：不走 Range 分片，直接拉分片合并
-        if (task.url.contains(".m3u8", true) || task.url.contains(".m3u", true)) {
-            Log.d(TAG, "runTask: id=$id HLS 转码流下载 url=${task.url.take(120)}")
-            hlsDownload(id, task, headers)
+        if (sourceUrl.contains(".m3u8", true) || sourceUrl.contains(".m3u", true)) {
+            Log.d(TAG, "runTask: id=$id HLS 转码流下载 url=${sourceUrl.take(120)}")
+            hlsDownload(id, task, sourceUrl, headers)
             return
         }
 
         // 总大小以服务器探测为准（Range0-0 的 Content-Range 是真实总大小），
         // 避免各平台传入的 size 与实际不符导致分片区间错误 → 文件截断/膨胀损坏
-        val total = downloader.getTotalSize(task.url, headers)
+        val total = downloader.getTotalSize(sourceUrl, headers)
             ?: taskSizes[id]?.takeIf { it > 0 }
         if (total == null) {
             // 服务器不返回文件大小（Range/Content-Length 均缺失）：降级为流式下载（开放区间 Range）
-            Log.w(TAG, "runTask: id=$id 无法获取总大小，降级流式下载 url=${task.url.take(120)}")
-            streamDownload(id, task, headers)
+            Log.w(TAG, "runTask: id=$id 无法获取总大小，降级流式下载 url=${sourceUrl.take(120)}")
+            streamDownload(id, task, sourceUrl, headers)
             return
         }
-        Log.d(TAG, "getTotalSize: id=$id total=$total url=${task.url.take(120)}")
+        Log.d(TAG, "getTotalSize: id=$id total=$total url=${sourceUrl.take(120)}")
         dao.updateProgress(id, DownloadTaskEntity.STATUS_DOWNLOADING, task.downloadedSize, total)
         // 取到大小后再次检查取消（暂停可能发生在 getTotalSize 期间）
         if (!isTaskActive()) return
@@ -448,7 +472,7 @@ class LegacyDownloadManager(
 
         // 平台安全上限：迅雷 CDN 对单文件并发 Range 有阈值（约 8），超过会降级 200 整文件
         val isXunlei = headers["User-Agent"]?.contains("xunlei", ignoreCase = true) == true ||
-            task.url.contains("xunlei", ignoreCase = true)
+            sourceUrl.contains("xunlei", ignoreCase = true)
         val hardCap = if (isXunlei) RANGE_WORKERS_CAP else null
         Log.d(TAG, "自适应下载: id=$id total=$total targetWorkers=$threadCount hardCap=$hardCap isXunlei=$isXunlei")
 
@@ -471,7 +495,7 @@ class LegacyDownloadManager(
             val outcome = customRunner.run(
                 DownloadEngineRunner.RunSpec(
                     taskId = id,
-                    url = task.url,
+                    url = sourceUrl,
                     total = total,
                     headers = headers,
                     chunkDir = chunkDir,
@@ -525,7 +549,7 @@ class LegacyDownloadManager(
                     if (!isTaskActive()) return
                     Log.w(TAG, "runTask: id=$id ${customRunner.name} 失败（${outcome.reason}），回退单流整文件下载")
                     singleStreamFallback(
-                        id, task, headers, total, chunkDir,
+                        id, task, sourceUrl, headers, total, chunkDir,
                         java.util.concurrent.atomic.AtomicReference(outcome.reason)
                     )
                 }
@@ -535,7 +559,7 @@ class LegacyDownloadManager(
 
         val outcome = engine.download(
             taskId = id,
-            url = task.url,
+            url = sourceUrl,
             total = total,
             chunkDir = chunkDir,
             headers = headers,
@@ -581,13 +605,13 @@ class LegacyDownloadManager(
             }
             is AdaptiveDownloadEngine.Outcome.NeedSingleStreamFallback -> {
                 Log.w(TAG, "runTask: id=$id 服务器忽略 Range，回退单流整文件下载")
-                singleStreamFallback(id, task, headers, total, chunkDir,
+                singleStreamFallback(id, task, sourceUrl, headers, total, chunkDir,
                     java.util.concurrent.atomic.AtomicReference("服务器持续忽略 Range"))
             }
             is AdaptiveDownloadEngine.Outcome.Failed -> {
                 if (!isTaskActive()) return
                 Log.w(TAG, "runTask: id=$id 引擎失败（${outcome.reason}），回退单流整文件下载")
-                singleStreamFallback(id, task, headers, total, chunkDir,
+                singleStreamFallback(id, task, sourceUrl, headers, total, chunkDir,
                     java.util.concurrent.atomic.AtomicReference(outcome.reason))
             }
         }
@@ -600,6 +624,7 @@ class LegacyDownloadManager(
     private suspend fun singleStreamFallback(
         id: Long,
         task: DownloadTaskEntity,
+        sourceUrl: String,
         headers: Map<String, String>,
         total: Long,
         chunkDir: File,
@@ -607,7 +632,7 @@ class LegacyDownloadManager(
     ) {
         val fullFile = File(chunkDir, "full_single.bin").apply { delete() } // 全新整文件，从 0 开始
         val fullDownloaded = AtomicLong(0)
-        val ok = downloader.downloadFull(id, task.url, fullFile, headers, total) { bytes ->
+        val ok = downloader.downloadFull(id, sourceUrl, fullFile, headers, total) { bytes ->
             speedLimiter.awaitAllow(bytes)
             // ★ 钳制到 total：任何竞态都不可能让显示超过总大小
             val new = minOf(fullDownloaded.addAndGet(bytes), total)
@@ -620,7 +645,12 @@ class LegacyDownloadManager(
     }
 
     /** 流式降级下载：总大小未知时单分片开放区间下载（Range: bytes=from-），读到 EOF */
-    private suspend fun streamDownload(id: Long, task: DownloadTaskEntity, headers: Map<String, String>) {
+    private suspend fun streamDownload(
+        id: Long,
+        task: DownloadTaskEntity,
+        sourceUrl: String,
+        headers: Map<String, String>,
+    ) {
         if (!isTaskActive()) return
         dao.updateProgress(id, DownloadTaskEntity.STATUS_DOWNLOADING, task.downloadedSize, 0)
         if (!isTaskActive()) return
@@ -630,7 +660,7 @@ class LegacyDownloadManager(
         val downloaded = AtomicLong(partFile.length())
         val ok = downloader.downloadChunk(
             taskId = id,
-            url = task.url,
+            url = sourceUrl,
             start = 0,
             end = Long.MAX_VALUE,
             partFile = partFile,
@@ -649,7 +679,7 @@ class LegacyDownloadManager(
             Log.w(TAG, "streamDownload: id=$id Range 失败，回退完整 GET 下载")
             val ok2 = downloader.downloadFull(
                 taskId = id,
-                url = task.url,
+                url = sourceUrl,
                 partFile = partFile,
                 headers = headers
             ) { bytes ->
@@ -665,13 +695,18 @@ class LegacyDownloadManager(
     }
 
     /** HLS（m3u8 转码流，如 UC play）下载：拉取分片合并 → 保存 → 完成回调 */
-    private suspend fun hlsDownload(id: Long, task: DownloadTaskEntity, headers: Map<String, String>) {
+    private suspend fun hlsDownload(
+        id: Long,
+        task: DownloadTaskEntity,
+        sourceUrl: String,
+        headers: Map<String, String>,
+    ) {
         if (!isTaskActive()) return
         _stats.update { it + (id to DownloadStats(0L, -1L, 1, 1)) }
         val hlsFile = File(context.cacheDir, "hls_$id")
         hlsFile.delete()
         val downloaded = AtomicLong(0)
-        val ok = HlsDownloader.download(task.url, headers, hlsFile) { bytes ->
+        val ok = HlsDownloader.download(sourceUrl, headers, hlsFile) { bytes ->
             speedLimiter.awaitAllow(bytes)
             val new = downloaded.addAndGet(bytes)
             dao.updateProgress(id, DownloadTaskEntity.STATUS_DOWNLOADING, new, 0)

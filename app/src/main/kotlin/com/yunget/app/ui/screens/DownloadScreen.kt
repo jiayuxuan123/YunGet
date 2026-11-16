@@ -53,8 +53,7 @@ import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Checkbox
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.FilledTonalButton
-import androidx.compose.material3.FloatingActionButton
-import androidx.compose.material3.FloatingActionButtonDefaults
+import androidx.compose.material3.FilledTonalIconButton
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
@@ -80,8 +79,10 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.ui.hapticfeedback.HapticFeedbackType
 import androidx.compose.ui.input.nestedscroll.nestedScroll
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.semantics.stateDescription
@@ -244,6 +245,7 @@ private fun DownloadPageContent(
     initialCompletedTab: Boolean = false,
 ) {
     val ui = LocalUiMetrics.current
+    val haptic = LocalHapticFeedback.current
     val pagerState = rememberPagerState(
         initialPage = if (initialCompletedTab) 1 else 0,
         pageCount = { 2 },
@@ -261,66 +263,73 @@ private fun DownloadPageContent(
         }
     }
     Surface(modifier = modifier.fillMaxSize(), color = MaterialTheme.colorScheme.background) {
-        Box(Modifier.fillMaxSize()) {
-            Column(Modifier.fillMaxSize()) {
+        Column(Modifier.fillMaxSize()) {
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = ui.space(14.dp), vertical = ui.space(4.dp)),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(8.dp),
+            ) {
                 DownloadTabs(
                     completedTab = completedTab,
                     activeCount = activeCount,
                     completedCount = completedCount,
                     onSelect = { completed ->
+                        haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
                         scope.launch {
                             pagerState.animateScrollToPage(if (completed) 1 else 0)
                         }
                     },
-                    modifier = Modifier.padding(horizontal = ui.space(14.dp), vertical = ui.space(4.dp)),
+                    modifier = Modifier.weight(1f),
                 )
-                HorizontalPager(
-                    state = pagerState,
-                    modifier = Modifier.weight(1f).fillMaxWidth(),
-                    key = { it },
+                FilledTonalIconButton(
+                    onClick = {
+                        haptic.performHapticFeedback(HapticFeedbackType.Confirm)
+                        onAdd()
+                    },
+                    modifier = Modifier.size(48.dp),
+                    shape = RoundedCornerShape(12.dp),
                 ) {
-                    val pageCompleted = it == 1
-                    DownloadTaskPage(
-                        listItems = listItems,
-                        completedTab = pageCompleted,
-                        listState = if (pageCompleted) completedListState else activeListState,
-                        collapsedFolders = collapsedFolders,
-                        tasks = tasks,
-                        stats = stats,
-                        activeCount = activeCount,
-                        completedCount = completedCount,
-                        onToggleFolder = { folder ->
-                            collapsedFolders = if (folder in collapsedFolders) {
-                                collapsedFolders - folder
-                            } else {
-                                collapsedFolders + folder
-                            }
-                        },
-                        onSwitchTab = {
-                            scope.launch { pagerState.animateScrollToPage(if (pageCompleted) 0 else 1) }
-                        },
-                        onAdd = onAdd,
-                        onPause = onPause,
-                        onResume = onResume,
-                        onOpen = onOpen,
-                        onInstall = onInstall,
-                        onDetails = onDetails,
-                        onRemove = onRemove,
-                        onPauseAll = onPauseAll,
-                        onResumeAll = onResumeAll,
-                        onDeleteAll = onDeleteAll,
-                    )
+                    Icon(Icons.Filled.Add, contentDescription = "添加下载任务")
                 }
             }
-            FloatingActionButton(
-                onClick = onAdd,
-                modifier = Modifier.align(Alignment.BottomEnd).padding(20.dp),
-                shape = RoundedCornerShape(12.dp),
-                containerColor = MaterialTheme.colorScheme.primary,
-                contentColor = MaterialTheme.colorScheme.onPrimary,
-                elevation = FloatingActionButtonDefaults.elevation(0.dp, 0.dp, 0.dp, 0.dp),
+            HorizontalPager(
+                state = pagerState,
+                modifier = Modifier.weight(1f).fillMaxWidth(),
+                key = { it },
             ) {
-                Icon(Icons.Filled.Add, contentDescription = "添加下载任务")
+                val pageCompleted = it == 1
+                DownloadTaskPage(
+                    listItems = listItems,
+                    completedTab = pageCompleted,
+                    listState = if (pageCompleted) completedListState else activeListState,
+                    collapsedFolders = collapsedFolders,
+                    tasks = tasks,
+                    stats = stats,
+                    activeCount = activeCount,
+                    completedCount = completedCount,
+                    onToggleFolder = { folder ->
+                        collapsedFolders = if (folder in collapsedFolders) {
+                            collapsedFolders - folder
+                        } else {
+                            collapsedFolders + folder
+                        }
+                    },
+                    onSwitchTab = {
+                        scope.launch { pagerState.animateScrollToPage(if (pageCompleted) 0 else 1) }
+                    },
+                    onAdd = onAdd,
+                    onPause = onPause,
+                    onResume = onResume,
+                    onOpen = onOpen,
+                    onInstall = onInstall,
+                    onDetails = onDetails,
+                    onRemove = onRemove,
+                    onPauseAll = onPauseAll,
+                    onResumeAll = onResumeAll,
+                    onDeleteAll = onDeleteAll,
+                )
             }
         }
     }

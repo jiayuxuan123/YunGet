@@ -54,6 +54,7 @@ import com.yunget.app.ui.theme.spatialDefault
 import com.yunget.app.ui.theme.spatialFast
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.FilledTonalButton
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
@@ -74,7 +75,9 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.input.nestedscroll.nestedScroll
+import androidx.compose.ui.hapticfeedback.HapticFeedbackType
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.Lifecycle
@@ -503,6 +506,7 @@ internal fun ResolveLandingContent(
     shortcutsContent: @Composable () -> Unit = {}
 ) {
     val ui = LocalUiMetrics.current
+    val haptic = LocalHapticFeedback.current
     val passwordRotation by animateFloatAsState(
         targetValue = if (showPassword) 180f else 0f,
         animationSpec = spatialFast(),
@@ -563,12 +567,20 @@ internal fun ResolveLandingContent(
                         horizontalArrangement = Arrangement.spacedBy(8.dp),
                         verticalArrangement = Arrangement.spacedBy(4.dp)
                     ) {
-                        TextButton(onClick = onPasteLink, modifier = Modifier.heightIn(min = 48.dp)) {
+                        FilledTonalButton(
+                            onClick = { onPasteLink() },
+                            modifier = Modifier.heightIn(min = 48.dp),
+                            shape = RoundedCornerShape(12.dp),
+                        ) {
                             Icon(Icons.Outlined.ContentPaste, contentDescription = null, modifier = Modifier.size(20.dp))
                             Spacer(Modifier.width(8.dp))
                             Text("粘贴链接")
                         }
-                        TextButton(onClick = onScanQr, modifier = Modifier.heightIn(min = 48.dp)) {
+                        FilledTonalButton(
+                            onClick = { onScanQr() },
+                            modifier = Modifier.heightIn(min = 48.dp),
+                            shape = RoundedCornerShape(12.dp),
+                        ) {
                             Icon(Icons.Outlined.QrCodeScanner, contentDescription = null, modifier = Modifier.size(20.dp))
                             Spacer(Modifier.width(8.dp))
                             Text("扫码")
@@ -640,19 +652,35 @@ internal fun ResolveLandingContent(
 
                     // 输入工作区仅此一个主操作；分享/直链沿用原有 ViewModel 分流。
                     Button(
-                        onClick = onResolve,
+                        onClick = {
+                            haptic.performHapticFeedback(HapticFeedbackType.Confirm)
+                            onResolve()
+                        },
                         modifier = Modifier.fillMaxWidth().heightIn(min = maxOf(48f, ui.space(52.dp).value).dp),
                         enabled = link.isNotBlank(),
                         shape = RoundedCornerShape(16.dp),
                         contentPadding = PaddingValues(horizontal = 24.dp, vertical = 16.dp)
                     ) {
-                        Icon(
-                            imageVector = if (isDirect) Icons.Outlined.Download else Icons.Outlined.ArrowForward,
-                            contentDescription = null,
-                            modifier = Modifier.size(20.dp)
-                        )
-                        Spacer(Modifier.width(8.dp))
-                        Text(if (isDirect) "开始下载" else "开始解析", style = MaterialTheme.typography.labelLarge)
+                        AnimatedContent(
+                            targetState = isDirect,
+                            transitionSpec = {
+                                fadeIn(effectsFast()).togetherWith(fadeOut(effectsFast()))
+                            },
+                            label = "resolvePrimaryAction",
+                        ) { direct ->
+                            Row(verticalAlignment = Alignment.CenterVertically) {
+                                Icon(
+                                    imageVector = if (direct) Icons.Outlined.Download else Icons.Outlined.ArrowForward,
+                                    contentDescription = null,
+                                    modifier = Modifier.size(20.dp)
+                                )
+                                Spacer(Modifier.width(8.dp))
+                                Text(
+                                    if (direct) "开始下载" else "开始解析",
+                                    style = MaterialTheme.typography.labelLarge,
+                                )
+                            }
+                        }
                     }
                 }
             }

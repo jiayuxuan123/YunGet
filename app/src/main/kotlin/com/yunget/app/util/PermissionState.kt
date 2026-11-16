@@ -83,7 +83,9 @@ object PermissionState {
     /** 「所有文件访问」是否已就绪；Android 10 及以下恒为 true（那些版本根本没有这个权限） */
     fun allFilesAccessGranted(): Boolean {
         if (Build.VERSION.SDK_INT < Build.VERSION_CODES.R) return true
-        return Environment.isExternalStorageManager()
+        // 个别精简 ROM / 预览运行环境没有完整 PackageManager 时，这个系统查询会直接抛
+        // NullPointerException。权限判断失败必须按“未授权”处理，不能把设置页组合打断。
+        return runCatching { Environment.isExternalStorageManager() }.getOrDefault(false)
     }
 
     /**
@@ -96,8 +98,10 @@ object PermissionState {
      */
     fun engineStoragePermissionPending(context: Context): Boolean {
         if (Build.VERSION.SDK_INT > Build.VERSION_CODES.Q) return false
-        return ContextCompat.checkSelfPermission(context, Manifest.permission.WRITE_EXTERNAL_STORAGE) !=
-            PackageManager.PERMISSION_GRANTED
+        return runCatching {
+            ContextCompat.checkSelfPermission(context, Manifest.permission.WRITE_EXTERNAL_STORAGE) !=
+                PackageManager.PERMISSION_GRANTED
+        }.getOrDefault(true)
     }
 
     /** 跳「所有文件访问」授权页；部分 ROM 没有应用级页面时依次回退到总列表页、应用详情页 */

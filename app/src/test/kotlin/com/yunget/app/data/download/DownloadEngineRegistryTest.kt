@@ -72,6 +72,16 @@ class DownloadEngineRegistryTest {
     }
 
     @Test
+    fun `内置引擎声明真实取链与传输能力`() {
+        val byId = DownloadEngineRegistry.all().associateBy { it.id }
+        assertTrue(byId.getValue("turbodl").capabilities.liveDiagnostics)
+        assertTrue(byId.getValue("legacy").capabilities.authenticatedHttp)
+        assertTrue(byId.getValue("legacy").capabilities.sourceFailover)
+        assertTrue(byId.getValue("aria2").capabilities.hls)
+        assertFalse(byId.getValue("aria2").capabilities.liveDiagnostics)
+    }
+
+    @Test
     fun `引擎 id 不重复`() {
         val ids = DownloadEngineRegistry.all().map { it.id }
         assertEquals("id 重复会让设置页出现两个同名项", ids.size, ids.distinct().size)

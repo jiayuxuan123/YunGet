@@ -962,7 +962,9 @@ class TurboDownloadManager(
         taskCallbacks[id] = onComplete
         // 引擎路由：选了 Gopeed 且内核已导入 → 「执行」交给引擎，任务登记/写库/回调与内置路径一致；
         // 否则一行不改地走原来的 TurboDL 路径。
-        if (shouldUseEngine() && mergeAudioUrl.isBlank() && motionUrl.isBlank() && !audioOnly) {
+        if (shouldUseEngine() && altSources.isEmpty() && fallbackUrl.isBlank() &&
+            mergeAudioUrl.isBlank() && motionUrl.isBlank() && !audioOnly
+        ) {
             startViaEngine(id, url, safeName, headers)
         } else {
             start(id, headers)

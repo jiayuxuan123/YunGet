@@ -34,6 +34,8 @@ import androidx.compose.animation.fadeOut
 import androidx.compose.animation.togetherWith
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.selection.selectable
+import androidx.compose.foundation.selection.selectableGroup
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -87,6 +89,9 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalHapticFeedback
+import androidx.compose.ui.hapticfeedback.HapticFeedbackType
+import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.window.DialogProperties
@@ -160,6 +165,7 @@ fun DownloadEngineScreen(
     BackHandler { onBack() }
 
     val context = LocalContext.current
+    val haptic = LocalHapticFeedback.current
     val scope = rememberCoroutineScope()
     val settings = remember { SettingsRepository(context) }
     val engineState by GopeedEngine.state.collectAsState()
@@ -243,6 +249,15 @@ fun DownloadEngineScreen(
     val engineOn = engineChoice == SettingsRepository.ENGINE_GOPEED
     val installed = soBytes > 0L
     val running = engineState == GopeedEngine.State.RUNNING
+    val panePager = androidx.compose.foundation.pager.rememberPagerState(
+        initialPage = if (engineOn) 1 else 0,
+    ) { 2 }
+    LaunchedEffect(engineOn) {
+        val target = if (engineOn) 1 else 0
+        if (panePager.currentPage != target && !panePager.isScrollInProgress) {
+            panePager.animateScrollToPage(target)
+        }
+    }
 
     // 引擎只能按真实文件路径落盘 → 「切到 Gopeed」必须先拿到存储权限（Android 11+ 是系统设置里的
     // 「所有文件访问」，Android 10- 是运行时存储权限）。三个值提到这里算，是因为 chooseEngine() 的
@@ -407,12 +422,14 @@ fun DownloadEngineScreen(
             modifier = Modifier
                 .fillMaxSize()
                 .padding(innerPadding)
-                .verticalScroll(rememberScrollState())
-                .padding(horizontal = 16.dp, vertical = 16.dp)
+                .padding(horizontal = 16.dp, vertical = 12.dp)
         ) {
             // 本页不做自己的入场动画：它是由设置页那一行「长」出来的（容器变换），
             // 再叠一层淡入上移只会和形变打架。
-            Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+            Column(
+                modifier = Modifier.fillMaxSize(),
+                verticalArrangement = Arrangement.spacedBy(12.dp),
+            ) {
                 Text(
                     "下载引擎决定新任务由谁来执行，已存在的任务不受影响。",
                     style = MaterialTheme.typography.bodySmall,
@@ -420,18 +437,36 @@ fun DownloadEngineScreen(
                 )
 
                 Card(
-                    modifier = Modifier.fillMaxWidth(),
+                    modifier = Modifier.fillMaxWidth().weight(1f),
                     shape = RoundedCornerShape(20.dp),
                     colors = CardDefaults.cardColors(
                         containerColor = MaterialTheme.colorScheme.surfaceContainerLow
                     )
                 ) {
-                    Column(modifier = Modifier.fillMaxWidth()) {
-                        // ---------- 第 1 段：内置分片下载器 ----------
-                        Column(
-                            modifier = Modifier.fillMaxWidth().padding(16.dp),
-                            verticalArrangement = Arrangement.spacedBy(12.dp)
-                        ) {
+                    Column(modifier = Modifier.fillMaxSize()) {
+                        EnginePaneSwitcher(
+                            selected = panePager.currentPage,
+                            onSelect = { page ->
+                                if (!panePager.isScrollInProgress) {
+                                    haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
+                                    scope.launch { panePager.animateScrollToPage(page) }
+                                }
+                            },
+                        )
+                        androidx.compose.foundation.pager.HorizontalPager(
+                            state = panePager,
+                            modifier = Modifier.fillMaxWidth().weight(1f),
+                            beyondViewportPageCount = 1,
+                        ) { pane ->
+                            when (pane) {
+                                0 -> Column(
+                                    modifier = Modifier
+                                        .fillMaxSize()
+                                        .verticalScroll(rememberScrollState())
+                                        .padding(16.dp),
+                                    verticalArrangement = Arrangement.spacedBy(12.dp)
+                                ) {
+                                    // ---------- 第 1 段：内置分片下载器 ----------
                             EngineSectionHeader(
                                 icon = Icons.Outlined.Download,
                                 title = "内置分片下载器",
@@ -516,6 +551,10 @@ fun DownloadEngineScreen(
                                                     MaterialTheme.colorScheme.error
                                                 },
                                             )
+                                            if (available) {
+                                                Spacer(Modifier.height(5.dp))
+                                                EngineCapabilityChips(engine.capabilities)
+                                            }
                                         }
                                     }
                                 }
@@ -598,28 +637,23 @@ fun DownloadEngineScreen(
                                 }
 
                                 Text(
-                                    text = "只有 TurboDL 能下网盘：网盘取到的直链要带 Cookie / Referer / UA 等" +
-                                        "请求头才能下，aria2 与内置兼容引擎不走这条带头的路径，下网盘基本不可用；" +
-                                        "Gopeed 面向磁力 / BT。日常下载不必改动这一项。",
+                                    text = "所有内置实现都会携带网盘直链所需的 Cookie / Referer / UA；" +
+                                        "兼容引擎和 aria2 重试时会按主源、备用地址和镜像顺序轮换。" +
+                                        "Gopeed 使用独立原生核心，适合 HTTP、磁力与 BT；缺少内核时会留在 TurboDL 路径。",
                                     style = MaterialTheme.typography.bodySmall,
                                     color = MaterialTheme.colorScheme.onSurfaceVariant
                                 )
                             }
                         }
 
-                        Box(
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .padding(horizontal = 16.dp)
-                                .height(1.dp)
-                                .background(MaterialTheme.colorScheme.outlineVariant)
-                        )
-
-                        // ---------- 第 2 段：Gopeed 引擎 ----------
-                        Column(
-                            modifier = Modifier.fillMaxWidth().padding(16.dp),
-                            verticalArrangement = Arrangement.spacedBy(12.dp)
-                        ) {
+                                1 -> Column(
+                                    modifier = Modifier
+                                        .fillMaxSize()
+                                        .verticalScroll(rememberScrollState())
+                                        .padding(16.dp),
+                                    verticalArrangement = Arrangement.spacedBy(12.dp)
+                                ) {
+                                    // ---------- 第 2 段：Gopeed 引擎 ----------
                             EngineSectionHeader(
                                 icon = Icons.Outlined.SwapHoriz,
                                 title = "Gopeed 引擎",
@@ -632,6 +666,12 @@ fun DownloadEngineScreen(
                                     "可在设置 →「下载保存目录」里自定义）。",
                                 style = MaterialTheme.typography.bodySmall,
                                 color = MaterialTheme.colorScheme.onSurfaceVariant
+                            )
+                            Text(
+                                "多账号镜像、视频音轨合成和动态照片等复杂任务会自动交给内置宿主路径，" +
+                                    "避免原生引擎缺少对应能力时产生坏文件。",
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.primary,
                             )
 
                             Row(
@@ -851,6 +891,8 @@ fun DownloadEngineScreen(
                                         color = MaterialTheme.colorScheme.error
                                     )
                                 }
+                            }
+                        }
                             }
                         }
                     }
@@ -1294,6 +1336,71 @@ private fun KernelProgressDialog(
  * 段头：圆角图标块 + 标题（+ 可选小标签）；当前启用的那一段图标底色跟着高亮。
  * 底色与图标色都走动画，切换引擎时能看出「选中态」变了。
  */
+@Composable
+private fun EnginePaneSwitcher(selected: Int, onSelect: (Int) -> Unit) {
+    Row(
+        modifier = Modifier.fillMaxWidth().padding(8.dp).selectableGroup(),
+        horizontalArrangement = Arrangement.spacedBy(6.dp),
+    ) {
+        listOf("内置实现", "Gopeed 内核").forEachIndexed { index, label ->
+            val active = selected == index
+            val background by animateColorAsState(
+                if (active) MaterialTheme.colorScheme.primaryContainer
+                else MaterialTheme.colorScheme.surfaceContainerHigh,
+                animationSpec = effectsFast(),
+                label = "engine-pane-bg-$index",
+            )
+            Surface(
+                modifier = Modifier.weight(1f).clip(RoundedCornerShape(12.dp))
+                    .selectable(selected = active, role = Role.Tab) { onSelect(index) },
+                shape = RoundedCornerShape(12.dp),
+                color = background,
+            ) {
+                Text(
+                    label,
+                    modifier = Modifier.fillMaxWidth().padding(vertical = 10.dp),
+                    style = MaterialTheme.typography.labelLarge,
+                    fontWeight = if (active) FontWeight.SemiBold else FontWeight.Normal,
+                    color = if (active) MaterialTheme.colorScheme.onPrimaryContainer
+                    else MaterialTheme.colorScheme.onSurfaceVariant,
+                    textAlign = androidx.compose.ui.text.style.TextAlign.Center,
+                )
+            }
+        }
+    }
+}
+
+@Composable
+private fun EngineCapabilityChips(capabilities: com.yunget.app.data.download.DownloadEngineCapabilities) {
+    val labels = buildList {
+        if (capabilities.authenticatedHttp) add("带头请求")
+        if (capabilities.rangedRequests) add("Range")
+        if (capabilities.hls) add("HLS")
+        if (capabilities.sourceFailover) add("镜像轮换")
+        if (capabilities.bitTorrent) add("BT")
+        if (capabilities.liveDiagnostics) add("现场诊断")
+        if (capabilities.directFilesystemTarget) add("真实路径")
+    }
+    FlowRow(
+        horizontalArrangement = Arrangement.spacedBy(5.dp),
+        verticalArrangement = Arrangement.spacedBy(4.dp),
+    ) {
+        labels.forEach { text ->
+            Surface(
+                shape = RoundedCornerShape(7.dp),
+                color = MaterialTheme.colorScheme.secondaryContainer,
+            ) {
+                Text(
+                    text,
+                    modifier = Modifier.padding(horizontal = 7.dp, vertical = 2.dp),
+                    style = MaterialTheme.typography.labelSmall,
+                    color = MaterialTheme.colorScheme.onSecondaryContainer,
+                )
+            }
+        }
+    }
+}
+
 @Composable
 private fun EngineSectionHeader(
     icon: ImageVector,

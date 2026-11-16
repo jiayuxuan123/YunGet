@@ -128,6 +128,16 @@ class UpdateVersionTest {
         )
     }
 
+    @Test
+    fun upgradingFromTestBuildToPlainReleaseIsDetected() {
+        // 本地测试包使用 2.7.39-test.1；后续正式包 2.7.39 必须能覆盖安装并提示更新。
+        val current = "2.7.39-test.1"
+        assertTrue(
+            "测试包应能把同号正式版识别为更高版本",
+            cmp("2.7.39", current) > 0,
+        )
+    }
+
     private fun asset(name: String) = UpdateChecker.Asset(
         name = name,
         downloadUrl = "https://example.test/$name",

@@ -17,6 +17,7 @@ import com.yunget.app.ui.screens.SettingsPreviewContent
 import com.yunget.app.ui.screens.DrivePreviewContent
 import com.yunget.app.ui.screens.DownloadPreviewContent
 import com.yunget.app.ui.screens.DownloadCompletedPreviewContent
+import com.yunget.app.ui.screens.DownloadEngineScreen
 import com.yunget.app.ui.screens.ThemeScreen
 import com.yunget.app.ui.screens.SupportScreen
 import com.yunget.app.ui.screens.SupportBuiltinPreviewContent
@@ -151,6 +152,13 @@ fun SupportAlipay() = FullScreenPreview { SupportBuiltinPreviewContent(initialPa
 @Preview(name = "drive-phone", widthDp = 412, heightDp = 892)
 @Composable
 fun DrivePhone() = PreviewShell(MainTab.Drive) { DrivePreviewContent() }
+
+@PreviewTest
+@Preview(name = "engine-phone", widthDp = 412, heightDp = 892)
+@Composable
+fun EnginePhone() = FullScreenPreview {
+    DownloadEngineScreen(onBack = {})
+}
 
 @PreviewTest
 @Preview(name = "downloads-phone", widthDp = 412, heightDp = 892)
