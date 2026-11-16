@@ -66,4 +66,18 @@ class AnalyticsDeliveryTest {
         queue.acknowledge(sending)
         assertEquals(setOf(later.getString("event_id")), queue.peek()!!.ids)
     }
+
+    @Test fun identicalEventsWithinTheSameMinuteAreCoalescedWithAnOccurrenceCount() {
+        val queue = AnalyticsQueue(Store()).apply { setEnabled(true) }
+        fun burst(id: String, bucket: Long) = event(id)
+            .put("time_bucket", bucket)
+            .put("properties", JSONObject().put("source", "quark").put("error", "auth"))
+        queue.enqueue(queue.ticket()!!, burst("first", 10))
+        queue.enqueue(queue.ticket()!!, burst("second", 10))
+        queue.enqueue(queue.ticket()!!, burst("third", 11))
+        val payload = queue.peek()!!.events
+        assertEquals(2, org.json.JSONArray(payload).length())
+        assertEquals(2, org.json.JSONArray(payload).getJSONObject(0).getJSONObject("properties").getInt("occurrences"))
+        assertTrue(queue.peek()!!.ids.contains("first"))
+    }
 }

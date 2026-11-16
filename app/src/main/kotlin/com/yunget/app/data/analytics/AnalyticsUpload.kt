@@ -21,8 +21,10 @@ internal class AnalyticsUpload(
     /** False leaves the batch intact for an idempotent retry. */
     fun send(batch: AnalyticsQueue.Batch, installId: String): Boolean {
         if (!queue.isCurrent(batch)) return false
+        val events = JSONArray(batch.events)
+        for (index in 0 until events.length()) events.optJSONObject(index)?.remove("time_bucket")
         val body = JSONObject().put("install_id", installId)
-            .put("events", JSONArray(batch.events)).toString()
+            .put("events", events).toString()
             .toRequestBody("application/json; charset=utf-8".toMediaType())
         val next = client.newCall(Request.Builder().url(endpoint)
             .header("X-YunGet-Analytics", "1").post(body).build())

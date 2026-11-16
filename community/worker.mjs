@@ -135,7 +135,7 @@ export function createHandler({fetchRemote = fetch, verifyAdmin = createAdminVer
       if (request.method === 'GET' && path === '/app.js') return secureResponse(script, 200, {'Content-Type': 'text/javascript; charset=utf-8', 'Cache-Control': 'public,max-age=300'});
       if (request.method === 'GET' && path === '/analytics.css') return secureResponse(analyticsStyle, 200, {'Content-Type': 'text/css; charset=utf-8', 'Cache-Control': 'public,max-age=300'});
       if (request.method === 'GET' && path === '/analytics.js') return secureResponse(analyticsScript, 200, {'Content-Type': 'text/javascript; charset=utf-8', 'Cache-Control': 'public,max-age=300'});
-      if (request.method === 'GET' && path === '/api/config') return secureResponse({verification: verificationConfig, version: '2.7.36'});
+      if (request.method === 'GET' && path === '/api/config') return secureResponse({verification: verificationConfig, version: '2.7.38'});
       if (request.method === 'GET' && path.startsWith('/verification/')) {
         if (!env.ASSETS) fail(503, '验证资源暂不可用');
         const resource = await env.ASSETS.fetch(request);

@@ -80,3 +80,38 @@ test('ingestion rejects private-looking values even under an allowed property ke
     assert.equal(f.sqlite.prepare('SELECT COUNT(*) AS n FROM analytics_events').get().n, 0);
   } finally { f.sqlite.close(); }
 });
+
+test('analytics accepts a generic HTTP 403 classification for direct links', async () => {
+  const f = fixture();
+  try {
+    const response = await f.handle(new Request('https://community.example.com/api/analytics', {
+      method: 'POST', headers: {'Content-Type': 'application/json', 'X-YunGet-Analytics': '1'},
+      body: JSON.stringify({install_id: '10000000-0000-4000-8000-000000000001', events: [{
+        event_id: '20000000-0000-4000-8000-000000000002', event: 'download_failed', app_version: '2.7.37',
+        properties: {schema_version: 2, source: 'direct', error: 'http_403', http_status: 403},
+      }]}),
+    }), f.env);
+    assert.equal(response.status, 202);
+    const row = f.sqlite.prepare("SELECT properties FROM analytics_events WHERE event='download_failed'").get();
+    assert.match(row.properties, /http_403/);
+  } finally { f.sqlite.close(); }
+});
+
+test('coalesced events contribute their occurrence count without inflating installs', async () => {
+  const f = fixture();
+  try {
+    f.seed('download_failed', {
+      source: 'xunlei', engine: 'turbodl', error: 'rate_limited', http_status: 503, occurrences: 25,
+    });
+    f.seed('download_failed', {
+      source: 'xunlei', engine: 'turbodl', error: 'rate_limited', http_status: 503, occurrences: 7,
+    });
+    const response = await f.handle(new Request('https://community.example.com/admin/api/analytics?days=7'), f.env);
+    assert.equal(response.status, 200);
+    const data = await response.json();
+    assert.equal(data.summary.download_failures, 32);
+    const bucket = data.errors.find(row => row.error === 'rate_limited');
+    assert.equal(bucket.count, 32);
+    assert.equal(bucket.installs, 1);
+  } finally { f.sqlite.close(); }
+});

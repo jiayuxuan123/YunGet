@@ -19,6 +19,8 @@ class AnalyticsBucketsTest {
     @Test
     fun errorCategoriesNeverNeedRawMessagesInTheDashboard() {
         assertEquals("auth", analyticsErrorCategory("HTTP 401 unauthorized"))
+        assertEquals("http_403", analyticsErrorCategory("HTTP 403", "direct"))
+        assertEquals("auth", analyticsErrorCategory("HTTP 403", "quark"))
         assertEquals("rate_limited", analyticsErrorCategory("HTTP 429 too many requests"))
         assertEquals("checksum", analyticsErrorCategory("SHA-256 mismatch"))
         assertEquals("timeout", analyticsErrorCategory("socket timeout"))

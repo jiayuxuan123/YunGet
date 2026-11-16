@@ -102,7 +102,9 @@ object AnonymousAnalytics {
         scope.launch {
             val payload = JSONObject().put("event_id", UUID.randomUUID().toString())
                 .put("event", event).put("product", "yunget").put("app_version", appVersion)
-                .put("platform", "android").put("properties", JSONObject().apply {
+                .put("platform", "android")
+                .put("time_bucket", System.currentTimeMillis() / 60_000L)
+                .put("properties", JSONObject().apply {
                     put("schema_version", 2)
                     put("api", Build.VERSION.SDK_INT)
                     put("abi", Build.SUPPORTED_ABIS.firstOrNull() ?: "unknown")

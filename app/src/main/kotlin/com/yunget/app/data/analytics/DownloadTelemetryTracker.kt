@@ -12,6 +12,7 @@ internal class DownloadTelemetryTracker(
 ) {
     private data class Observed(val status: Int, val generation: Long, var activeSince: Long?, var elapsed: Long)
     private val previous = mutableMapOf<Long, Observed>()
+    private val terminalEmitted = mutableMapOf<Long, Pair<Long, String>>()
     private var primed = false
 
     fun observe(tasks: List<DownloadTaskEntity>): List<AnalyticsEvent> {
@@ -27,9 +28,10 @@ internal class DownloadTelemetryTracker(
             if (old?.status == task.status && old.generation == task.attemptGeneration) continue
             val sameAttempt = old?.generation == task.attemptGeneration
             val elapsed = if (sameAttempt) old!!.elapsed + (old.activeSince?.let { (now - it).coerceAtLeast(0) } ?: 0) else 0
+            val source = analyticsSource(task.platform, task.url)
             val props = buildMap<String, Any> {
                 put("engine", engine.takeIf { it in setOf("turbodl", "legacy", "aria2", "gopeed") } ?: "other")
-                put("source", analyticsSource(task.platform, task.url))
+                put("source", source)
                 put("size_bucket", analyticsSizeBucket(task.totalSize))
                 put("stage", task.pipelineStage.lowercase().takeIf { it in setOf("network", "processing", "saving", "save_failed", "saved") } ?: "unknown")
                 if (elapsed > 0) put("duration_bucket", analyticsDurationBucket(elapsed))
@@ -39,27 +41,32 @@ internal class DownloadTelemetryTracker(
                     if (old?.status == DownloadTaskEntity.STATUS_PAUSED || old?.status == DownloadTaskEntity.STATUS_FAILED) "download_resumed" else "download_started", props)
                 DownloadTaskEntity.STATUS_COMPLETED -> events += AnalyticsEvent("download_completed", props)
                 DownloadTaskEntity.STATUS_FAILED -> {
-                    val error = analyticsErrorCategory(task.errorMsg)
+                    val error = analyticsErrorCategory(task.errorMsg, source)
                     val name = when {
                         error == "cancelled" -> "download_cancelled"
                         task.pipelineStage == "SAVE_FAILED" || task.pipelineStage == "SAVING" -> "save_failed"
                         task.pipelineStage == "PROCESSING" -> "processing_failed"
                         else -> "download_failed"
                     }
-                    events += AnalyticsEvent(name, props + buildMap {
+                    val terminalKey = task.attemptGeneration to name
+                    if (terminalEmitted[task.id] != terminalKey) {
+                        events += AnalyticsEvent(name, props + buildMap {
                         put("error", error)
                         val terminal = diagnostics(task.id)
                         (analyticsHttpStatus(task.errorMsg) ?: terminal?.lastHttpStatus)
                             ?.takeIf { it >= 400 }?.let { put("http_status", it) }
                         terminal?.failureStage?.takeIf { it in setOf("queued", "probing", "transferring", "verifying", "finalizing") }
                             ?.let { put("stage", it) }
-                    })
+                        })
+                        terminalEmitted[task.id] = terminalKey
+                    }
                 }
             }
             previous[task.id] = Observed(task.status, task.attemptGeneration, if (active) now else null, elapsed)
         }
         primed = true
         previous.keys.retainAll(tasks.mapTo(HashSet()) { it.id })
+        terminalEmitted.keys.retainAll(tasks.mapTo(HashSet()) { it.id })
         return events
     }
 }

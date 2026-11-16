@@ -72,4 +72,21 @@ class TelemetryTrackerTest {
         assertEquals("probing", failed.properties["stage"])
         assertEquals("other", failed.properties["error"])
     }
+
+    @Test fun repeatedTerminalFlapsInTheSameAttemptAreOnlyCountedOnce() {
+        val tracker = DownloadTelemetryTracker("turbodl")
+        tracker.observe(emptyList())
+        tracker.observe(listOf(task(Task.STATUS_DOWNLOADING)))
+        assertEquals(
+            "download_failed",
+            tracker.observe(listOf(task(Task.STATUS_FAILED, error = "HTTP 503"))).single().name,
+        )
+        tracker.observe(listOf(task(Task.STATUS_DOWNLOADING)))
+        assertTrue(tracker.observe(listOf(task(Task.STATUS_FAILED, error = "HTTP 503"))).isEmpty())
+        tracker.observe(listOf(task(Task.STATUS_DOWNLOADING, 2)))
+        assertEquals(
+            "download_failed",
+            tracker.observe(listOf(task(Task.STATUS_FAILED, 2, error = "HTTP 503"))).single().name,
+        )
+    }
 }

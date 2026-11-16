@@ -21,13 +21,14 @@ internal fun analyticsDurationBucket(millis: Long): String = when {
     else -> ">=1h"
 }
 
-internal fun analyticsErrorCategory(raw: String): String {
+internal fun analyticsErrorCategory(raw: String, source: String? = null): String {
     val message = raw.lowercase()
     val status = analyticsHttpStatus(raw)
     return when {
         message.isBlank() -> "unknown"
         "cancelled" in message || "canceled" in message || "取消" in message -> "cancelled"
         "存储权限" in message || "permission denied" in message || "securityexception" in message -> "permission"
+        status != null && source in setOf("direct", "github", "unknown", "other") -> "http_$status"
         status == 401 || status == 403 || "unauthorized" in message ||
             "forbidden" in message || "登录" in message || "授权" in message -> "auth"
         status == 404 || status == 410 || "not found" in message ||

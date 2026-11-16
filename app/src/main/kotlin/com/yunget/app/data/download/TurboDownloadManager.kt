@@ -168,6 +168,7 @@ class TurboDownloadManager(
     private val saveLock = Mutex()
     private val sourceRefreshAttempts = ConcurrentHashMap<Long, Int>()
     private val rateLimitUntil = ConcurrentHashMap<Long, Long>()
+    private val sourceRateLimitUntil = ConcurrentHashMap<String, Long>()
     private val refreshJobs = ConcurrentHashMap<Long, kotlinx.coroutines.Job>()
     private val sourceRefresher by lazy { QuarkTaskRefresher(context) }
 
@@ -889,6 +890,7 @@ class TurboDownloadManager(
         taskHeaders.clear()
         taskSizes.clear()
         rateLimitUntil.clear()
+        sourceRateLimitUntil.clear()
         taskNames.clear()
         taskCallbacks.clear()
         turboOutputs.clear()
@@ -970,18 +972,27 @@ class TurboDownloadManager(
 
     /** 开始/恢复下载（断点续传）。 */
     override fun start(id: Long, headers: Map<String, String>) {
-        val until = rateLimitUntil[id]
-        if (until != null && until > System.currentTimeMillis()) {
-            val status = terminalDetails[id]?.lastHttpStatus
-            scope.launch {
-                dao.updateError(id, RateLimitCooldown.message(status, until))
+        scope.launch {
+            val task = dao.get(id) ?: return@launch
+            val now = System.currentTimeMillis()
+            val until = rateLimitUntil[id]
+            val sourceKey = RateLimitCooldown.sourceKey(task.platform, task.url)
+            val sourceUntil = sourceKey?.let { sourceRateLimitUntil[it] }
+            if ((until != null && until > now) || (sourceUntil != null && sourceUntil > now)) {
+                val status = terminalDetails[id]?.lastHttpStatus
+                val activeUntil = listOfNotNull(
+                    until?.takeIf { it > now },
+                    sourceUntil?.takeIf { it > now },
+                ).maxOrNull() ?: now
+                dao.updateError(id, RateLimitCooldown.message(status, activeUntil))
+                Log.w(TAG, "start blocked by source cooldown: id=$id source=${sourceKey ?: "-"}")
+                return@launch
             }
-            Log.w(TAG, "start blocked by source cooldown: id=$id remaining=${until - System.currentTimeMillis()}ms")
-            return
+            if (until != null) rateLimitUntil.remove(id, until)
+            if (sourceKey != null && sourceUntil != null) sourceRateLimitUntil.remove(sourceKey, sourceUntil)
+            sourceRefreshAttempts.remove(id)
+            startTransfer(id, headers)
         }
-        if (until != null) rateLimitUntil.remove(id, until)
-        sourceRefreshAttempts.remove(id)
-        startTransfer(id, headers)
     }
 
     private fun startTransfer(id: Long, headers: Map<String, String>, requiredPauseSerial: Long? = null) {
@@ -1780,6 +1791,7 @@ class TurboDownloadManager(
             val failureText = if (RateLimitCooldown.applies(event.reason, status)) {
                 val until = System.currentTimeMillis() + RateLimitCooldown.DURATION_MS
                 rateLimitUntil[roomId] = until
+                RateLimitCooldown.sourceKey(task.platform, task.url)?.let { sourceRateLimitUntil[it] = until }
                 RateLimitCooldown.message(status, until)
             } else {
                 rateLimitUntil.remove(roomId)

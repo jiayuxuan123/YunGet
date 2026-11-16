@@ -26,6 +26,24 @@ internal class AnalyticsQueue(private val store: AnalyticsQueueStore) {
     @Synchronized fun enqueue(ticket: Long, event: JSONObject): Boolean {
         if (!enabled || ticket != generation) return false
         val queue = read()
+        val bucket = event.optLong("time_bucket", 0)
+        if (bucket > 0) {
+            val signature = signature(event)
+            for (index in queue.length() - 1 downTo 0) {
+                val candidate = queue.optJSONObject(index) ?: continue
+                if (candidate.optLong("time_bucket", 0) != bucket || signature(candidate) != signature) continue
+                val properties = candidate.optJSONObject("properties") ?: JSONObject()
+                properties.put(
+                    "occurrences",
+                    (properties.optInt("occurrences", 1) + event.optJSONObject("properties")?.optInt("occurrences", 1)
+                        .orZero()).coerceAtMost(1000),
+                )
+                candidate.put("properties", properties)
+                queue.put(index, candidate)
+                store.write(queue.toString())
+                return true
+            }
+        }
         if (queue.length() >= 100) queue.remove(0)
         queue.put(event)
         store.write(queue.toString())
@@ -63,4 +81,17 @@ internal class AnalyticsQueue(private val store: AnalyticsQueueStore) {
         val raw = store.read()
         if (raw.isNullOrBlank()) JSONArray() else JSONArray(raw)
     }.getOrElse { JSONArray() }
+
+    private fun signature(event: JSONObject): String {
+        val properties = event.optJSONObject("properties")?.let { JSONObject(it.toString()).apply { remove("occurrences") } }
+        return listOf(
+            event.optString("event"),
+            event.optString("product"),
+            event.optString("app_version"),
+            event.optString("platform"),
+            properties?.toString().orEmpty(),
+        ).joinToString("|")
+    }
+
+    private fun Int?.orZero(): Int = this ?: 0
 }

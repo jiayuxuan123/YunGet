@@ -4,9 +4,9 @@
 >
 > **本项目是 [CYQawa/YunX（云析）](https://github.com/CYQawa/YunX) 的二次开发版本**，在其协议与架构基础上进行功能扩展，并将下载能力逐步迁移至独立的 [TurboDL](https://github.com/jiayuxuan123/TurboDL) 下载引擎。遵循 GNU AGPL-3.0 协议开源。
 
-本次更新修复新增网盘的登录入口、官网网页登录兼容性，并为两个官网加入浏览器链接助手与现代导航体验，详见[2.7.37 完整更新日志](engineering/releases/2.7.37.md)。
+本次更新修复统计重复上报、直链 403 误分类和同一来源连续限流，详见[2.7.38 完整更新日志](engineering/releases/2.7.38.md)。
 
-当前版本 **2.7.37**（versionCode 85）· Android 7.0+（minSdk 24，targetSdk 34）· 内置 TurboDL 0.5.0.6
+当前版本 **2.7.38**（versionCode 86）· Android 7.0+（minSdk 24，targetSdk 34）· 内置 TurboDL 0.5.0.6
 
 **官网**：[jiayuxuan123.github.io/YunGet](https://jiayuxuan123.github.io/YunGet/) —— 下载、使用说明、常见问题、隐私与条款
 
@@ -21,6 +21,13 @@
 - 本项目在上游协议解析、网盘功能和 Android 应用结构基础上进行了二次开发。
 - 下载能力已迁移到独立的 [TurboDL](https://github.com/jiayuxuan123/TurboDL) SDK：日常的直链下载走它，HLS 通过它的插件机制接入。项目早期自己写的那套下载实现仍留在代码里，作为可选的兜底引擎。
 - **赞赏渠道说明**：应用内「支持开发」页的赞赏码仅面向**本二次开发版本**的维护；若想支持上游原项目作者，请移步 [上游仓库](https://github.com/CYQawa/YunX) 的捐赠渠道，避免权益混淆。
+
+## 2.7.38 更新
+
+- 匿名统计把同一分钟、同一属性的重复事件合并计数，减少 D1 写入和重复行。
+- 同一来源触发 429/503 后，冷却会覆盖该来源下的其他任务，避免多个任务同时反复冲击同一网盘。
+- 直链/GitHub 的 403 改为 `HTTP 403`，不再误报成“登录失效”。
+- 修复下载任务在同一尝试内状态反复切换时重复上报终态的问题。
 
 ## 2.7.37 更新
 
