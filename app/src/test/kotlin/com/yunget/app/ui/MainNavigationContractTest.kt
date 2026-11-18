@@ -44,4 +44,18 @@ class MainNavigationContractTest {
             settingsScreen.substring(engineGuard, activeConnections).contains("return"),
         )
     }
+
+    @Test
+    fun engineAdvancedReplacesTheListInBothSettingsStyles() {
+        val classicSettings = File("src/main/kotlin/com/yunget/app/ui/classic/SettingsScreen.kt").readText()
+        for (screen in listOf(settingsScreen, classicSettings)) {
+            val listStart = screen.indexOf(".nestedScroll(scrollBehavior.nestedScrollConnection)")
+            val advancedGuard = screen.indexOf("if (showEngineAdvanced)")
+            assertTrue("高级参数应在设置列表之前打开", advancedGuard in 0 until listStart)
+            assertTrue(
+                "高级参数页显示时应结束设置列表的组合",
+                screen.substring(advancedGuard, listStart).contains("return"),
+            )
+        }
+    }
 }

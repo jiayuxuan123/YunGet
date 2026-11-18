@@ -165,6 +165,7 @@ fun SettingsScreen(
     onAnnouncementClick: () -> Unit = {},
     modifier: Modifier = Modifier
 ) {
+    val settingsScrollState = rememberScrollState()
     var showThreadsDialog by remember { mutableStateOf(false) }
     var showLogDialog by remember { mutableStateOf(false) }
     // 检查更新结果（非空时弹更新对话框）
@@ -303,11 +304,30 @@ fun SettingsScreen(
         }
     }
 
+    if (showEngineAdvanced) {
+        EngineAdvancedScreen(onBack = { showEngineAdvanced = false }, modifier = modifier)
+        return
+    }
+
+    if (showDownloadEngine) {
+        DownloadEngineScreen(
+            onBack = {
+                showDownloadEngine = false
+                engineChoice = settingsRepo.downloadEngine
+            },
+            onOpenAnnouncement = {
+                showDownloadEngine = false
+                onAnnouncementClick()
+            }
+        )
+        return
+    }
+
     Column(
         modifier = modifier
             .fillMaxSize()
             .nestedScroll(scrollBehavior.nestedScrollConnection)
-            .verticalScroll(rememberScrollState())
+            .verticalScroll(settingsScrollState)
             .padding(16.dp)
     ) {
         // ---------- 下载 ----------
@@ -1494,25 +1514,6 @@ fun SettingsScreen(
             },
             dismissButton = {
                 TextButton(onClick = { showBatteryDialog = false }) { Text("暂不") }
-            }
-        )
-    }
-
-    // 下载引擎页：独立全屏页（两套下载器切换、导入内核、引擎启停与状态）。
-    // 返回时重新读一次设置，让上面那一行的副标题立刻反映新选择。
-    if (showEngineAdvanced) {
-        EngineAdvancedScreen(onBack = { showEngineAdvanced = false })
-    }
-
-    if (showDownloadEngine) {
-        DownloadEngineScreen(
-            onBack = {
-                showDownloadEngine = false
-                engineChoice = settingsRepo.downloadEngine
-            },
-            onOpenAnnouncement = {
-                showDownloadEngine = false
-                onAnnouncementClick()
             }
         )
     }

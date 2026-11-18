@@ -7,6 +7,7 @@ import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.selection.selectable
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.ListItem
@@ -210,6 +211,7 @@ fun SettingsScreen(
     }
 
     val ui = LocalUiMetrics.current
+    val settingsListState = rememberLazyListState()
     var showThreadsDialog by remember { mutableStateOf(false) }
     var showLogDialog by remember { mutableStateOf(false) }
     // 检查更新结果（非空时弹更新对话框）
@@ -369,12 +371,18 @@ fun SettingsScreen(
         return
     }
 
+    if (showEngineAdvanced) {
+        EngineAdvancedScreen(onBack = { showEngineAdvanced = false }, modifier = modifier)
+        return
+    }
+
     val activeConns = activeConnectionsProvider()
     Box(
         modifier = modifier.fillMaxSize().nestedScroll(scrollBehavior.nestedScrollConnection),
         contentAlignment = Alignment.TopCenter
     ) {
         LazyColumn(
+            state = settingsListState,
             modifier = Modifier.widthIn(max = 720.dp).fillMaxSize(),
             contentPadding = PaddingValues(
                 start = ui.space(14.dp), end = ui.space(14.dp),
@@ -1526,12 +1534,6 @@ fun SettingsScreen(
                 TextButton(onClick = { showBatteryDialog = false }) { Text("暂不") }
             }
         )
-    }
-
-    // 下载引擎页：独立全屏页（两套下载器切换、导入内核、引擎启停与状态）。
-    // 返回时重新读一次设置，让上面那一行的副标题立刻反映新选择。
-    if (showEngineAdvanced) {
-        EngineAdvancedScreen(onBack = { showEngineAdvanced = false })
     }
 
     // 插件页：独立全屏页（JS 脚本的导入/启停/运行状态/详情/卸载）。
