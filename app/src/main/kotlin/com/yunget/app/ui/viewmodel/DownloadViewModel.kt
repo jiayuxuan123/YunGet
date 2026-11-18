@@ -6,6 +6,7 @@ import androidx.lifecycle.viewModelScope
 import com.yunget.app.data.db.DownloadTaskEntity
 import com.yunget.app.data.download.DownloadManager
 import com.yunget.app.data.download.DownloadStats
+import com.yunget.app.data.download.DownloadPlatform
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
@@ -98,12 +99,33 @@ class DownloadViewModel(private val manager: DownloadManager) : ViewModel() {
 
     /** 添加下载任务（headers 可携带 Referer/Cookie 等） */
     fun enqueue(url: String, fileName: String, headers: Map<String, String> = emptyMap()) {
-        viewModelScope.launch { manager.enqueue(url, fileName, headers) }
+        val magnet = com.yunget.app.data.download.MagnetLink.isMagnet(url)
+        viewModelScope.launch {
+            manager.enqueue(
+                url = url,
+                fileName = if (magnet) {
+                    com.yunget.app.data.download.MagnetLink.displayName(url)
+                } else fileName,
+                headers = headers,
+                platform = if (magnet) DownloadPlatform.MAGNET else "",
+            )
+        }
     }
 
     fun pause(id: Long) = manager.pause(id)
 
     fun resume(id: Long) = manager.start(id)
+    fun terminalDiagnostics(id: Long) = manager.terminalDiagnostics(id)
+
+    fun finishRecording(id: Long) {
+        viewModelScope.launch {
+            try {
+                if (!manager.finishRecording(id)) com.yunget.app.ui.SnackbarController.show("直播录制已结束")
+            } catch (_: IllegalStateException) {
+                com.yunget.app.ui.SnackbarController.show("录制状态已变化，请查看任务详情")
+            }
+        }
+    }
 
     fun remove(id: Long, deleteLocal: Boolean = false) {
         clearSpeedHistory(id)

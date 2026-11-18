@@ -145,6 +145,63 @@ object DownloadSaver {
     }
 
     /**
+     * Save a completed directory tree while preserving its relative layout.
+     * Used by native multi-file torrents, whose backend deliberately publishes
+     * the verified directory instead of inventing an archive format.
+     */
+    fun saveDirectory(
+        context: Context,
+        rootName: String,
+        source: File,
+        targetDirUri: String? = null,
+        shouldContinue: () -> Boolean = { true },
+    ): String? {
+        val tree = Uri.parse(targetDirUri ?: throw SecurityException("BT 文件夹需要已授权的下载目录"))
+        val resolver = context.contentResolver
+        val parent = DocumentsContract.buildDocumentUriUsingTree(tree, DocumentsContract.getTreeDocumentId(tree))
+        val safeRoot = DownloadPathPolicy.sanitizeName(rootName)
+            .takeUnless { it == "." || it == ".." }.orEmpty()
+            .ifBlank { "download_${System.currentTimeMillis()}" }
+        val root = DocumentsContract.createDocument(resolver, parent,
+            DocumentsContract.Document.MIME_TYPE_DIR, safeRoot) ?: return null
+        val buffer = ByteArray(COPY_BUFFER_SIZE)
+        fun copyChildren(directory: File, target: Uri) {
+            for (entry in directory.listFiles() ?: throw IOException("无法读取 BT 缓存目录")) {
+                if (entry.canonicalFile != entry.absoluteFile) throw IOException("BT 缓存中的符号链接不能保存")
+                if (!shouldContinue()) throw CancellationException("保存已取消")
+                val isDirectory = entry.isDirectory
+                val mime = if (isDirectory) DocumentsContract.Document.MIME_TYPE_DIR else mimeOf(entry.name)
+                val doc = DocumentsContract.createDocument(resolver, target, mime, entry.name)
+                    ?: throw IOException("无法创建 BT 下载目标")
+                if (isDirectory) {
+                    copyChildren(entry, doc)
+                } else {
+                    val output = resolver.openOutputStream(doc) ?: throw IOException("无法打开 BT 下载目标")
+                    output.use { out ->
+                        entry.inputStream().use { input ->
+                            while (true) {
+                                if (!shouldContinue()) throw CancellationException("保存已取消")
+                                val count = input.read(buffer)
+                                if (count < 0) break
+                                out.write(buffer, 0, count)
+                            }
+                        }
+                    }
+                }
+            }
+        }
+        var completed = false
+        try {
+            copyChildren(source.canonicalFile, root)
+            if (!shouldContinue()) throw CancellationException("保存已取消")
+            completed = true
+            return root.toString()
+        } finally {
+            if (!completed) delete(context, root.toString())
+        }
+    }
+
+    /**
      * [save] 的目标级执行核心：先关闭输出流，再提交目标。
      * 任一步失败都只 abort 当前这次创建的目标，避免把半成品留在 MediaStore/SAF/文件目录。
      */

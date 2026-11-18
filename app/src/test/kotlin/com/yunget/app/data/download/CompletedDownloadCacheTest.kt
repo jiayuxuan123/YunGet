@@ -95,6 +95,20 @@ class CompletedDownloadCacheTest {
     }
 
     @Test
+    fun `reuses a completed torrent tree after saving fails`() {
+        val cacheRoot = temp.newFolder("torrents")
+        val torrent = File(cacheRoot, "task_1.part").apply { mkdir() }
+        File(torrent, "one.bin").writeBytes(byteArrayOf(1, 2, 3))
+        val child = File(torrent, "nested").apply { mkdir() }
+        val second = File(child, "two.bin").apply { writeBytes(byteArrayOf(4, 5)) }
+        val task = task("SAVE_FAILED", torrent, 5L)
+
+        assertEquals(torrent.canonicalFile, CompletedDownloadCache.resolve(task, cacheRoot))
+        second.delete()
+        assertNull(CompletedDownloadCache.resolve(task, cacheRoot))
+    }
+
+    @Test
     fun `rejects directories zero sized blank and invalid paths`() {
         val cacheRoot = temp.newFolder("cache")
         val directory = File(cacheRoot, "directory").apply { mkdirs() }

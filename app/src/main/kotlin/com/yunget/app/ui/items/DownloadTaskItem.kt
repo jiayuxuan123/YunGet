@@ -24,15 +24,17 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.outlined.Delete
 import androidx.compose.material.icons.outlined.CheckCircle
 import androidx.compose.material.icons.outlined.InsertDriveFile
+import androidx.compose.material.icons.outlined.MoreVert
 import androidx.compose.material.icons.outlined.OpenInNew
 import androidx.compose.material.icons.outlined.Pause
 import androidx.compose.material.icons.outlined.PlayArrow
 import androidx.compose.material.icons.outlined.Refresh
 import androidx.compose.material.icons.outlined.SystemUpdate
 import androidx.compose.material3.ButtonDefaults
+import androidx.compose.material3.DropdownMenu
+import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.FilledTonalButton
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
@@ -45,7 +47,9 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.Immutable
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.graphicsLayer
@@ -105,7 +109,7 @@ internal fun DownloadTaskItem(
     val ui = LocalUiMetrics.current
     Surface(
         modifier = modifier.fillMaxWidth(),
-        shape = RoundedCornerShape(16.dp),
+        shape = MaterialTheme.shapes.large,
         color = MaterialTheme.colorScheme.surface,
     ) {
         Column(
@@ -143,7 +147,7 @@ internal fun DownloadTaskItem(
                     DownloadTaskStatus(item.status)
                 }
             }
-            if (item.isCompleted) {
+            if (item.isCompleted && !item.hasSavedFile) {
                 DownloadCompletionBanner(item)
             }
             DownloadTaskProgress(item.id, item.status, tasks, stats)
@@ -438,6 +442,9 @@ internal fun DownloadTaskActions(
         label = "downloadActionPress",
     )
     val failed = item.status == DownloadTaskEntity.STATUS_FAILED
+    val install = item.isCompleted && item.hasSavedFile && item.fileName.endsWith(".apk", ignoreCase = true)
+    val preview = item.isCompleted && item.hasSavedFile && PreviewTypes.kindOf(item.fileName) == PreviewKind.VIDEO
+    var showMore by remember(item.id) { mutableStateOf(false) }
     val container by animateColorAsState(
         targetValue = if (failed) MaterialTheme.colorScheme.errorContainer
         else MaterialTheme.colorScheme.primaryContainer,
@@ -456,20 +463,20 @@ internal fun DownloadTaskActions(
         verticalArrangement = Arrangement.spacedBy(8.dp),
         itemVerticalAlignment = Alignment.CenterVertically,
     ) {
-        FilledTonalButton(
+        if (item.isActive || item.isResumable || (item.isCompleted && item.hasSavedFile)) FilledTonalButton(
             onClick = {
                 when {
                     item.isActive -> onPause(item.id)
                     item.isResumable -> onResume(item.id)
+                    install -> onInstall(item.id)
                     item.isCompleted -> onOpen(item.id)
                 }
             },
-            enabled = item.isActive || item.isResumable || (item.isCompleted && item.hasSavedFile),
             modifier = Modifier.heightIn(min = 48.dp).graphicsLayer {
                 scaleX = scale.value
                 scaleY = scale.value
             },
-            shape = RoundedCornerShape(8.dp),
+            shape = MaterialTheme.shapes.medium,
             colors = ButtonDefaults.filledTonalButtonColors(
                 containerColor = container,
                 contentColor = foreground,
@@ -490,36 +497,16 @@ internal fun DownloadTaskActions(
                     DownloadTaskEntity.STATUS_PENDING -> Icons.Outlined.Pause to "暂停"
                     DownloadTaskEntity.STATUS_PAUSED -> Icons.Outlined.PlayArrow to "继续"
                     DownloadTaskEntity.STATUS_FAILED -> Icons.Outlined.Refresh to "重试"
-                    else -> Icons.Outlined.OpenInNew to "打开"
+                    else -> when {
+                        install -> Icons.Outlined.SystemUpdate to "安装"
+                        preview -> Icons.Outlined.PlayArrow to "预览"
+                        else -> Icons.Outlined.OpenInNew to "打开"
+                    }
                 }
                 Row(verticalAlignment = Alignment.CenterVertically) {
                     Icon(icon, contentDescription = null, modifier = Modifier.size(20.dp))
                     Spacer(Modifier.width(8.dp))
                     Text(label)
-                }
-            }
-        }
-        if (item.isCompleted && item.hasSavedFile) {
-            if (PreviewTypes.kindOf(item.fileName) == PreviewKind.VIDEO) {
-                TextButton(
-                    onClick = { onOpen(item.id) },
-                    modifier = Modifier.heightIn(min = 48.dp),
-                    shape = RoundedCornerShape(8.dp),
-                ) {
-                    Icon(Icons.Outlined.PlayArrow, contentDescription = null, modifier = Modifier.size(20.dp))
-                    Spacer(Modifier.width(4.dp))
-                    Text("视频预览")
-                }
-            }
-            if (item.fileName.endsWith(".apk", ignoreCase = true)) {
-                TextButton(
-                    onClick = { onInstall(item.id) },
-                    modifier = Modifier.heightIn(min = 48.dp),
-                    shape = RoundedCornerShape(8.dp),
-                ) {
-                    Icon(Icons.Outlined.SystemUpdate, contentDescription = null, modifier = Modifier.size(20.dp))
-                    Spacer(Modifier.width(4.dp))
-                    Text("安装")
                 }
             }
         }
@@ -530,12 +517,22 @@ internal fun DownloadTaskActions(
                 shape = RoundedCornerShape(8.dp),
             ) { Text("详情") }
         }
-        IconButton(onClick = { onRemove(item.id) }, modifier = Modifier.size(48.dp)) {
-            Icon(
-                Icons.Outlined.Delete,
-                contentDescription = "删除任务 ${item.fileName}",
-                tint = MaterialTheme.colorScheme.onSurfaceVariant,
-            )
+        Box {
+            IconButton(onClick = { showMore = true }, modifier = Modifier.size(48.dp)) {
+                Icon(Icons.Outlined.MoreVert, contentDescription = "更多操作 ${item.fileName}")
+            }
+            DropdownMenu(expanded = showMore, onDismissRequest = { showMore = false }) {
+                if (install) {
+                    DropdownMenuItem(text = { Text("打开文件") }, onClick = {
+                        showMore = false
+                        onOpen(item.id)
+                    })
+                }
+                DropdownMenuItem(text = { Text("删除任务") }, onClick = {
+                    showMore = false
+                    onRemove(item.id)
+                })
+            }
         }
     }
 }

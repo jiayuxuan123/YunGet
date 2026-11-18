@@ -75,7 +75,7 @@ test('analytics ingestion requires the dedicated app header before using the dat
   assert.deepEqual(await response.json(), {error:'统计请求来源无效'});
 });
 
-test('analytics rejects oversized batches before inserting events', async () => {
+test('retired analytics endpoint acknowledges oversized legacy batches without D1', async () => {
   const database = {
     prepare:()=>({
       bind(){return this;},
@@ -95,21 +95,11 @@ test('analytics rejects oversized batches before inserting events', async () => 
       })),
     }),
   }), {...env, DB:database});
-  assert.equal(response.status, 422);
-  assert.deepEqual(await response.json(), {error:'统计事件数量无效'});
+  assert.equal(response.status, 202);
+  assert.deepEqual(await response.json(), {accepted:0,disabled:true});
 });
 
-test('production rate limiting uses the edge cache before D1', async () => {
-  const values = new Map();
-  const cache = {
-    async match(request) {
-      const value = values.get(request.url);
-      return value === undefined ? undefined : new Response(String(value));
-    },
-    async put(request, response) {
-      values.set(request.url, Number(await response.text()));
-    },
-  };
+test('retired analytics endpoint never touches D1 or rate-limit cache', async () => {
   let d1Prepares = 0;
   const database = {prepare(){d1Prepares++; throw new Error('D1 should not be used for rate limiting');}};
   const handle = createHandler({verifyAdmin:async()=>null});
@@ -119,13 +109,10 @@ test('production rate limiting uses the edge cache before D1', async () => {
     body:'{}',
   });
   for (let index = 0; index < 60; index++) {
-    const response = await handle(request(), {...env, DB:database, RATE_CACHE:cache});
-    assert.equal(response.status, 422);
+    const response = await handle(request(), {...env, DB:database});
+    assert.equal(response.status, 202);
   }
-  const limited = await handle(request(), {...env, DB:database, RATE_CACHE:cache});
-  assert.equal(limited.status, 429);
   assert.equal(d1Prepares, 0);
-  assert.equal(values.size, 1);
 });
 
 test('thread visibility is available to moderators and never exposes owner ids', async () => {

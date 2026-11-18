@@ -7,7 +7,7 @@ import java.io.File
 internal object CompletedDownloadCache {
     private val reusableStages = setOf("PROCESSING", "SAVING", "SAVE_FAILED")
 
-    fun resolve(task: DownloadTaskEntity, cacheRoot: File): File? {
+    fun resolve(task: DownloadTaskEntity, vararg cacheRoots: File): File? {
         return try {
             if (task.pipelineStage !in reusableStages ||
                 task.completedCachePath.isBlank() ||
@@ -17,18 +17,16 @@ internal object CompletedDownloadCache {
             }
 
             val cachedFile = File(task.completedCachePath).canonicalFile
-            val rootPath = cacheRoot.canonicalPath
-            val rootPrefix = if (rootPath.endsWith(File.separator)) {
-                rootPath
-            } else {
-                rootPath + File.separator
-            }
+            if (cacheRoots.none { DownloadPathPolicy.isContained(it, cachedFile) }) return null
 
-            cachedFile.takeIf {
-                it.path.startsWith(rootPrefix) &&
-                    it.isFile &&
-                    it.length() == task.completedCacheSize
+            val actualSize = when {
+                cachedFile.isFile -> cachedFile.length()
+                cachedFile.isDirectory -> cachedFile.walkTopDown()
+                    .filter { it.isFile }
+                    .sumOf { it.length() }
+                else -> -1L
             }
+            cachedFile.takeIf { actualSize == task.completedCacheSize }
         } catch (_: Exception) {
             null
         }

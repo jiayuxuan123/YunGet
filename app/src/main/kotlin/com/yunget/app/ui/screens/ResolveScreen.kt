@@ -19,6 +19,7 @@ import androidx.compose.animation.slideOutVertically
 import androidx.compose.animation.togetherWith
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.PaddingValues
@@ -50,6 +51,7 @@ import com.yunget.app.ui.components.YunGetLoading
 import com.yunget.app.ui.theme.effectsDefault
 import com.yunget.app.ui.theme.effectsFast
 import com.yunget.app.ui.theme.LocalUiMetrics
+import com.yunget.app.ui.components.ShareLinkField
 import com.yunget.app.ui.theme.spatialDefault
 import com.yunget.app.ui.theme.spatialFast
 import androidx.compose.material3.AlertDialog
@@ -516,177 +518,153 @@ internal fun ResolveLandingContent(
         ShareLinkParser.parse(link) == null && looksLikeDirectUrl(link)
     }
 
-    LazyColumn(
-        modifier = modifier
-            .fillMaxSize()
-            .imePadding(),
-        contentPadding = PaddingValues(horizontal = ui.space(16.dp), vertical = ui.space(12.dp)),
-        verticalArrangement = Arrangement.spacedBy(ui.space(12.dp))
-    ) {
-        item(key = "resolve_workspace", contentType = "workspace") {
-            Surface(
-                modifier = Modifier.fillMaxWidth().animateContentSize(spatialDefault()),
-                shape = RoundedCornerShape(20.dp),
-                color = MaterialTheme.colorScheme.surfaceContainer
-            ) {
-                Column(
-                    modifier = Modifier.padding(ui.space(14.dp)),
-                    verticalArrangement = Arrangement.spacedBy(ui.space(10.dp))
+    BoxWithConstraints(modifier.fillMaxSize()) {
+        val contentInset = ((maxWidth - 680.dp) / 2).coerceAtLeast(ui.space(16.dp))
+        LazyColumn(
+            modifier = Modifier.fillMaxSize().imePadding(),
+            contentPadding = PaddingValues(horizontal = contentInset, vertical = ui.space(12.dp)),
+            verticalArrangement = Arrangement.spacedBy(ui.space(12.dp))
+        ) {
+            item(key = "resolve_workspace", contentType = "workspace") {
+                Surface(
+                    modifier = Modifier.fillMaxWidth().animateContentSize(spatialDefault()),
+                    shape = MaterialTheme.shapes.large,
+                    color = MaterialTheme.colorScheme.surface
                 ) {
-                    Text(
-                        text = "解析链接",
-                        style = MaterialTheme.typography.titleMedium,
-                        color = MaterialTheme.colorScheme.onSurface
-                    )
-
-                    clipboardContent()
-
-                    OutlinedTextField(
-                        value = link,
-                        onValueChange = onLinkChange,
-                        modifier = Modifier.fillMaxWidth(),
-                        label = { Text("分享链接 / 直链") },
-                        placeholder = { Text("粘贴分享链接、文案或直链") },
-                        leadingIcon = { Icon(Icons.Outlined.Link, contentDescription = null) },
-                        trailingIcon = {
-                            if (link.isNotEmpty()) {
-                                IconButton(onClick = onClearLink, modifier = Modifier.size(48.dp)) {
-                                    Icon(Icons.Filled.Close, contentDescription = "清空链接和提取码")
-                                }
-                            }
-                        },
-                        textStyle = MaterialTheme.typography.bodyLarge,
-                        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Uri),
-                        minLines = 2,
-                        maxLines = 5,
-                        shape = RoundedCornerShape(12.dp)
-                    )
-
-                    FlowRow(
-                        modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.spacedBy(8.dp),
-                        verticalArrangement = Arrangement.spacedBy(4.dp)
+                    Column(
+                        modifier = Modifier.padding(ui.space(14.dp)),
+                        verticalArrangement = Arrangement.spacedBy(ui.space(10.dp))
                     ) {
-                        FilledTonalButton(
-                            onClick = { onPasteLink() },
-                            modifier = Modifier.heightIn(min = 48.dp),
-                            shape = RoundedCornerShape(12.dp),
+                        clipboardContent()
+
+                        ShareLinkField(link, onLinkChange, onClearLink)
+
+                        FlowRow(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.spacedBy(8.dp),
+                            verticalArrangement = Arrangement.spacedBy(4.dp)
                         ) {
-                            Icon(Icons.Outlined.ContentPaste, contentDescription = null, modifier = Modifier.size(20.dp))
-                            Spacer(Modifier.width(8.dp))
-                            Text("粘贴链接")
+                            FilledTonalButton(
+                                onClick = { onPasteLink() },
+                                modifier = Modifier.heightIn(min = 48.dp),
+                                shape = RoundedCornerShape(12.dp),
+                            ) {
+                                Icon(Icons.Outlined.ContentPaste, contentDescription = null, modifier = Modifier.size(20.dp))
+                                Spacer(Modifier.width(8.dp))
+                                Text("粘贴")
+                            }
+                            FilledTonalButton(
+                                onClick = { onScanQr() },
+                                modifier = Modifier.heightIn(min = 48.dp),
+                                shape = RoundedCornerShape(12.dp),
+                            ) {
+                                Icon(Icons.Outlined.QrCodeScanner, contentDescription = null, modifier = Modifier.size(20.dp))
+                                Spacer(Modifier.width(8.dp))
+                                Text("扫码")
+                            }
+                            TextButton(
+                                onClick = onTogglePassword,
+                                modifier = Modifier.heightIn(min = 48.dp)
+                            ) {
+                                Icon(Icons.Outlined.Key, contentDescription = null, modifier = Modifier.size(20.dp))
+                                Spacer(Modifier.width(8.dp))
+                                Text(if (pwd.isBlank()) "提取码" else "已填提取码")
+                                Spacer(Modifier.width(4.dp))
+                                Icon(
+                                    Icons.Outlined.KeyboardArrowDown,
+                                    contentDescription = if (showPassword) "收起提取码" else "展开提取码",
+                                    modifier = Modifier.size(20.dp).graphicsLayer { rotationZ = passwordRotation }
+                                )
+                            }
                         }
-                        FilledTonalButton(
-                            onClick = { onScanQr() },
-                            modifier = Modifier.heightIn(min = 48.dp),
-                            shape = RoundedCornerShape(12.dp),
+
+                        AnimatedVisibility(
+                            visible = showPassword,
+                            enter = fadeIn(effectsDefault()) + expandVertically(spatialDefault()),
+                            exit = fadeOut(effectsFast()) + shrinkVertically(spatialFast())
                         ) {
-                            Icon(Icons.Outlined.QrCodeScanner, contentDescription = null, modifier = Modifier.size(20.dp))
-                            Spacer(Modifier.width(8.dp))
-                            Text("扫码")
-                        }
-                        TextButton(
-                            onClick = onTogglePassword,
-                            modifier = Modifier.heightIn(min = 48.dp)
-                        ) {
-                            Icon(Icons.Outlined.Key, contentDescription = null, modifier = Modifier.size(20.dp))
-                            Spacer(Modifier.width(8.dp))
-                            Text(if (pwd.isBlank()) "提取码（可选）" else "提取码 · 已填写")
-                            Spacer(Modifier.width(4.dp))
-                            Icon(
-                                Icons.Outlined.KeyboardArrowDown,
-                                contentDescription = if (showPassword) "收起提取码" else "展开提取码",
-                                modifier = Modifier.size(20.dp).graphicsLayer { rotationZ = passwordRotation }
+                            OutlinedTextField(
+                                value = pwd,
+                                onValueChange = onPwdChange,
+                                modifier = Modifier.fillMaxWidth(),
+                                label = { Text("提取码") },
+                                placeholder = { Text("自动识别，也可手动填写") },
+                                trailingIcon = {
+                                    if (pwd.isNotEmpty()) {
+                                        IconButton(onClick = onClearPwd, modifier = Modifier.size(48.dp)) {
+                                            Icon(Icons.Filled.Close, contentDescription = "清空提取码")
+                                        }
+                                    }
+                                },
+                                textStyle = MaterialTheme.typography.bodyLarge,
+                                singleLine = true,
+                                shape = RoundedCornerShape(16.dp)
                             )
                         }
-                    }
 
-                    AnimatedVisibility(
-                        visible = showPassword,
-                        enter = fadeIn(effectsDefault()) + expandVertically(spatialDefault()),
-                        exit = fadeOut(effectsFast()) + shrinkVertically(spatialFast())
-                    ) {
-                        OutlinedTextField(
-                            value = pwd,
-                            onValueChange = onPwdChange,
-                            modifier = Modifier.fillMaxWidth(),
-                            label = { Text("提取码") },
-                            placeholder = { Text("自动识别，也可手动填写") },
-                            trailingIcon = {
-                                if (pwd.isNotEmpty()) {
-                                    IconButton(onClick = onClearPwd, modifier = Modifier.size(48.dp)) {
-                                        Icon(Icons.Filled.Close, contentDescription = "清空提取码")
-                                    }
-                                }
-                            },
-                            textStyle = MaterialTheme.typography.bodyLarge,
-                            singleLine = true,
-                            shape = RoundedCornerShape(16.dp)
-                        )
-                    }
-
-                    AnimatedVisibility(
-                        visible = errorMessage != null,
-                        enter = fadeIn(effectsDefault()) + expandVertically(spatialDefault()),
-                        exit = fadeOut(effectsFast()) + shrinkVertically(spatialFast())
-                    ) {
-                        if (errorMessage != null) {
-                            Surface(
-                                shape = RoundedCornerShape(16.dp),
-                                color = MaterialTheme.colorScheme.errorContainer,
-                                contentColor = MaterialTheme.colorScheme.onErrorContainer
-                            ) {
-                                Row(
-                                    modifier = Modifier.fillMaxWidth().padding(16.dp),
-                                    horizontalArrangement = Arrangement.spacedBy(12.dp)
+                        AnimatedVisibility(
+                            visible = errorMessage != null,
+                            enter = fadeIn(effectsDefault()) + expandVertically(spatialDefault()),
+                            exit = fadeOut(effectsFast()) + shrinkVertically(spatialFast())
+                        ) {
+                            if (errorMessage != null) {
+                                Surface(
+                                    shape = RoundedCornerShape(16.dp),
+                                    color = MaterialTheme.colorScheme.errorContainer,
+                                    contentColor = MaterialTheme.colorScheme.onErrorContainer
                                 ) {
-                                    Icon(Icons.Outlined.ErrorOutline, contentDescription = null, modifier = Modifier.size(24.dp))
-                                    Column(modifier = Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(4.dp)) {
-                                        Text("解析未完成", style = MaterialTheme.typography.titleSmall)
-                                        Text(errorMessage, style = MaterialTheme.typography.bodyMedium)
+                                    Row(
+                                        modifier = Modifier.fillMaxWidth().padding(16.dp),
+                                        horizontalArrangement = Arrangement.spacedBy(12.dp)
+                                    ) {
+                                        Icon(Icons.Outlined.ErrorOutline, contentDescription = null, modifier = Modifier.size(24.dp))
+                                        Column(modifier = Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                                            Text("解析未完成", style = MaterialTheme.typography.titleSmall)
+                                            Text(errorMessage, style = MaterialTheme.typography.bodyMedium)
+                                        }
                                     }
                                 }
                             }
                         }
-                    }
 
-                    // 输入工作区仅此一个主操作；分享/直链沿用原有 ViewModel 分流。
-                    Button(
-                        onClick = {
-                            haptic.performHapticFeedback(HapticFeedbackType.Confirm)
-                            onResolve()
-                        },
-                        modifier = Modifier.fillMaxWidth().heightIn(min = maxOf(48f, ui.space(52.dp).value).dp),
-                        enabled = link.isNotBlank(),
-                        shape = RoundedCornerShape(16.dp),
-                        contentPadding = PaddingValues(horizontal = 24.dp, vertical = 16.dp)
-                    ) {
-                        AnimatedContent(
-                            targetState = isDirect,
-                            transitionSpec = {
-                                fadeIn(effectsFast()).togetherWith(fadeOut(effectsFast()))
+                        // 输入工作区仅此一个主操作；分享/直链沿用原有 ViewModel 分流。
+                        Button(
+                            onClick = {
+                                haptic.performHapticFeedback(HapticFeedbackType.Confirm)
+                                onResolve()
                             },
-                            label = "resolvePrimaryAction",
-                        ) { direct ->
-                            Row(verticalAlignment = Alignment.CenterVertically) {
-                                Icon(
-                                    imageVector = if (direct) Icons.Outlined.Download else Icons.Outlined.ArrowForward,
-                                    contentDescription = null,
-                                    modifier = Modifier.size(20.dp)
-                                )
-                                Spacer(Modifier.width(8.dp))
-                                Text(
-                                    if (direct) "开始下载" else "开始解析",
-                                    style = MaterialTheme.typography.labelLarge,
-                                )
+                            modifier = Modifier.fillMaxWidth().heightIn(min = maxOf(48f, ui.space(52.dp).value).dp),
+                            enabled = link.isNotBlank(),
+                            shape = RoundedCornerShape(16.dp),
+                            contentPadding = PaddingValues(horizontal = 24.dp, vertical = 16.dp)
+                        ) {
+                            AnimatedContent(
+                                targetState = isDirect,
+                                transitionSpec = {
+                                    fadeIn(effectsFast()).togetherWith(fadeOut(effectsFast()))
+                                },
+                                label = "resolvePrimaryAction",
+                            ) { direct ->
+                                Row(verticalAlignment = Alignment.CenterVertically) {
+                                    Icon(
+                                        imageVector = if (direct) Icons.Outlined.Download else Icons.Outlined.ArrowForward,
+                                        contentDescription = null,
+                                        modifier = Modifier.size(20.dp)
+                                    )
+                                    Spacer(Modifier.width(8.dp))
+                                    Text(
+                                        if (direct) "开始下载" else "开始解析",
+                                        style = MaterialTheme.typography.labelLarge,
+                                    )
+                                }
                             }
                         }
                     }
                 }
             }
-        }
-        item(key = "resolve_shortcuts", contentType = "shortcuts") {
-            shortcutsContent()
+            item(key = "resolve_shortcuts", contentType = "shortcuts") {
+                shortcutsContent()
+            }
         }
     }
 }

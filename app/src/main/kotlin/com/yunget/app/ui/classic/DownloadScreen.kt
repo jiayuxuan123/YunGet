@@ -240,6 +240,7 @@ fun DownloadScreen(
             onOpen = { taskId -> tasks.firstOrNull { it.id == taskId }?.let { openSavedFile(context, it.savePath, it.fileName) } },
             onInstall = { taskId -> tasks.firstOrNull { it.id == taskId }?.let { installApk(context, it.savePath, it.fileName) } },
             onRemove = { taskId -> pendingDelete = tasks.firstOrNull { it.id == taskId }; detailId = null },
+            onFinishRecording = viewModel::finishRecording,
         )
     }
     if (showAddDialog) {

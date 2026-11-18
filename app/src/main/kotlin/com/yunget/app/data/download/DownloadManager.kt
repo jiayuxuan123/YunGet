@@ -82,6 +82,8 @@ interface DownloadManager {
     /** Only coarse terminal diagnostics; implementations without HTTP metrics return null. */
     fun terminalDiagnostics(id: Long): DownloadDiagnostics? = null
 
+    suspend fun finishRecording(id: Long): Boolean = false
+
     // ---------- 引擎专有：链接解析（默认不支持）----------
 
     /**

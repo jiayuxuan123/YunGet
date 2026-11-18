@@ -102,6 +102,7 @@ import com.yunget.app.data.download.Aria2Executor
 import com.yunget.app.data.download.Aria2ProbeResult
 import com.yunget.app.data.download.DownloadEngineRegistry
 import com.yunget.app.data.download.EngineBuildInfo
+import com.yunget.app.data.download.NativePreviewRouting
 import com.yunget.app.data.gopeed.GopeedEngine
 import com.yunget.app.data.gopeed.KernelProvisioner
 import com.yunget.app.data.prefs.SettingsRepository
@@ -480,13 +481,18 @@ fun DownloadEngineScreen(
                                 color = MaterialTheme.colorScheme.onSurfaceVariant
                             )
                             Text(
-                                "TurboDL ${EngineBuildInfo.TURBO_DL_VERSION} · Android 使用 " +
-                                    "${EngineBuildInfo.ANDROID_RUNTIME_LABEL} 稳定路径",
+                                "TurboDL ${EngineBuildInfo.TURBO_DL_VERSION} · ${EngineBuildInfo.ANDROID_RUNTIME_LABEL}",
                                 style = MaterialTheme.typography.labelMedium,
                                 color = MaterialTheme.colorScheme.primary
                             )
+                            val protocols = remember { EngineBuildInfo.compiledNativeProtocols }
+                            if (protocols.isNotEmpty()) Text(
+                                protocols.joinToString(" · "),
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            )
                             TextButton(onClick = onOpenAnnouncement) {
-                                Text("查看 ${EngineBuildInfo.TURBO_DL_VERSION} 更新公告")
+                                Text("查看更新公告")
                             }
                             EngineActionButton(
                                 selected = !engineOn,
@@ -969,6 +975,70 @@ fun DownloadEngineScreen(
         onCancel = { KernelProvisioner.cancel() },
         onDismiss = { KernelProvisioner.reset() }
     )
+}
+
+@Composable
+private fun SingleEngineScreen(
+    onBack: () -> Unit,
+    onOpenAnnouncement: () -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    BackHandler { onBack() }
+    val context = LocalContext.current
+    val settings = remember { SettingsRepository(context) }
+    val provider = remember {
+        DownloadEngineRegistry.all()
+            .firstOrNull { it.id == NativePreviewRouting.ENGINE_ID && it.isAvailable() }
+            ?: DownloadEngineRegistry.default()
+    }
+    LaunchedEffect(provider.id) {
+        settings.downloadEngineId = provider.id
+        settings.downloadEngine = SettingsRepository.ENGINE_BUILTIN
+    }
+    Scaffold(
+        modifier = modifier.fillMaxSize(),
+        topBar = {
+            TopAppBar(
+                title = { Text("下载引擎", style = MaterialTheme.typography.titleLarge) },
+                navigationIcon = {
+                    IconButton(onClick = onBack) {
+                        Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "返回")
+                    }
+                },
+                colors = TopAppBarDefaults.topAppBarColors(containerColor = MaterialTheme.colorScheme.surface),
+            )
+        },
+    ) { padding ->
+        Column(
+            modifier = Modifier.fillMaxSize().padding(padding).padding(16.dp),
+            verticalArrangement = Arrangement.spacedBy(12.dp),
+        ) {
+            Text(
+                "当前版本只保留一个下载引擎，任务会统一走 TurboDL 原生核心。",
+                style = MaterialTheme.typography.bodyMedium,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+            Card(
+                modifier = Modifier.fillMaxWidth(),
+                shape = RoundedCornerShape(20.dp),
+                colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceContainerLow),
+            ) {
+                Column(modifier = Modifier.padding(18.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                    Text(provider.displayName, style = MaterialTheme.typography.titleLarge)
+                    Text(provider.description, style = MaterialTheme.typography.bodySmall)
+                    Text(
+                        "TurboDL ${EngineBuildInfo.TURBO_DL_VERSION} · ${EngineBuildInfo.ANDROID_RUNTIME_LABEL}",
+                        style = MaterialTheme.typography.labelMedium,
+                        color = MaterialTheme.colorScheme.primary,
+                    )
+                    EngineCapabilityChips(provider.capabilities)
+                }
+            }
+            OutlinedButton(onClick = onOpenAnnouncement, modifier = Modifier.fillMaxWidth()) {
+                Text("查看更新公告")
+            }
+        }
+    }
 }
 
 /**

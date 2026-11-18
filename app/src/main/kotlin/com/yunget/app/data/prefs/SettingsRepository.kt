@@ -197,7 +197,8 @@ class SettingsRepository(context: Context) {
      * 不能让用户以为点了就立即换引擎。
      */
     var downloadEngineId: String
-        get() = prefs.getString("download_engine_id", DEFAULT_DOWNLOAD_ENGINE) ?: DEFAULT_DOWNLOAD_ENGINE
+        get() = prefs.getString("download_engine_id", null)
+            ?: DEFAULT_DOWNLOAD_ENGINE
         set(value) {
             prefs.edit().putString("download_engine_id", value).apply()
         }
@@ -524,17 +525,11 @@ class SettingsRepository(context: Context) {
             prefs.edit().putString("engine_user_agent", value.trim()).apply()
         }
 
-    /**
-     * HTTP 版本策略（0=AUTO / 1=强制 HTTP/1.1 / 2=允许 HTTP/2）。
-     *
-     * 与「强制 HTTP/1.1」布尔开关的关系：那个开关是旧接口，只覆盖分片链路；
-     * 本项是引擎的完整三态策略，语义更细（AUTO 会让探测与单流回退走 h2，
-     * 而分片并发仍走 h1）。**本项优先于布尔开关**。
-     */
+    /** 0=自动，1=HTTP/1.1，2=允许 HTTP/2，3=原生核心优先 HTTP/3。 */
     var engineHttpVersionPolicy: Int
         get() = prefs.getInt("engine_http_version_policy", 0)
         set(value) {
-            prefs.edit().putInt("engine_http_version_policy", value.coerceIn(0, 2)).apply()
+            prefs.edit().putInt("engine_http_version_policy", value.coerceIn(0, 3)).apply()
         }
 
     companion object {

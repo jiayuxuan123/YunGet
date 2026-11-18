@@ -454,11 +454,18 @@ fun SettingsScreen(
         SettingsItem(
             icon = Icons.Outlined.Memory,
             title = "下载引擎",
-                        valueText = if (engineChoice == SettingsRepository.ENGINE_GOPEED) "Gopeed" else "TurboDL",
+            valueText = if (engineChoice == SettingsRepository.ENGINE_GOPEED) {
+                "Gopeed"
+            } else {
+                com.yunget.app.data.download.DownloadEngineRegistry
+                    .find(settingsRepo.downloadEngineId)?.displayName ?: "TurboDL"
+            },
             description = if (engineChoice == SettingsRepository.ENGINE_GOPEED) {
                 "Gopeed 引擎（支持磁力/BT，需导入内核）"
             } else {
-                "内置分片下载器 · 具体实现与 Gopeed 引擎都在这一页里选"
+                com.yunget.app.data.download.DownloadEngineRegistry
+                    .find(settingsRepo.downloadEngineId)?.description
+                    ?: "内置分片下载器 · 具体实现与 Gopeed 引擎都在这一页里选"
             },
             onClick = { showDownloadEngine = true }
         )

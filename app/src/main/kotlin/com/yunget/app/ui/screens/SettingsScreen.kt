@@ -107,12 +107,14 @@ import androidx.compose.ui.unit.dp
 import com.yunget.app.data.backup.AuthBackupManager
 import com.yunget.app.data.backup.AuthCrypto
 import com.yunget.app.data.download.DownloadSaver
+import com.yunget.app.data.download.DownloadEngineRegistry
 import com.yunget.app.data.download.ThreadCountAdvice
 import com.yunget.app.data.network.HttpClients
 import com.yunget.app.data.plugin.PluginRepository
 import com.yunget.app.data.prefs.SettingsRepository
 import com.yunget.app.ui.theme.ThemeController
 import com.yunget.app.ui.theme.LocalUiMetrics
+import com.yunget.app.ui.components.SettingsSection
 import com.yunget.app.ui.theme.AppUiStyle
 import com.yunget.app.ui.theme.LocalAppUiStyle
 import com.yunget.app.ui.theme.accentText
@@ -381,11 +383,16 @@ fun SettingsScreen(
             verticalArrangement = Arrangement.spacedBy(ui.space(14.dp))
         ) {
             item(key = "download_overview") {
-                SettingsOverview(threads = threads, concurrent = maxConcurrent, isGopeed = engineChoice == SettingsRepository.ENGINE_GOPEED)
+                SettingsOverview(
+                    threads = threads,
+                    concurrent = maxConcurrent,
+                    engineName = if (engineChoice == SettingsRepository.ENGINE_GOPEED) "Gopeed"
+                        else DownloadEngineRegistry.find(settingsRepo.downloadEngineId)?.displayName ?: "TurboDL",
+                    onEngine = { showDownloadEngine = true },
+                )
             }
             item(key = "settings_quick_actions") {
                 SettingsQuickActions(
-                    onEngine = { showDownloadEngine = true },
                     onTheme = onThemeClick,
                     onLogs = onLogViewClick,
                 )
@@ -481,11 +488,16 @@ fun SettingsScreen(
                     SettingsItem(
                         icon = Icons.Outlined.Memory,
                         title = "下载引擎",
-                        valueText = if (engineChoice == SettingsRepository.ENGINE_GOPEED) "Gopeed" else "TurboDL",
+                        valueText = if (engineChoice == SettingsRepository.ENGINE_GOPEED) {
+                            "Gopeed"
+                        } else {
+                            DownloadEngineRegistry.find(settingsRepo.downloadEngineId)?.displayName ?: "TurboDL"
+                        },
                         description = if (engineChoice == SettingsRepository.ENGINE_GOPEED) {
                             "Gopeed · 磁力 / BT"
                         } else {
-                            "TurboDL · 自适应并发与断点续传"
+                            DownloadEngineRegistry.find(settingsRepo.downloadEngineId)?.description
+                                ?: "TurboDL · 自适应并发与断点续传"
                         },
                         onClick = { showDownloadEngine = true }
                     )
@@ -1720,12 +1732,14 @@ private fun ImportAuthDialog(
 }
 
 @Composable
-private fun SettingsOverview(threads: Int, concurrent: Int, isGopeed: Boolean) {
+private fun SettingsOverview(threads: Int, concurrent: Int, engineName: String, onEngine: () -> Unit) {
     val ui = LocalUiMetrics.current
     Surface(
+        onClick = onEngine,
         modifier = Modifier.fillMaxWidth(),
-        shape = RoundedCornerShape(16.dp),
-        color = MaterialTheme.colorScheme.surfaceContainerLow,
+        shape = MaterialTheme.shapes.large,
+        color = MaterialTheme.colorScheme.primaryContainer,
+        contentColor = MaterialTheme.colorScheme.onPrimaryContainer,
     ) {
         Row(
             modifier = Modifier.fillMaxWidth().padding(horizontal = ui.space(13.dp), vertical = ui.space(11.dp)),
@@ -1735,11 +1749,11 @@ private fun SettingsOverview(threads: Int, concurrent: Int, isGopeed: Boolean) {
             Surface(
                 modifier = Modifier.size(34.dp),
                 shape = RoundedCornerShape(10.dp),
-                color = MaterialTheme.colorScheme.primaryContainer,
+                color = MaterialTheme.colorScheme.surface,
             ) {
                 Box(contentAlignment = Alignment.Center) {
                     Icon(
-                        Icons.Outlined.Tune,
+                        Icons.Outlined.Memory,
                         contentDescription = null,
                         modifier = Modifier.size(19.dp),
                         tint = MaterialTheme.colorScheme.onPrimaryContainer,
@@ -1748,26 +1762,20 @@ private fun SettingsOverview(threads: Int, concurrent: Int, isGopeed: Boolean) {
             }
             Column(modifier = Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(2.dp)) {
                 Text(
-                    "下载策略",
-                    style = MaterialTheme.typography.titleSmall,
+                    engineName,
+                    style = MaterialTheme.typography.titleMedium,
                     fontWeight = FontWeight.SemiBold,
                 )
-                Text("$concurrent 个任务 · $threads 连接/任务",
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant)
+                Text("并发 $concurrent 项 · 每项 $threads 连接",
+                    style = MaterialTheme.typography.bodySmall)
             }
-            Text(
-                if (isGopeed) "Gopeed" else "TurboDL",
-                style = MaterialTheme.typography.labelMedium,
-                color = MaterialTheme.colorScheme.accentText,
-            )
+            Icon(Icons.Outlined.ChevronRight, contentDescription = null)
         }
     }
 }
 
 @Composable
 private fun SettingsQuickActions(
-    onEngine: () -> Unit,
     onTheme: () -> Unit,
     onLogs: () -> Unit,
 ) {
@@ -1775,7 +1783,6 @@ private fun SettingsQuickActions(
         modifier = Modifier.fillMaxWidth(),
         horizontalArrangement = Arrangement.spacedBy(8.dp),
     ) {
-        SettingsQuickAction(Icons.Outlined.Memory, "下载引擎", onEngine, Modifier.weight(1f))
         SettingsQuickAction(Icons.Outlined.Palette, "主题外观", onTheme, Modifier.weight(1f))
         SettingsQuickAction(Icons.AutoMirrored.Outlined.ReceiptLong, "实时日志", onLogs, Modifier.weight(1f))
     }
@@ -1814,34 +1821,14 @@ private fun SettingsQuickAction(
 private fun SettingsGroup(
     title: String,
     description: String,
-    content: @Composable ColumnScope.() -> Unit
+    content: @Composable ColumnScope.() -> Unit,
 ) {
-    val ui = LocalUiMetrics.current
-    Column(verticalArrangement = Arrangement.spacedBy(ui.space(8.dp))) {
-        Column(
-            modifier = Modifier.padding(start = 16.dp, top = 8.dp, end = 16.dp),
-            verticalArrangement = Arrangement.spacedBy(2.dp),
-        ) {
-            Text(
-                title,
-                style = MaterialTheme.typography.titleSmall,
-                fontWeight = FontWeight.SemiBold,
-                color = MaterialTheme.colorScheme.onSurface,
-            )
-            if (com.yunget.app.ui.theme.LocalShowSettingDescriptions.current) {
-                Text(
-                    description,
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                )
-            }
-        }
-        Surface(
-            shape = RoundedCornerShape(16.dp),
-            color = MaterialTheme.colorScheme.surface,
-            modifier = Modifier.fillMaxWidth(),
-        ) { Column(content = content) }
-    }
+    SettingsSection(
+        title,
+        description.takeIf { com.yunget.app.ui.theme.LocalShowSettingDescriptions.current },
+        LocalUiMetrics.current.space(8.dp),
+        content,
+    )
 }
 
 @Composable
@@ -1965,10 +1952,9 @@ internal fun SettingsPreviewContent() {
         contentPadding = PaddingValues(ui.space(14.dp)),
         verticalArrangement = Arrangement.spacedBy(ui.space(14.dp))
     ) {
-        item { SettingsOverview(threads = 16, concurrent = 3, isGopeed = false) }
+        item { SettingsOverview(threads = 16, concurrent = 3, engineName = "TurboDL", onEngine = {}) }
         item {
             SettingsQuickActions(
-                onEngine = {},
                 onTheme = {},
                 onLogs = {},
             )

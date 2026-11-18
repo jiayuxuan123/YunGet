@@ -30,6 +30,9 @@ include(":aria2-kernel")
 
 // 纯 JVM 的共享内核（网盘解析/模型/任务模型）：Android 与桌面/Flutter 的引擎宿主共用。
 include(":core")
+if (providers.gradleProperty("yungetDesktopNativeBin").isPresent) {
+    include(":desktopApp")
+}
 
 // 桌面端的引擎宿主（TurboDL + core，stdio JSON 协议）。
 include(":host")

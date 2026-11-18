@@ -50,6 +50,7 @@ data class DownloadStats(
     /** 当前配置的连接上限；0 表示该引擎没有提供可展示的上限。 */
     val connectionLimit: Int = 0,
     val diagnostics: DownloadDiagnostics? = null,
+    val liveRecording: Boolean = false,
 ) {
     fun connectionSummary(): String = when {
         chunkCount > 0 && connectionLimit > 0 -> "$chunkCount/$connectionLimit 连接"
@@ -171,6 +172,7 @@ class TurboDownloadManager(
     private val sourceRateLimitUntil = ConcurrentHashMap<String, Long>()
     private val refreshJobs = ConcurrentHashMap<Long, kotlinx.coroutines.Job>()
     private val sourceRefresher by lazy { QuarkTaskRefresher(context) }
+    private val nativePreview by lazy { NativePreview(context, speedLimitProvider, httpVersionPolicyProvider) }
 
     private fun sdkStarted(id: Long, generation: Long) {
         if (sdkGenerations.put(id, generation) == null) onTaskStarted(id)
@@ -194,7 +196,7 @@ class TurboDownloadManager(
     }
 
     private fun completedCache(task: DownloadTaskEntity): File? =
-        CompletedDownloadCache.resolve(task, context.cacheDir)
+        CompletedDownloadCache.resolve(task, turboCacheDir(), File(context.cacheDir, "media-processing"))
 
 
     /**
@@ -223,7 +225,9 @@ class TurboDownloadManager(
         runCatching {
             val engineResolver = bootstrap.client.backendResolver
             bootstrap.client.backendResolver = dev.turbodl.core.BackendResolver { request ->
-                engineResolver?.resolve(request)
+                if (request.tags[NativePreviewRouting.TAG] == NativePreviewRouting.NATIVE) {
+                    nativePreview.backend
+                } else engineResolver?.resolve(request)
                     ?: com.yunget.app.data.plugin.sharedPluginRuntime(context)
                         .host?.extensions
                         ?.let { dev.turbodl.plugin.runtime.ext.BackendRegistry(it) }
@@ -249,6 +253,9 @@ class TurboDownloadManager(
     override fun terminalDiagnostics(id: Long): DownloadDiagnostics? = synchronized(terminalDetails) {
         terminalDetails[id]
     }
+
+    override suspend fun finishRecording(id: Long): Boolean =
+        turboIds[id]?.let { nativePreview.finishRecording(it) } ?: false
 
     /** 任务列表（Room Flow 直通）*/
     override val tasks: Flow<List<DownloadTaskEntity>> = dao.observeAll()
@@ -880,6 +887,7 @@ class TurboDownloadManager(
         if (!shutdownFlag.compareAndSet(false, true)) return
         runCatching { scope.cancel() }
         runCatching { bootstrap.shutdown() }
+        runCatching { nativePreview.close() }
         runCatching { releaseWakeLock() }
         // 保活引用要**归还**而不是直接 stopService：引用计数是跨来源共享的
         // （Gopeed 内核包下载 KernelProvisioner 也在用同一条前台服务），直接停会把别人的保活一起关掉。
@@ -934,10 +942,27 @@ class TurboDownloadManager(
         Log.d(TAG, "enqueue: platform=$platform size=$size headers=${headers.keys}")
         // 请求头持久化到 DB：进程重启后恢复下载仍能带上 Cookie/Referer，否则必定 403。
         val headersJson = if (headers.isNotEmpty()) JSONObject(headers as Map<*, *>).toString() else "{}"
+        val nativeMediaKind = NativePreviewRouting.mediaKind(url, safeName)
+            ?.takeIf(nativePreview::supportsMedia)
+        val nativeTorrent = nativePreview.supportsTorrent() && (NativePreviewRouting.isMagnet(url) ||
+            NativePreviewRouting.isTorrentFile(url, safeName))
+        val useNative = settings.downloadEngine != SettingsRepository.ENGINE_GOPEED &&
+            settings.downloadEngineId == NativePreviewRouting.ENGINE_ID &&
+            nativePreview.available &&
+            fallbackUrl.isBlank() && altSources.isEmpty() && !ignoreSslProvider() &&
+            (nativeTorrent || nativeMediaKind != null || NativePreviewRouting.isFtp(url) ||
+                NativePreviewRouting.supportsDirectLink(url, safeName))
+        val extension = safeName.substringAfterLast('.', "").lowercase()
+        val outputName = when {
+            useNative && nativeTorrent && extension == "torrent" -> safeName.substringBeforeLast('.').ifBlank { "BT下载" }
+            useNative && nativeMediaKind != null && extension in setOf("m3u", "m3u8", "mpd", "dash") ->
+                safeName.substringBeforeLast('.') + ".mp4"
+            else -> safeName
+        }
         val id = dao.insert(
             DownloadTaskEntity(
                 url = url,
-                fileName = safeName,
+                fileName = outputName,
                 platform = platform,
                 fallbackUrl = fallbackUrl,
                 altSourcesJson = DownloadPostProcessor.encodeSources(altSources),
@@ -948,8 +973,11 @@ class TurboDownloadManager(
                 sourceAccountId = submission.sourceAccountId,
                 refreshReferenceJson = submission.refreshReferenceJson,
                 transferPolicyJson = submission.transferPolicyJson.ifBlank { "{}" }.let { stored ->
-                    if (stored == "{}") TaskTransferPolicies.encode(buildConfig(), platform, submission.sourceAccountId)
-                    else stored
+                    val policy = if (stored == "{}") {
+                        TaskTransferPolicies.encode(buildConfig(), platform, submission.sourceAccountId)
+                    } else stored
+                    NativePreviewRouting.pin(policy, useNative, nativeMediaKind
+                        ?: NativePreviewRouting.TORRENT_FILE.takeIf { nativeTorrent })
                 },
 
                 requestHeadersJson = headersJson,
@@ -958,7 +986,7 @@ class TurboDownloadManager(
         )
         if (headers.isNotEmpty()) taskHeaders[id] = headers
         if (size > 0) taskSizes[id] = size
-        taskNames[id] = safeName
+        taskNames[id] = outputName
         taskCallbacks[id] = onComplete
         // 引擎路由：选了 Gopeed 且内核已导入 → 「执行」交给引擎，任务登记/写库/回调与内置路径一致；
         // 否则一行不改地走原来的 TurboDL 路径。
@@ -1062,6 +1090,7 @@ class TurboDownloadManager(
                 // 稳定键 = Room 任务 id：使同一任务多次 submit 复用同一分片目录，
                 // 真正实现断点续传（暂停恢复 / 进程重启都从断点继续，而非从头下）。
                 stableKey = "room-$id",
+                tags = NativePreviewRouting.tags(task.transferPolicyJson),
                 mirrors = DownloadPostProcessor.mirrors(task, restoredHeaders),
             )
             dao.updateStatus(id, DownloadTaskEntity.STATUS_DOWNLOADING)
@@ -1175,10 +1204,20 @@ class TurboDownloadManager(
         lastDbWriteBytes.remove(id)
         val cleanup = taskCallbacks.remove(id)
         scope.launch {
-            if (turboId != null) client.cancel(turboId, deleteOutput = true)
-            turboOutputs.remove(id)?.delete()
+            if (turboId != null) {
+                client.cancel(turboId, deleteOutput = true)
+                client.awaitSettled(turboId)
+            }
+            val task = dao.get(id)
+            val output = turboOutputs.remove(id) ?: File(turboCacheDir(), "task_${id}.part")
+            withContext(Dispatchers.IO) {
+                if (output.isDirectory) output.deleteRecursively() else output.delete()
+                NativePreviewRouting.torrentMetadataFile(output).delete()
+                NativePreviewRouting.partialTorrentMetadataFile(output).delete()
+                task?.let(::completedCache)?.takeIf { it != output }?.delete()
+            }
             if (deleteLocal) {
-                dao.get(id)?.savePath?.takeIf { it.isNotBlank() }?.let {
+                task?.savePath?.takeIf { it.isNotBlank() }?.let {
                     val ok = DownloadSaver.delete(context, it)
                     Log.d(TAG, "remove: id=$id 删除本地文件 ${if (ok) "成功" else "失败/未找到"} ($it)")
                 }
@@ -1491,7 +1530,8 @@ class TurboDownloadManager(
                         remainMillis = p.etaMillis,
                         chunkCount = (details?.takeIf { it.requestMetricsAvailable }?.activeRequests ?: p.activeConnections).coerceAtLeast(0),
                         connectionLimit = details?.configuredConnections ?: threadProvider().coerceAtLeast(1),
-                        diagnostics = DownloadDiagnostics.from(details),
+                        diagnostics = nativePreview.diagnostics(ev.taskId) ?: DownloadDiagnostics.from(details),
+                        liveRecording = nativePreview.isRecording(ev.taskId),
                     ))
                 }
                 // 进度写库节流：每任务至多每 800ms 或每增长 1MB 写一次，避免高频 launch+DB 竞争拖慢吞吐。
@@ -1508,7 +1548,14 @@ class TurboDownloadManager(
             }
             is TurboEvent.Completed -> {
                 rateLimitUntil.remove(roomId)
-                _stats.update { stats -> stats[roomId]?.let { stats + (roomId to it.copy(speed = 0, chunkCount = 0, diagnostics = DownloadDiagnostics.from(client.taskDetails(ev.taskId)))) } ?: stats }
+                val diagnostics = nativePreview.takeDiagnostics(ev.taskId)
+                    ?: DownloadDiagnostics.from(client.taskDetails(ev.taskId))
+                if (diagnostics != null) synchronized(terminalDetails) {
+                    terminalDetails[roomId] = diagnostics
+                }
+                _stats.update { stats ->
+                    stats[roomId]?.let { stats + (roomId to it.copy(speed = 0, chunkCount = 0, diagnostics = diagnostics)) } ?: stats
+                }
                 val job = scope.launch(start = kotlinx.coroutines.CoroutineStart.LAZY) {
                     onTurboCompleted(roomId, ev.file, ev.totalBytes, generation = generation)
                 }
@@ -1690,24 +1737,49 @@ class TurboDownloadManager(
         var committedPath: String? = null
         var unregisteredProcessed: File? = null
         try {
+          val inputSize = if (downloadedFile.isDirectory) {
+              downloadedFile.walkTopDown().filter { it.isFile }.sumOf { it.length() }
+          } else downloadedFile.length()
           if (!alreadyProcessed && dao.markDownloadedGeneration(roomId, expectedGeneration,
-              downloadedFile.canonicalPath, downloadedFile.length(), maxOf(total, downloadedFile.length())) == 0) return
+              downloadedFile.canonicalPath, inputSize, maxOf(total, inputSize)) == 0) return
           saveLock.withLock {
             kotlinx.coroutines.currentCoroutineContext().ensureActive()
-            val file = if (alreadyProcessed) downloadedFile else DownloadPostProcessor.process(context, task, downloadedFile)
+            val file = if (alreadyProcessed || downloadedFile.isDirectory) {
+                downloadedFile
+            } else {
+                DownloadPostProcessor.process(context, task, downloadedFile)
+            }
             unregisteredProcessed = file.takeIf { it != downloadedFile }
             kotlinx.coroutines.currentCoroutineContext().ensureActive()
             val latest = dao.get(roomId) ?: return
             if (latest.status != DownloadTaskEntity.STATUS_DOWNLOADING || latest.attemptGeneration != expectedGeneration) return
-            if (dao.updatePipelineGeneration(roomId, expectedGeneration, "SAVING", file.canonicalPath, file.length()) == 0) return
+            val processedSize = if (file.isDirectory) {
+                file.walkTopDown().filter { it.isFile }.sumOf { it.length() }
+            } else file.length()
+            if (dao.updatePipelineGeneration(roomId, expectedGeneration, "SAVING", file.canonicalPath, processedSize) == 0) return
             unregisteredProcessed = null
             if (!storagePermissionProvider()) throw IllegalStateException("未授予存储权限")
+            var savedName = task.fileName
             val savedPath = withContext(Dispatchers.IO) {
-                DownloadSaver.save(context, task.fileName, file, saveDirProvider()) { operation.isActive }
+                val path = if (file.isDirectory) {
+                    val entries = file.walkTopDown().filter { it.isFile }.take(2).toList()
+                    val single = entries.singleOrNull()
+                    if (single != null) {
+                        savedName = single.name
+                        DownloadSaver.save(context, savedName, single, saveDirProvider()) { operation.isActive }
+                    } else {
+                        DownloadSaver.saveDirectory(context, task.fileName, file, saveDirProvider()) { operation.isActive }
+                    }
+                } else {
+                    DownloadSaver.save(context, task.fileName, file, saveDirProvider()) { operation.isActive }
+                }
+                committedPath = path
+                path
             } ?: throw IllegalStateException("保存失败")
-            committedPath = savedPath
             kotlinx.coroutines.currentCoroutineContext().ensureActive()
-            val actualSize = file.length()
+            val actualSize = if (file.isDirectory) {
+                file.walkTopDown().filter { it.isFile }.sumOf { it.length() }
+            } else file.length()
             val finalTotal = actualSize
             if (dao.completeGeneration(roomId, expectedGeneration, savedPath, actualSize, finalTotal) == 0) {
                 withContext(Dispatchers.IO) { DownloadSaver.delete(context, savedPath) }
@@ -1715,14 +1787,19 @@ class TurboDownloadManager(
                 return
             }
             committedPath = null
+            if (savedName != task.fileName) dao.updateFileName(roomId, savedName)
             clearSdkMapping(roomId, expectedGeneration)
             _stats.update { it - roomId }
             metadataAtMs.remove(roomId)
-            turboOutputs.remove(roomId)?.delete()
-            if (file != downloadedFile) file.delete()
+            val transferOutput = turboOutputs.remove(roomId) ?: File(turboCacheDir(), "task_${roomId}.part")
+            withContext(Dispatchers.IO) {
+                for (output in setOf(transferOutput, downloadedFile, file)) {
+                    if (output.isDirectory) output.deleteRecursively() else output.delete()
+                }
+            }
             sourceRefreshAttempts.remove(roomId)
             rateLimitUntil.remove(roomId)
-            dispatchToFileHandlers(task, savedPath, actualSize)
+            dispatchToFileHandlers(task.copy(fileName = savedName), savedPath, actualSize)
             taskCallbacks.remove(roomId)?.let { callback -> runCatching { callback() } }
             DiagLog.i(context, DiagLog.Category.DOWNLOAD, "下载完成：id=$roomId 实际=$actualSize")
           }
@@ -1744,7 +1821,9 @@ class TurboDownloadManager(
             DiagLog.e(context, DiagLog.Category.STORAGE, "保存失败：id=$roomId", error)
         } finally {
             unregisteredProcessed?.let { file ->
-                withContext(kotlinx.coroutines.NonCancellable + Dispatchers.IO) { file.delete() }
+                withContext(kotlinx.coroutines.NonCancellable + Dispatchers.IO) {
+                    if (file.isDirectory) file.deleteRecursively() else file.delete()
+                }
             }
             sdkFinished(roomId, expectedGeneration)
         }
@@ -1752,13 +1831,14 @@ class TurboDownloadManager(
 
     private suspend fun onSdkFailure(roomId: Long, event: TurboEvent.Failed, generation: Long) {
         val pauseSerial = pauseSerials[roomId] ?: 0L
+        val nativeFailure = nativePreview.takeDiagnostics(event.taskId)
         try {
             client.awaitSettled(event.taskId)
             val task = dao.get(roomId) ?: return
             if (task.attemptGeneration != generation || task.status != DownloadTaskEntity.STATUS_DOWNLOADING ||
                 turboIds[roomId] != event.taskId) return
             val failedDetails = client.taskDetails(event.taskId)
-            val status = failedDetails?.lastHttpStatus
+            val status = nativeFailure?.lastHttpStatus ?: failedDetails?.lastHttpStatus
             val expired = status in setOf(401, 403, 410) ||
                 (status == null && event.reason.contains("授权/时效"))
             if (expired && task.sourceAccountId.isNotBlank() &&
@@ -1787,7 +1867,7 @@ class TurboDownloadManager(
             _stats.update { it - roomId }
             metadataAtMs.remove(roomId)
             lastSeenBytes.remove(roomId)
-            DownloadDiagnostics.from(failedDetails)?.let { details ->
+            (nativeFailure ?: DownloadDiagnostics.from(failedDetails))?.let { details ->
                 synchronized(terminalDetails) { terminalDetails[roomId] = details }
             }
             val failureText = if (RateLimitCooldown.applies(event.reason, status)) {

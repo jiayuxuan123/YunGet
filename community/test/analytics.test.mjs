@@ -66,7 +66,7 @@ test('daily chart uses the same Asia Shanghai calendar as its range', async () =
   } finally { f.sqlite.close(); }
 });
 
-test('ingestion rejects private-looking values even under an allowed property key', async () => {
+test('legacy ingestion is acknowledged without writing D1', async () => {
   const f = fixture();
   try {
     const response = await f.handle(new Request('https://community.example.com/api/analytics', {
@@ -76,12 +76,12 @@ test('ingestion rejects private-looking values even under an allowed property ke
         properties: {source: 'https://example.invalid/private?token=synthetic'},
       }]}),
     }), f.env);
-    assert.equal(response.status, 422);
+    assert.equal(response.status, 202);
     assert.equal(f.sqlite.prepare('SELECT COUNT(*) AS n FROM analytics_events').get().n, 0);
   } finally { f.sqlite.close(); }
 });
 
-test('analytics accepts a generic HTTP 403 classification for direct links', async () => {
+test('legacy analytics clients cannot refill the retired table', async () => {
   const f = fixture();
   try {
     const response = await f.handle(new Request('https://community.example.com/api/analytics', {
@@ -92,8 +92,7 @@ test('analytics accepts a generic HTTP 403 classification for direct links', asy
       }]}),
     }), f.env);
     assert.equal(response.status, 202);
-    const row = f.sqlite.prepare("SELECT properties FROM analytics_events WHERE event='download_failed'").get();
-    assert.match(row.properties, /http_403/);
+    assert.equal(f.sqlite.prepare('SELECT COUNT(*) AS n FROM analytics_events').get().n, 0);
   } finally { f.sqlite.close(); }
 });
 

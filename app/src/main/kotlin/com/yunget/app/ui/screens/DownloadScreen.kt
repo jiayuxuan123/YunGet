@@ -22,7 +22,6 @@ import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.ExperimentalLayoutApi
-import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
@@ -43,7 +42,7 @@ import androidx.compose.foundation.text.selection.SelectionContainer
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
-import androidx.compose.material.icons.outlined.Delete
+import androidx.compose.material.icons.outlined.MoreVert
 import androidx.compose.material.icons.outlined.Download
 import androidx.compose.material.icons.outlined.ExpandMore
 import androidx.compose.material.icons.outlined.Folder
@@ -57,6 +56,8 @@ import androidx.compose.material3.FilledTonalIconButton
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
+import androidx.compose.material3.DropdownMenu
+import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.ModalBottomSheet
@@ -93,6 +94,7 @@ import androidx.compose.ui.unit.dp
 import androidx.core.content.ContextCompat
 import androidx.core.content.FileProvider
 import com.yunget.app.data.db.DownloadTaskEntity
+import com.yunget.app.data.download.DownloadDiagnostics
 import com.yunget.app.data.download.DownloadStats
 import com.yunget.app.data.download.TaskTransferPolicies
 import com.yunget.app.ui.SnackbarController
@@ -205,6 +207,8 @@ fun DownloadScreen(
             onDismiss = { detailId = null },
             onPause = onPause, onResume = onResume, onOpen = onOpen,
             onInstall = onInstall, onRemove = onRemove,
+            onFinishRecording = viewModel::finishRecording,
+            terminalDiagnostics = viewModel::terminalDiagnostics,
         )
     }
     pendingDeleteId?.let { id ->
@@ -462,6 +466,7 @@ private fun DownloadOverview(
     val paused = listItems.count { it.status == DownloadTaskEntity.STATUS_PAUSED }
     val failed = listItems.count { it.status == DownloadTaskEntity.STATUS_FAILED }
     val completed = listItems.count { it.isCompleted }
+    var showActions by remember(completedTab) { mutableStateOf(false) }
     val activeIds = remember(listItems) {
         listItems.filter { it.status == DownloadTaskEntity.STATUS_DOWNLOADING }.map { it.id }.toSet()
     }
@@ -473,42 +478,51 @@ private fun DownloadOverview(
         paused > 0 -> "$paused 项下载已暂停"
         else -> "下载队列已完成"
     }
-    Column(
+    Row(
         Modifier.fillMaxWidth().padding(horizontal = 4.dp, vertical = 6.dp),
-        verticalArrangement = Arrangement.spacedBy(8.dp),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(8.dp),
     ) {
-        Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-            Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(4.dp)) {
-                Text(headline, style = MaterialTheme.typography.titleSmall)
-                if (!completedTab && pending + paused + failed > 0) {
-                    Text(listOfNotNull(
-                        "等待 $pending".takeIf { pending > 0 },
-                        "暂停 $paused".takeIf { paused > 0 },
-                        "失败 $failed".takeIf { failed > 0 },
-                    ).joinToString(" · "), style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant)
-                }
-            }
-            IconButton(onClick = onDeleteAll, modifier = Modifier.size(48.dp)) {
-                Icon(Icons.Outlined.Delete, contentDescription = "删除全部任务",
-                    tint = MaterialTheme.colorScheme.onSurfaceVariant)
+        Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(3.dp)) {
+            Text(headline, style = MaterialTheme.typography.titleSmall)
+            if (!completedTab && activeIds.isNotEmpty()) DownloadTotalSpeed(activeIds, stats)
+            if (!completedTab) {
+                val otherStates = listOfNotNull(
+                    "等待 $pending".takeIf { downloading > 0 && pending > 0 },
+                    "失败 $failed".takeIf { downloading + pending > 0 && failed > 0 },
+                    "暂停 $paused".takeIf { downloading + pending + failed > 0 && paused > 0 },
+                )
+                if (otherStates.isNotEmpty()) Text(
+                    otherStates.joinToString(" · "),
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
             }
         }
-        if (!completedTab) {
-            FlowRow(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp),
-                itemVerticalAlignment = Alignment.CenterVertically) {
-                DownloadTotalSpeed(activeIds, stats)
-                TextButton(
-                    onClick = onPauseAll, enabled = downloading + pending > 0,
-                    modifier = Modifier.heightIn(min = 48.dp),
-                    shape = RoundedCornerShape(10.dp),
-                ) { Text("全部暂停") }
-                TextButton(
-                    onClick = onResumeAll, enabled = paused + failed > 0,
-                    modifier = Modifier.heightIn(min = 48.dp),
-                    shape = RoundedCornerShape(10.dp),
-                ) { Text("全部开始") }
+        Box {
+            IconButton(onClick = { showActions = true }, modifier = Modifier.size(48.dp)) {
+                Icon(Icons.Outlined.MoreVert, contentDescription = "批量操作")
+            }
+            DropdownMenu(expanded = showActions, onDismissRequest = { showActions = false }) {
+                if (!completedTab && downloading + pending > 0) {
+                    DropdownMenuItem(text = { Text("全部暂停") }, onClick = {
+                        showActions = false
+                        onPauseAll()
+                    })
+                }
+                if (!completedTab && paused + failed > 0) {
+                    DropdownMenuItem(text = { Text("全部开始") }, onClick = {
+                        showActions = false
+                        onResumeAll()
+                    })
+                }
+                DropdownMenuItem(
+                    text = { Text("删除全部任务") },
+                    onClick = {
+                        showActions = false
+                        onDeleteAll()
+                    },
+                )
             }
         }
     }
@@ -656,6 +670,8 @@ internal fun DownloadTaskDetails(
     onOpen: (Long) -> Unit,
     onInstall: (Long) -> Unit,
     onRemove: (Long) -> Unit,
+    onFinishRecording: (Long) -> Unit = {},
+    terminalDiagnostics: (Long) -> DownloadDiagnostics? = { null },
 ) {
     val taskFlow = remember(tasks, id) { tasks.map { it.firstOrNull { task -> task.id == id } }.distinctUntilChanged() }
     val task by taskFlow.collectAsState(initial = tasks.value.firstOrNull { it.id == id })
@@ -703,7 +719,12 @@ internal fun DownloadTaskDetails(
                 else "已下载 ${formatDownloadSize(shown)} · 大小未知",
             )
             if (current.status == DownloadTaskEntity.STATUS_DOWNLOADING) DownloadLiveStatistics(id, stats)
-            DownloadDiagnosticsRows(id, stats)
+            val recordingFlow = remember(stats, id) { stats.map { it[id]?.liveRecording == true }.distinctUntilChanged() }
+            val recording by recordingFlow.collectAsState(initial = false)
+            if (recording && current.status == DownloadTaskEntity.STATUS_DOWNLOADING) {
+                TextButton(onClick = { onFinishRecording(id) }) { Text("结束录制并保存") }
+            }
+            DownloadDiagnosticsRows(id, stats, terminalDiagnostics(id))
             if (current.avgSpeed > 0) DownloadDetailField("平均速度", formatDownloadSpeed(current.avgSpeed))
             DownloadSpeedHistory(id, speedSeries)
             if (current.errorMsg.isNotBlank()) DownloadDetailField("失败原因", current.errorMsg, isError = true)
@@ -788,12 +809,17 @@ private fun DownloadDetailStatus(status: Int, text: String) {
 private fun DownloadDiagnosticsRows(
     id: Long,
     stats: StateFlow<Map<Long, DownloadStats>>,
+    terminal: DownloadDiagnostics?,
 ) {
     val diagnosticsFlow = remember(stats, id) {
         stats.map { it[id]?.diagnostics }.distinctUntilChanged()
     }
     val diagnostics by diagnosticsFlow.collectAsState(initial = stats.value[id]?.diagnostics)
-    val current = diagnostics ?: return
+    val current = diagnostics ?: terminal ?: return
+    if (current.httpProtocolDescription.isNotEmpty()) {
+        DownloadDetailField("实际 HTTP 协议", current.httpProtocolDescription)
+    }
+    current.lastHttpStatus?.let { DownloadDetailField("最近 HTTP 响应", it.toString()) }
     DownloadDetailField("开始接收", formatDiagnosticsDuration(current.firstByteMillis))
     DownloadDetailField("传输用时", formatDiagnosticsDuration(current.transferMillis))
 }
@@ -1118,10 +1144,16 @@ private fun AddDownloadDialog(
                     value = url,
                     onValueChange = {
                         url = it
-                        if (name.isBlank()) name = it.substringAfterLast('/').take(80)
+                        if (name.isBlank()) {
+                            name = if (com.yunget.app.data.download.MagnetLink.isMagnet(it)) {
+                                com.yunget.app.data.download.MagnetLink.displayName(it)
+                            } else {
+                                it.substringAfterLast('/').take(80)
+                            }
+                        }
                     },
                     modifier = Modifier.fillMaxWidth(),
-                    label = { Text("文件直链 URL") },
+                    label = { Text("文件、直播或磁力链接") },
                     shape = RoundedCornerShape(16.dp),
                     keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Uri),
                     singleLine = true
@@ -1139,7 +1171,9 @@ private fun AddDownloadDialog(
         confirmButton = {
             Button(
                 onClick = { onConfirm(url.trim(), name.trim()) },
-                enabled = url.isNotBlank() && name.isNotBlank(),
+                enabled = url.isNotBlank() && (
+                    name.isNotBlank() || com.yunget.app.data.download.MagnetLink.isMagnet(url)
+                    ),
                 modifier = Modifier.heightIn(min = 48.dp),
                 shape = RoundedCornerShape(16.dp)
             ) { Text("开始下载") }

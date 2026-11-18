@@ -153,33 +153,9 @@ export function createHandler({fetchRemote = fetch, verifyAdmin = createAdminVer
         return secureResponse({items: results.map(row => ({...row, pinned: Boolean(row.pinned), important: Boolean(row.important)}))}, 200, {'Cache-Control': 'public,max-age=15'});
       }
       if (request.method === 'POST' && path === '/api/analytics') {
-        await rate(request, env, 'analytics-ip', 60, 3600);
-        if (!env.COMMUNITY_VERIFICATION_SECRET) fail(503, '统计服务暂不可用');
-        const body = await readJson(request);
-        const installId = text(body.install_id, 64, 32);
-        if (!/^[a-f0-9-]{32,64}$/i.test(installId)) fail(422, '安装标识无效');
-        const installHash = await hmacHash(installId, env.COMMUNITY_VERIFICATION_SECRET);
-        await rate(request, env, `analytics-install-${installHash.slice(0, 24)}`, 400, 86400);
-        if (!Array.isArray(body.events) || body.events.length < 1 || body.events.length > 20) fail(422, '统计事件数量无效');
-        const statements = body.events.map((entry) => {
-          if (!entry || typeof entry !== 'object' || Array.isArray(entry)) fail(422, '统计事件格式无效');
-          const eventId = text(entry.event_id, 64, 32);
-          if (!/^[a-f0-9-]{32,64}$/i.test(eventId)) fail(422, '统计事件标识无效');
-          const event = enumValue(entry.event, analyticsEvents);
-          const product = enumValue(entry.product || 'yunget', products);
-          const appVersion = text(entry.app_version || '', 32, 0);
-          const platform = enumValue(entry.platform || 'android', new Set(['android', 'jvm', 'other']));
-          if (appVersion && !/^\d+(?:\.\d+){2,3}$/.test(appVersion)) fail(422, '统计版本无效');
-          let props;
-          try { props = analyticsProperties(entry.properties); }
-          catch { fail(422, '统计属性值无效'); }
-          return env.DB.prepare(
-            'INSERT INTO analytics_events(event_id,install_hash,event,product,app_version,platform,properties,created_at) VALUES(?,?,?,?,?,?,?,?) ON CONFLICT(event_id) DO NOTHING',
-          ).bind(eventId, installHash, event, product, appVersion, platform, props, stamp());
-        });
-        const results = await env.DB.batch(statements);
-        const accepted = results.reduce((sum, result) => sum + Number(result.meta?.changes || 0), 0);
-        return secureResponse({accepted}, 202);
+        // New clients use Google Analytics. Acknowledge old clients without
+        // touching D1 so they stop retrying and cannot refill the old table.
+        return secureResponse({accepted: 0, disabled: true}, 202);
       }
       if (request.method === 'GET' && path === '/admin/api/session') return secureResponse({developer: true});
       if (request.method === 'GET' && path === '/admin/api/analytics') {
@@ -327,6 +303,5 @@ export default {fetch: createHandler(), async scheduled(_controller, env) {
     env.DB.prepare('DELETE FROM rate_limits WHERE expires_at<?').bind(now),
     env.DB.prepare('DELETE FROM used_verifications WHERE expires_at<?').bind(now),
     env.DB.prepare('DELETE FROM messages WHERE created_at<?').bind(now - 30 * 86400),
-    env.DB.prepare('DELETE FROM analytics_events WHERE created_at<?').bind(now - ANALYTICS_RETENTION_DAYS * 86400),
   ]);
 }};

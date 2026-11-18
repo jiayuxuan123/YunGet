@@ -8,7 +8,15 @@ data class DownloadDiagnostics(
     val transferMillis: Long,
     val lastHttpStatus: Int? = null,
     val failureStage: String? = null,
+    val negotiatedHttpVersions: Int = 0,
 ) {
+    val httpProtocolDescription: String
+        get() = buildList {
+            if (negotiatedHttpVersions and 1 != 0) add("HTTP/1.1")
+            if (negotiatedHttpVersions and 2 != 0) add("HTTP/2")
+            if (negotiatedHttpVersions and 4 != 0) add("HTTP/3")
+        }.joinToString(" · ")
+
     companion object {
         fun from(details: TaskTransferDetails?): DownloadDiagnostics? {
             if (details == null) return null

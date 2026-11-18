@@ -799,21 +799,18 @@ private fun DriveListContent(
             }
             item(key = "display_options") {
                 Surface(
-                    Modifier.fillMaxWidth(), shape = RoundedCornerShape(24.dp),
-                    color = MaterialTheme.colorScheme.surfaceContainerLow
+                    Modifier.fillMaxWidth(), shape = MaterialTheme.shapes.large,
+                    color = MaterialTheme.colorScheme.surface
                 ) {
                     Column(Modifier.padding(4.dp)) {
                         Surface(onClick = onOrderClick, shape = RoundedCornerShape(16.dp), color = Color.Transparent) {
                             Row(
-                                Modifier.fillMaxWidth().heightIn(min = 64.dp).padding(12.dp),
+                                Modifier.fillMaxWidth().heightIn(min = 48.dp).padding(horizontal = 12.dp, vertical = 6.dp),
                                 verticalAlignment = Alignment.CenterVertically,
                                 horizontalArrangement = Arrangement.spacedBy(12.dp)
                             ) {
                                 Icon(Icons.Outlined.Sort, null, tint = MaterialTheme.colorScheme.primary)
-                                Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(4.dp)) {
-                                    Text("平台排序", style = MaterialTheme.typography.bodyLarge)
-                                    Text("调整各分组内的显示顺序", style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                                }
+                                Text("平台排序", modifier = Modifier.weight(1f), style = MaterialTheme.typography.bodyLarge)
                                 Icon(Icons.Outlined.ChevronRight, null, tint = MaterialTheme.colorScheme.onSurfaceVariant)
                             }
                         }
@@ -821,14 +818,11 @@ private fun DriveListContent(
                         Row(
                             modifier = Modifier.fillMaxWidth().clip(RoundedCornerShape(16.dp))
                                 .toggleable(value = hideUnlogged, role = Role.Switch, onValueChange = onHideUnloggedChange)
-                                .heightIn(min = 64.dp).padding(12.dp),
+                                .heightIn(min = 48.dp).padding(horizontal = 12.dp, vertical = 6.dp),
                             verticalAlignment = Alignment.CenterVertically,
                             horizontalArrangement = Arrangement.spacedBy(12.dp)
                         ) {
-                            Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(4.dp)) {
-                                Text("隐藏未登录网盘", style = MaterialTheme.typography.bodyLarge)
-                                Text("只显示已经登录的平台", style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                            }
+                            Text("隐藏未登录网盘", modifier = Modifier.weight(1f), style = MaterialTheme.typography.bodyLarge)
                             Switch(checked = hideUnlogged, onCheckedChange = null)
                         }
                     }
@@ -901,12 +895,12 @@ private fun DriveOverview(loggedInCount: Int, platformCount: Int, onManageAccoun
             if (onManageAccounts != null) {
                 FilledTonalButton(
                     onClick = onManageAccounts,
-                    modifier = Modifier.heightIn(min = 44.dp),
+                    modifier = Modifier.heightIn(min = 48.dp),
                     shape = RoundedCornerShape(12.dp),
                 ) {
                     Icon(Icons.Outlined.ManageAccounts, null, Modifier.size(18.dp))
                     Spacer(Modifier.width(6.dp))
-                    Text("管理", style = MaterialTheme.typography.labelLarge)
+                    Text("管理账号", style = MaterialTheme.typography.labelLarge)
                 }
             }
         }

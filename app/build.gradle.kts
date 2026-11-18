@@ -15,6 +15,26 @@ plugins {
 // 只要 keystore 文件不变，签名（SHA-256 指纹）就永久固定，升级可原地覆盖安装。
 val keystorePropsFile = rootProject.file("keystore.properties")
 val keystoreProps = Properties()
+val gaMeasurementId = providers.gradleProperty("yungetGaMeasurementId")
+    .orElse(providers.environmentVariable("YUNGET_GA_MEASUREMENT_ID"))
+    .orNull.orEmpty()
+val gaApiSecret = providers.gradleProperty("yungetGaApiSecret")
+    .orElse(providers.environmentVariable("YUNGET_GA_API_SECRET"))
+    .orNull.orEmpty()
+val nativePreviewLibraries = providers.gradleProperty("yungetNativePreviewLibraries").orNull?.let(::file)
+val turboDlPreviewSource = rootProject.file("../TurboDL/turbodl-native/src/main")
+val turboDlCorePreviewSource = rootProject.file("../TurboDL/turbodl-core/src/main/kotlin")
+if (nativePreviewLibraries != null) {
+    require(nativePreviewLibraries.resolve("arm64-v8a/libturbodl_engine.so").isFile) {
+        "The native preview requires an Android ARM64 libturbodl_engine.so"
+    }
+    require(turboDlPreviewSource.resolve("java").isDirectory && turboDlPreviewSource.resolve("kotlin").isDirectory) {
+        "Check out TurboDL beside YunGet to build the native preview"
+    }
+    require(turboDlCorePreviewSource.isDirectory) {
+        "The native preview requires the matching TurboDL core source"
+    }
+}
 if (keystorePropsFile.exists()) {
     FileInputStream(keystorePropsFile).use { keystoreProps.load(it) }
 }
@@ -31,7 +51,7 @@ android {
         // Android 7.0 发布于 2016 年，覆盖率早已 >99%。
         minSdk = 24
         targetSdk = 34
-        versionCode = 88
+        versionCode = 89
         // 2.7.10 内容：**原生（L2）插件在手机端暂时禁用**
         //  ① 移除整条 dex 加载链：AndroidNativePluginLoader、YunHostBridge、l2-providers 模块；
         //  ② 移除网盘 CloudProvider 抽象（CloudProvider.kt / Resolver / ShareRepository）
@@ -392,7 +412,9 @@ android {
         //  视频平台解析（微博/小红书/Pixiv）改为**引擎级原生插件** turbo-plugin-parser，
         //  与 HLS 插件同一套机制：只往 LINK_PARSER 注册解析器、往 PROTOCOL_HANDLER
         //  每平台声明一条，引擎内核对这三个平台一无所知。平台改版只需换这个插件。
-        versionName = "2.7.39"
+        versionName = providers.gradleProperty("yungetVersion").get()
+        buildConfigField("String", "GA_MEASUREMENT_ID", "\"$gaMeasurementId\"")
+        buildConfigField("String", "GA_API_SECRET", "\"$gaApiSecret\"")
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
     }
@@ -407,7 +429,13 @@ android {
         abi {
             isEnable = true
             reset()
-            include("arm64-v8a", "armeabi-v7a", "x86_64")
+            if (nativePreviewLibraries != null) {
+                include(*listOf("arm64-v8a", "armeabi-v7a", "x86_64").filter { abi ->
+                    nativePreviewLibraries.resolve("$abi/libturbodl_engine.so").isFile
+                }.toTypedArray())
+            } else {
+                include("arm64-v8a", "armeabi-v7a", "x86_64")
+            }
             // Keep a universal bridge APK: 2.7.22 and older updaters do not
             // understand ABI-specific assets and select the first APK blindly.
             isUniversalApk = true
@@ -430,6 +458,7 @@ android {
     }
 
     buildFeatures {
+        buildConfig = true
         compose = true
     }
 
@@ -458,6 +487,13 @@ android {
     }
 
     buildTypes {
+        debug {
+            if (nativePreviewLibraries != null) {
+                applicationIdSuffix = ".nativepreview"
+                versionNameSuffix = ".1-native-preview"
+                resValue("string", "app_name", "云取·原生测试")
+            }
+        }
         release {
             // 有 keystore 配置时使用固定发布签名；否则回退默认（仅本机调试）
             signingConfig = signingConfigs.findByName("release")
@@ -466,6 +502,27 @@ android {
                 getDefaultProguardFile("proguard-android-optimize.txt"),
                 "proguard-rules.pro"
             )
+        }
+    }
+    sourceSets {
+        getByName("main").java.srcDir(rootProject.file("shared-ui/src/main/kotlin"))
+        getByName("release").apply {
+            if (nativePreviewLibraries == null) {
+                java.srcDir("src/compatEngine/kotlin")
+            } else {
+                java.srcDirs("src/nativePreview/kotlin", turboDlPreviewSource.resolve("java"),
+                    turboDlPreviewSource.resolve("kotlin"), turboDlCorePreviewSource)
+                jniLibs.srcDir(nativePreviewLibraries)
+            }
+        }
+        getByName("debug").apply {
+            if (nativePreviewLibraries == null) {
+                java.srcDir("src/compatEngine/kotlin")
+            } else {
+                java.srcDirs("src/nativePreview/kotlin", turboDlPreviewSource.resolve("java"),
+                    turboDlPreviewSource.resolve("kotlin"), turboDlCorePreviewSource)
+                jniLibs.srcDir(nativePreviewLibraries)
+            }
         }
     }
 
@@ -490,6 +547,9 @@ android {
     // 那会让整个 App 的 stdlib 跟着跳版（且 metadata 2.4.0 又触发一次上面的问题）。
     // 运行时只需要 stdlib 的稳定 API，2.1.0 完全够用。
     configurations.configureEach {
+        if (nativePreviewLibraries != null) {
+            exclude(group = "dev.turbodl", module = "turbodl-core")
+        }
         resolutionStrategy.force("org.jetbrains.kotlin:kotlin-stdlib:2.1.0")
         resolutionStrategy.force("org.jetbrains.kotlin:kotlin-stdlib-jdk7:2.1.0")
         resolutionStrategy.force("org.jetbrains.kotlin:kotlin-stdlib-jdk8:2.1.0")
@@ -674,14 +734,14 @@ dependencies {
 
     // TurboDL SDK（纯 JVM 多线程下载引擎 + 可选插件框架），从 mavenLocal 解析 dev.turbodl:*:0.5.0.2
     // 0.2.0.8：读缓冲改为按并发摊薄（修 256 连接 = 256MB = 整堆的 OOM，见 2.7.2 说明）
-    implementation("dev.turbodl:turbodl-core:0.5.0.6")
-    implementation("dev.turbodl:turbo-plugin-runtime:0.5.0.6")
-    implementation("dev.turbodl:turbo-plugin-bootstrap:0.5.0.6")
-    implementation("dev.turbodl:turbo-plugin-hls:0.5.0.6")
+    implementation("dev.turbodl:turbodl-core:0.5.0.7")
+    implementation("dev.turbodl:turbo-plugin-runtime:0.5.0.7")
+    implementation("dev.turbodl:turbo-plugin-bootstrap:0.5.0.7")
+    implementation("dev.turbodl:turbo-plugin-hls:0.5.0.7")
     // 视频平台链接解析（微博/小红书/Pixiv）—— 引擎级原生插件，与 HLS 同一套机制。
     // 它自己往 LINK_PARSER 注册解析器、往 PROTOCOL_HANDLER 每平台声明一条；
     // 宿主只负责把它装进 PluginHost（见 TurboBootstrap.extraPlugins）。
-    implementation("dev.turbodl:turbo-plugin-parser:0.5.0.6")
+    implementation("dev.turbodl:turbo-plugin-parser:0.5.0.7")
 
     // JavaScript 插件加载器：让用户能自己写/导入脚本插件。
     //
@@ -695,7 +755,7 @@ dependencies {
     //     公开 API（interruptEvaluation / memoryLimit / memoryUsage…）与 jvm 版逐名一致，
     //     且 Android 侧走 System.loadLibrary（不再有 createTempFile 问题）。
     // 所以：排掉 jvm 版，换成 android 版 —— turbo-plugin-js 自身一行代码都不用改。
-    implementation("dev.turbodl:turbo-plugin-js:0.5.0.6") {
+    implementation("dev.turbodl:turbo-plugin-js:0.5.0.7") {
         exclude(group = "io.github.dokar3", module = "quickjs-kt-jvm")
     }
     implementation("io.github.dokar3:quickjs-kt-android:1.0.15")

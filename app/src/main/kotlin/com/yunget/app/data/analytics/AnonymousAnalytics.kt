@@ -2,7 +2,6 @@ package com.yunget.app.data.analytics
 
 import android.content.Context
 import android.os.Build
-import com.yunget.app.data.community.CommunityApi
 import com.yunget.app.data.prefs.SettingsRepository
 import java.util.UUID
 import kotlinx.coroutines.CoroutineScope
@@ -34,7 +33,7 @@ object AnonymousAnalytics {
     private val wake = Channel<Unit>(Channel.CONFLATED)
     private var worker: Job? = null
     private var queue: AnalyticsQueue? = null
-    private var uploader: AnalyticsUpload? = null
+    private var uploader: GoogleAnalyticsUpload? = null
     private var appContext: Context? = null
     private var appVersion = ""
 
@@ -65,15 +64,25 @@ object AnonymousAnalytics {
     private fun changeEnabled(enabled: Boolean) {
         worker?.cancel()
         uploader?.cancel()
-        queue?.setEnabled(enabled)
-        if (!enabled) { worker = null; return }
+        val sendEnabled = enabled && GoogleAnalyticsConfig.enabled
+        queue?.setEnabled(sendEnabled)
+        if (!sendEnabled) {
+            worker = null
+            uploader = null
+            return
+        }
         worker = scope.launch {
             for (signal in wake) {
                 delay(500)
                 while (isActive) {
                     val batch = queue?.peek() ?: break
                     val sender = synchronized(this@AnonymousAnalytics) {
-                        uploader ?: AnalyticsUpload(checkNotNull(queue), AnalyticsUpload.client(), CommunityApi.analyticsUrl)
+                        uploader ?: GoogleAnalyticsUpload(
+                            checkNotNull(queue),
+                            GoogleAnalyticsUpload.client(),
+                            GoogleAnalyticsConfig.measurementId,
+                            GoogleAnalyticsConfig.apiSecret,
+                        )
                             .also { uploader = it }
                     }
                     val identity = synchronized(this@AnonymousAnalytics) {

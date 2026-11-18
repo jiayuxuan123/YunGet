@@ -2,8 +2,6 @@ package com.yunget.app.ui
 
 import androidx.compose.animation.AnimatedContent
 import androidx.compose.animation.AnimatedVisibility
-import androidx.compose.animation.core.animateFloatAsState
-import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
 import androidx.compose.animation.scaleIn
@@ -24,7 +22,6 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.padding
 import androidx.compose.material3.ExperimentalMaterial3Api
-import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.outlined.Bookmarks
@@ -34,17 +31,10 @@ import androidx.compose.material3.TopAppBar
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.size
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.NavigationBar
-import androidx.compose.material3.NavigationBarItem
-import androidx.compose.material3.NavigationBarItemDefaults
-import androidx.compose.material3.NavigationRail
-import androidx.compose.material3.NavigationRailItem
-import androidx.compose.material3.NavigationRailItemDefaults
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.SnackbarHost
 import androidx.compose.material3.Text
 import androidx.compose.material3.TopAppBarDefaults
-import androidx.compose.material3.VerticalDivider
 import androidx.compose.material3.rememberTopAppBarState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
@@ -132,6 +122,8 @@ import com.yunget.app.ui.login.UCLoginScreen
 import com.yunget.app.ui.login.XunleiLoginScreen
 import com.yunget.app.ui.login.XunleiVerifyWebViewScreen
 import com.yunget.app.ui.navigation.MainTab
+import com.yunget.app.ui.navigation.SharedBottomBar
+import com.yunget.app.ui.navigation.SharedNavigationRail
 import com.yunget.app.ui.navigation.usesNavigationRail
 import com.yunget.app.ui.theme.motionTween
 import com.yunget.app.ui.screens.AboutScreen
@@ -619,13 +611,24 @@ fun MainScreen(
         val text = incomingLink?.trim()
         if (text.isNullOrBlank()) return@LaunchedEffect
         if (com.yunget.app.data.download.MagnetLink.isMagnet(text)) {
-            // 磁力只有 Gopeed 引擎能下（内置 TurboDL 不解析 BT）。
-            // 不在解析页报"无法识别"——那样用户只会觉得链接坏了。
-            // 切到下载页并说明当前引擎不支持，用户可以去引擎页换 Gopeed。
+            // 磁力由支持 BT 的引擎处理；内置兼容和旧 TurboDL 不认识 BT。
             currentTab = MainTab.Download
-            com.yunget.app.ui.SnackbarController.show(
-                "磁力链接需要 Gopeed 引擎，请在「下载引擎」里切换后再添加",
-            )
+            val settings = com.yunget.app.data.prefs.SettingsRepository(context)
+            val nativeProvider = com.yunget.app.data.download.DownloadEngineRegistry
+                .find(settings.downloadEngineId)
+                ?.takeIf { it.id == com.yunget.app.data.download.NativePreviewRouting.ENGINE_ID }
+                ?.takeIf { it.isAvailable() }
+                ?.capabilities?.bitTorrent == true
+            val gopeedProvider = settings.downloadEngine ==
+                com.yunget.app.data.prefs.SettingsRepository.ENGINE_GOPEED &&
+                com.yunget.app.data.gopeed.GopeedEngine.isInstalled(context)
+            if (nativeProvider || gopeedProvider) {
+                downloadViewModel.enqueue(text, "")
+            } else {
+                com.yunget.app.ui.SnackbarController.show(
+                    "当前引擎不支持 BT，请先在「下载引擎」里切换到支持 BT 的引擎",
+                )
+            }
         } else {
             currentTab = MainTab.Resolve
             resolveViewModel.startResolve(text, null)
@@ -1641,115 +1644,24 @@ internal fun MainAppBar(
             ),
         )
     } else {
-        Column(Modifier.fillMaxWidth().background(MaterialTheme.colorScheme.surface)) {
-            TopAppBar(
-                title = animatedTitle,
-                actions = actions,
-                scrollBehavior = scrollBehavior,
-                colors = TopAppBarDefaults.topAppBarColors(
-                    containerColor = MaterialTheme.colorScheme.surface,
-                    scrolledContainerColor = MaterialTheme.colorScheme.surface,
-                ),
-            )
-        }
+        TopAppBar(
+            title = animatedTitle,
+            actions = actions,
+            scrollBehavior = scrollBehavior,
+            colors = TopAppBarDefaults.topAppBarColors(
+                containerColor = MaterialTheme.colorScheme.background,
+                scrolledContainerColor = MaterialTheme.colorScheme.background,
+            ),
+        )
     }
 }
 
-/**
- * 底部导航栏（竖屏）：4 个主 Tab（解析 / 网盘 / 下载 / 设置）。
- */
 @Composable
-internal fun MainBottomBar(
-    currentTab: MainTab,
-    onTabSelected: (MainTab) -> Unit
-) {
-    val classic = LocalAppUiStyle.current == AppUiStyle.CLASSIC
-    Column(Modifier.fillMaxWidth()) {
-        if (!classic) {
-            HorizontalDivider(
-                color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.72f)
-            )
-        }
-        NavigationBar(
-            containerColor = MaterialTheme.colorScheme.surface,
-            tonalElevation = 0.dp,
-        ) {
-            MainTab.values().forEach { tab ->
-                val iconScale by animateFloatAsState(
-                    targetValue = if (currentTab == tab) 1.06f else 1f,
-                    animationSpec = spatialFast(), label = "bottomNavigationSelection",
-                )
-                NavigationBarItem(
-                    selected = currentTab == tab,
-                    onClick = { onTabSelected(tab) },
-                    icon = {
-                        Icon(
-                            imageVector = if (currentTab == tab) tab.selectedIcon else tab.unselectedIcon,
-                            contentDescription = tab.title,
-                            modifier = Modifier.graphicsLayer { scaleX = iconScale; scaleY = iconScale },
-                        )
-                    },
-                    label = { Text(tab.title) },
-                    colors = if (classic) NavigationBarItemDefaults.colors()
-                    else NavigationBarItemDefaults.colors(
-                        selectedIconColor = MaterialTheme.colorScheme.primary,
-                        selectedTextColor = MaterialTheme.colorScheme.primary,
-                        indicatorColor = MaterialTheme.colorScheme.primary.copy(alpha = 0.10f),
-                        unselectedIconColor = MaterialTheme.colorScheme.onSurfaceVariant,
-                        unselectedTextColor = MaterialTheme.colorScheme.onSurfaceVariant,
-                    ),
-                )
-            }
-        }
-    }
+internal fun MainBottomBar(currentTab: MainTab, onTabSelected: (MainTab) -> Unit) {
+    SharedBottomBar(currentTab, onTabSelected, LocalAppUiStyle.current == AppUiStyle.CLASSIC, spatialFast())
 }
 
-/**
- * 侧边导航栏（横屏）：同 4 个主 Tab，未选中项只显示图标，节省横向空间。
- */
 @Composable
-internal fun MainNavigationRail(
-    currentTab: MainTab,
-    onTabSelected: (MainTab) -> Unit
-) {
-    val classic = LocalAppUiStyle.current == AppUiStyle.CLASSIC
-    Row(modifier = Modifier.fillMaxHeight()) {
-        NavigationRail(
-            containerColor = MaterialTheme.colorScheme.surface,
-            modifier = Modifier.fillMaxHeight(),
-        ) {
-            MainTab.values().forEach { tab ->
-                val iconScale by animateFloatAsState(
-                    targetValue = if (currentTab == tab) 1.06f else 1f,
-                    animationSpec = spatialFast(), label = "railNavigationSelection",
-                )
-                NavigationRailItem(
-                    selected = currentTab == tab,
-                    onClick = { onTabSelected(tab) },
-                    icon = {
-                        Icon(
-                            imageVector = if (currentTab == tab) tab.selectedIcon else tab.unselectedIcon,
-                            contentDescription = tab.title,
-                            modifier = Modifier.graphicsLayer { scaleX = iconScale; scaleY = iconScale },
-                        )
-                    },
-                    label = { Text(tab.title) },
-                    alwaysShowLabel = true,
-                    colors = if (classic) NavigationRailItemDefaults.colors()
-                    else NavigationRailItemDefaults.colors(
-                        selectedIconColor = MaterialTheme.colorScheme.primary,
-                        selectedTextColor = MaterialTheme.colorScheme.primary,
-                        indicatorColor = MaterialTheme.colorScheme.primary.copy(alpha = 0.10f),
-                        unselectedIconColor = MaterialTheme.colorScheme.onSurfaceVariant,
-                        unselectedTextColor = MaterialTheme.colorScheme.onSurfaceVariant,
-                    ),
-                )
-            }
-        }
-        if (!classic) {
-            VerticalDivider(
-                color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.72f)
-            )
-        }
-    }
+internal fun MainNavigationRail(currentTab: MainTab, onTabSelected: (MainTab) -> Unit) {
+    SharedNavigationRail(currentTab, onTabSelected, LocalAppUiStyle.current == AppUiStyle.CLASSIC, spatialFast())
 }

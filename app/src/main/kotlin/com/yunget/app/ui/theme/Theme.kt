@@ -49,82 +49,6 @@ import com.google.android.material.color.utilities.Hct
 import com.google.android.material.color.utilities.SchemeNeutral
 import com.google.android.material.color.utilities.SchemeTonalSpot
 
-private val lightScheme = lightColorScheme(
-    primary = AstryxPalette.accentLight,
-    onPrimary = AstryxPalette.onAccentLight,
-    primaryContainer = AstryxPalette.accentContainerLight,
-    onPrimaryContainer = AstryxPalette.onAccentContainerLight,
-    secondary = AstryxPalette.secondaryLight,
-    onSecondary = AstryxPalette.onSecondaryLight,
-    secondaryContainer = AstryxPalette.secondaryContainerLight,
-    onSecondaryContainer = AstryxPalette.onSecondaryContainerLight,
-    tertiary = AstryxPalette.successLight,
-    onTertiary = AstryxPalette.onSuccessLight,
-    tertiaryContainer = AstryxPalette.successContainerLight,
-    onTertiaryContainer = AstryxPalette.onSuccessContainerLight,
-    error = AstryxPalette.errorLight,
-    onError = AstryxPalette.onErrorLight,
-    errorContainer = AstryxPalette.errorContainerLight,
-    onErrorContainer = AstryxPalette.onErrorContainerLight,
-    background = AstryxPalette.backgroundLight,
-    onBackground = AstryxPalette.onBackgroundLight,
-    surface = AstryxPalette.surfaceLight,
-    onSurface = AstryxPalette.onSurfaceLight,
-    surfaceVariant = AstryxPalette.surfaceVariantLight,
-    onSurfaceVariant = AstryxPalette.onSurfaceVariantLight,
-    outline = AstryxPalette.outlineLight,
-    outlineVariant = AstryxPalette.outlineVariantLight,
-    scrim = AstryxPalette.scrimLight,
-    inverseSurface = AstryxPalette.inverseSurfaceLight,
-    inverseOnSurface = AstryxPalette.inverseOnSurfaceLight,
-    inversePrimary = AstryxPalette.inversePrimaryLight,
-    surfaceDim = AstryxPalette.surfaceDimLight,
-    surfaceBright = AstryxPalette.surfaceBrightLight,
-    surfaceContainerLowest = AstryxPalette.surfaceLowestLight,
-    surfaceContainerLow = AstryxPalette.surfaceLowLight,
-    surfaceContainer = AstryxPalette.surfaceContainerLight,
-    surfaceContainerHigh = AstryxPalette.surfaceHighLight,
-    surfaceContainerHighest = AstryxPalette.surfaceHighestLight,
-)
-
-private val darkScheme = darkColorScheme(
-    primary = AstryxPalette.accentDark,
-    onPrimary = AstryxPalette.onAccentDark,
-    primaryContainer = AstryxPalette.accentContainerDark,
-    onPrimaryContainer = AstryxPalette.onAccentContainerDark,
-    secondary = AstryxPalette.secondaryDark,
-    onSecondary = AstryxPalette.onSecondaryDark,
-    secondaryContainer = AstryxPalette.secondaryContainerDark,
-    onSecondaryContainer = AstryxPalette.onSecondaryContainerDark,
-    tertiary = AstryxPalette.successDark,
-    onTertiary = AstryxPalette.onSuccessDark,
-    tertiaryContainer = AstryxPalette.successContainerDark,
-    onTertiaryContainer = AstryxPalette.onSuccessContainerDark,
-    error = AstryxPalette.errorDark,
-    onError = AstryxPalette.onErrorDark,
-    errorContainer = AstryxPalette.errorContainerDark,
-    onErrorContainer = AstryxPalette.onErrorContainerDark,
-    background = AstryxPalette.backgroundDark,
-    onBackground = AstryxPalette.onBackgroundDark,
-    surface = AstryxPalette.surfaceDark,
-    onSurface = AstryxPalette.onSurfaceDark,
-    surfaceVariant = AstryxPalette.surfaceVariantDark,
-    onSurfaceVariant = AstryxPalette.onSurfaceVariantDark,
-    outline = AstryxPalette.outlineDark,
-    outlineVariant = AstryxPalette.outlineVariantDark,
-    scrim = AstryxPalette.scrimDark,
-    inverseSurface = AstryxPalette.inverseSurfaceDark,
-    inverseOnSurface = AstryxPalette.inverseOnSurfaceDark,
-    inversePrimary = AstryxPalette.inversePrimaryDark,
-    surfaceDim = AstryxPalette.surfaceDimDark,
-    surfaceBright = AstryxPalette.surfaceBrightDark,
-    surfaceContainerLowest = AstryxPalette.surfaceLowestDark,
-    surfaceContainerLow = AstryxPalette.surfaceLowDark,
-    surfaceContainer = AstryxPalette.surfaceContainerDark,
-    surfaceContainerHigh = AstryxPalette.surfaceHighDark,
-    surfaceContainerHighest = AstryxPalette.surfaceHighestDark,
-)
-
 private val mediumContrastLightColorScheme = lightColorScheme(
     primary = primaryLightMediumContrast,
     onPrimary = onPrimaryLightMediumContrast,
@@ -280,7 +204,7 @@ private val highContrastDarkColorScheme = darkColorScheme(
 /**
  * 列表组外圈圆角：与下面 Shapes.large 共用同一个值，避免两处各写一份走样。
  */
-private val CornerLarge = 12.dp
+private val CornerLarge = 16.dp
 
 /**
  * M3 Expressive 圆角刻度。
@@ -290,11 +214,11 @@ private val CornerLarge = 12.dp
  */
 private val ExpressiveShapes = Shapes(
     extraSmall = RoundedCornerShape(4.dp),
-    small = RoundedCornerShape(6.dp),
-    medium = RoundedCornerShape(8.dp),
+    small = RoundedCornerShape(8.dp),
+    medium = RoundedCornerShape(12.dp),
     large = RoundedCornerShape(CornerLarge),
-    largeIncreased = RoundedCornerShape(14.dp),
-    extraLarge = RoundedCornerShape(20.dp),
+    largeIncreased = RoundedCornerShape(20.dp),
+    extraLarge = RoundedCornerShape(24.dp),
     extraLargeIncreased = RoundedCornerShape(24.dp),
     extraExtraLarge = RoundedCornerShape(28.dp)
 )
