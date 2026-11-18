@@ -2,7 +2,7 @@ import assert from 'node:assert/strict';
 import vm from 'node:vm';
 import test from 'node:test';
 import {script, style} from '../web.mjs';
-import {analyticsScript} from '../analytics.mjs';
+import {analyticsHtml} from '../analytics.mjs';
 
 test('the served browser module parses independently of its string wrapper', () => {
   assert.doesNotThrow(() => new vm.Script(script));
@@ -30,8 +30,8 @@ test('developer and mobile navigation expose every management destination', () =
   assert.match(style, /\.social-community \.primary-nav button\{[^}]*align-items:center/);
 });
 
-test('analytics labels legacy cooldown classes without claiming a missing status', () => {
-  assert.match(analyticsScript, /429\/503（类别）/);
-  assert.match(analyticsScript, /401\/403\/410（类别）/);
-  assert.match(analyticsScript, /探测\/首包/);
+test('analytics page reports the migration without querying the retired D1 table', () => {
+  assert.match(analyticsHtml, /Google Analytics Measurement Protocol/);
+  assert.match(analyticsHtml, /不会写入社区数据库/);
+  assert.doesNotMatch(analyticsHtml, /\/admin\/api\/analytics/);
 });

@@ -1,7 +1,6 @@
 import {createAdminVerifier} from './auth.mjs';
 import {html, style, script} from './web.mjs';
 import {analyticsHtml, analyticsScript, analyticsStyle} from './analytics.mjs';
-import {analyticsEvents, analyticsProperties, readAnalytics} from './analytics-data.mjs';
 import {consumeVerification, issueVerification, scopeForPath, verificationConfig, VerificationError} from './verification.mjs';
 import {createAccounts} from './accounts.mjs';
 import {createSocial} from './social.mjs';
@@ -80,7 +79,6 @@ function secureResponse(body, status = 200, extra = {}) {
 }
 const accounts = createAccounts({fail, text, hash, stamp, secureResponse});
 const session = accounts.session;
-export const ANALYTICS_RETENTION_DAYS = 7;
 async function rate(request, env, action, limit, seconds) {
   const now = stamp();
   const identifier = await hash(`${new URL(env.PUBLIC_ORIGIN).host}:${request.headers.get('CF-Connecting-IP') || 'unknown'}:${Math.floor(now / 86400)}`);
@@ -159,11 +157,11 @@ export function createHandler({fetchRemote = fetch, verifyAdmin = createAdminVer
       }
       if (request.method === 'GET' && path === '/admin/api/session') return secureResponse({developer: true});
       if (request.method === 'GET' && path === '/admin/api/analytics') {
-        const rawDays = Number(url.searchParams.get('days') || ANALYTICS_RETENTION_DAYS);
-        if (!Number.isInteger(rawDays) || rawDays < 1 || rawDays > ANALYTICS_RETENTION_DAYS) fail(422, '统计周期无效');
-        const version = url.searchParams.get('version') || undefined;
-        if (version && !/^\d+(?:\.\d+){2,3}$/.test(version)) fail(422, '版本筛选无效');
-        return secureResponse(await readAnalytics(env.DB, {days: rawDays, version}));
+        return secureResponse({
+          migrated: true,
+          provider: 'google-analytics',
+          message: '匿名统计已迁移至 Google Analytics，旧 D1 数据不再提供查询。',
+        }, 410);
       }
       const owner = await session(request, env);
       if (request.method === 'GET' && path === '/api/session') return await accounts.who(request, env, owner);
