@@ -18,7 +18,6 @@
 
 package com.yunget.app.data.network.video
 
-import com.yunget.app.data.download.DownloadPathPolicy
 import java.text.SimpleDateFormat
 import java.util.Locale
 
@@ -151,7 +150,7 @@ object PixivParser : VideoParser {
         ).optJSONArray("body")
 
         val title = body.optString("title")
-        val fileBase = DownloadPathPolicy.sanitizeName(title).take(80).ifBlank { "pixiv_${link.id}" }
+        val fileBase = VideoHttp.sanitizeFileName(title).take(80).ifBlank { "pixiv_${link.id}" }
 
         val medias = buildList {
             if (pages != null) {

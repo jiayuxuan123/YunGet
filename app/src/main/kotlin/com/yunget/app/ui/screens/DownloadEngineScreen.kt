@@ -69,6 +69,7 @@ import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
@@ -649,6 +650,8 @@ fun DownloadEngineScreen(
                                     style = MaterialTheme.typography.bodySmall,
                                     color = MaterialTheme.colorScheme.onSurfaceVariant
                                 )
+
+                                SftpConfigCard(settings = settings)
                             }
                         }
 
@@ -1010,7 +1013,11 @@ private fun SingleEngineScreen(
         },
     ) { padding ->
         Column(
-            modifier = Modifier.fillMaxSize().padding(padding).padding(16.dp),
+            modifier = Modifier
+                .fillMaxSize()
+                .padding(padding)
+                .verticalScroll(rememberScrollState())
+                .padding(16.dp),
             verticalArrangement = Arrangement.spacedBy(12.dp),
         ) {
             Text(
@@ -1034,8 +1041,95 @@ private fun SingleEngineScreen(
                     EngineCapabilityChips(provider.capabilities)
                 }
             }
+            SftpConfigCard(settings = settings)
             OutlinedButton(onClick = onOpenAnnouncement, modifier = Modifier.fillMaxWidth()) {
                 Text("查看更新公告")
+            }
+        }
+    }
+}
+
+@Composable
+private fun SftpConfigCard(
+    settings: SettingsRepository,
+    modifier: Modifier = Modifier,
+) {
+    var sftpUser by remember { mutableStateOf(settings.sftpUsername) }
+    var sftpPass by remember { mutableStateOf(settings.sftpPassword) }
+    var sftpKnownHosts by remember { mutableStateOf(settings.sftpKnownHosts) }
+    var sftpPublicKey by remember { mutableStateOf(settings.sftpPublicKey) }
+    var sftpPrivateKey by remember { mutableStateOf(settings.sftpPrivateKey) }
+    var sftpSavedNotice by remember { mutableStateOf(false) }
+
+    Card(
+        modifier = modifier.fillMaxWidth(),
+        shape = RoundedCornerShape(20.dp),
+        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceContainerLow),
+    ) {
+        Column(modifier = Modifier.padding(18.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
+            Text("SFTP 凭据与主机校验", style = MaterialTheme.typography.titleMedium)
+            Text(
+                "用于 sftp:// 任务默认认证及 known_hosts 主机密钥校验（URL 中自带用户名密码时优先使用 URL 凭据）。",
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+            OutlinedTextField(
+                value = sftpUser,
+                onValueChange = { sftpUser = it; sftpSavedNotice = false },
+                label = { Text("SFTP 用户名") },
+                singleLine = true,
+                modifier = Modifier.fillMaxWidth(),
+            )
+            OutlinedTextField(
+                value = sftpPass,
+                onValueChange = { sftpPass = it; sftpSavedNotice = false },
+                label = { Text("SFTP 密码（可选）") },
+                singleLine = true,
+                modifier = Modifier.fillMaxWidth(),
+            )
+            OutlinedTextField(
+                value = sftpKnownHosts,
+                onValueChange = { sftpKnownHosts = it; sftpSavedNotice = false },
+                label = { Text("known_hosts 文件路径（主机校验）") },
+                singleLine = true,
+                modifier = Modifier.fillMaxWidth(),
+            )
+            OutlinedTextField(
+                value = sftpPublicKey,
+                onValueChange = { sftpPublicKey = it; sftpSavedNotice = false },
+                label = { Text("SSH 公钥路径（可选）") },
+                singleLine = true,
+                modifier = Modifier.fillMaxWidth(),
+            )
+            OutlinedTextField(
+                value = sftpPrivateKey,
+                onValueChange = { sftpPrivateKey = it; sftpSavedNotice = false },
+                label = { Text("SSH 私钥路径（可选）") },
+                singleLine = true,
+                modifier = Modifier.fillMaxWidth(),
+            )
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                Text(
+                    if (sftpSavedNotice) "已保存 SFTP 配置" else "支持 .metalink/.meta4 与多源独立请求头",
+                    style = MaterialTheme.typography.labelSmall,
+                    color = if (sftpSavedNotice) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+                Button(
+                    onClick = {
+                        settings.sftpUsername = sftpUser.trim()
+                        settings.sftpPassword = sftpPass
+                        settings.sftpKnownHosts = sftpKnownHosts.trim()
+                        settings.sftpPublicKey = sftpPublicKey.trim()
+                        settings.sftpPrivateKey = sftpPrivateKey.trim()
+                        sftpSavedNotice = true
+                    },
+                ) {
+                    Text("保存")
+                }
             }
         }
     }

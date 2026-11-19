@@ -18,7 +18,6 @@
 
 package com.yunget.app.data.network
 
-import android.util.Base64
 import java.nio.charset.StandardCharsets
 
 /**
@@ -266,7 +265,7 @@ object C139Constants {
                 val v = kv2.substringAfter('=')
                 if (v.isNotBlank()) {
                     val decoded = runCatching {
-                        String(Base64.decode(v, Base64.DEFAULT), StandardCharsets.UTF_8)
+                        String(CoreBase64.decode(v), StandardCharsets.UTF_8)
                     }.getOrNull()
                     if (!decoded.isNullOrBlank()) return decoded
                 }
@@ -276,7 +275,7 @@ object C139Constants {
         extractAuthorization(cookie)?.let { auth ->
             val account = runCatching {
                 val b64 = auth.removePrefix("Basic").trim()
-                String(Base64.decode(b64, Base64.DEFAULT), StandardCharsets.UTF_8)
+                String(CoreBase64.decode(b64), StandardCharsets.UTF_8)
                     .split(":").getOrNull(1)
             }.getOrNull()
             if (!account.isNullOrBlank()) return account
@@ -313,7 +312,7 @@ object C139Constants {
                 val v = kv2.substringAfter('=')
                 if (v.isNotBlank()) {
                     return runCatching {
-                        String(Base64.decode(v, Base64.DEFAULT), StandardCharsets.UTF_8)
+                        String(CoreBase64.decode(v), StandardCharsets.UTF_8)
                     }.getOrNull()?.takeIf { it.isNotBlank() } ?: v
                 }
             }

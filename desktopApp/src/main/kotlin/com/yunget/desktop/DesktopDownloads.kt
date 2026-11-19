@@ -74,9 +74,11 @@ internal class DesktopDownloads(
     private val scope = CoroutineScope(lifecycle + Dispatchers.IO)
     private val running = mutableMapOf<String, Long>()
     private val speedSamples = mutableMapOf<String, SpeedSample>()
+    private val speedHistoryFlow = MutableStateFlow<Map<String, List<Long>>>(emptyMap())
     private val cleanupHooks = mutableMapOf<String, suspend () -> Unit>()
     private val current = MutableStateFlow(readTasks())
     val tasks = current.asStateFlow()
+    val speedHistory = speedHistoryFlow.asStateFlow()
     val capabilities = JSONObject(NativeTransferClient.capabilities())
 
     @Volatile
@@ -212,6 +214,7 @@ internal class DesktopDownloads(
         }
         cleanupHooks.remove(id)
         speedSamples.remove(id)
+        speedHistoryFlow.value = speedHistoryFlow.value - id
         runCatching { if (row.partial.exists()) row.partial.delete() }
         if (deleteLocalFile && row.status == "DONE") {
             runCatching { if (row.output.exists()) row.output.delete() }
@@ -231,6 +234,7 @@ internal class DesktopDownloads(
         for (row in toDelete) {
             cleanupHooks.remove(row.id)
             speedSamples.remove(row.id)
+            speedHistoryFlow.value = speedHistoryFlow.value - row.id
             runCatching { if (row.partial.exists()) row.partial.delete() }
         }
         current.value = current.value.filterNot { it.status == "FAILED" }
@@ -251,8 +255,18 @@ internal class DesktopDownloads(
 
     private fun start(row: DesktopTask, httpVersion: Int) {
         val cfg = config
+        val isSftp = row.source.startsWith("sftp://", ignoreCase = true)
+        val uriUserInfo = if (isSftp) runCatching { URI(row.source).userInfo }.getOrNull().orEmpty() else ""
+        val urlUser = uriUserInfo.substringBefore(':', "").takeIf { uriUserInfo.isNotEmpty() }.orEmpty()
+        val urlPass = if (':' in uriUserInfo) uriUserInfo.substringAfter(':') else ""
+        val sanitizedSource = if (isSftp) stripDesktopSftpUserInfo(row.source) else row.source
         val network = NativeTransferClient.Network(
+            username = if (isSftp) urlUser.ifBlank { cfg.sftpUsername } else "",
+            password = if (isSftp) urlPass.ifBlank { cfg.sftpPassword } else "",
             proxy = cfg.proxyUrl,
+            sshKnownHosts = if (isSftp) cfg.sftpKnownHosts else "",
+            sshPublicKey = if (isSftp) cfg.sftpPublicKey else "",
+            sshPrivateKey = if (isSftp) cfg.sftpPrivateKey else "",
             dohUrl = cfg.dohUrl,
             httpVersion = httpVersion,
         )
@@ -263,7 +277,7 @@ internal class DesktopDownloads(
         val id = try {
             when (row.kind) {
                 TransferKind.HTTP -> engine.submitHttp(
-                    source = NativeTransferClient.HttpSource(row.source, row.headers),
+                    source = NativeTransferClient.HttpSource(sanitizedSource, row.headers),
                     destination = row.partial,
                     stableKey = row.id,
                     expectedSha256 = row.expectedHash.takeIf(String::isNotEmpty),
@@ -330,6 +344,16 @@ internal class DesktopDownloads(
                 speedSamples[id] = SpeedSample(snapshot.downloadedBytes, now, 0.0)
                 0L
             }
+            if (snapshot.state != NativeTransferClient.COMPLETED &&
+                snapshot.state != NativeTransferClient.PAUSED &&
+                snapshot.state != NativeTransferClient.FAILED &&
+                snapshot.state != NativeTransferClient.CANCELLED
+            ) {
+                val curMap = speedHistoryFlow.value
+                val prevSeries = curMap[id].orEmpty()
+                val nextSeries = (prevSeries + speed).takeLast(40)
+                speedHistoryFlow.value = curMap + (id to nextSeries)
+            }
             val effectiveTotal = if (snapshot.totalBytes > 0L) snapshot.totalBytes else row.total
             val eta = if (effectiveTotal > 0L && speed > 0L && snapshot.downloadedBytes < effectiveTotal) {
                 (effectiveTotal - snapshot.downloadedBytes) / speed
@@ -360,8 +384,12 @@ internal class DesktopDownloads(
                 NativeTransferClient.PAUSED, NativeTransferClient.FAILED, NativeTransferClient.CANCELLED -> {
                     retire(id, nativeId)
                     slotsFreed = true
+                    val nextStatus = if (snapshot.state == NativeTransferClient.PAUSED) "PAUSED" else "FAILED"
+                    if (nextStatus == "FAILED") {
+                        DesktopLogStore.warn("download", "task_failed", "${row.output.name}: ${snapshot.message}")
+                    }
                     update(id) { updated.copy(
-                        status = if (snapshot.state == NativeTransferClient.PAUSED) "PAUSED" else "FAILED",
+                        status = nextStatus,
                         message = snapshot.message,
                         speedBytesPerSec = 0,
                         etaSeconds = -1,
@@ -397,6 +425,7 @@ internal class DesktopDownloads(
         val finished = try {
             Files.createDirectories(target.parentFile.toPath())
             Files.move(row.partial.toPath(), target.toPath())
+            DesktopLogStore.info("download", "task_done", "${target.name} (${formatBytes(row.downloaded)})")
             row.copy(
                 output = target,
                 status = "DONE",
@@ -521,4 +550,16 @@ internal fun inferTransferKind(link: String): TransferKind {
         path.endsWith(".mpd") -> TransferKind.DASH
         else -> TransferKind.HTTP
     }
+}
+
+internal fun stripDesktopSftpUserInfo(url: String): String {
+    if (!url.startsWith("sftp://", ignoreCase = true)) return url
+    val schemeEnd = url.indexOf("://")
+    if (schemeEnd < 0) return url
+    val authStart = schemeEnd + 3
+    val authEnd = url.indexOfAny(charArrayOf('/', '?', '#'), startIndex = authStart)
+        .let { if (it < 0) url.length else it }
+    val atIndex = url.indexOf('@', startIndex = authStart)
+    if (atIndex !in authStart until authEnd) return url
+    return url.substring(0, authStart) + url.substring(atIndex + 1)
 }

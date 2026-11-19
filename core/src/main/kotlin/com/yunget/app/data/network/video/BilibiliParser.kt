@@ -18,7 +18,6 @@
 
 package com.yunget.app.data.network.video
 
-import com.yunget.app.data.download.DownloadPathPolicy
 import org.json.JSONObject
 
 /**
@@ -240,7 +239,7 @@ object BilibiliParser : VideoParser {
 
     /** 文件名：标题清洗后截断，标题为空时用兜底名 */
     private fun fileNameBase(title: String, fallback: String): String {
-        val cleaned = DownloadPathPolicy.sanitizeName(title).take(80)
+        val cleaned = VideoHttp.sanitizeFileName(title).take(80)
         return cleaned.ifBlank { fallback }
     }
 }

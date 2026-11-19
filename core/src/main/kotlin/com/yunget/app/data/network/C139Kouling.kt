@@ -76,7 +76,7 @@ object C139KoulingParser {
  * 带密码查询时必须同时把 `isPasswd` 置为 1；否则服务端不会使用 `passwd`，
  * 对设有提取码的口令会返回 9188 错误。
  */
-internal fun buildC139KoulingInfoRequest(
+fun buildC139KoulingInfoRequest(
     command: C139Kouling,
     account: String,
     password: String
@@ -99,7 +99,7 @@ internal fun buildC139KoulingInfoRequest(
 """.trimIndent()
 
 /** 第二段查询：口令 + 最终提取码 → 正式分享链接。 */
-internal fun buildC139KoulingGeneralRequest(
+fun buildC139KoulingGeneralRequest(
     command: C139Kouling,
     account: String,
     password: String
@@ -133,7 +133,7 @@ private fun xmlCdata(value: String): String =
     "<![CDATA[" + value.replace("]]>", "]]]]><![CDATA[>") + "]]>"
 
 /** 解析第一段查询响应；调用方已确认口令格式，错误会把服务端描述带出去。 */
-internal fun parseC139KoulingInfo(xml: String): C139KoulingInfo {
+fun parseC139KoulingInfo(xml: String): C139KoulingInfo {
     val root = parseC139Xml(xml)
     checkC139Result(root)
     val info = root.firstElement("getOutLinkInfoRes")
@@ -145,7 +145,7 @@ internal fun parseC139KoulingInfo(xml: String): C139KoulingInfo {
 }
 
 /** 解析第二段查询响应，提取真实分享链接与 linkID。 */
-internal fun parseC139KoulingGeneral(xml: String): C139ResolvedKouling {
+fun parseC139KoulingGeneral(xml: String): C139ResolvedKouling {
     val root = parseC139Xml(xml)
     checkC139Result(root)
     val outLink = root.firstElement("outLink")

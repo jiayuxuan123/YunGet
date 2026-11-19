@@ -29,6 +29,7 @@ internal class NativePreview(
     private val context: Context,
     private val speedLimit: () -> Long,
     private val httpVersionPreference: () -> Int,
+    private val sftpConfig: () -> NativeSftpConfig = { NativeSftpConfig() },
 ) : NativePreviewRouting {
     private val closed = AtomicBoolean(false)
     private val engineRef = AtomicReference<NativeTransferClient?>(null)
@@ -44,6 +45,8 @@ internal class NativePreview(
     }
 
     override fun supportsTorrent(): Boolean = capabilities.optBoolean("bittorrent")
+    override fun supportsMetalink(): Boolean = capabilities.optBoolean("metalink")
+    override fun supportsSftp(): Boolean = capabilities.optBoolean("sftp")
 
     override fun isRecording(taskId: Long): Boolean = recordings.containsKey(taskId)
 
@@ -109,6 +112,9 @@ internal class NativePreview(
                     request.url.startsWith("http://", true) ||
                         request.url.startsWith("https://", true) ||
                         (NativePreviewRouting.isFtp(request.url) && capabilities.optBoolean("ftp")) ||
+                        (NativePreviewRouting.isSftp(request.url) && capabilities.optBoolean("sftp")) ||
+                        (request.tags[NativePreviewRouting.MEDIA_TAG] == NativePreviewRouting.METALINK_FILE &&
+                            capabilities.optBoolean("metalink")) ||
                         (NativePreviewRouting.isMagnet(request.url) &&
                             capabilities.optBoolean("bittorrent"))
                     )
@@ -127,14 +133,45 @@ internal class NativePreview(
                 val native = engine()
                 val kind = request.tags[NativePreviewRouting.MEDIA_TAG]
                 val torrent = NativePreviewRouting.isMagnet(request.url) || kind == NativePreviewRouting.TORRENT_FILE
-                val mediaKind = kind?.takeUnless { torrent }
+                val metalink = kind == NativePreviewRouting.METALINK_FILE ||
+                    NativePreviewRouting.isMetalinkFile(request.url, request.destination.name)
+                val mediaKind = kind?.takeUnless { torrent || metalink }
                 check(mediaKind == null || supportsMedia(mediaKind)) { "当前安装包缺少对应的视频内核，断点已保留" }
                 check(!torrent || supportsTorrent()) { "当前安装包缺少 BT 内核，断点已保留" }
+                check(!metalink || supportsMetalink()) { "当前安装包缺少 Metalink 内核，断点已保留" }
+                check(!NativePreviewRouting.isSftp(request.url) || supportsSftp()) { "当前安装包缺少 SFTP 内核，断点已保留" }
                 ensureStorage(request.destination, torrent)
                 val started = System.nanoTime()
                 var task = 0L
                 var terminal = false
                 try {
+                    val taggedAlt = NativePreviewRouting.decodeAltSources(
+                        request.tags[NativePreviewRouting.ALT_SOURCES_TAG]
+                    )
+                    val fallbackCandidates = if (
+                        !torrent && !metalink && mediaKind == null && request.expectedSha256.isNullOrBlank()
+                    ) {
+                        val rawCandidates = when {
+                            taggedAlt.isNotEmpty() -> taggedAlt.map { alt ->
+                                val altHeaders = alt.headers.toMutableMap()
+                                if (altHeaders.keys.none { it.equals("User-Agent", ignoreCase = true) }) {
+                                    altHeaders["User-Agent"] = config.userAgent
+                                }
+                                NativeTransferClient.HttpSource(alt.url, altHeaders)
+                            }
+                            request.mirrors.isNotEmpty() -> request.mirrors.map { mirror ->
+                                NativeTransferClient.HttpSource(
+                                    mirror,
+                                    mirrorHeaders(request.url, mirror, request.headers, config.userAgent),
+                                )
+                            }
+                            else -> emptyList()
+                        }
+                        val seen = linkedSetOf(request.url)
+                        rawCandidates.filter { seen.add(it.url) }
+                    } else {
+                        emptyList()
+                    }
                     task = if (torrent) {
                         val stableKey = requireNotNull(request.stableKey)
                         val source = if (NativePreviewRouting.isMagnet(request.url)) {
@@ -149,6 +186,16 @@ internal class NativePreview(
                             policy = NativeTransferClient.TorrentPolicy(
                                 peerLimit = connections.coerceIn(1, 256),
                             ),
+                        )
+                    } else if (metalink) {
+                        val stableKey = requireNotNull(request.stableKey)
+                        val (document, baseUrl) = loadMetalinkDocument(native, context, headers, config, stableKey)
+                        native.submitMetalink(
+                            document = document,
+                            baseUrl = baseUrl,
+                            destination = request.destination,
+                            stableKey = stableKey,
+                            policy = policy(config, connections, request.url),
                         )
                     } else if (mediaKind != null) {
                         native.submitMedia(
@@ -168,20 +215,31 @@ internal class NativePreview(
                             network = network(config, request.url),
                         )
                     } else {
-                        val mirrorSources = if (request.mirrors.isNotEmpty() &&
-                            !request.expectedSha256.isNullOrBlank()
-                        ) {
-                            request.mirrors.map { mirror ->
-                                NativeTransferClient.HttpSource(
-                                    mirror,
-                                    mirrorHeaders(request.url, mirror, request.headers, config.userAgent),
-                                )
+                        val mirrorSources = if (!request.expectedSha256.isNullOrBlank()) {
+                            when {
+                                taggedAlt.isNotEmpty() -> taggedAlt.map { alt ->
+                                    val altHeaders = alt.headers.toMutableMap()
+                                    if (altHeaders.keys.none { it.equals("User-Agent", ignoreCase = true) }) {
+                                        altHeaders["User-Agent"] = config.userAgent
+                                    }
+                                    NativeTransferClient.HttpSource(alt.url, altHeaders)
+                                }
+                                request.mirrors.isNotEmpty() -> request.mirrors.map { mirror ->
+                                    NativeTransferClient.HttpSource(
+                                        mirror,
+                                        mirrorHeaders(request.url, mirror, request.headers, config.userAgent),
+                                    )
+                                }
+                                else -> emptyList()
                             }
                         } else {
                             emptyList()
                         }
                         native.submitHttp(
-                            source = NativeTransferClient.HttpSource(request.url, headers),
+                            source = NativeTransferClient.HttpSource(
+                                NativePreviewRouting.stripSftpUserInfo(request.url),
+                                headers,
+                            ),
                             destination = request.destination,
                             stableKey = requireNotNull(request.stableKey),
                             expectedSha256 = request.expectedSha256,
@@ -196,29 +254,53 @@ internal class NativePreview(
                     var cap = speedLimit()
                     native.setSpeedLimit(cap)
                     var snapshot = native.query(task)
-                    while (!snapshot.terminal) {
-                        if (!context.isActive()) throw CancellationException("Download paused")
-                        if (mediaKind != null) {
-                            val details = native.mediaDetails(task)
-                            if (details.live && details.stage == 2) recordings[context.taskId] = task
-                            else recordings.remove(context.taskId)
+                    var nextFallbackIndex = 0
+                    while (true) {
+                        while (!snapshot.terminal) {
+                            if (!context.isActive()) throw CancellationException("Download paused")
+                            if (mediaKind != null) {
+                                val details = native.mediaDetails(task)
+                                if (details.live && details.stage == 2) recordings[context.taskId] = task
+                                else recordings.remove(context.taskId)
+                            }
+                            if (snapshot.totalBytes != total) {
+                                total = snapshot.totalBytes
+                                context.reportTotalSize(total)
+                            }
+                            transferDetails[context.taskId] = downloadDetails(native, task, snapshot, started, torrent)
+                            if (snapshot.state != NativeTransferClient.QUEUED &&
+                                (snapshot.state != NativeTransferClient.PROBING || snapshot.downloadedBytes > 0)
+                            ) {
+                                context.reportProgress(snapshot.downloadedBytes, snapshot.activeRequests)
+                            }
+                            val nextCap = speedLimit()
+                            if (nextCap != cap) {
+                                native.setSpeedLimit(nextCap)
+                                cap = nextCap
+                            }
+                            delay(150)
+                            snapshot = native.query(task)
                         }
-                        if (snapshot.totalBytes != total) {
-                            total = snapshot.totalBytes
-                            context.reportTotalSize(total)
-                        }
-                        transferDetails[context.taskId] = downloadDetails(native, task, snapshot, started, torrent)
-                        if (snapshot.state != NativeTransferClient.QUEUED &&
-                            (snapshot.state != NativeTransferClient.PROBING || snapshot.downloadedBytes > 0)
-                        ) {
-                            context.reportProgress(snapshot.downloadedBytes, snapshot.activeRequests)
-                        }
-                        val nextCap = speedLimit()
-                        if (nextCap != cap) {
-                            native.setSpeedLimit(nextCap)
-                            cap = nextCap
-                        }
-                        delay(150)
+                        val canFailover = snapshot.state == NativeTransferClient.FAILED &&
+                            snapshot.errorCode !in setOf(3, 4) &&
+                            context.isActive() &&
+                            nextFallbackIndex < fallbackCandidates.size
+                        if (!canFailover) break
+                        val candidate = fallbackCandidates[nextFallbackIndex++]
+                        retireTask(native, task)
+                        task = native.submitHttp(
+                            source = NativeTransferClient.HttpSource(
+                                NativePreviewRouting.stripSftpUserInfo(candidate.url),
+                                candidate.headers,
+                            ),
+                            destination = request.destination,
+                            stableKey = requireNotNull(request.stableKey),
+                            expectedSha256 = request.expectedSha256,
+                            knownSize = request.knownSize.takeIf { it > 0 },
+                            policy = policy(config, connections, candidate.url),
+                            network = network(config, candidate.url),
+                        )
+                        native.setSpeedLimit(cap)
                         snapshot = native.query(task)
                     }
 
@@ -238,6 +320,9 @@ internal class NativePreview(
                     if (torrent) {
                         NativePreviewRouting.torrentMetadataFile(request.destination).delete()
                         BackendResult.directory(request.destination, snapshot.totalBytes)
+                    } else if (metalink) {
+                        NativePreviewRouting.metalinkMetadataFile(request.destination).delete()
+                        BackendResult(listOf(request.destination), snapshot.totalBytes)
                     } else {
                         BackendResult(listOf(request.destination), snapshot.totalBytes)
                     }
@@ -284,6 +369,57 @@ internal class NativePreview(
             }
             check(partial.renameTo(metadata)) { "无法保存已下载的种子文件" }
             return metadata.absolutePath
+        } finally {
+            retireTask(native, task)
+        }
+    }
+
+    private suspend fun loadMetalinkDocument(
+        native: NativeTransferClient,
+        transfer: BackendContext,
+        headers: Map<String, String>,
+        config: dev.turbodl.core.TurboConfig,
+        stableKey: String,
+    ): Pair<String, String> {
+        val request = transfer.request
+        val localFile = when {
+            request.url.startsWith("file://", ignoreCase = true) -> runCatching { File(URI(request.url)) }.getOrNull()
+            !request.url.contains("://") -> File(request.url)
+            else -> null
+        }
+        if (localFile != null && localFile.isFile) {
+            require(localFile.length() in 1..1_048_576) { "Metalink 文件须小于 1 MiB" }
+            return localFile.readText() to ""
+        }
+        val metadata = NativePreviewRouting.metalinkMetadataFile(request.destination)
+        if (metadata.isFile && metadata.length() in 1..1_048_576) {
+            return metadata.readText() to request.url
+        }
+        val partial = NativePreviewRouting.partialMetalinkMetadataFile(request.destination)
+        val started = System.nanoTime()
+        val task = native.submitHttp(
+            source = NativeTransferClient.HttpSource(request.url, headers),
+            destination = partial,
+            stableKey = "$stableKey-metalink-metadata",
+            maximumBytes = 1_048_576L,
+            policy = policy(config, 1, request.url),
+            network = network(config, request.url),
+        )
+        try {
+            var snapshot = native.query(task)
+            while (!snapshot.terminal) {
+                if (!transfer.isActive()) throw CancellationException("Download paused")
+                delay(150)
+                snapshot = native.query(task)
+            }
+            if (snapshot.state != NativeTransferClient.COMPLETED) {
+                transferDetails[transfer.taskId] = downloadDetails(native, task, snapshot, started, false)
+                    .copy(failureStage = "metadata")
+                val http = snapshot.httpStatus.takeIf { it >= 400 }?.let { "HTTP $it · " }.orEmpty()
+                error(http + "Metalink 文件下载失败：${snapshot.message}")
+            }
+            check(partial.renameTo(metadata)) { "无法保存已下载的 Metalink 文件" }
+            return metadata.readText() to request.url
         } finally {
             retireTask(native, task)
         }
@@ -348,9 +484,19 @@ internal class NativePreview(
                 capabilities.optBoolean("http2_compiled") -> 2
             else -> 0
         }
+        val isSftp = NativePreviewRouting.isSftp(url)
+        val sftp = if (isSftp) sftpConfig() else null
+        val uriUserInfo = if (isSftp) runCatching { URI(url).userInfo }.getOrNull().orEmpty() else ""
+        val urlUser = uriUserInfo.substringBefore(':', "").takeIf { uriUserInfo.isNotEmpty() }.orEmpty()
+        val urlPass = if (':' in uriUserInfo) uriUserInfo.substringAfter(':') else ""
         return NativeTransferClient.Network(
+            username = urlUser.ifBlank { sftp?.username.orEmpty() },
+            password = urlPass.ifBlank { sftp?.password.orEmpty() },
             proxy = systemProxy(url),
             caBundle = caBundle.absolutePath,
+            sshKnownHosts = sftp?.knownHosts.orEmpty(),
+            sshPublicKey = sftp?.publicKey.orEmpty(),
+            sshPrivateKey = sftp?.privateKey.orEmpty(),
             dohUrl = (config.dns as? DnsMode.DoH)?.dohUrl.orEmpty(),
             httpVersion = httpVersion,
         )

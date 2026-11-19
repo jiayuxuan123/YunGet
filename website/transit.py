@@ -375,8 +375,8 @@ def download(facts: dict, href) -> str:
     for asset in facts.get("win_installers") or []:
         arch_rows.append(
             [
-                f"<strong>Windows x64（早期 Beta）</strong><br><span class=\"mono small\">{esc(asset['name'])}</span>",
-                "Windows 10/11 64 位安装器（早期 Beta 预览版，内置 TurboDL 原生引擎）。",
+                f"<strong>Windows x64</strong><br><span class=\"mono small\">{esc(asset['name'])}</span>",
+                "Windows 10/11 64 位安装器（内置 TurboDL 原生引擎与完整桌面端能力）。",
                 _mb(asset["size"]),
                 f'<span class="mono small">{esc((asset.get("sha256") or "")[:16])}…</span>',
                 _button("下载", _edge(facts, asset["url"])),
@@ -405,7 +405,7 @@ def download(facts: dict, href) -> str:
     win_platform_row = (
         [
             "Windows",
-            _status("planned", "早期 Beta"),
+            _status("ready", "可下载"),
             f'已提供 x64 安装包（{_mb(win_asset["size"])}），{_button("下载 MSI", _edge(facts, win_asset["url"]))}',
         ]
         if win_asset
@@ -443,7 +443,7 @@ def download(facts: dict, href) -> str:
         )
         + _section(
             "平台状态",
-            "Android 提供正式版 APK；Windows 已提供早期 Beta 安装包。尚无构建的平台不显示下载按钮。",
+            "Android 提供正式版 APK；Windows 提供 x64 MSI 安装包。尚无构建的平台不显示下载按钮。",
             _timetable(
                 ["平台", "状态", "当前说明"],
                 [

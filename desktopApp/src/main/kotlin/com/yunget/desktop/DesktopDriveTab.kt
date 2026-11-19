@@ -1,6 +1,8 @@
 package com.yunget.desktop
 
 import androidx.compose.foundation.BorderStroke
+import androidx.compose.foundation.ContextMenuArea
+import androidx.compose.foundation.ContextMenuItem
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
@@ -20,6 +22,7 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.Checkbox
+import androidx.compose.material3.FilterChip
 import androidx.compose.material3.FilledTonalButton
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.LinearProgressIndicator
@@ -45,10 +48,22 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import com.yunget.app.data.network.model.ShareFile
+import com.yunget.app.data.network.model.ShareInfo
+import com.yunget.app.data.upload.UploadIo
+import com.yunget.app.data.upload.UploadPhase
 import kotlinx.coroutines.launch
 import java.io.File
 
 private data class DriveCrumb(val dirId: String, val label: String)
+
+private data class ActiveUploadState(
+    val fileName: String,
+    val index: Int,
+    val totalCount: Int,
+    val phase: UploadPhase,
+    val sentBytes: Long,
+    val totalBytes: Long,
+)
 
 @OptIn(ExperimentalLayoutApi::class)
 @Composable
@@ -59,9 +74,12 @@ internal fun DesktopDriveTab(
     downloads: DesktopDownloads,
     onNotify: (String) -> Unit,
     onOpenAccountDialog: (DriveAccountKind) -> Unit,
+    pendingUploadFiles: List<File> = emptyList(),
+    onConsumePendingUploadFiles: () -> Unit = {},
 ) {
     val scope = rememberCoroutineScope()
     val accounts by accountStore.accounts.collectAsState()
+    val allAccounts by accountStore.allAccounts.collectAsState()
     val personalDrives = remember { DriveAccountKind.entries.filter { it.supportsPersonalDrive } }
     var selectedDrive by remember {
         mutableStateOf(
@@ -80,8 +98,12 @@ internal fun DesktopDriveTab(
     var showNewFolderDialog by remember { mutableStateOf(false) }
     var renameTarget by remember { mutableStateOf<ShareFile?>(null) }
     var deleteTarget by remember { mutableStateOf<ShareFile?>(null) }
+    var shareTargets by remember { mutableStateOf<List<ShareFile>>(emptyList()) }
+    var activeUpload by remember { mutableStateOf<ActiveUploadState?>(null) }
+    var activeUploadIo by remember { mutableStateOf<UploadIo?>(null) }
 
     val currentAccount = accounts[selectedDrive]
+    val driveAccounts = remember(allAccounts, selectedDrive) { accountStore.accountsOf(selectedDrive) }
     val currentDirId = crumbs.lastOrNull()?.dirId ?: driveService.rootDirId(selectedDrive)
 
     fun loadDir(kind: DriveAccountKind, dirId: String, resetCrumbs: Boolean = false, pushLabel: String? = null, trimToIndex: Int? = null) {
@@ -112,7 +134,7 @@ internal fun DesktopDriveTab(
         }
     }
 
-    LaunchedEffect(selectedDrive, currentAccount?.credential) {
+    LaunchedEffect(selectedDrive, currentAccount?.id, currentAccount?.credential) {
         filterQuery = ""
         val root = driveService.rootDirId(selectedDrive)
         if (currentAccount != null) {
@@ -122,6 +144,80 @@ internal fun DesktopDriveTab(
             files = emptyList()
             selectedFids = emptySet()
             errorMessage = ""
+        }
+    }
+
+    fun uploadLocalFiles(localFiles: List<File>) {
+        val valid = localFiles.filter { it.isFile }
+        if (valid.isEmpty()) return
+        if (currentAccount == null) {
+            errorMessage = "请先登录${selectedDrive.displayName}后再上传文件"
+            return
+        }
+        if (!driveService.supportsUpload(selectedDrive)) {
+            errorMessage = "${selectedDrive.displayName}暂不支持个人网盘上传"
+            return
+        }
+        val kind = selectedDrive
+        val targetDir = currentDirId
+        scope.launch {
+            errorMessage = ""
+            var succeeded = 0
+            var failed = 0
+            var lastErr = ""
+            for ((idx, file) in valid.withIndex()) {
+                activeUpload = ActiveUploadState(
+                    fileName = file.name,
+                    index = idx + 1,
+                    totalCount = valid.size,
+                    phase = UploadPhase.PREPARING,
+                    sentBytes = 0L,
+                    totalBytes = file.length().coerceAtLeast(1L),
+                )
+                val res = runCatching {
+                    driveService.uploadFile(
+                        kind = kind,
+                        parentId = targetDir,
+                        localFile = file,
+                        onIoCreated = { io -> activeUploadIo = io },
+                        onProgress = { phase, sent, total ->
+                            activeUpload = ActiveUploadState(
+                                fileName = file.name,
+                                index = idx + 1,
+                                totalCount = valid.size,
+                                phase = phase,
+                                sentBytes = sent,
+                                totalBytes = total.coerceAtLeast(1L),
+                            )
+                        },
+                    )
+                }
+                activeUploadIo = null
+                res.onSuccess { succeeded++ }
+                    .onFailure { err ->
+                        failed++
+                        lastErr = err.message ?: "上传失败"
+                    }
+                if (lastErr.contains("取消")) break
+            }
+            activeUpload = null
+            if (succeeded > 0) {
+                loadDir(kind, targetDir)
+                scope.launch { accountStore.refreshQuota(kind) }
+            }
+            if (failed == 0) {
+                onNotify("已上传 $succeeded 个文件到${kind.displayName}")
+            } else {
+                errorMessage = "上传完成：成功 $succeeded 个，失败 $failed 个（$lastErr）"
+            }
+        }
+    }
+
+    LaunchedEffect(pendingUploadFiles) {
+        if (pendingUploadFiles.isNotEmpty()) {
+            val copy = pendingUploadFiles.toList()
+            onConsumePendingUploadFiles()
+            uploadLocalFiles(copy)
         }
     }
 
@@ -270,7 +366,7 @@ internal fun DesktopDriveTab(
                 modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp),
             )
             Row(horizontalArrangement = Arrangement.spacedBy(6.dp), modifier = Modifier.fillMaxWidth()) {
-                listOf(DriveAccountKind.GITHUB, DriveAccountKind.FEIJIPAN).forEach { kind ->
+                listOf(DriveAccountKind.GITHUB).forEach { kind ->
                     val ok = accounts.containsKey(kind)
                     OutlinedButton(
                         onClick = { onOpenAccountDialog(kind) },
@@ -306,8 +402,22 @@ internal fun DesktopDriveTab(
                         horizontalArrangement = Arrangement.spacedBy(8.dp),
                     ) {
                         Text(selectedDrive.displayName, style = MaterialTheme.typography.headlineMedium, fontWeight = FontWeight.SemiBold)
-                        if (currentAccount != null && currentAccount.nickname.isNotBlank()) {
-                            DesktopPill(currentAccount.nickname)
+                        if (currentAccount != null) {
+                            DesktopPill(currentAccount.displayLabel)
+                        }
+                        if (driveAccounts.size > 1) {
+                            driveAccounts.forEach { acc ->
+                                FilterChip(
+                                    selected = acc.isPrimary,
+                                    onClick = {
+                                        if (!acc.isPrimary) {
+                                            accountStore.setPrimary(selectedDrive, acc.id)
+                                            onNotify("已切换账号：${acc.displayLabel}")
+                                        }
+                                    },
+                                    label = { Text(acc.displayLabel, maxLines = 1, overflow = TextOverflow.Ellipsis) },
+                                )
+                            }
                         }
                     }
                     if (currentAccount != null && currentAccount.totalBytes > 0L) {
@@ -330,10 +440,29 @@ internal fun DesktopDriveTab(
                                 scope.launch { accountStore.refreshQuota(selectedDrive) }
                             },
                         ) { Text("刷新") }
-                        OutlinedButton(
-                            enabled = !busy,
-                            onClick = { showNewFolderDialog = true },
-                        ) { Text("新建文件夹") }
+                        if (driveService.supportsFolderMutation(selectedDrive)) {
+                            OutlinedButton(
+                                enabled = !busy,
+                                onClick = { showNewFolderDialog = true },
+                            ) { Text("新建文件夹") }
+                        }
+                        if (driveService.supportsUpload(selectedDrive)) {
+                            OutlinedButton(
+                                enabled = !busy && activeUpload == null,
+                                onClick = {
+                                    val picked = pickUploadFiles()
+                                    if (picked.isNotEmpty()) uploadLocalFiles(picked)
+                                },
+                            ) { Text("上传文件") }
+                        }
+                        if (driveService.supportsCreateShare(selectedDrive) && selectedFids.isNotEmpty()) {
+                            OutlinedButton(
+                                enabled = !busy,
+                                onClick = {
+                                    shareTargets = files.filter { it.fid in selectedFids }
+                                },
+                            ) { Text("生成分享 (${selectedFids.size})") }
+                        }
                         FilledTonalButton(
                             enabled = selectedFids.isNotEmpty() && batchStatus.isEmpty(),
                             onClick = {
@@ -341,6 +470,43 @@ internal fun DesktopDriveTab(
                                 downloadItems(picked)
                             },
                         ) { Text("下载选中 (${selectedFids.size})") }
+                    }
+                }
+            }
+
+            activeUpload?.let { up ->
+                val phaseText = when (up.phase) {
+                    UploadPhase.PREPARING -> "计算摘要/预处理"
+                    UploadPhase.UPLOADING -> "上传中"
+                    UploadPhase.FINISHING -> "网盘确认中"
+                }
+                val ratio = (up.sentBytes.toFloat() / up.totalBytes.coerceAtLeast(1L).toFloat()).coerceIn(0f, 1f)
+                Surface(
+                    shape = MaterialTheme.shapes.medium,
+                    color = MaterialTheme.colorScheme.secondaryContainer.copy(alpha = 0.65f),
+                    modifier = Modifier.fillMaxWidth(),
+                ) {
+                    Column(
+                        modifier = Modifier.padding(horizontal = 14.dp, vertical = 10.dp),
+                        verticalArrangement = Arrangement.spacedBy(6.dp),
+                    ) {
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.SpaceBetween,
+                            verticalAlignment = Alignment.CenterVertically,
+                        ) {
+                            Text(
+                                text = "上传 (${up.index}/${up.totalCount}) · ${up.fileName} · $phaseText (${(ratio * 100).toInt()}%) · ${formatBytes(up.sentBytes)} / ${formatBytes(up.totalBytes)}",
+                                style = MaterialTheme.typography.labelMedium,
+                                maxLines = 1,
+                                overflow = TextOverflow.Ellipsis,
+                                modifier = Modifier.weight(1f),
+                            )
+                            TextButton(
+                                onClick = { activeUploadIo?.cancel() },
+                            ) { Text("取消上传", color = MaterialTheme.colorScheme.error) }
+                        }
+                        LinearProgressIndicator(progress = { ratio }, modifier = Modifier.fillMaxWidth())
                     }
                 }
             }
@@ -445,20 +611,51 @@ internal fun DesktopDriveTab(
                             LazyColumn(modifier = Modifier.fillMaxSize()) {
                                 items(visibleFiles, key = { it.fid }) { file ->
                                     val checked = file.fid in selectedFids
-                                    Row(
-                                        modifier = Modifier
-                                            .fillMaxWidth()
-                                            .clickable {
+                                    ContextMenuArea(
+                                        items = {
+                                            buildList {
                                                 if (file.isdir) {
-                                                    loadDir(selectedDrive, driveService.childDirId(selectedDrive, file), pushLabel = file.fname)
+                                                    add(ContextMenuItem("打开文件夹") {
+                                                        loadDir(selectedDrive, driveService.childDirId(selectedDrive, file), pushLabel = file.fname)
+                                                    })
+                                                    add(ContextMenuItem("下载整个文件夹") { downloadItems(listOf(file)) })
                                                 } else {
-                                                    selectedFids = if (checked) selectedFids - file.fid else selectedFids + file.fid
+                                                    add(ContextMenuItem("下载文件") { downloadItems(listOf(file)) })
+                                                    add(ContextMenuItem("复制下载直链") {
+                                                        scope.launch {
+                                                            runCatching { driveService.resolveDownload(selectedDrive, file) }
+                                                                .onSuccess { res ->
+                                                                    copyToClipboard(res.url)
+                                                                    onNotify("已复制直链：${file.fname}")
+                                                                }
+                                                                .onFailure { err -> errorMessage = err.message ?: "取链失败" }
+                                                        }
+                                                    })
+                                                }
+                                                if (driveService.supportsCreateShare(selectedDrive)) {
+                                                    add(ContextMenuItem("生成分享链接") { shareTargets = listOf(file) })
+                                                }
+                                                if (driveService.supportsFolderMutation(selectedDrive)) {
+                                                    add(ContextMenuItem("重命名") { renameTarget = file })
+                                                    add(ContextMenuItem("删除") { deleteTarget = file })
                                                 }
                                             }
-                                            .padding(horizontal = 12.dp, vertical = 8.dp),
-                                        verticalAlignment = Alignment.CenterVertically,
-                                        horizontalArrangement = Arrangement.spacedBy(10.dp),
+                                        },
                                     ) {
+                                        Row(
+                                            modifier = Modifier
+                                                .fillMaxWidth()
+                                                .clickable {
+                                                    if (file.isdir) {
+                                                        loadDir(selectedDrive, driveService.childDirId(selectedDrive, file), pushLabel = file.fname)
+                                                    } else {
+                                                        selectedFids = if (checked) selectedFids - file.fid else selectedFids + file.fid
+                                                    }
+                                                }
+                                                .padding(horizontal = 12.dp, vertical = 8.dp),
+                                            verticalAlignment = Alignment.CenterVertically,
+                                            horizontalArrangement = Arrangement.spacedBy(10.dp),
+                                        ) {
                                         Checkbox(
                                             checked = checked,
                                             onCheckedChange = { isChecked ->
@@ -487,9 +684,14 @@ internal fun DesktopDriveTab(
                                                 Text(meta, style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
                                             }
                                         }
-                                        TextButton(onClick = { renameTarget = file }) { Text("重命名") }
-                                        TextButton(onClick = { deleteTarget = file }) {
-                                            Text("删除", color = MaterialTheme.colorScheme.error)
+                                        if (driveService.supportsCreateShare(selectedDrive)) {
+                                            TextButton(onClick = { shareTargets = listOf(file) }) { Text("分享") }
+                                        }
+                                        if (driveService.supportsFolderMutation(selectedDrive)) {
+                                            TextButton(onClick = { renameTarget = file }) { Text("重命名") }
+                                            TextButton(onClick = { deleteTarget = file }) {
+                                                Text("删除", color = MaterialTheme.colorScheme.error)
+                                            }
                                         }
                                         if (file.isdir) {
                                             FilledTonalButton(
@@ -514,6 +716,7 @@ internal fun DesktopDriveTab(
                                                 enabled = batchStatus.isEmpty(),
                                                 onClick = { downloadItems(listOf(file)) },
                                             ) { Text("下载") }
+                                        }
                                         }
                                     }
                                     HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.35f))
@@ -626,4 +829,158 @@ internal fun DesktopDriveTab(
             },
         )
     }
+
+    if (shareTargets.isNotEmpty()) {
+        DesktopCreateShareDialog(
+            kind = selectedDrive,
+            files = shareTargets,
+            driveService = driveService,
+            onDismiss = { shareTargets = emptyList() },
+            onNotify = onNotify,
+        )
+    }
+}
+
+@OptIn(ExperimentalLayoutApi::class)
+@Composable
+private fun DesktopCreateShareDialog(
+    kind: DriveAccountKind,
+    files: List<ShareFile>,
+    driveService: DesktopDriveService,
+    onDismiss: () -> Unit,
+    onNotify: (String) -> Unit,
+) {
+    val scope = rememberCoroutineScope()
+    val expireOptions = remember(kind) { driveService.shareExpireOptions(kind) }
+    var selectedExpire by remember(kind) { mutableStateOf(expireOptions.first().second) }
+    var title by remember(files) {
+        mutableStateOf(
+            if (files.size == 1) files.first().fname else "${files.first().fname} 等 ${files.size} 项"
+        )
+    }
+    var passcode by remember(kind, files) { mutableStateOf("") }
+    var busy by remember { mutableStateOf(false) }
+    var error by remember { mutableStateOf("") }
+    var result by remember { mutableStateOf<ShareInfo?>(null) }
+    val supportsCustomCode = kind in setOf(
+        DriveAccountKind.QUARK,
+        DriveAccountKind.UC,
+        DriveAccountKind.BAIDU,
+        DriveAccountKind.PAN123,
+        DriveAccountKind.GUANGYA,
+        DriveAccountKind.XUNLEI,
+    )
+
+    AlertDialog(
+        onDismissRequest = { if (!busy) onDismiss() },
+        title = { Text("生成 ${kind.displayName} 分享链接") },
+        text = {
+            Column(verticalArrangement = Arrangement.spacedBy(10.dp), modifier = Modifier.fillMaxWidth()) {
+                val info = result
+                if (info == null) {
+                    Text(
+                        text = "已选 ${files.size} 项：${files.take(3).joinToString("、") { it.fname }}${if (files.size > 3) "…" else ""}",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                    OutlinedTextField(
+                        value = title,
+                        onValueChange = { title = it },
+                        label = { Text("分享名称") },
+                        singleLine = true,
+                        enabled = !busy,
+                        modifier = Modifier.fillMaxWidth(),
+                    )
+                    if (expireOptions.size > 1) {
+                        Text("有效期", style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                        FlowRow(horizontalArrangement = Arrangement.spacedBy(6.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                            expireOptions.forEach { (label, code) ->
+                                FilterChip(
+                                    selected = selectedExpire == code,
+                                    onClick = { selectedExpire = code },
+                                    enabled = !busy,
+                                    label = { Text(label) },
+                                )
+                            }
+                        }
+                    }
+                    if (supportsCustomCode) {
+                        OutlinedTextField(
+                            value = passcode,
+                            onValueChange = { passcode = it.take(6) },
+                            label = { Text("提取码（留空默认随机或免密）") },
+                            singleLine = true,
+                            enabled = !busy,
+                            modifier = Modifier.fillMaxWidth(),
+                        )
+                    }
+                } else {
+                    Surface(
+                        shape = MaterialTheme.shapes.medium,
+                        color = MaterialTheme.colorScheme.surfaceContainerLow,
+                        border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.6f)),
+                        modifier = Modifier.fillMaxWidth(),
+                    ) {
+                        Column(modifier = Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                            Text("分享创建成功", style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.SemiBold)
+                            Text("链接：${info.shareUrl}", style = MaterialTheme.typography.bodySmall)
+                            if (info.passcode.isNotBlank()) {
+                                Text("提取码：${info.passcode}", style = MaterialTheme.typography.bodySmall, fontWeight = FontWeight.Medium)
+                            }
+                            if (!info.warning.isNullOrBlank()) {
+                                Text(info.warning!!, style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.error)
+                            }
+                        }
+                    }
+                }
+                if (error.isNotBlank()) {
+                    Text(error, color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodySmall)
+                }
+            }
+        },
+        confirmButton = {
+            val info = result
+            if (info == null) {
+                Button(
+                    enabled = !busy,
+                    onClick = {
+                        busy = true
+                        error = ""
+                        scope.launch {
+                            val res = runCatching {
+                                driveService.createShare(
+                                    kind = kind,
+                                    files = files,
+                                    title = title,
+                                    expiredType = selectedExpire,
+                                    passcode = passcode,
+                                )
+                            }
+                            busy = false
+                            res.onSuccess { created ->
+                                result = created
+                            }.onFailure { err ->
+                                error = err.message ?: "生成分享链接失败"
+                            }
+                        }
+                    },
+                ) { Text(if (busy) "生成中…" else "创建分享") }
+            } else {
+                Button(
+                    onClick = {
+                        val text = buildString {
+                            append(info.shareUrl)
+                            if (info.passcode.isNotBlank()) append(" 提取码：${info.passcode}")
+                        }
+                        copyToClipboard(text)
+                        onNotify("已复制分享链接")
+                        onDismiss()
+                    },
+                ) { Text("复制链接并关闭") }
+            }
+        },
+        dismissButton = {
+            TextButton(enabled = !busy, onClick = onDismiss) { Text("关闭") }
+        },
+    )
 }

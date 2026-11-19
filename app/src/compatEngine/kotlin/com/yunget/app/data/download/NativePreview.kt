@@ -10,10 +10,13 @@ internal class NativePreview(
     context: Context,
     speedLimit: () -> Long,
     httpVersionPreference: () -> Int,
+    sftpConfig: () -> NativeSftpConfig = { NativeSftpConfig() },
 ) : NativePreviewRouting {
     override val available = false
     override fun supportsMedia(kind: String) = false
     override fun supportsTorrent() = false
+    override fun supportsMetalink() = false
+    override fun supportsSftp() = false
     override val backend = object : DownloadBackend {
         override val name = NativePreviewRouting.NATIVE
         override fun supports(request: DownloadRequest) = false

@@ -18,9 +18,8 @@
 
 package com.yunget.app.data.network.video
 
-import com.yunget.app.data.download.DownloadPathPolicy
-import com.yunget.app.data.network.HttpClients
-import com.yunget.app.util.DiagnosticLog
+import com.yunget.app.data.network.CoreHttp
+import com.yunget.app.data.network.CoreLog
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import okhttp3.MediaType.Companion.toMediaType
@@ -243,7 +242,7 @@ object DouyinParser : VideoParser {
     private suspend fun fetchViaWebView(link: DetectedVideoLink): WebPayload? {
         val type = pathType(link)
         val url = "https://www.douyin.com/$type/${link.id}"
-        val json = HeadlessWebView.loadAndExtract(
+        val json = BrowserPageExtractorRegistry.current.loadAndExtract(
             url = url,
             userAgent = VideoHttp.UA_CHROME,
             readyCheckJs = readyCheckJs(),
@@ -256,22 +255,22 @@ object DouyinParser : VideoParser {
         ) ?: return null
         val obj = runCatching { JSONObject(json) }.getOrNull() ?: return null
         obj.optString("error").takeIf { it.isNotBlank() && it != "null" }?.let { err ->
-            DiagnosticLog.warn(DiagnosticLog.NETWORK, "douyin_webview_extract_failed", err)
+            CoreLog.warn(CoreLog.NETWORK, "douyin_webview_extract_failed", err)
             return null
         }
         // 图片与动图资源由脚本**成对**产出（同一个数据源、下标一致）
         val images = obj.optJSONArray("images")?.toStringList().orEmpty()
         val motions = obj.optJSONArray("motions")?.toStringList().orEmpty()
         // 诊断：用了哪个数据源、拿到几张图/几张动图、SSR 状态、首项字段名 —— 排查「为什么没有动图」全靠这一行
-        DiagnosticLog.warn(
-            DiagnosticLog.NETWORK, "douyin_webview_media",
+        CoreLog.warn(
+            CoreLog.NETWORK, "douyin_webview_media",
             "src=${obj.optString("src")} images=${images.size} motions=${obj.optString("motionCount")} " +
                 "ssr=${obj.optString("ssr")} imgKeys=${obj.optString("imgKeys")} " +
                 "videoKeys=${obj.optString("videoKeys")}"
         )
         val video = obj.optString("video").takeIf { it.isNotBlank() && it != "null" }.orEmpty()
         if (images.isEmpty() && video.isBlank()) {
-            DiagnosticLog.warn(DiagnosticLog.NETWORK, "douyin_webview_no_media", "页面没有给出可用的图/视频直链")
+            CoreLog.warn(CoreLog.NETWORK, "douyin_webview_no_media", "页面没有给出可用的图/视频直链")
             return null
         }
         return WebPayload(
@@ -794,7 +793,7 @@ object DouyinParser : VideoParser {
      *   因此这里直接用底层 OkHttp 客户端读 `headers.values("Set-Cookie")`。
      */
     private suspend fun registerTtwid(): String = withContext(Dispatchers.IO) {
-        val client = HttpClients.apiClient()
+        val client = CoreHttp.client()
         val body = """{"region":"cn","aid":1768,"needFid":false,"service":"www.iesdouyin.com","union":true,"fid":""}"""
             .toRequestBody("application/json".toMediaType())
         val request = Request.Builder()
@@ -861,9 +860,9 @@ object DouyinParser : VideoParser {
     private fun imageFileName(id: String, title: String, index: Int): String =
         "${safeTitle(title, "douyin_$id")}_$index.jpg"
 
-    /** 清洗标题里的非法文件名字符并截断（清洗交给共享的 [DownloadPathPolicy]） */
+    /** 清洗标题里的非法文件名字符并截断 */
     private fun safeTitle(title: String, fallback: String): String =
-        DownloadPathPolicy.sanitizeName(title).take(80).ifBlank { fallback }
+        VideoHttp.sanitizeFileName(title).take(80).ifBlank { fallback }
 }
 
 // ---------------------------------------------------------------------- JSON 取值

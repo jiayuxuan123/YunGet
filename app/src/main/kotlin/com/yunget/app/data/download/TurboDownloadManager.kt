@@ -172,7 +172,22 @@ class TurboDownloadManager(
     private val sourceRateLimitUntil = ConcurrentHashMap<String, Long>()
     private val refreshJobs = ConcurrentHashMap<Long, kotlinx.coroutines.Job>()
     private val sourceRefresher by lazy { QuarkTaskRefresher(context) }
-    private val nativePreview by lazy { NativePreview(context, speedLimitProvider, httpVersionPolicyProvider) }
+    private val nativePreview by lazy {
+        NativePreview(
+            context = context,
+            speedLimit = speedLimitProvider,
+            httpVersionPreference = httpVersionPolicyProvider,
+            sftpConfig = {
+                NativeSftpConfig(
+                    username = settings.sftpUsername,
+                    password = settings.sftpPassword,
+                    knownHosts = settings.sftpKnownHosts,
+                    publicKey = settings.sftpPublicKey,
+                    privateKey = settings.sftpPrivateKey,
+                )
+            },
+        )
+    }
 
     private fun sdkStarted(id: Long, generation: Long) {
         if (sdkGenerations.put(id, generation) == null) onTaskStarted(id)
@@ -946,15 +961,22 @@ class TurboDownloadManager(
             ?.takeIf(nativePreview::supportsMedia)
         val nativeTorrent = nativePreview.supportsTorrent() && (NativePreviewRouting.isMagnet(url) ||
             NativePreviewRouting.isTorrentFile(url, safeName))
+        val nativeMetalink = nativePreview.supportsMetalink() &&
+            NativePreviewRouting.isMetalinkFile(url, safeName)
+        val nativeSftp = nativePreview.supportsSftp() && NativePreviewRouting.isSftp(url)
+        val encodedAltSources = DownloadPostProcessor.encodeSources(altSources)
         val useNative = settings.downloadEngine != SettingsRepository.ENGINE_GOPEED &&
             settings.downloadEngineId == NativePreviewRouting.ENGINE_ID &&
             nativePreview.available &&
-            fallbackUrl.isBlank() && altSources.isEmpty() && !ignoreSslProvider() &&
-            (nativeTorrent || nativeMediaKind != null || NativePreviewRouting.isFtp(url) ||
+            !ignoreSslProvider() &&
+            (nativeTorrent || nativeMetalink || nativeSftp || nativeMediaKind != null ||
+                NativePreviewRouting.isFtp(url) ||
                 NativePreviewRouting.supportsDirectLink(url, safeName))
         val extension = safeName.substringAfterLast('.', "").lowercase()
         val outputName = when {
             useNative && nativeTorrent && extension == "torrent" -> safeName.substringBeforeLast('.').ifBlank { "BT下载" }
+            useNative && nativeMetalink && extension in setOf("metalink", "meta4") ->
+                safeName.substringBeforeLast('.').ifBlank { "Metalink下载" }
             useNative && nativeMediaKind != null && extension in setOf("m3u", "m3u8", "mpd", "dash") ->
                 safeName.substringBeforeLast('.') + ".mp4"
             else -> safeName
@@ -965,7 +987,7 @@ class TurboDownloadManager(
                 fileName = outputName,
                 platform = platform,
                 fallbackUrl = fallbackUrl,
-                altSourcesJson = DownloadPostProcessor.encodeSources(altSources),
+                altSourcesJson = encodedAltSources,
                 mergeAudioUrl = mergeAudioUrl,
                 mergeAudioHeadersJson = org.json.JSONObject(mergeAudioHeaders as Map<*, *>).toString(),
                 motionUrl = motionUrl,
@@ -976,8 +998,18 @@ class TurboDownloadManager(
                     val policy = if (stored == "{}") {
                         TaskTransferPolicies.encode(buildConfig(), platform, submission.sourceAccountId)
                     } else stored
-                    NativePreviewRouting.pin(policy, useNative, nativeMediaKind
-                        ?: NativePreviewRouting.TORRENT_FILE.takeIf { nativeTorrent })
+                    val pinnedAlt = buildList {
+                        if (fallbackUrl.isNotBlank()) add(DownloadSource(fallbackUrl, headers))
+                        addAll(altSources)
+                    }.takeIf { it.isNotEmpty() }?.let(DownloadPostProcessor::encodeSources)
+                    NativePreviewRouting.pin(
+                        policy = policy,
+                        useNative = useNative,
+                        mediaKind = nativeMediaKind
+                            ?: NativePreviewRouting.TORRENT_FILE.takeIf { nativeTorrent }
+                            ?: NativePreviewRouting.METALINK_FILE.takeIf { nativeMetalink },
+                        altSourcesJson = pinnedAlt,
+                    )
                 },
 
                 requestHeadersJson = headersJson,
@@ -1091,7 +1123,11 @@ class TurboDownloadManager(
                 // 真正实现断点续传（暂停恢复 / 进程重启都从断点继续，而非从头下）。
                 stableKey = "room-$id",
                 tags = NativePreviewRouting.tags(task.transferPolicyJson),
-                mirrors = DownloadPostProcessor.mirrors(task, restoredHeaders),
+                mirrors = if (NativePreviewRouting.selected(task.transferPolicyJson)) {
+                    emptyList()
+                } else {
+                    DownloadPostProcessor.mirrors(task, restoredHeaders)
+                },
             )
             dao.updateStatus(id, DownloadTaskEntity.STATUS_DOWNLOADING)
             submittedRequests[id] = request
@@ -1214,6 +1250,8 @@ class TurboDownloadManager(
                 if (output.isDirectory) output.deleteRecursively() else output.delete()
                 NativePreviewRouting.torrentMetadataFile(output).delete()
                 NativePreviewRouting.partialTorrentMetadataFile(output).delete()
+                NativePreviewRouting.metalinkMetadataFile(output).delete()
+                NativePreviewRouting.partialMetalinkMetadataFile(output).delete()
                 task?.let(::completedCache)?.takeIf { it != output }?.delete()
             }
             if (deleteLocal) {

@@ -90,10 +90,7 @@ import androidx.compose.foundation.clickable
 import androidx.compose.material.icons.outlined.ManageAccounts
 import androidx.compose.material.icons.outlined.ChevronRight
 
-/**
- * 网盘账号展示模型。
- * TODO: 迅雷 / UC 后续接入 cookie 登录后，isLoggedIn 由真实登录态驱动。
- */
+/** 网盘账号展示模型，登录态均由各平台真实账号实体驱动。 */
 /**
  * 账号副标题：**备注优先**，没有备注才用平台昵称。
  *

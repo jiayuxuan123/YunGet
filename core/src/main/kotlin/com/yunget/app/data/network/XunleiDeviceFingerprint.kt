@@ -18,9 +18,31 @@
 
 package com.yunget.app.data.network
 
-import android.content.Context
 import java.security.MessageDigest
 import kotlin.random.Random
+
+/** 迅雷设备指纹三元组（一次生成、长期持久化复用）。 */
+data class XunleiDeviceIdentity(
+    val deviceId: String,
+    val peerId: String,
+    val deviceSign: String
+)
+
+/** 宿主持久化接口：Android 端落盘到 SharedPreferences，桌面端可落盘或使用内存默认实现。 */
+interface XunleiDeviceFingerprintStore {
+    fun load(): XunleiDeviceIdentity?
+    fun save(identity: XunleiDeviceIdentity)
+}
+
+/** 纯 JVM 默认存储（进程内复用，供桌面端或测试直接使用）。 */
+class InMemoryXunleiDeviceFingerprintStore(
+    private var cached: XunleiDeviceIdentity? = null
+) : XunleiDeviceFingerprintStore {
+    override fun load(): XunleiDeviceIdentity? = cached
+    override fun save(identity: XunleiDeviceIdentity) {
+        cached = identity
+    }
+}
 
 /**
  * 迅雷设备指纹管理器（动态生成 + 持久化）：
@@ -31,11 +53,6 @@ import kotlin.random.Random
  * 目的：开源分发后每台设备独立指纹，避免所有用户共享一个官方指纹被迅雷风控识别/连带封禁。
  */
 object XunleiDeviceFingerprint {
-
-    private const val PREFS = "xunlei_device_fp"
-    private const val KEY_ID = "device_id"
-    private const val KEY_PEER = "peer_id"
-    private const val KEY_SIGN = "device_sign"
 
     // devicesign 计算常量（与文档 §8 / alist 一致）
     private const val PACKAGE_NAME = "com.xunlei.downloadprovider"
@@ -54,33 +71,36 @@ object XunleiDeviceFingerprint {
     @Volatile
     private var deviceSign: String = XunleiConstants.DEVICE_SIGN
 
-    /** 进程启动时调用一次（Application.onCreate）；幂等，可重复调用 */
-    fun init(context: Context) {
+    /** 进程启动时调用一次（Android 在 Application.onCreate 注入持久化实现）；幂等，可重复调用 */
+    fun init(store: XunleiDeviceFingerprintStore = InMemoryXunleiDeviceFingerprintStore()) {
         if (initialized) return
         synchronized(this) {
             if (initialized) return
-            val prefs = context.applicationContext
-                .getSharedPreferences(PREFS, Context.MODE_PRIVATE)
-            val savedId = prefs.getString(KEY_ID, null)
-            if (savedId != null) {
-                deviceId = savedId
-                peerId = prefs.getString(KEY_PEER, XunleiConstants.PEER_ID)!!
-                deviceSign = prefs.getString(KEY_SIGN, XunleiConstants.DEVICE_SIGN)!!
-            } else {
-                // 首次启动：生成唯一设备指纹并持久化
-                val newId = randomHex(32)
-                val newPeer = randomHex(32)
-                val newSign = buildDeviceSign(newId)
-                prefs.edit()
-                    .putString(KEY_ID, newId)
-                    .putString(KEY_PEER, newPeer)
-                    .putString(KEY_SIGN, newSign)
-                    .apply()
-                deviceId = newId
-                peerId = newPeer
-                deviceSign = newSign
-            }
+            val identity = store.load() ?: generate().also { store.save(it) }
+            deviceId = identity.deviceId
+            peerId = identity.peerId
+            deviceSign = identity.deviceSign
             initialized = true
+        }
+    }
+
+    /** 生成一组新的随机设备指纹（纯函数，不改全局状态）。 */
+    fun generate(): XunleiDeviceIdentity {
+        val newId = randomHex(32)
+        val newPeer = randomHex(32)
+        return XunleiDeviceIdentity(
+            deviceId = newId,
+            peerId = newPeer,
+            deviceSign = buildDeviceSign(newId)
+        )
+    }
+
+    internal fun resetForTest() {
+        synchronized(this) {
+            initialized = false
+            deviceId = XunleiConstants.DEVICE_ID
+            peerId = XunleiConstants.PEER_ID
+            deviceSign = XunleiConstants.DEVICE_SIGN
         }
     }
 
@@ -91,7 +111,7 @@ object XunleiDeviceFingerprint {
     fun deviceSign(): String = deviceSign
 
     /** devicesign：div101.{deviceId}{md5(sha1(deviceId + package_name + appid + app_key))} */
-    private fun buildDeviceSign(id: String): String {
+    fun buildDeviceSign(id: String): String {
         val base = id + PACKAGE_NAME + APPID + APP_KEY
         val sha1 = sha1Hex(base)
         val md5 = md5Hex(sha1)
@@ -103,10 +123,10 @@ object XunleiDeviceFingerprint {
     }
 
     private fun sha1Hex(input: String): String =
-        MessageDigest.getInstance("SHA-1").digest(input.toByteArray())
+        MessageDigest.getInstance("SHA-1").digest(input.toByteArray(Charsets.UTF_8))
             .joinToString("") { "%02x".format(it) }
 
     private fun md5Hex(input: String): String =
-        MessageDigest.getInstance("MD5").digest(input.toByteArray())
+        MessageDigest.getInstance("MD5").digest(input.toByteArray(Charsets.UTF_8))
             .joinToString("") { "%02x".format(it) }
 }

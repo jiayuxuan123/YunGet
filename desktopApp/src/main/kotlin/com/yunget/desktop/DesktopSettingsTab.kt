@@ -23,6 +23,7 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Surface
+import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
@@ -50,6 +51,9 @@ internal fun DesktopSettingsTab(
     capabilities: JSONObject,
     onNotify: (String) -> Unit,
     onOpenAccountDialog: (DriveAccountKind) -> Unit,
+    onOpenLogViewer: () -> Unit = {},
+    onCheckUpdate: () -> Unit = {},
+    checkingUpdate: Boolean = false,
 ) {
     val accounts by accountStore.accounts.collectAsState()
     val scroll = rememberScrollState()
@@ -60,6 +64,11 @@ internal fun DesktopSettingsTab(
     var proxyText by remember(config.proxyUrl) { mutableStateOf(config.proxyUrl) }
     var dohText by remember(config.dohUrl) { mutableStateOf(config.dohUrl) }
     var mirrorText by remember(config.githubMirrorPrefix) { mutableStateOf(config.githubMirrorPrefix) }
+    var sftpUserText by remember(config.sftpUsername) { mutableStateOf(config.sftpUsername) }
+    var sftpPassText by remember(config.sftpPassword) { mutableStateOf(config.sftpPassword) }
+    var sftpKnownHostsText by remember(config.sftpKnownHosts) { mutableStateOf(config.sftpKnownHosts) }
+    var sftpPublicKeyText by remember(config.sftpPublicKey) { mutableStateOf(config.sftpPublicKey) }
+    var sftpPrivateKeyText by remember(config.sftpPrivateKey) { mutableStateOf(config.sftpPrivateKey) }
 
     Column(
         modifier = Modifier
@@ -271,6 +280,75 @@ internal fun DesktopSettingsTab(
                             }) { Text("恢复直连") }
                         }
                     }
+                    HorizontalDivider()
+                    Text("SFTP 凭据与主机校验", style = MaterialTheme.typography.titleSmall)
+                    Text(
+                        "用于 sftp:// 任务默认认证及 known_hosts 主机密钥校验（URL 自带用户名密码时优先使用 URL 凭据）。",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.spacedBy(10.dp),
+                    ) {
+                        OutlinedTextField(
+                            value = sftpUserText,
+                            onValueChange = { sftpUserText = it },
+                            label = { Text("SFTP 用户名") },
+                            singleLine = true,
+                            modifier = Modifier.weight(1f),
+                        )
+                        OutlinedTextField(
+                            value = sftpPassText,
+                            onValueChange = { sftpPassText = it },
+                            label = { Text("SFTP 密码（可选）") },
+                            singleLine = true,
+                            modifier = Modifier.weight(1f),
+                        )
+                    }
+                    OutlinedTextField(
+                        value = sftpKnownHostsText,
+                        onValueChange = { sftpKnownHostsText = it },
+                        label = { Text("known_hosts 文件路径（主机校验）") },
+                        singleLine = true,
+                        modifier = Modifier.fillMaxWidth(),
+                    )
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.spacedBy(10.dp),
+                    ) {
+                        OutlinedTextField(
+                            value = sftpPublicKeyText,
+                            onValueChange = { sftpPublicKeyText = it },
+                            label = { Text("SSH 公钥路径（可选）") },
+                            singleLine = true,
+                            modifier = Modifier.weight(1f),
+                        )
+                        OutlinedTextField(
+                            value = sftpPrivateKeyText,
+                            onValueChange = { sftpPrivateKeyText = it },
+                            label = { Text("SSH 私钥路径（可选）") },
+                            singleLine = true,
+                            modifier = Modifier.weight(1f),
+                        )
+                    }
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.End,
+                    ) {
+                        FilledTonalButton(onClick = {
+                            settingsStore.update {
+                                it.copy(
+                                    sftpUsername = sftpUserText.trim(),
+                                    sftpPassword = sftpPassText,
+                                    sftpKnownHosts = sftpKnownHostsText.trim(),
+                                    sftpPublicKey = sftpPublicKeyText.trim(),
+                                    sftpPrivateKey = sftpPrivateKeyText.trim(),
+                                )
+                            }
+                            onNotify("SFTP 配置已保存")
+                        }) { Text("保存 SFTP 配置") }
+                    }
                 }
             }
 
@@ -300,39 +378,187 @@ internal fun DesktopSettingsTab(
                 title = "账号与凭证",
                 description = "点击任意平台卡片以登录、导入 Cookie / Token 或退出登录。",
             ) {
-                FlowRow(
+                val driveAccounts = DriveAccountKind.entries.filter { !it.isVideoPlatform && it != DriveAccountKind.GITHUB }
+                val mediaAndDevAccounts = DriveAccountKind.entries.filter { it.isVideoPlatform || it == DriveAccountKind.GITHUB }
+                Column(
                     modifier = Modifier.fillMaxWidth().padding(16.dp),
-                    horizontalArrangement = Arrangement.spacedBy(10.dp),
-                    verticalArrangement = Arrangement.spacedBy(10.dp),
+                    verticalArrangement = Arrangement.spacedBy(14.dp),
                 ) {
-                    DriveAccountKind.entries.forEach { kind ->
-                        val acc = accounts[kind]
-                        Surface(
-                            shape = MaterialTheme.shapes.medium,
-                            color = if (acc != null) MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.55f)
-                            else MaterialTheme.colorScheme.surfaceContainerLow,
-                            border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.6f)),
-                            modifier = Modifier.width(190.dp).clickable { onOpenAccountDialog(kind) },
-                        ) {
-                            Column(
-                                modifier = Modifier.padding(12.dp),
-                                verticalArrangement = Arrangement.spacedBy(4.dp),
+                    Text(
+                        "网盘账号（11 个平台）",
+                        style = MaterialTheme.typography.labelLarge,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                    FlowRow(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.spacedBy(10.dp),
+                        verticalArrangement = Arrangement.spacedBy(10.dp),
+                    ) {
+                        driveAccounts.forEach { kind ->
+                            val acc = accounts[kind]
+                            Surface(
+                                shape = MaterialTheme.shapes.medium,
+                                color = if (acc != null) MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.55f)
+                                else MaterialTheme.colorScheme.surfaceContainerLow,
+                                border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.6f)),
+                                modifier = Modifier.width(190.dp).clickable { onOpenAccountDialog(kind) },
                             ) {
-                                Row(
-                                    verticalAlignment = Alignment.CenterVertically,
-                                    horizontalArrangement = Arrangement.spacedBy(6.dp),
+                                Column(
+                                    modifier = Modifier.padding(12.dp),
+                                    verticalArrangement = Arrangement.spacedBy(4.dp),
                                 ) {
-                                    StatusDot(active = acc != null)
-                                    Text(kind.displayName, style = MaterialTheme.typography.titleSmall)
+                                    Row(
+                                        verticalAlignment = Alignment.CenterVertically,
+                                        horizontalArrangement = Arrangement.spacedBy(6.dp),
+                                    ) {
+                                        StatusDot(active = acc != null)
+                                        Text(kind.displayName, style = MaterialTheme.typography.titleSmall)
+                                    }
+                                    Text(
+                                        text = acc?.nickname?.ifBlank { "已连接" } ?: "点击配置",
+                                        style = MaterialTheme.typography.labelSmall,
+                                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                    )
                                 }
-                                Text(
-                                    text = acc?.nickname?.ifBlank { "已连接" } ?: "点击配置",
-                                    style = MaterialTheme.typography.labelSmall,
-                                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                                )
                             }
                         }
                     }
+                    HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.45f))
+                    Text(
+                        "视频解析与 GitHub 凭证",
+                        style = MaterialTheme.typography.labelLarge,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                    FlowRow(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.spacedBy(10.dp),
+                        verticalArrangement = Arrangement.spacedBy(10.dp),
+                    ) {
+                        mediaAndDevAccounts.forEach { kind ->
+                            val acc = accounts[kind]
+                            Surface(
+                                shape = MaterialTheme.shapes.medium,
+                                color = if (acc != null) MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.55f)
+                                else MaterialTheme.colorScheme.surfaceContainerLow,
+                                border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.6f)),
+                                modifier = Modifier.width(190.dp).clickable { onOpenAccountDialog(kind) },
+                            ) {
+                                Column(
+                                    modifier = Modifier.padding(12.dp),
+                                    verticalArrangement = Arrangement.spacedBy(4.dp),
+                                ) {
+                                    Row(
+                                        verticalAlignment = Alignment.CenterVertically,
+                                        horizontalArrangement = Arrangement.spacedBy(6.dp),
+                                    ) {
+                                        StatusDot(active = acc != null)
+                                        Text(kind.displayName, style = MaterialTheme.typography.titleSmall)
+                                    }
+                                    Text(
+                                        text = acc?.nickname?.ifBlank { "已连接" } ?: "点击配置",
+                                        style = MaterialTheme.typography.labelSmall,
+                                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                    )
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+
+            SettingsSection(
+                title = "桌面体验与通知",
+                description = "控制系统托盘常驻、下载完成通知与剪贴板自动识别。",
+            ) {
+                Column(
+                    modifier = Modifier.padding(16.dp),
+                    verticalArrangement = Arrangement.spacedBy(12.dp),
+                ) {
+                    ToggleRow(
+                        title = "关闭窗口时最小化到系统托盘",
+                        subtitle = "点击右上角关闭按钮后在托盘继续下载；可在托盘右键彻底退出",
+                        checked = config.minimizeToTray,
+                        onCheckedChange = { checked ->
+                            settingsStore.update { it.copy(minimizeToTray = checked) }
+                        },
+                    )
+                    HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f))
+                    ToggleRow(
+                        title = "下载完成 / 失败系统通知",
+                        subtitle = "任务完成或发生错误时弹出 Windows 系统通知",
+                        checked = config.systemNotifications,
+                        onCheckedChange = { checked ->
+                            settingsStore.update { it.copy(systemNotifications = checked) }
+                        },
+                    )
+                    HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f))
+                    ToggleRow(
+                        title = "剪贴板自动监听",
+                        subtitle = "复制网盘分享、视频链接、GitHub 或磁力链接时弹出顶部快捷解析提示",
+                        checked = config.clipboardMonitor,
+                        onCheckedChange = { checked ->
+                            settingsStore.update { it.copy(clipboardMonitor = checked) }
+                            onNotify(if (checked) "已开启剪贴板监听" else "已关闭剪贴板监听")
+                        },
+                    )
+                }
+            }
+
+            SettingsSection(
+                title = "配置备份、诊断与更新",
+                description = "导入/导出桌面端配置 JSON、排查运行日志或检查新版本（当前 ${DesktopAppMeta.currentVersion}）。",
+            ) {
+                Column(
+                    modifier = Modifier.padding(16.dp),
+                    verticalArrangement = Arrangement.spacedBy(12.dp),
+                ) {
+                    FlowRow(
+                        horizontalArrangement = Arrangement.spacedBy(8.dp),
+                        verticalArrangement = Arrangement.spacedBy(8.dp),
+                    ) {
+                        FilledTonalButton(
+                            onClick = {
+                                val outFile = pickExportJsonFile()
+                                if (outFile != null) {
+                                    runCatching {
+                                        outFile.writeText(settingsStore.exportConfigJson(includeSftpSecrets = false))
+                                    }.onSuccess {
+                                        onNotify("已导出配置到：${outFile.name}")
+                                    }.onFailure { err ->
+                                        onNotify("导出失败：${err.message.orEmpty()}")
+                                    }
+                                }
+                            },
+                        ) { Text("导出配置备份") }
+                        OutlinedButton(
+                            onClick = {
+                                val inFile = pickImportJsonFile()
+                                if (inFile != null) {
+                                    runCatching {
+                                        settingsStore.importConfigJson(inFile.readText())
+                                    }.onSuccess {
+                                        onNotify("已导入配置备份：${inFile.name}")
+                                    }.onFailure { err ->
+                                        onNotify("导入失败：${err.message.orEmpty()}")
+                                    }
+                                }
+                            },
+                        ) { Text("导入配置备份") }
+                        OutlinedButton(onClick = onOpenLogViewer) {
+                            Text("打开日志查看器")
+                        }
+                        OutlinedButton(
+                            enabled = !checkingUpdate,
+                            onClick = onCheckUpdate,
+                        ) {
+                            Text(if (checkingUpdate) "检查中…" else "检查更新")
+                        }
+                    }
+                    Text(
+                        text = "提示：配置导出默认不包含账号凭据（账号凭据已由 Windows DPAPI 加密保护）与 SFTP 私钥/密码。",
+                        style = MaterialTheme.typography.labelSmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
                 }
             }
 
@@ -349,11 +575,15 @@ internal fun DesktopSettingsTab(
                         verticalArrangement = Arrangement.spacedBy(8.dp),
                     ) {
                         val capPairs = listOf(
-                            "HTTP/3 (QUIC)" to capabilities.optBoolean("http3"),
-                            "HTTP/2" to capabilities.optBoolean("http2", true),
-                            "HLS / DASH" to (capabilities.optBoolean("hls", true) || capabilities.optBoolean("media", true)),
-                            "BitTorrent" to capabilities.optBoolean("torrent", true),
-                            "Metalink" to capabilities.optBoolean("metalink", true),
+                            "HTTP/3 (QUIC)" to capabilities.optBoolean("http3_compiled"),
+                            "HTTP/2" to capabilities.optBoolean("http2_compiled"),
+                            "HLS / DASH" to (capabilities.optBoolean("hls") || capabilities.optBoolean("dash")),
+                            "BitTorrent" to capabilities.optBoolean("bittorrent"),
+                            "Metalink" to capabilities.optBoolean("metalink"),
+                            "FTP" to capabilities.optBoolean("ftp"),
+                            "SFTP" to capabilities.optBoolean("sftp"),
+                            "Browser CDP" to (DesktopBrowserLocator.findBrowser() != null),
+                            "DPAPI 凭据加密" to DesktopCredentialCrypto.isWindows,
                         )
                         capPairs.forEach { (label, enabled) ->
                             DesktopPill(
@@ -384,6 +614,27 @@ internal fun DesktopSettingsTab(
             }
             Spacer(Modifier.height(12.dp))
         }
+    }
+}
+
+@Composable
+private fun ToggleRow(
+    title: String,
+    subtitle: String,
+    checked: Boolean,
+    onCheckedChange: (Boolean) -> Unit,
+) {
+    Row(
+        modifier = Modifier.fillMaxWidth(),
+        horizontalArrangement = Arrangement.SpaceBetween,
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Column(modifier = Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(2.dp)) {
+            Text(title, style = MaterialTheme.typography.titleSmall)
+            Text(subtitle, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+        }
+        Spacer(Modifier.width(12.dp))
+        Switch(checked = checked, onCheckedChange = onCheckedChange)
     }
 }
 

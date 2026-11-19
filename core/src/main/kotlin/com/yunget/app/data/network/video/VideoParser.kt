@@ -22,7 +22,7 @@ package com.yunget.app.data.network.video
  * 单个视频平台的解析器。
  *
  * 实现约定：
- * - 网络请求走 `HttpClients.apiClient()`（统一超时 + 代理），不要自己 new OkHttpClient；
+ * - 网络请求走 `CoreHttp.client()`（统一超时 + 代理），不要自己 new OkHttpClient；
  * - 失败一律抛 [VideoParseException]（带 [VideoParseErrorKind]），不要抛裸异常；
  * - [cookie] 为该平台账号的完整 Cookie 头（未登录时为空串）。需要登录的平台在空 Cookie 时应抛
  *   `UNSUPPORTED` 并给出「请先到账号页登录」这类可操作提示；

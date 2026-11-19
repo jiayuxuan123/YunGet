@@ -18,7 +18,8 @@
 
 package com.yunget.app.data.network.video
 
-import com.yunget.app.data.network.HttpClients
+import com.yunget.app.data.network.CoreHttp
+import java.net.URI
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import okhttp3.FormBody
@@ -32,7 +33,7 @@ import org.json.JSONObject
  * 视频解析各平台共用的 HTTP 小工具。
  *
  * 存在的意义是把三件容易写错、又十个解析器都要做的事收在一处：
- * 1. **统一走 `HttpClients.apiClient()`**（共享超时与代理设置，不要在解析器里 new client）；
+ * 1. **统一走 `CoreHttp.client()`**（共享超时与代理设置，不要在解析器里 new client）；
  * 2. **把 HTTP 状态码翻译成 [VideoParseException]**：403/418/429 是各平台风控的常态
  *    （微博、小红书匿名请求尤其常见），必须变成「请稍后重试」而不是裸异常或静默失败；
  * 3. **短链展开**：抖音/小红书/快手/微博/B站都有 `v.douyin.com` 这类短链，先取 Location
@@ -69,7 +70,7 @@ object VideoHttp {
         headers: Map<String, String> = emptyMap(),
         body: RequestBody? = null,
         followRedirects: Boolean = true,
-        clientProvider: () -> OkHttpClient = { HttpClients.apiClient() }
+        clientProvider: () -> OkHttpClient = { CoreHttp.client() }
     ): RawResponse = withContext(Dispatchers.IO) {
         val builder = Request.Builder().url(url).headers(buildHeaders(headers))
         when (method.uppercase()) {
@@ -123,7 +124,7 @@ object VideoHttp {
         url: String,
         headers: Map<String, String> = emptyMap(),
         what: String = "解析",
-        clientProvider: () -> OkHttpClient = { HttpClients.apiClient() }
+        clientProvider: () -> OkHttpClient = { CoreHttp.client() }
     ): String {
         val response = request(url, headers = headers, clientProvider = clientProvider)
         requireSuccess(response, what)
@@ -135,7 +136,7 @@ object VideoHttp {
         url: String,
         headers: Map<String, String> = emptyMap(),
         what: String = "解析",
-        clientProvider: () -> OkHttpClient = { HttpClients.apiClient() }
+        clientProvider: () -> OkHttpClient = { CoreHttp.client() }
     ): JSONObject {
         val text = getText(url, headers, what, clientProvider)
         return runCatching { JSONObject(text) }.getOrElse {
@@ -149,7 +150,7 @@ object VideoHttp {
         form: Map<String, String>,
         headers: Map<String, String> = emptyMap(),
         what: String = "解析",
-        clientProvider: () -> OkHttpClient = { HttpClients.apiClient() }
+        clientProvider: () -> OkHttpClient = { CoreHttp.client() }
     ): String {
         val formBody = FormBody.Builder().apply {
             form.forEach { (k, v) -> add(k, v) }
@@ -167,7 +168,7 @@ object VideoHttp {
     suspend fun expandRedirect(
         url: String,
         headers: Map<String, String> = emptyMap(),
-        clientProvider: () -> OkHttpClient = { HttpClients.apiClient() }
+        clientProvider: () -> OkHttpClient = { CoreHttp.client() }
     ): String? {
         val response = request(
             url = url,
@@ -214,5 +215,31 @@ object VideoHttp {
         url.startsWith("//") -> "https:$url"
         url.startsWith("http://") -> "https://" + url.removePrefix("http://")
         else -> url
+    }
+
+    /** 清洗文件名里的非法字符并限制长度（纯 JVM 实现，与下载路径策略口径一致）。 */
+    fun sanitizeFileName(name: String): String {
+        var cleaned = name
+            .replace(Regex("[\\\\/:*?\"<>|\\x00-\\x1f]"), "_")
+            .trim()
+        if (cleaned.length > 120) {
+            val ext = cleaned.substringAfterLast('.', "").take(10)
+            val base = cleaned.substringBeforeLast('.').take(100)
+            cleaned = if (ext.isNotBlank() && ext != cleaned) "$base.$ext" else cleaned.take(120)
+        }
+        return cleaned
+    }
+
+    /** 日志脱敏：仅保留 scheme://host[:port]，去掉路径、查询参数与凭据。 */
+    fun redactUrl(value: Any?): String {
+        val raw = value?.toString()?.takeIf { it.isNotBlank() } ?: return "<none>"
+        return runCatching {
+            val uri = URI(raw)
+            val scheme = uri.scheme?.lowercase() ?: return@runCatching "<relative-url>"
+            val host = uri.host?.lowercase() ?: return@runCatching "<$scheme-url>"
+            val defaultPort = (scheme == "https" && uri.port == 443) || (scheme == "http" && uri.port == 80)
+            val port = if (uri.port >= 0 && !defaultPort) ":${uri.port}" else ""
+            "$scheme://$host$port"
+        }.getOrDefault("<invalid-url>")
     }
 }

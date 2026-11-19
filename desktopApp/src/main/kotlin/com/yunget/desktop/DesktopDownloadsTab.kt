@@ -1,6 +1,9 @@
 package com.yunget.desktop
 
 import androidx.compose.foundation.BorderStroke
+import androidx.compose.foundation.Canvas
+import androidx.compose.foundation.ContextMenuArea
+import androidx.compose.foundation.ContextMenuItem
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.ExperimentalLayoutApi
@@ -11,6 +14,7 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.material3.AlertDialog
@@ -21,6 +25,7 @@ import androidx.compose.material3.FilterChip
 import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
+import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
@@ -33,6 +38,11 @@ import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.graphics.Brush
+import androidx.compose.ui.graphics.Path
+import androidx.compose.ui.graphics.StrokeCap
+import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
@@ -56,20 +66,29 @@ internal fun DesktopDownloadsTab(
 ) {
     val scope = rememberCoroutineScope()
     val tasks by downloads.tasks.collectAsState()
+    val speedHistory by downloads.speedHistory.collectAsState()
     var filter by remember { mutableStateOf(DownloadFilter.ALL) }
+    var searchQuery by remember { mutableStateOf("") }
     var deleteTarget by remember { mutableStateOf<DesktopTask?>(null) }
+    var detailTaskId by remember { mutableStateOf<String?>(null) }
 
     val totalSpeed = tasks.sumOf { if (it.status == "RUNNING") it.speedBytesPerSec else 0L }
     val activeCount = tasks.count { it.queuedOrActive }
     val doneCount = tasks.count { it.status == "DONE" }
     val issueCount = tasks.count { it.status == "FAILED" || it.status == "PAUSED" || it.status == "READY_TO_SAVE" }
 
-    val visibleTasks = remember(tasks, filter) {
-        when (filter) {
+    val visibleTasks = remember(tasks, filter, searchQuery) {
+        val byStatus = when (filter) {
             DownloadFilter.ALL -> tasks
             DownloadFilter.ACTIVE -> tasks.filter { it.queuedOrActive }
             DownloadFilter.DONE -> tasks.filter { it.status == "DONE" }
             DownloadFilter.ISSUES -> tasks.filter { it.status == "FAILED" || it.status == "PAUSED" || it.status == "READY_TO_SAVE" }
+        }
+        val q = searchQuery.trim()
+        if (q.isEmpty()) byStatus else byStatus.filter {
+            it.output.name.contains(q, ignoreCase = true) ||
+                it.sourceLabel.contains(q, ignoreCase = true) ||
+                it.source.contains(q, ignoreCase = true)
         }
     }
 
@@ -143,12 +162,19 @@ internal fun DesktopDownloadsTab(
                     label = { Text("${DownloadFilter.ISSUES.label} ($issueCount)") },
                 )
             }
-            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            Row(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
                 DesktopPill("并发上限 ${config.maxConcurrentTasks}")
                 DesktopPill("单任务 ${config.connectionsPerTask} 线程")
                 if (config.speedLimitMbPerSec > 0.0) {
                     DesktopPill("限速 ${config.speedLimitMbPerSec} MB/s")
                 }
+                OutlinedTextField(
+                    value = searchQuery,
+                    onValueChange = { searchQuery = it },
+                    placeholder = { Text("搜索任务…") },
+                    singleLine = true,
+                    modifier = Modifier.width(190.dp),
+                )
             }
         }
 
@@ -171,6 +197,7 @@ internal fun DesktopDownloadsTab(
                         httpPolicy = config.httpPolicy,
                         downloads = downloads,
                         onNotify = onNotify,
+                        onOpenDetail = { detailTaskId = row.id },
                         onRequestDelete = { deleteTarget = row },
                     )
                 }
@@ -210,6 +237,20 @@ internal fun DesktopDownloadsTab(
             },
         )
     }
+
+    detailTaskId?.let { id ->
+        val liveTask = tasks.firstOrNull { it.id == id }
+        if (liveTask != null) {
+            DesktopTaskDetailDialog(
+                task = liveTask,
+                samples = speedHistory[id].orEmpty(),
+                onDismiss = { detailTaskId = null },
+                onNotify = onNotify,
+            )
+        } else {
+            detailTaskId = null
+        }
+    }
 }
 
 @OptIn(ExperimentalLayoutApi::class)
@@ -219,6 +260,7 @@ private fun DesktopTaskCard(
     httpPolicy: Int,
     downloads: DesktopDownloads,
     onNotify: (String) -> Unit,
+    onOpenDetail: () -> Unit,
     onRequestDelete: () -> Unit,
 ) {
     val scope = rememberCoroutineScope()
@@ -232,12 +274,32 @@ private fun DesktopTaskCard(
         else -> Triple("失败", MaterialTheme.colorScheme.errorContainer, MaterialTheme.colorScheme.onErrorContainer)
     }
 
-    Surface(
-        shape = MaterialTheme.shapes.large,
-        color = MaterialTheme.colorScheme.surfaceContainerLow,
-        border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.6f)),
-        modifier = Modifier.fillMaxWidth(),
+    ContextMenuArea(
+        items = {
+            buildList {
+                when (row.status) {
+                    "RUNNING", "QUEUED" -> add(ContextMenuItem("暂停任务") { scope.launch { downloads.pause(row.id) } })
+                    "PAUSED", "FAILED" -> add(ContextMenuItem("继续 / 重试") { scope.launch { downloads.resume(row.id, httpPolicy) } })
+                    "DONE" -> {
+                        add(ContextMenuItem("打开文件") { openLocalFile(row.output) })
+                        add(ContextMenuItem("在资源管理器中定位") { revealInExplorer(row.output) })
+                    }
+                }
+                add(ContextMenuItem("查看详情与速度曲线") { onOpenDetail() })
+                add(ContextMenuItem("复制任务源链接") {
+                    copyToClipboard(row.source)
+                    onNotify("已复制任务源地址")
+                })
+                add(ContextMenuItem("移除任务") { onRequestDelete() })
+            }
+        },
     ) {
+        Surface(
+            shape = MaterialTheme.shapes.large,
+            color = MaterialTheme.colorScheme.surfaceContainerLow,
+            border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.6f)),
+            modifier = Modifier.fillMaxWidth(),
+        ) {
         Column(
             modifier = Modifier.padding(16.dp),
             verticalArrangement = Arrangement.spacedBy(10.dp),
@@ -301,6 +363,7 @@ private fun DesktopTaskCard(
                             }
                         }
                     }
+                    TextButton(onClick = onOpenDetail) { Text("详情") }
                     TextButton(onClick = {
                         copyToClipboard(row.source)
                         onNotify("已复制任务源地址")
@@ -358,5 +421,126 @@ private fun DesktopTaskCard(
                 Text(row.message, color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodySmall)
             }
         }
+        }
     }
+}
+
+@Composable
+private fun DesktopTaskDetailDialog(
+    task: DesktopTask,
+    samples: List<Long>,
+    onDismiss: () -> Unit,
+    onNotify: (String) -> Unit,
+) {
+    val primary = MaterialTheme.colorScheme.primary
+    val gridColor = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.4f)
+    val peakSpeed = samples.maxOrNull() ?: task.speedBytesPerSec
+    val avgSpeed = if (samples.isNotEmpty()) samples.average().toLong() else task.speedBytesPerSec
+    val protocols = formatProtocols(task.httpVersions).joinToString(" · ").ifBlank { "未协商 / 非 HTTP" }
+    val resumeNote = when {
+        task.status == "DONE" -> "已完成并保存至目标位置"
+        task.partial.isFile -> "存在未完成缓存（${formatBytes(task.partial.length())}），支持断点续传"
+        task.status == "QUEUED" -> "排队等待引擎调度"
+        else -> "等待探测服务器 Range 能力"
+    }
+
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text("任务详情与速率诊断", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold) },
+        text = {
+            Column(verticalArrangement = Arrangement.spacedBy(10.dp), modifier = Modifier.fillMaxWidth()) {
+                Text(task.output.name, style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.Medium)
+                Surface(
+                    shape = MaterialTheme.shapes.medium,
+                    color = MaterialTheme.colorScheme.surfaceContainerLow,
+                    border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.6f)),
+                    modifier = Modifier.fillMaxWidth(),
+                ) {
+                    Column(modifier = Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.SpaceBetween,
+                        ) {
+                            Text("实时速率曲线", style = MaterialTheme.typography.labelMedium, fontWeight = FontWeight.SemiBold)
+                            Text(
+                                text = "当前 ${formatSpeed(task.speedBytesPerSec)} · 峰值 ${formatSpeed(peakSpeed)} · 均值 ${formatSpeed(avgSpeed)}",
+                                style = MaterialTheme.typography.labelSmall,
+                                color = MaterialTheme.colorScheme.primary,
+                            )
+                        }
+                        Canvas(modifier = Modifier.fillMaxWidth().height(92.dp)) {
+                            val w = size.width
+                            val h = size.height
+                            drawLine(gridColor, Offset(0f, h * 0.25f), Offset(w, h * 0.25f), strokeWidth = 1f)
+                            drawLine(gridColor, Offset(0f, h * 0.5f), Offset(w, h * 0.5f), strokeWidth = 1f)
+                            drawLine(gridColor, Offset(0f, h * 0.75f), Offset(w, h * 0.75f), strokeWidth = 1f)
+                            val pts = if (samples.size >= 2) samples else listOf(0L, task.speedBytesPerSec)
+                            val maxVal = (pts.maxOrNull() ?: 1L).coerceAtLeast(1024L).toFloat()
+                            val stepX = w / (pts.size - 1).coerceAtLeast(1)
+                            val strokePath = Path()
+                            val fillPath = Path()
+                            pts.forEachIndexed { idx, value ->
+                                val x = idx * stepX
+                                val y = h - (value.toFloat() / maxVal).coerceIn(0f, 1f) * (h - 8f) - 4f
+                                if (idx == 0) {
+                                    strokePath.moveTo(x, y)
+                                    fillPath.moveTo(x, h)
+                                    fillPath.lineTo(x, y)
+                                } else {
+                                    strokePath.lineTo(x, y)
+                                    fillPath.lineTo(x, y)
+                                }
+                            }
+                            fillPath.lineTo(w, h)
+                            fillPath.close()
+                            drawPath(
+                                path = fillPath,
+                                brush = Brush.verticalGradient(
+                                    colors = listOf(primary.copy(alpha = 0.28f), primary.copy(alpha = 0.02f)),
+                                ),
+                            )
+                            drawPath(
+                                path = strokePath,
+                                color = primary,
+                                style = Stroke(width = 2.5f, cap = StrokeCap.Round),
+                            )
+                        }
+                    }
+                }
+
+                Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                    Text("状态：${task.status} · 协议类型：${task.kind.name} · 协商协议：$protocols", style = MaterialTheme.typography.bodySmall)
+                    Text("进度：${formatBytes(task.downloaded)} / ${if (task.total > 0L) formatBytes(task.total) else "未知大小"} · 当前/峰值连接：${task.activeConnections} / ${task.peakConnections}", style = MaterialTheme.typography.bodySmall)
+                    if (task.firstByteMicros > 0L) {
+                        Text("首字节延迟 (TTFB)：${formatLatencyMs(task.firstByteMicros)}", style = MaterialTheme.typography.bodySmall)
+                    }
+                    Text("续传诊断：$resumeNote", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    if (task.expectedHash.isNotBlank()) {
+                        Text("SHA-256 校验：${task.expectedHash}", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    }
+                    if (task.headers.isNotEmpty()) {
+                        Text("自定义请求头：${task.headers.keys.joinToString(", ")}", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    }
+                    Text("保存路径：${task.output.absolutePath}", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    Text("源地址：${task.source.take(160)}", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    if (task.message.isNotBlank()) {
+                        Text("诊断信息：${task.message}", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.error)
+                    }
+                }
+            }
+        },
+        confirmButton = {
+            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                OutlinedButton(
+                    onClick = {
+                        copyToClipboard(
+                            "文件: ${task.output.name}\n状态: ${task.status}\n进度: ${task.downloaded}/${task.total}\n协议: $protocols\n续传: $resumeNote\n源地址: ${task.source}\n信息: ${task.message}"
+                        )
+                        onNotify("已复制任务诊断信息")
+                    },
+                ) { Text("复制诊断") }
+                Button(onClick = onDismiss) { Text("关闭") }
+            }
+        },
+    )
 }

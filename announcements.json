@@ -8,6 +8,14 @@
   ],
   "items": [
     {
+      "id": "2026-11-19-release-2743",
+      "title": "云取 2.7.43：Windows 桌面端全功能补齐 + TurboDL 0.5.0.9",
+      "body": "# 云取 2.7.43\n\nAndroid 正式版（versionCode 93，内置 TurboDL 0.5.0.9）与 **Windows x64 桌面端完整版** 同步发布。Android 端可直接覆盖升级。\n\n## Windows 桌面端重大升级\n\n- **网页登录与凭据安全**：新增基于本机 Edge/Chrome 隔离会话的自动网页登录与抓凭证（覆盖 11 个网盘与视频平台），补齐光鸭/蓝奏/小飞机账密与短信直登；接入 Windows DPAPI 用户态凭据加密并自动迁移旧配置；补齐抖音/快手/小红书无头浏览器视频抽取。\n- **网盘业务闭环**：支持同平台多账号管理与主账号切换；9 大平台支持分享一键转存、本地多文件上传与生成分享链接；接入小飞机个人盘浏览与直链下载。\n- **桌面原生交互**：新增系统托盘与原生完成/失败通知、剪贴板监听、解析历史与收藏夹、窗口拖放、全列表右键菜单与 `Ctrl+K` 命令面板。\n- **诊断与更新**：新增日志查看器、配置导入/导出（默认脱敏）、在线检查更新并一键下载 MSI、任务详情实时速率曲线。\n\n## Android 端与跨端核心\n\n- 升级内置 **TurboDL 0.5.0.9**：修复单源无强 ETag 并发分段、停滞分片主动回收（与限速协同）及续传测速基线虚高。\n- 139、迅雷与全平台视频解析核心统一迁入 `:core`，完善 Metalink/SFTP 原生路由能力支持。\n\n[TurboDL 0.5.0.9](https://github.com/jiayuxuan123/TurboDL/releases/tag/v0.5.0.9)",
+      "date": "2026-11-19",
+      "pinned": true,
+      "important": true
+    },
+    {
       "id": "2026-11-19-release-2742",
       "title": "云取 2.7.42：跨端核心升级 + Windows 早期 Beta 首发",
       "body": "# 云取 2.7.42\n\nAndroid 正式版（versionCode 92，内置 TurboDL 0.5.0.8）同步附带 **Windows x64 早期 Beta 安装包**。Android 端可直接覆盖升级。\n\n## Windows 端（早期 Beta 版）\n\n> Windows 端当前为**早期 Beta 预览版**，先开放安装器与核心解析/下载体验；应用内网页登录自动获取凭证、更多网盘覆盖（迅雷/移动云盘/小飞机个人盘等）以及桌面端 UI 打磨将在后续版本持续补齐。\n\n- 提供 `YunGet-2.7.42-windows-x64-beta.msi` 安装包，内置 TurboDL 0.5.0.8 原生引擎，支持 HTTP/2/3、HLS/DASH、BT/磁力与 Metalink。\n- 首批支持 10 大网盘分享解析、GitHub 仓库/发行版解析、8 个个人网盘目录管理、并发下载队列、限速、代理与深浅主题。\n\n## Android 端\n\n- 抽离共用 `:core` 解析与网盘模块，为多端同步演进打底。\n- 修复原生下载队列在排队/探测阶段提前上报进度的问题。\n- 解耦蓝奏优享解析仓储的凭据读取。\n\n[TurboDL 0.5.0.8](https://github.com/jiayuxuan123/TurboDL/releases/tag/v0.5.0.8)",

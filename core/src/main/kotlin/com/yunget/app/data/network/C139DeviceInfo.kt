@@ -18,19 +18,14 @@
 
 package com.yunget.app.data.network
 
-import android.content.Context
-import android.os.Build
-import androidx.core.content.edit
 import java.util.Locale
-import java.util.UUID
 
 /**
  * 139 个人云盘口令 XML 接口使用的运行时设备信息。
  *
  * **不要在常量里写死厂商、型号、分辨率或设备 ID**：这些字段既因设备而异，也可能暴露
- * 协作者/抓包者的真实设备。厂商、型号、系统版本、屏幕分辨率和语言全部从 Android
- * 系统 API 读取；设备 ID 使用本应用安装时随机生成并持久化的值，不读取
- * `Settings.Secure.ANDROID_ID`、IMEI 等硬件标识。
+ * 协作者/抓包者的真实设备。Android 端由宿主适配层从系统 API 与安装期随机 ID 注入，
+ * 桌面端/纯 JVM 环境下走进程级随机默认实现，不读取任何硬件标识。
  *
  * 该动态生成只用于本次新增的口令 XML 请求；`fbcbd0b` 及以前已有的普通分享/个人盘固定
  * 设备头保持原样，避免改变线上协议行为。
@@ -55,33 +50,33 @@ data class C139DeviceInfo(
     fun appUserAgent(): String = "android|$model|android $osVersion|mCloud$appVersion-$mmSource"
 
     companion object {
-        private const val PREFS = "c139_device"
-        private const val KEY_DEVICE_ID = "installation_id"
         private const val FALLBACK_ID = "00000000000000000000000000000000"
 
-        @Volatile
-        private var cachedDeviceId: String? = null
+        private val defaultJvmDeviceId: String by lazy { CoreDeviceIds.randomHex32() }
 
-        /** 从系统 API 与本地安装 ID 生成请求头信息。 */
-        fun from(context: Context): C139DeviceInfo {
-            val appContext = context.applicationContext
-            val metrics = appContext.resources.displayMetrics
-            val configuration = appContext.resources.configuration
-            val locale = runCatching { configuration.locales[0] }.getOrDefault(Locale.getDefault())
-            val osVersion = Build.VERSION.RELEASE.takeIf { it.isNotBlank() }
-                ?: Build.VERSION.SDK_INT.toString()
-            return C139DeviceInfo(
-                appVersion = C139Constants.SHARE_CODE_APP_VERSION,
-                manufacturer = sanitizeField(Build.MANUFACTURER.ifBlank { "Android" }),
-                model = sanitizeField(Build.MODEL.ifBlank { "Android Device" }),
-                deviceId = installationId(appContext),
-                osVersion = sanitizeField(osVersion),
-                screen = "${metrics.widthPixels}X${metrics.heightPixels}",
-                language = sanitizeField(locale.language.ifBlank { "zh" }),
-                channel = C139Constants.SHARE_CODE_APP_CHANNEL,
-                mmSource = C139Constants.SHARE_CODE_MM_SOURCE
-            )
+        @Volatile
+        private var provider: () -> C139DeviceInfo = { defaultJvm() }
+
+        /** 由宿主（Android 或桌面端）在启动时装配设备信息提供者。 */
+        fun installProvider(deviceInfoProvider: () -> C139DeviceInfo) {
+            provider = deviceInfoProvider
         }
+
+        /** 获取当前宿主的设备信息；未装配时返回纯 JVM 默认值。 */
+        fun current(): C139DeviceInfo = provider()
+
+        /** 纯 JVM 默认实现（桌面端无需 Android 上下文即可直接使用）。 */
+        fun defaultJvm(deviceId: String = defaultJvmDeviceId): C139DeviceInfo = C139DeviceInfo(
+            appVersion = C139Constants.SHARE_CODE_APP_VERSION,
+            manufacturer = "Android",
+            model = "Android Device",
+            deviceId = sanitizeField(deviceId).ifBlank { FALLBACK_ID },
+            osVersion = "13",
+            screen = "1080X2400",
+            language = sanitizeField(Locale.getDefault().language.ifBlank { "zh" }),
+            channel = C139Constants.SHARE_CODE_APP_CHANNEL,
+            mmSource = C139Constants.SHARE_CODE_MM_SOURCE
+        )
 
         /** 仅供未注入 Context 的测试/异常路径；不会读取或伪造真实硬件信息。 */
         fun fallback(): C139DeviceInfo = C139DeviceInfo(
@@ -96,21 +91,11 @@ data class C139DeviceInfo(
             mmSource = C139Constants.SHARE_CODE_MM_SOURCE
         )
 
-        private fun installationId(context: Context): String {
-            cachedDeviceId?.let { return it }
-            synchronized(this) {
-                cachedDeviceId?.let { return it }
-                val prefs = context.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
-                val saved = prefs.getString(KEY_DEVICE_ID, null)
-                    ?.takeIf { it.matches(Regex("[0-9a-f]{32}")) }
-                val value = saved ?: UUID.randomUUID().toString().replace("-", "")
-                if (saved == null) prefs.edit { putString(KEY_DEVICE_ID, value) }
-                cachedDeviceId = value
-                return value
-            }
+        internal fun resetProviderForTest() {
+            provider = { defaultJvm() }
         }
 
-        private fun sanitizeField(value: String): String =
+        fun sanitizeField(value: String): String =
             value.replace('|', ' ').replace('\n', ' ').replace('\r', ' ').trim()
     }
 }

@@ -18,9 +18,7 @@
 
 package com.yunget.app.data.network.video
 
-import android.util.Log
-import com.yunget.app.data.download.DownloadPathPolicy
-import com.yunget.app.util.LogRedactor
+import com.yunget.app.data.network.CoreLog
 import org.json.JSONArray
 import org.json.JSONObject
 
@@ -77,9 +75,10 @@ object KuaishouParser : VideoParser {
             ?: run {
                 // 这类失败几乎都来自「拿到了非作品页」（入口页 / 验证页 / 改版），
                 // 记下真实请求地址与响应长度，便于下次定位，而不是只留一句“页面改版”
-                Log.w(
+                CoreLog.warn(
+                    CoreLog.NETWORK,
                     TAG,
-                    "快手未找到 window.INIT_STATE：url=${LogRedactor.url(pageUrl)} " +
+                    "快手未找到 window.INIT_STATE：url=${VideoHttp.redactUrl(pageUrl)} " +
                         "status=${response.status} bodyLen=${response.body.length}"
                 )
                 throw VideoParseException(
@@ -197,9 +196,9 @@ object KuaishouParser : VideoParser {
     private fun imageFileName(id: String, title: String, index: Int): String =
         "${safeTitle(title, fallbackName(id))}_$index.jpg"
 
-    /** 清洗标题里的非法文件名字符并截断（清洗交给共享的 [DownloadPathPolicy]） */
+    /** 清洗标题里的非法文件名字符并截断 */
     private fun safeTitle(title: String, fallback: String): String =
-        DownloadPathPolicy.sanitizeName(title).take(80).ifBlank { fallback }
+        VideoHttp.sanitizeFileName(title).take(80).ifBlank { fallback }
 
     /** 与参考实现的 Optional 字段对齐：缺失或 JSON `null` 一律当成空串 */
     private fun jsonString(node: JSONObject, key: String): String =

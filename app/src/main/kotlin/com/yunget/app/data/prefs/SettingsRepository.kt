@@ -588,4 +588,29 @@ class SettingsRepository(context: Context) {
     var downloadDebug: Boolean
         get() = prefs.getBoolean("download_debug", false)
         set(value) { prefs.edit().putBoolean("download_debug", value).apply() }
+
+    /** 原生引擎 SFTP 默认用户名（URL 未携带 userInfo 时使用）。 */
+    var sftpUsername: String
+        get() = prefs.getString("sftp_username", "") ?: ""
+        set(value) { prefs.edit().putString("sftp_username", value.trim()).apply() }
+
+    /** 原生引擎 SFTP 默认密码。 */
+    var sftpPassword: String
+        get() = prefs.getString("sftp_password", "") ?: ""
+        set(value) { prefs.edit().putString("sftp_password", value).apply() }
+
+    /** 原生引擎 SFTP known_hosts 路径（主机密钥校验）。 */
+    var sftpKnownHosts: String
+        get() = prefs.getString("sftp_known_hosts", "") ?: ""
+        set(value) { prefs.edit().putString("sftp_known_hosts", value.trim()).apply() }
+
+    /** 原生引擎 SFTP 公钥路径（可选）。 */
+    var sftpPublicKey: String
+        get() = prefs.getString("sftp_public_key", "") ?: ""
+        set(value) { prefs.edit().putString("sftp_public_key", value.trim()).apply() }
+
+    /** 原生引擎 SFTP 私钥路径（可选）。 */
+    var sftpPrivateKey: String
+        get() = prefs.getString("sftp_private_key", "") ?: ""
+        set(value) { prefs.edit().putString("sftp_private_key", value.trim()).apply() }
 }

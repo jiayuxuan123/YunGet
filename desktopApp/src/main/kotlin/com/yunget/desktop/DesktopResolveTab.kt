@@ -1,6 +1,8 @@
 package com.yunget.desktop
 
 import androidx.compose.foundation.BorderStroke
+import androidx.compose.foundation.ContextMenuArea
+import androidx.compose.foundation.ContextMenuItem
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
@@ -18,9 +20,12 @@ import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.lazy.itemsIndexed
+import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.Checkbox
 import androidx.compose.material3.CircularProgressIndicator
+import androidx.compose.material3.FilterChip
 import androidx.compose.material3.FilledTonalButton
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.LinearProgressIndicator
@@ -33,6 +38,7 @@ import androidx.compose.material3.Tab
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
@@ -51,6 +57,8 @@ import com.yunget.app.data.network.GitHubRepo
 import com.yunget.app.data.network.SharePlatform
 import com.yunget.app.data.network.model.ShareFile
 import com.yunget.app.data.network.model.ShareSession
+import com.yunget.app.data.network.video.VideoMediaKind
+import com.yunget.app.data.network.video.VideoParseResult
 import com.yunget.app.ui.components.ShareLinkField
 import kotlinx.coroutines.launch
 import java.io.File
@@ -64,6 +72,7 @@ private sealed class ResolveViewState {
         val session: ShareSession,
         val files: List<ShareFile>,
     ) : ResolveViewState()
+    data class VideoLoaded(val result: VideoParseResult) : ResolveViewState()
     data class GitHubRepoLoaded(val bundle: GitHubRepoBundle) : ResolveViewState()
     data class GitHubAccountLoaded(val owner: String, val repos: List<GitHubRepo>) : ResolveViewState()
     data class DirectReady(val direct: DesktopLinkTarget.Direct) : ResolveViewState()
@@ -75,13 +84,21 @@ internal fun DesktopResolveTab(
     config: DesktopConfig,
     accountStore: DesktopAccountStore,
     resolveService: DesktopResolveService,
+    driveService: DesktopDriveService,
     downloads: DesktopDownloads,
+    historyStore: DesktopResolveHistoryStore,
     onNotify: (String) -> Unit,
     onOpenAccountDialog: (DriveAccountKind) -> Unit,
     onJumpToDownloads: () -> Unit,
+    externalInput: String? = null,
+    onConsumeExternalInput: () -> Unit = {},
+    clipboardMonitorEnabled: Boolean = false,
+    onToggleClipboardMonitor: (Boolean) -> Unit = {},
 ) {
     val scope = rememberCoroutineScope()
     val accounts by accountStore.accounts.collectAsState()
+    val historyRecords by historyStore.history.collectAsState()
+    val favoriteRecords by historyStore.favorites.collectAsState()
 
     var rawInput by remember { mutableStateOf("") }
     var passcode by remember { mutableStateOf("") }
@@ -89,10 +106,15 @@ internal fun DesktopResolveTab(
     var batchStatus by remember { mutableStateOf("") }
     var errorMessage by remember { mutableStateOf("") }
     var viewState by remember { mutableStateOf<ResolveViewState>(ResolveViewState.Idle) }
+    var historyPanelTab by remember { mutableIntStateOf(0) }
+    var lastResolvedTitle by remember { mutableStateOf("") }
+    var lastResolvedPlatform by remember { mutableStateOf("") }
 
     val crumbs = remember { mutableStateListOf<ShareCrumb>() }
     var filterQuery by remember { mutableStateOf("") }
     var selectedFids by remember { mutableStateOf<Set<String>>(emptySet()) }
+    var saveToDriveRequest by remember { mutableStateOf<Triple<SharePlatform, ShareSession, List<ShareFile>>?>(null) }
+    var selectedVideoIndices by remember { mutableStateOf<Set<Int>>(emptySet()) }
     var ghSubTab by remember { mutableIntStateOf(0) }
     var ghTreePrefix by remember { mutableStateOf("") }
 
@@ -130,11 +152,12 @@ internal fun DesktopResolveTab(
     fun startResolve(inputOverride: String? = null) {
         val text = (inputOverride ?: rawInput).trim()
         if (text.isEmpty()) {
-            errorMessage = "请先粘贴分享链接、GitHub 链接、直链或磁力链接"
+            errorMessage = "请先粘贴网盘链接/口令、视频链接、GitHub 链接、直链或磁力链接"
             return
         }
         errorMessage = ""
         selectedFids = emptySet()
+        selectedVideoIndices = emptySet()
         filterQuery = ""
         val target = detectDesktopLinkTarget(text)
         when (target) {
@@ -155,10 +178,52 @@ internal fun DesktopResolveTab(
                         .onSuccess { opened ->
                             crumbs.clear()
                             crumbs.add(ShareCrumb(opened.rootDirId, "根目录"))
+                            val title = opened.session.title.ifBlank { opened.files.firstOrNull()?.fname.orEmpty() }
+                            val platformLabel = platformDisplayName(opened.platform)
+                            lastResolvedTitle = title
+                            lastResolvedPlatform = platformLabel
+                            historyStore.recordHistory(target.rawInput, passcode, title, platformLabel)
                             viewState = ResolveViewState.ShareLoaded(opened.platform, opened.session, opened.files)
                         }
                         .onFailure { err ->
                             errorMessage = err.message ?: "解析分享链接失败"
+                        }
+                    busy = false
+                }
+            }
+            is DesktopLinkTarget.Kouling -> {
+                busy = true
+                scope.launch {
+                    runCatching { resolveService.openKouling(target, passcode.ifBlank { null }) }
+                        .onSuccess { opened ->
+                            crumbs.clear()
+                            crumbs.add(ShareCrumb(opened.rootDirId, "根目录"))
+                            val title = opened.session.title.ifBlank { opened.files.firstOrNull()?.fname.orEmpty() }
+                            val platformLabel = platformDisplayName(opened.platform)
+                            lastResolvedTitle = title
+                            lastResolvedPlatform = platformLabel
+                            historyStore.recordHistory(text, passcode, title, platformLabel)
+                            viewState = ResolveViewState.ShareLoaded(opened.platform, opened.session, opened.files)
+                        }
+                        .onFailure { err ->
+                            errorMessage = err.message ?: "解析口令失败"
+                        }
+                    busy = false
+                }
+            }
+            is DesktopLinkTarget.Video -> {
+                busy = true
+                scope.launch {
+                    runCatching { resolveService.parseVideo(target.detected) }
+                        .onSuccess { parsed ->
+                            selectedVideoIndices = emptySet()
+                            lastResolvedTitle = parsed.title
+                            lastResolvedPlatform = parsed.platform.displayName
+                            historyStore.recordHistory(text, "", parsed.title, parsed.platform.displayName)
+                            viewState = ResolveViewState.VideoLoaded(parsed)
+                        }
+                        .onFailure { err ->
+                            errorMessage = err.message ?: "解析视频/图集失败"
                         }
                     busy = false
                 }
@@ -184,6 +249,9 @@ internal fun DesktopResolveTab(
                                 .onSuccess { bundle ->
                                     ghTreePrefix = ""
                                     ghSubTab = if (bundle.releases.isNotEmpty()) 0 else 1
+                                    lastResolvedTitle = bundle.repo.fullName
+                                    lastResolvedPlatform = "GitHub"
+                                    historyStore.recordHistory(text, "", bundle.repo.fullName, "GitHub")
                                     viewState = ResolveViewState.GitHubRepoLoaded(bundle)
                                 }
                                 .onFailure { err -> errorMessage = err.message ?: "加载 GitHub 仓库失败" }
@@ -195,6 +263,9 @@ internal fun DesktopResolveTab(
                         scope.launch {
                             runCatching { resolveService.listGitHubAccountRepos(gh.owner) }
                                 .onSuccess { repos ->
+                                    lastResolvedTitle = "@${gh.owner}"
+                                    lastResolvedPlatform = "GitHub"
+                                    historyStore.recordHistory(text, "", "@${gh.owner}", "GitHub")
                                     viewState = ResolveViewState.GitHubAccountLoaded(gh.owner, repos)
                                 }
                                 .onFailure { err -> errorMessage = err.message ?: "加载 GitHub 仓库列表失败" }
@@ -203,6 +274,15 @@ internal fun DesktopResolveTab(
                     }
                 }
             }
+        }
+    }
+
+    LaunchedEffect(externalInput) {
+        val incoming = externalInput?.trim().orEmpty()
+        if (incoming.isNotEmpty()) {
+            onConsumeExternalInput()
+            rawInput = incoming
+            startResolve(incoming)
         }
     }
 
@@ -219,12 +299,34 @@ internal fun DesktopResolveTab(
             Column {
                 Text("智能链接解析", style = MaterialTheme.typography.headlineMedium, fontWeight = FontWeight.SemiBold)
                 Text(
-                    "支持 10 大网盘分享、GitHub 仓库/发行版、HTTP/3 直链、HLS/DASH 流媒体与 BT/磁力/Metalink",
+                    "支持 12 大网盘及口令、主流视频/图集（抖音/快手/B站/小红书/微博/Pixiv/AcFun）、GitHub、HTTP/3、HLS/DASH 与 BT/磁力",
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
             }
-            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            Row(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
+                FilterChip(
+                    selected = clipboardMonitorEnabled,
+                    onClick = { onToggleClipboardMonitor(!clipboardMonitorEnabled) },
+                    label = { Text(if (clipboardMonitorEnabled) "剪贴板监听：开" else "剪贴板监听：关") },
+                )
+                if (rawInput.isNotBlank()) {
+                    val fav = favoriteRecords.any { it.input.equals(rawInput.trim(), ignoreCase = true) }
+                    OutlinedButton(
+                        onClick = {
+                            val added = historyStore.toggleFavorite(
+                                input = rawInput,
+                                passcode = passcode,
+                                title = lastResolvedTitle.ifBlank { rawInput.trim().take(48) },
+                                platformLabel = lastResolvedPlatform.ifBlank { "链接" },
+                            )
+                            onNotify(if (added) "已加入收藏夹" else "已取消收藏")
+                        },
+                    ) { Text(if (fav) "已收藏 ★" else "收藏") }
+                }
+                if (viewState != ResolveViewState.Idle) {
+                    OutlinedButton(onClick = { viewState = ResolveViewState.Idle }) { Text("历史 / 收藏") }
+                }
                 OutlinedButton(onClick = {
                     val clip = readClipboardText().trim()
                     if (clip.isEmpty()) {
@@ -350,10 +452,386 @@ internal fun DesktopResolveTab(
         // Result body
         when (val state = viewState) {
             ResolveViewState.Idle -> {
-                DesktopEmptyCard(
-                    title = "粘贴链接即可开始解析",
-                    subtitle = "点击上方任意网盘标签可快速导入 Cookie / Token 或账密登录；夸克、UC、光鸭、蓝奏、小飞机与城通均支持免登录解析。",
-                )
+                Column(
+                    modifier = Modifier.weight(1f).fillMaxWidth(),
+                    verticalArrangement = Arrangement.spacedBy(12.dp),
+                ) {
+                    if (historyRecords.isEmpty() && favoriteRecords.isEmpty()) {
+                        DesktopEmptyCard(
+                            title = "粘贴链接即可开始解析",
+                            subtitle = "点击上方任意平台标签可快速登录（支持弹窗扫码自动捕获）；支持直接拖入链接/种子文件，或开启右上角「剪贴板监听」。",
+                        )
+                    } else {
+                        Surface(
+                            shape = MaterialTheme.shapes.large,
+                            color = MaterialTheme.colorScheme.surfaceContainerLow,
+                            border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.6f)),
+                            modifier = Modifier.weight(1f).fillMaxWidth(),
+                        ) {
+                            Column(modifier = Modifier.fillMaxSize()) {
+                                Row(
+                                    modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 10.dp),
+                                    horizontalArrangement = Arrangement.SpaceBetween,
+                                    verticalAlignment = Alignment.CenterVertically,
+                                ) {
+                                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                                        FilterChip(
+                                            selected = historyPanelTab == 0,
+                                            onClick = { historyPanelTab = 0 },
+                                            label = { Text("最近解析 (${historyRecords.size})") },
+                                        )
+                                        FilterChip(
+                                            selected = historyPanelTab == 1,
+                                            onClick = { historyPanelTab = 1 },
+                                            label = { Text("收藏夹 (${favoriteRecords.size})") },
+                                        )
+                                    }
+                                    if (historyPanelTab == 0 && historyRecords.isNotEmpty()) {
+                                        TextButton(
+                                            onClick = {
+                                                historyStore.clearHistory()
+                                                onNotify("已清空解析历史")
+                                            },
+                                        ) { Text("清空历史", color = MaterialTheme.colorScheme.error) }
+                                    }
+                                }
+                                HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f))
+                                val list = if (historyPanelTab == 0) historyRecords else favoriteRecords
+                                if (list.isEmpty()) {
+                                    Column(modifier = Modifier.padding(24.dp)) {
+                                        Text(
+                                            text = if (historyPanelTab == 0) "暂无解析历史，粘贴链接解析后会自动记录。" else "暂无收藏记录，解析链接后点击右上角「收藏」即可保存。",
+                                            style = MaterialTheme.typography.bodySmall,
+                                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                        )
+                                    }
+                                } else {
+                                    LazyColumn(modifier = Modifier.fillMaxSize()) {
+                                        items(list, key = { it.id }) { rec ->
+                                            val isFav = favoriteRecords.any { it.input.equals(rec.input, ignoreCase = true) }
+                                            Row(
+                                                modifier = Modifier
+                                                    .fillMaxWidth()
+                                                    .clickable {
+                                                        rawInput = rec.input
+                                                        passcode = rec.passcode
+                                                        startResolve(rec.input)
+                                                    }
+                                                    .padding(horizontal = 16.dp, vertical = 9.dp),
+                                                verticalAlignment = Alignment.CenterVertically,
+                                                horizontalArrangement = Arrangement.spacedBy(10.dp),
+                                            ) {
+                                                if (rec.platformLabel.isNotBlank()) {
+                                                    DesktopPill(rec.platformLabel)
+                                                }
+                                                Column(modifier = Modifier.weight(1f)) {
+                                                    Text(
+                                                        text = rec.title.ifBlank { rec.input },
+                                                        style = MaterialTheme.typography.bodyMedium,
+                                                        maxLines = 1,
+                                                        overflow = TextOverflow.Ellipsis,
+                                                    )
+                                                    Text(
+                                                        text = rec.input + if (rec.passcode.isNotBlank()) "  [提取码: ${rec.passcode}]" else "",
+                                                        style = MaterialTheme.typography.labelSmall,
+                                                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                                        maxLines = 1,
+                                                        overflow = TextOverflow.Ellipsis,
+                                                    )
+                                                }
+                                                TextButton(
+                                                    onClick = {
+                                                        val nowFav = historyStore.toggleFavorite(rec.input, rec.passcode, rec.title, rec.platformLabel)
+                                                        onNotify(if (nowFav) "已加入收藏夹" else "已取消收藏")
+                                                    },
+                                                ) { Text(if (isFav) "★" else "☆") }
+                                                FilledTonalButton(
+                                                    onClick = {
+                                                        rawInput = rec.input
+                                                        passcode = rec.passcode
+                                                        startResolve(rec.input)
+                                                    },
+                                                ) { Text("解析") }
+                                                TextButton(
+                                                    onClick = {
+                                                        if (historyPanelTab == 0) historyStore.removeHistory(rec.id)
+                                                        else historyStore.removeFavorite(rec.id)
+                                                    },
+                                                ) { Text("删除", color = MaterialTheme.colorScheme.error) }
+                                            }
+                                            HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.35f))
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+
+            is ResolveViewState.VideoLoaded -> {
+                val result = state.result
+                val videoAccountKind = DriveAccountKind.fromVideoPlatform(result.platform)
+                val isLoggedIn = videoAccountKind != null && accounts.containsKey(videoAccountKind)
+                val subFolder = if (result.medias.size > 1) {
+                    sanitizeFileName(result.title.ifBlank { result.platform.displayName }, "media-batch").take(60)
+                } else ""
+
+                fun enqueueVideoBatch(indices: List<Int>) {
+                    if (indices.isEmpty()) return
+                    scope.launch {
+                        var added = 0
+                        var failed = 0
+                        var lastErr = ""
+                        try {
+                            for ((pos, mediaIndex) in indices.withIndex()) {
+                                val media = result.medias.getOrNull(mediaIndex) ?: continue
+                                val resolved = resolveService.buildVideoMediaDownload(result, media, mediaIndex)
+                                batchStatus = "正在入队 (${pos + 1}/${indices.size})：${resolved.fileName}"
+                                val baseDir = File(config.downloadDirectory)
+                                val targetDir = if (subFolder.isBlank()) baseDir else File(baseDir, subFolder)
+                                runCatching {
+                                    downloads.submit(
+                                        source = resolved.url,
+                                        directory = targetDir,
+                                        fileName = resolved.fileName,
+                                        kind = resolved.kind,
+                                        httpVersion = config.httpPolicy,
+                                        headers = resolved.headers,
+                                        autoRename = config.conflictPolicy == ConflictPolicy.AUTO_RENAME,
+                                        sourceLabel = resolved.sourceLabel,
+                                        knownSize = resolved.size,
+                                    )
+                                    val audio = resolveService.buildVideoAudioDownload(result, media, mediaIndex)
+                                    if (audio != null) {
+                                        downloads.submit(
+                                            source = audio.url,
+                                            directory = targetDir,
+                                            fileName = audio.fileName,
+                                            kind = audio.kind,
+                                            httpVersion = config.httpPolicy,
+                                            headers = audio.headers,
+                                            autoRename = config.conflictPolicy == ConflictPolicy.AUTO_RENAME,
+                                            sourceLabel = audio.sourceLabel,
+                                            knownSize = audio.size,
+                                        )
+                                    }
+                                }.onSuccess { added++ }
+                                    .onFailure { err ->
+                                        failed++
+                                        lastErr = err.message.orEmpty()
+                                    }
+                            }
+                        } finally {
+                            batchStatus = ""
+                        }
+                        if (failed == 0) {
+                            onNotify("已将 $added 项媒体加入下载队列")
+                        } else {
+                            errorMessage = "成功入队 $added 项，失败 $failed 项：$lastErr"
+                        }
+                    }
+                }
+
+                Surface(
+                    shape = MaterialTheme.shapes.large,
+                    color = MaterialTheme.colorScheme.surfaceContainerLow,
+                    border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.6f)),
+                    modifier = Modifier.weight(1f).fillMaxWidth(),
+                ) {
+                    Column(modifier = Modifier.fillMaxSize()) {
+                        Row(
+                            modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 12.dp),
+                            horizontalArrangement = Arrangement.SpaceBetween,
+                            verticalAlignment = Alignment.CenterVertically,
+                        ) {
+                            Row(
+                                verticalAlignment = Alignment.CenterVertically,
+                                horizontalArrangement = Arrangement.spacedBy(8.dp),
+                                modifier = Modifier.weight(1f),
+                            ) {
+                                DesktopPill(
+                                    text = result.platform.displayName,
+                                    containerColor = MaterialTheme.colorScheme.primaryContainer,
+                                    contentColor = MaterialTheme.colorScheme.onPrimaryContainer,
+                                )
+                                DesktopPill("${result.medias.size} 个媒体")
+                                if (result.author.isNotBlank()) {
+                                    Text(
+                                        text = "@${result.author}",
+                                        style = MaterialTheme.typography.labelLarge,
+                                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                        maxLines = 1,
+                                        overflow = TextOverflow.Ellipsis,
+                                    )
+                                }
+                            }
+                            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                                if (videoAccountKind != null && !isLoggedIn) {
+                                    OutlinedButton(onClick = { onOpenAccountDialog(videoAccountKind) }) {
+                                        Text("配置${videoAccountKind.displayName} Cookie")
+                                    }
+                                }
+                                if (result.medias.size > 1) {
+                                    OutlinedButton(
+                                        enabled = selectedVideoIndices.isNotEmpty() && batchStatus.isEmpty(),
+                                        onClick = { enqueueVideoBatch(selectedVideoIndices.sorted()) },
+                                    ) { Text("下载选中 (${selectedVideoIndices.size})") }
+                                    FilledTonalButton(
+                                        enabled = result.medias.isNotEmpty() && batchStatus.isEmpty(),
+                                        onClick = { enqueueVideoBatch(result.medias.indices.toList()) },
+                                    ) { Text("全部下载") }
+                                }
+                            }
+                        }
+
+                        Column(
+                            modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 4.dp),
+                            verticalArrangement = Arrangement.spacedBy(6.dp),
+                        ) {
+                            if (result.title.isNotBlank()) {
+                                Text(
+                                    text = result.title,
+                                    style = MaterialTheme.typography.titleMedium,
+                                    fontWeight = FontWeight.SemiBold,
+                                    maxLines = 2,
+                                    overflow = TextOverflow.Ellipsis,
+                                )
+                            }
+                            if (result.text.isNotBlank() && result.text.trim() != result.title.trim()) {
+                                Text(
+                                    text = result.text,
+                                    style = MaterialTheme.typography.bodySmall,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                    maxLines = 3,
+                                    overflow = TextOverflow.Ellipsis,
+                                )
+                            }
+                            if (result.notice.isNotBlank()) {
+                                Surface(
+                                    shape = MaterialTheme.shapes.small,
+                                    color = MaterialTheme.colorScheme.secondaryContainer.copy(alpha = 0.7f),
+                                    modifier = Modifier.fillMaxWidth(),
+                                ) {
+                                    Text(
+                                        text = result.notice,
+                                        style = MaterialTheme.typography.bodySmall,
+                                        color = MaterialTheme.colorScheme.onSecondaryContainer,
+                                        modifier = Modifier.padding(horizontal = 12.dp, vertical = 6.dp),
+                                    )
+                                }
+                            }
+                            if (result.medias.size > 1) {
+                                Row(
+                                    modifier = Modifier.fillMaxWidth(),
+                                    horizontalArrangement = Arrangement.SpaceBetween,
+                                    verticalAlignment = Alignment.CenterVertically,
+                                ) {
+                                    Text(
+                                        text = "多文件批量下载将自动归档到子文件夹：$subFolder",
+                                        style = MaterialTheme.typography.labelSmall,
+                                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                    )
+                                    TextButton(onClick = {
+                                        selectedVideoIndices = if (selectedVideoIndices.size == result.medias.size) {
+                                            emptySet()
+                                        } else {
+                                            result.medias.indices.toSet()
+                                        }
+                                    }) {
+                                        Text(if (selectedVideoIndices.size == result.medias.size) "取消全选" else "全选")
+                                    }
+                                }
+                            }
+                        }
+                        HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f))
+
+                        LazyColumn(modifier = Modifier.fillMaxSize()) {
+                            itemsIndexed(
+                                items = result.medias,
+                                key = { idx, media -> "$idx:${media.url}" },
+                            ) { idx, media ->
+                                val resolved = resolveService.buildVideoMediaDownload(result, media, idx)
+                                val audioResolved = resolveService.buildVideoAudioDownload(result, media, idx)
+                                val motionResolved = resolveService.buildVideoMotionDownload(result, media, idx)
+                                val checked = idx in selectedVideoIndices
+                                val kindLabel = when (media.kind) {
+                                    VideoMediaKind.VIDEO -> if (media.isHls) "HLS 视频" else "视频"
+                                    VideoMediaKind.IMAGE -> if (motionResolved != null) "实况图片" else "图片"
+                                    VideoMediaKind.AUDIO -> "音频"
+                                }
+                                Row(
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .padding(horizontal = 16.dp, vertical = 10.dp),
+                                    verticalAlignment = Alignment.CenterVertically,
+                                    horizontalArrangement = Arrangement.spacedBy(10.dp),
+                                ) {
+                                    if (result.medias.size > 1) {
+                                        Checkbox(
+                                            checked = checked,
+                                            onCheckedChange = {
+                                                selectedVideoIndices = if (it) selectedVideoIndices + idx else selectedVideoIndices - idx
+                                            },
+                                        )
+                                    }
+                                    DesktopPill(kindLabel)
+                                    Column(
+                                        modifier = Modifier.weight(1f),
+                                        verticalArrangement = Arrangement.spacedBy(2.dp),
+                                    ) {
+                                        Text(
+                                            text = resolved.fileName,
+                                            style = MaterialTheme.typography.bodyMedium,
+                                            fontWeight = FontWeight.Medium,
+                                            maxLines = 1,
+                                            overflow = TextOverflow.Ellipsis,
+                                        )
+                                        val meta = buildList {
+                                            if (media.quality.isNotBlank()) add(media.quality)
+                                            if (media.size > 0L) add(formatBytes(media.size))
+                                            if (audioResolved != null) add("含独立音轨（桌面端分别下载视频与音轨）")
+                                        }.joinToString(" · ")
+                                        if (meta.isNotBlank()) {
+                                            Text(
+                                                text = meta,
+                                                style = MaterialTheme.typography.labelSmall,
+                                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                                maxLines = 1,
+                                                overflow = TextOverflow.Ellipsis,
+                                            )
+                                        }
+                                    }
+                                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                                        if (audioResolved != null) {
+                                            OutlinedButton(onClick = { enqueueResolved(audioResolved, subFolder) }) {
+                                                Text("仅下音轨")
+                                            }
+                                            FilledTonalButton(onClick = {
+                                                enqueueResolved(resolved, subFolder)
+                                                enqueueResolved(audioResolved, subFolder)
+                                            }) {
+                                                Text("下音视频")
+                                            }
+                                        } else if (motionResolved != null) {
+                                            OutlinedButton(onClick = { enqueueResolved(motionResolved, subFolder) }) {
+                                                Text("下实况视频")
+                                            }
+                                            FilledTonalButton(onClick = { enqueueResolved(resolved, subFolder) }) {
+                                                Text("下原图")
+                                            }
+                                        } else {
+                                            FilledTonalButton(onClick = { enqueueResolved(resolved, subFolder) }) {
+                                                Text("下载")
+                                            }
+                                        }
+                                    }
+                                }
+                                HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.35f))
+                            }
+                        }
+                    }
+                }
             }
 
             is ResolveViewState.DirectReady -> {
@@ -588,6 +1066,22 @@ internal fun DesktopResolveTab(
                                         Text("登录${accountKind.displayName}")
                                     }
                                 }
+                                if (resolveService.supportsSaveToDrive(state.platform)) {
+                                    OutlinedButton(
+                                        enabled = selectedFids.isNotEmpty() && batchStatus.isEmpty(),
+                                        onClick = {
+                                            if (!isLoggedIn && accountKind != null) {
+                                                onNotify("请先登录${accountKind.displayName}后再转存")
+                                                onOpenAccountDialog(accountKind)
+                                            } else {
+                                                val picked = state.files.filter { it.fid in selectedFids }
+                                                if (picked.isNotEmpty()) {
+                                                    saveToDriveRequest = Triple(state.platform, state.session, picked)
+                                                }
+                                            }
+                                        },
+                                    ) { Text("转存选中 (${selectedFids.size})") }
+                                }
                                 FilledTonalButton(
                                     enabled = selectedFids.isNotEmpty() && batchStatus.isEmpty(),
                                     onClick = {
@@ -650,20 +1144,60 @@ internal fun DesktopResolveTab(
                         LazyColumn(modifier = Modifier.fillMaxSize()) {
                             items(visibleFiles, key = { it.fid }) { file ->
                                 val checked = file.fid in selectedFids
-                                Row(
-                                    modifier = Modifier
-                                        .fillMaxWidth()
-                                        .clickable {
+                                ContextMenuArea(
+                                    items = {
+                                        buildList {
                                             if (file.isdir) {
-                                                navigateTo(resolveService.shareChildDirId(state.platform, file), file.fname)
+                                                add(ContextMenuItem("打开文件夹") {
+                                                    navigateTo(resolveService.shareChildDirId(state.platform, file), file.fname)
+                                                })
+                                                add(ContextMenuItem("下载整个目录") { downloadShareItems(listOf(file)) })
                                             } else {
-                                                selectedFids = if (checked) selectedFids - file.fid else selectedFids + file.fid
+                                                add(ContextMenuItem("下载文件") {
+                                                    scope.launch {
+                                                        runCatching { resolveService.resolveShareDownload(state.platform, state.session, file) }
+                                                            .onSuccess { res -> enqueueResolved(res) }
+                                                            .onFailure { err -> errorMessage = err.message ?: "获取直链失败" }
+                                                    }
+                                                })
+                                                add(ContextMenuItem("复制下载直链") {
+                                                    scope.launch {
+                                                        runCatching { resolveService.resolveShareDownload(state.platform, state.session, file) }
+                                                            .onSuccess { res ->
+                                                                copyToClipboard(res.url)
+                                                                onNotify("已复制直链：${file.fname}")
+                                                            }
+                                                            .onFailure { err -> errorMessage = err.message ?: "获取直链失败" }
+                                                    }
+                                                })
+                                            }
+                                            if (resolveService.supportsSaveToDrive(state.platform)) {
+                                                add(ContextMenuItem("转存到我的网盘") {
+                                                    if (!isLoggedIn && accountKind != null) {
+                                                        onNotify("请先登录${accountKind.displayName}后再转存")
+                                                        onOpenAccountDialog(accountKind)
+                                                    } else {
+                                                        saveToDriveRequest = Triple(state.platform, state.session, listOf(file))
+                                                    }
+                                                })
                                             }
                                         }
-                                        .padding(horizontal = 12.dp, vertical = 8.dp),
-                                    verticalAlignment = Alignment.CenterVertically,
-                                    horizontalArrangement = Arrangement.spacedBy(10.dp),
+                                    },
                                 ) {
+                                    Row(
+                                        modifier = Modifier
+                                            .fillMaxWidth()
+                                            .clickable {
+                                                if (file.isdir) {
+                                                    navigateTo(resolveService.shareChildDirId(state.platform, file), file.fname)
+                                                } else {
+                                                    selectedFids = if (checked) selectedFids - file.fid else selectedFids + file.fid
+                                                }
+                                            }
+                                            .padding(horizontal = 12.dp, vertical = 8.dp),
+                                        verticalAlignment = Alignment.CenterVertically,
+                                        horizontalArrangement = Arrangement.spacedBy(10.dp),
+                                    ) {
                                     Checkbox(
                                         checked = checked,
                                         onCheckedChange = { isChecked ->
@@ -700,11 +1234,37 @@ internal fun DesktopResolveTab(
                                         TextButton(onClick = {
                                             navigateTo(resolveService.shareChildDirId(state.platform, file), file.fname)
                                         }) { Text("打开") }
+                                        if (resolveService.supportsSaveToDrive(state.platform)) {
+                                            TextButton(
+                                                enabled = batchStatus.isEmpty(),
+                                                onClick = {
+                                                    if (!isLoggedIn && accountKind != null) {
+                                                        onNotify("请先登录${accountKind.displayName}后再转存")
+                                                        onOpenAccountDialog(accountKind)
+                                                    } else {
+                                                        saveToDriveRequest = Triple(state.platform, state.session, listOf(file))
+                                                    }
+                                                },
+                                            ) { Text("转存") }
+                                        }
                                         FilledTonalButton(
                                             enabled = batchStatus.isEmpty(),
                                             onClick = { downloadShareItems(listOf(file)) },
                                         ) { Text("下载整个目录") }
                                     } else {
+                                        if (resolveService.supportsSaveToDrive(state.platform)) {
+                                            TextButton(
+                                                enabled = batchStatus.isEmpty(),
+                                                onClick = {
+                                                    if (!isLoggedIn && accountKind != null) {
+                                                        onNotify("请先登录${accountKind.displayName}后再转存")
+                                                        onOpenAccountDialog(accountKind)
+                                                    } else {
+                                                        saveToDriveRequest = Triple(state.platform, state.session, listOf(file))
+                                                    }
+                                                },
+                                            ) { Text("转存") }
+                                        }
                                         TextButton(
                                             enabled = batchStatus.isEmpty(),
                                             onClick = {
@@ -728,6 +1288,7 @@ internal fun DesktopResolveTab(
                                                 }
                                             },
                                         ) { Text("下载") }
+                                    }
                                     }
                                 }
                                 HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.35f))
@@ -963,5 +1524,205 @@ internal fun DesktopResolveTab(
                 }
             }
         }
+
+        saveToDriveRequest?.let { (platform, session, items) ->
+            val kind = DriveAccountKind.fromPlatform(platform)
+            if (kind != null) {
+                DesktopSaveToDriveDialog(
+                    platform = platform,
+                    kind = kind,
+                    session = session,
+                    items = items,
+                    resolveService = resolveService,
+                    driveService = driveService,
+                    onDismiss = { saveToDriveRequest = null },
+                    onSaved = { msg ->
+                        saveToDriveRequest = null
+                        onNotify(msg)
+                    },
+                )
+            } else {
+                saveToDriveRequest = null
+            }
+        }
     }
+}
+
+@OptIn(ExperimentalLayoutApi::class)
+@Composable
+private fun DesktopSaveToDriveDialog(
+    platform: SharePlatform,
+    kind: DriveAccountKind,
+    session: ShareSession,
+    items: List<ShareFile>,
+    resolveService: DesktopResolveService,
+    driveService: DesktopDriveService,
+    onDismiss: () -> Unit,
+    onSaved: (String) -> Unit,
+) {
+    val scope = rememberCoroutineScope()
+    val rootId = remember(kind) { driveService.rootDirId(kind) }
+    val dirStack = remember(kind) { mutableStateListOf(ShareCrumb(rootId, "根目录")) }
+    var folders by remember(kind) { mutableStateOf<List<ShareFile>>(emptyList()) }
+    var loading by remember(kind) { mutableStateOf(false) }
+    var saving by remember(kind) { mutableStateOf(false) }
+    var error by remember(kind) { mutableStateOf("") }
+    var newFolderName by remember(kind) { mutableStateOf("") }
+    var showNewFolderRow by remember(kind) { mutableStateOf(false) }
+
+    val currentDirId = dirStack.lastOrNull()?.dirId ?: rootId
+
+    fun loadFolders(dirId: String) {
+        loading = true
+        error = ""
+        scope.launch {
+            runCatching { driveService.listFiles(kind, dirId).filter { it.isdir } }
+                .onSuccess { folders = it }
+                .onFailure { err -> error = err.message ?: "读取个人网盘目录失败" }
+            loading = false
+        }
+    }
+
+    LaunchedEffect(kind, currentDirId) {
+        loadFolders(currentDirId)
+    }
+
+    AlertDialog(
+        onDismissRequest = { if (!saving) onDismiss() },
+        title = { Text("转存到 ${kind.displayName}") },
+        text = {
+            Column(verticalArrangement = Arrangement.spacedBy(10.dp), modifier = Modifier.fillMaxWidth()) {
+                Text(
+                    text = "待转存 ${items.size} 项：${items.take(2).joinToString("、") { it.fname }}${if (items.size > 2) "…" else ""}",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+                FlowRow(
+                    horizontalArrangement = Arrangement.spacedBy(4.dp),
+                    verticalArrangement = Arrangement.spacedBy(4.dp),
+                ) {
+                    dirStack.forEachIndexed { idx, crumb ->
+                        if (idx > 0) Text("/", color = MaterialTheme.colorScheme.onSurfaceVariant)
+                        Text(
+                            text = crumb.label,
+                            style = MaterialTheme.typography.labelLarge,
+                            color = if (idx == dirStack.lastIndex) MaterialTheme.colorScheme.onSurface
+                            else MaterialTheme.colorScheme.primary,
+                            modifier = Modifier.clickable(enabled = idx < dirStack.lastIndex && !saving) {
+                                while (dirStack.size > idx + 1) dirStack.removeAt(dirStack.lastIndex)
+                            }.padding(horizontal = 3.dp),
+                        )
+                    }
+                }
+                if (showNewFolderRow) {
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.spacedBy(8.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                    ) {
+                        OutlinedTextField(
+                            value = newFolderName,
+                            onValueChange = { newFolderName = it },
+                            placeholder = { Text("新文件夹名称") },
+                            singleLine = true,
+                            enabled = !saving && !loading,
+                            modifier = Modifier.weight(1f),
+                        )
+                        FilledTonalButton(
+                            enabled = newFolderName.isNotBlank() && !saving && !loading,
+                            onClick = {
+                                val name = newFolderName.trim()
+                                scope.launch {
+                                    loading = true
+                                    runCatching { driveService.createFolder(kind, currentDirId, name) }
+                                        .onSuccess {
+                                            newFolderName = ""
+                                            showNewFolderRow = false
+                                            loadFolders(currentDirId)
+                                        }
+                                        .onFailure { err ->
+                                            loading = false
+                                            error = err.message ?: "新建文件夹失败"
+                                        }
+                                }
+                            },
+                        ) { Text("创建") }
+                    }
+                }
+                Surface(
+                    modifier = Modifier.fillMaxWidth().height(210.dp),
+                    shape = MaterialTheme.shapes.medium,
+                    color = MaterialTheme.colorScheme.surfaceContainerLow,
+                    border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.6f)),
+                ) {
+                    if (loading) {
+                        Column(modifier = Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                            LinearProgressIndicator(modifier = Modifier.fillMaxWidth())
+                            Text("正在加载目录…", style = MaterialTheme.typography.bodySmall)
+                        }
+                    } else if (folders.isEmpty()) {
+                        Column(modifier = Modifier.padding(16.dp)) {
+                            Text("当前目录下没有子文件夹，可直接转存到此目录。", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                        }
+                    } else {
+                        LazyColumn(modifier = Modifier.fillMaxSize()) {
+                            items(folders, key = { it.fid }) { folder ->
+                                Row(
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .clickable(enabled = !saving) {
+                                            dirStack.add(ShareCrumb(driveService.childDirId(kind, folder), folder.fname))
+                                        }
+                                        .padding(horizontal = 12.dp, vertical = 8.dp),
+                                    verticalAlignment = Alignment.CenterVertically,
+                                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                                ) {
+                                    DesktopPill(
+                                        text = "目录",
+                                        containerColor = MaterialTheme.colorScheme.primaryContainer,
+                                        contentColor = MaterialTheme.colorScheme.onPrimaryContainer,
+                                    )
+                                    Text(folder.fname, style = MaterialTheme.typography.bodyMedium, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                                }
+                                HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.3f))
+                            }
+                        }
+                    }
+                }
+                if (error.isNotBlank()) {
+                    Text(error, color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodySmall)
+                }
+            }
+        },
+        confirmButton = {
+            Button(
+                enabled = !saving && !loading,
+                onClick = {
+                    saving = true
+                    error = ""
+                    scope.launch {
+                        val res = runCatching {
+                            resolveService.saveShareFilesToDrive(platform, session, items, currentDirId)
+                        }
+                        saving = false
+                        res.onSuccess { count ->
+                            onSaved("已转存 $count 项到 ${kind.displayName}（${dirStack.last().label}）")
+                        }.onFailure { err ->
+                            error = err.message ?: "转存失败"
+                        }
+                    }
+                },
+            ) { Text(if (saving) "转存中…" else "转存到此目录") }
+        },
+        dismissButton = {
+            Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                if (driveService.supportsFolderMutation(kind)) {
+                    TextButton(enabled = !saving, onClick = { showNewFolderRow = !showNewFolderRow }) {
+                        Text(if (showNewFolderRow) "收起新建" else "新建文件夹")
+                    }
+                }
+                TextButton(enabled = !saving, onClick = onDismiss) { Text("取消") }
+            }
+        },
+    )
 }

@@ -18,7 +18,6 @@
 
 package com.yunget.app.data.network.video
 
-import com.yunget.app.data.download.DownloadPathPolicy
 import org.json.JSONObject
 import java.text.SimpleDateFormat
 import java.util.Locale
@@ -327,7 +326,7 @@ object WeiboParser : VideoParser {
 
     /** 文件名主干：清洗非法字符并截断；标题为空时兜底为「平台_id」 */
     private fun fileBase(title: String, link: DetectedVideoLink): String {
-        val cleaned = DownloadPathPolicy.sanitizeName(title).take(80)
+        val cleaned = VideoHttp.sanitizeFileName(title).take(80)
         return cleaned.ifBlank { "${platform.displayName}_${link.id}" }
     }
 }

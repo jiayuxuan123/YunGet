@@ -67,4 +67,33 @@ class NativePreviewRoutingTest {
         assertFalse(NativePreviewRouting.isTorrentFile("https://example.org/file?name=seed.torrent"))
         assertFalse(NativePreviewRouting.isTorrentFile("ftp://example.org/file.torrent"))
     }
+
+    @Test
+    fun metalinkAndSftpDetectionAndAltSourcesTagsRoundTrip() {
+        assertTrue(NativePreviewRouting.isMetalinkFile("https://example.org/pkg.meta4?v=1"))
+        assertTrue(NativePreviewRouting.isMetalinkFile("file:///sdcard/Download/pkg.metalink"))
+        assertTrue(NativePreviewRouting.isMetalinkFile("https://example.org/dl", "release.meta4"))
+        assertFalse(NativePreviewRouting.isMetalinkFile("https://example.org/pkg.zip", "pkg.zip"))
+
+        assertTrue(NativePreviewRouting.isSftp("sftp://mirror.example.org/pub/file.iso"))
+        assertTrue(NativePreviewRouting.isSftp("sftp://alice:secret@mirror.example.org:2222/pub/file.iso"))
+        assertFalse(NativePreviewRouting.isSftp("ftp://mirror.example.org/pub/file.iso"))
+        assertEquals(
+            "sftp://mirror.example.org:2222/pub/a%20b.iso",
+            NativePreviewRouting.stripSftpUserInfo("sftp://alice:demo@mirror.example.org:2222/pub/a%20b.iso"),
+        )
+        assertEquals(
+            "sftp://mirror.example.org/pub/file@v2.iso",
+            NativePreviewRouting.stripSftpUserInfo("sftp://mirror.example.org/pub/file@v2.iso"),
+        )
+
+        val altJson = """[{"url":"https://m2.example.org/a","headers":{"Cookie":"b=2"}}]"""
+        val pinned = NativePreviewRouting.pin("{}", true, NativePreviewRouting.MEDIA_DASH, altJson)
+        val tags = NativePreviewRouting.tags(pinned)
+        assertEquals(altJson, tags[NativePreviewRouting.ALT_SOURCES_TAG])
+        val decoded = NativePreviewRouting.decodeAltSources(tags[NativePreviewRouting.ALT_SOURCES_TAG])
+        assertEquals(1, decoded.size)
+        assertEquals("https://m2.example.org/a", decoded[0].url)
+        assertEquals(mapOf("Cookie" to "b=2"), decoded[0].headers)
+    }
 }

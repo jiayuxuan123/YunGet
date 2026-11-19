@@ -18,7 +18,7 @@
 
 package com.yunget.app.data.repository
 
-import com.yunget.app.data.network.HttpClients
+import com.yunget.app.data.network.CoreHttp
 import com.yunget.app.data.network.video.DetectedVideoLink
 import com.yunget.app.data.network.video.VideoHttp
 import com.yunget.app.data.network.video.VideoLinkParser
@@ -40,7 +40,7 @@ import okhttp3.OkHttpClient
  */
 class VideoParseRepository(
     private val cookieProvider: suspend (VideoPlatform) -> String = { "" },
-    private val clientProvider: () -> OkHttpClient = { HttpClients.apiClient() }
+    private val clientProvider: () -> OkHttpClient = { CoreHttp.client() }
 ) {
 
     /** 从任意文本里识别并解析视频；识别不到视频链接返回 null（调用方据此回退到网盘解析） */

@@ -18,7 +18,6 @@
 
 package com.yunget.app.data.network
 
-import android.util.Base64
 import com.yunget.app.data.network.model.DownloadLink
 import com.yunget.app.data.network.model.FileThumbnail
 import com.yunget.app.data.network.model.QuotaInfo
@@ -60,9 +59,9 @@ import java.util.zip.GZIPInputStream
  * 不能串用。mcloud-sign 按「明文 body」计算（§4），加密只是传输包装；mcloud-skey 可省略。
  */
 class C139Api(
-    private val clientProvider: () -> OkHttpClient = { HttpClients.apiClient() },
-    /** 设备信息由系统 API 生成；未注入 Context 的测试路径使用无隐私占位值。 */
-    private val deviceInfoProvider: () -> C139DeviceInfo = { C139DeviceInfo.fallback() }
+    private val clientProvider: () -> OkHttpClient = { CoreHttp.client() },
+    /** 设备信息由宿主装配；未注入宿主时使用纯 JVM 默认值。 */
+    private val deviceInfoProvider: () -> C139DeviceInfo = { C139DeviceInfo.current() }
 ) {
     /** 每次请求动态获取全局客户端（忽略 SSL 开关切换即时生效） */
     private val client get() = clientProvider()
@@ -101,7 +100,7 @@ class C139Api(
     fun calSign(bodyJson: String, ts: String, rand: String): String {
         val encoded = encodeURIComponent(bodyJson)
         val sorted = encoded.toCharArray().sorted().joinToString("")
-        val b64 = Base64.encodeToString(sorted.toByteArray(Charsets.UTF_8), Base64.NO_WRAP)
+        val b64 = CoreBase64.encode(sorted.toByteArray(Charsets.UTF_8))
         val res = md5(b64) + md5("$ts:$rand")
         return md5(res).uppercase()
     }
@@ -122,7 +121,7 @@ class C139Api(
      */
     fun accountFromAuthorization(authorization: String): String? = runCatching {
         val b64 = authorization.removePrefix("Basic").trim()
-        val decoded = String(Base64.decode(b64, Base64.DEFAULT), Charsets.UTF_8)
+        val decoded = String(CoreBase64.decode(b64), Charsets.UTF_8)
         decoded.split(":").getOrNull(1)?.takeIf { it.isNotBlank() }
     }.getOrNull()
 
@@ -134,12 +133,12 @@ class C139Api(
         val cipher = Cipher.getInstance("AES/CBC/PKCS5Padding")
         cipher.init(Cipher.ENCRYPT_MODE, key, IvParameterSpec(iv))
         val ct = cipher.doFinal(plaintext.toByteArray(Charsets.UTF_8))
-        return Base64.encodeToString(iv + ct, Base64.NO_WRAP)
+        return CoreBase64.encode(iv + ct)
     }
 
     /** 加密 base64 → 明文 JSON；解密后若为 gzip（首 2 字节 0x1f 0x8b）先解压（alist YunCrypto 同款） */
     private fun decryptBody(b64: String, key: SecretKeySpec = shareAesKey): String {
-        val raw = Base64.decode(b64, Base64.NO_WRAP)
+        val raw = CoreBase64.decode(b64)
         val iv = raw.copyOfRange(0, 16)
         val ct = raw.copyOfRange(16, raw.size)
         val cipher = Cipher.getInstance("AES/CBC/PKCS5Padding")

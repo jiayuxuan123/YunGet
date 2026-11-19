@@ -30,6 +30,8 @@ dependencies {
     implementation("org.jetbrains.compose.material3:material3-desktop:1.9.0-beta03")
     implementation("org.jetbrains.kotlinx:kotlinx-coroutines-swing:1.10.2")
     implementation("org.json:json:20240303")
+    implementation("net.java.dev.jna:jna:5.6.0")
+    implementation("net.java.dev.jna:jna-platform:5.6.0")
     testImplementation("junit:junit:4.13.2")
 }
 

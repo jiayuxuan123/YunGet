@@ -18,10 +18,7 @@
 
 package com.yunget.app.data.network
 
-import android.webkit.WebSettings
-import androidx.webkit.UserAgentMetadata
-import androidx.webkit.WebSettingsCompat
-import androidx.webkit.WebViewFeature
+import okhttp3.HttpUrl.Companion.toHttpUrlOrNull
 import org.json.JSONObject
 import org.json.JSONTokener
 
@@ -143,44 +140,6 @@ object XunleiWebCredential {
     const val DESKTOP_SEC_CH_UA_MOBILE = "?0"
     const val DESKTOP_SEC_CH_UA_PLATFORM = "\"Windows\""
 
-    /**
-     * 让 WebView 的**客户端提示**（Sec-CH-UA / Sec-CH-UA-Mobile / Sec-CH-UA-Platform）与
-     * [DESKTOP_UA] 保持一致。
-     *
-     * 只把 `settings.userAgentString` 改成桌面 UA、而不同步 client hints 时，服务端会按 Android/
-     * 移动端提示判定请求，与 UA 冲突 —— 实测表现为 pan.xunlei.com 只渲染出「迅雷云盘 / 打开APP」
-     * 的移动版落地页（issues #152）。这里用 `WebSettingsCompat.setUserAgentMetadata` 把 client
-     * hints 的 UA 元数据也改成桌面 Chrome 131 / Windows（同时影响 HTTP 头与 `navigator.userAgentData`）。
-     *
-     * 依赖 WebView 的 `USER_AGENT_METADATA` 特性；不支持时静默跳过（页面回退到仅靠 UA 判定）。
-     */
-    fun applyDesktopClientHints(settings: WebSettings) {
-        if (!WebViewFeature.isFeatureSupported(WebViewFeature.USER_AGENT_METADATA)) return
-        // 品牌顺序/版本与 DESKTOP_UA（Chrome 131 / Windows 64 位）保持一致
-        val brandVersions = listOf(
-            Triple("Google Chrome", "131", "131.0.0.0"),
-            Triple("Chromium", "131", "131.0.0.0"),
-            Triple("Not_A Brand", "24", "24.0.0.0")
-        ).map { (brand, major, full) ->
-            UserAgentMetadata.BrandVersion.Builder()
-                .setBrand(brand)
-                .setMajorVersion(major)
-                .setFullVersion(full)
-                .build()
-        }
-        val metadata = UserAgentMetadata.Builder()
-            .setBrandVersionList(brandVersions)
-            .setFullVersion("131.0.0.0")
-            .setPlatform("Windows")
-            .setPlatformVersion("10.0.0")
-            .setArchitecture("x86")
-            .setModel("")
-            .setMobile(false)
-            .setWow64(false)
-            .build()
-        WebSettingsCompat.setUserAgentMetadata(settings, metadata)
-    }
-
     /** 允许 WebView 停留 / 跳转的域名（登录过程会经 i.xunlei.com 等官方域，统一放行 *.xunlei.com） */
     private val TRUSTED_HOSTS = listOf("xunlei.com")
 
@@ -260,16 +219,16 @@ object XunleiWebCredential {
     fun isTrustedUrl(url: String?): Boolean {
         val value = url?.trim().orEmpty()
         if (value.isEmpty() || value == "about:blank") return true
-        val uri = runCatching { android.net.Uri.parse(value) }.getOrNull() ?: return false
-        if (!uri.scheme.equals("https", ignoreCase = true)) return false
-        if (uri.userInfo != null) return false
-        // ⚠️ android.net.Uri 的 port 在 URL **没写端口**时返回 -1，**不会**补 scheme 默认端口
-        // （和 java.net.URL.getDefaultPort() 不是一回事）。所以这里必须把 -1 当成 443 放行，
-        // 否则 `https://pan.xunlei.com/` 这种最常见的地址会被判成不可信 ⇒ WebView 拦掉所有跳转，
-        // 网页登录一步都走不动。
-        val port = uri.port
-        if (port != -1 && port != 443) return false
-        val host = uri.host?.lowercase().orEmpty()
+        val parsed = value.toHttpUrlOrNull() ?: return false
+        if (!parsed.isHttps) return false
+        if (parsed.encodedUsername.isNotEmpty() || parsed.encodedPassword.isNotEmpty()) return false
+        val authority = value.substringAfter("://", "")
+            .substringBefore('/')
+            .substringBefore('?')
+            .substringBefore('#')
+        if ('@' in authority) return false
+        if (parsed.port != 443) return false
+        val host = parsed.host.lowercase()
         return TRUSTED_HOSTS.any { host == it || host.endsWith(".$it") }
     }
 
@@ -302,7 +261,7 @@ object XunleiWebCredential {
      * 裸 token（手动粘贴 access_token 的场景）：
      * 去掉 `Bearer ` 前缀后过一遍 token 校验，通过就只填 access（没有 refresh，过期只能重登）。
      */
-    internal fun parseRawToken(text: String): XunleiWebTokens? {
+    fun parseRawToken(text: String): XunleiWebTokens? {
         val token = stripBearer(text)
         return if (isValidToken(token)) XunleiWebTokens(token, "", "", "", "", "") else null
     }
@@ -314,7 +273,7 @@ object XunleiWebCredential {
      * 任一 token 非法（长度/字符集不对）即整体判失败——网页登录过程中会把中间态写进
      * localStorage，不能当成登录成功。
      */
-    internal fun fieldsFrom(fields: Map<String, String>): XunleiWebTokens? {
+    fun fieldsFrom(fields: Map<String, String>): XunleiWebTokens? {
         val access = pick(fields, "access_token", "accessToken")
         val refresh = pick(fields, "refresh_token", "refreshToken")
         if (access.isNotEmpty() && !isValidToken(access)) return null

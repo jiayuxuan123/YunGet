@@ -50,6 +50,7 @@ class YunGetApp : Application() {
         com.yunget.app.data.network.CoreDeviceIds.installPan123LoginUuid {
             com.yunget.app.data.network.Pan123DeviceId.value()
         }
+        com.yunget.app.data.network.video.HeadlessWebView.install(this)
         // 结构化诊断日志的落盘装配（滚动文件 + 后台写线程）。
         // 默认关闭，由设置里的「诊断模式」打开 —— 开启后所有出站请求、
         // WebView 事件、数据库操作都会留痕。
@@ -57,7 +58,11 @@ class YunGetApp : Application() {
         com.yunget.app.data.analytics.AnonymousAnalytics.initialize(this)
         com.yunget.app.data.analytics.AnonymousAnalytics.track("app_open")
         // 迅雷动态设备指纹：首次启动生成并持久化（开源分发后每台设备独立指纹）
-        com.yunget.app.data.network.XunleiDeviceFingerprint.init(this)
+        com.yunget.app.data.network.XunleiDeviceFingerprint.init(
+            com.yunget.app.data.network.AndroidXunleiDeviceFingerprintStore(this)
+        )
+        // 139 口令 XML 设备信息：向共享内核注入 Android 系统信息与持久化安装 ID
+        com.yunget.app.data.network.AndroidC139DeviceInfo.install(this)
         // 本机密钥失效自愈：必须在**任何**凭证读写之前装配。改锁屏密码/指纹会让 Android Keystore
         // 里的密钥被系统永久作废（KeyPermanentlyInvalidatedException / Key not found / Invalid
         // key blob 三种形态）。装配后这类事件只会记下「登录态已失效」的一次性提示，

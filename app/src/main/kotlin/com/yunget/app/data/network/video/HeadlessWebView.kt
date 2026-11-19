@@ -26,11 +26,13 @@ import android.view.ViewGroup
 import android.webkit.ValueCallback
 import android.webkit.WebResourceError
 import android.webkit.WebResourceRequest
+import android.webkit.WebSettings
 import android.webkit.WebView
 import android.webkit.WebViewClient
-import com.yunget.app.data.network.video.alignClientHintsWith
 import com.yunget.app.util.DiagnosticLog
 import com.yunget.app.util.LogRedactor
+import androidx.webkit.UserAgentMetadata
+import androidx.webkit.WebSettingsCompat
 import androidx.webkit.WebViewCompat
 import androidx.webkit.WebViewFeature
 import java.lang.ref.WeakReference
@@ -64,14 +66,18 @@ import org.json.JSONObject
  * ★ 线程：`WebView` 只能在创建它的线程上用，所以整段都跑在主线程；轮询间隔用 `delay` 让出，
  *   不会卡 UI。**不要在 IO 线程调用**（内部会自己切到主线程）。
  */
-object HeadlessWebView {
+object HeadlessWebView : BrowserPageExtractor {
 
     /** 当前处于前台的 Activity（挂 WebView 用）；只在进程内保存弱引用，不泄漏 */
     @Volatile
     private var resumedActivity: WeakReference<Activity>? = null
 
+    override val isAvailable: Boolean
+        get() = resumedActivity?.get() != null
+
     /** 在 `YunXApp.onCreate` 里调一次，之后 [loadAndExtract] 才能拿到 Activity */
     fun install(app: Application) {
+        BrowserPageExtractorRegistry.install(this)
         app.registerActivityLifecycleCallbacks(object : Application.ActivityLifecycleCallbacks {
             override fun onActivityResumed(activity: Activity) {
                 resumedActivity = WeakReference(activity)
@@ -97,15 +103,15 @@ object HeadlessWebView {
      * @return 就绪并取到的 JSON 文本；超时、页面报错或拿不到 Activity 时返回 null。
      */
     @SuppressLint("SetJavaScriptEnabled")
-    suspend fun loadAndExtract(
+    override suspend fun loadAndExtract(
         url: String,
         userAgent: String,
         readyCheckJs: String,
         extractJs: String,
-        timeoutMs: Long = 25_000L,
-        pollIntervalMs: Long = 350L,
+        timeoutMs: Long,
+        pollIntervalMs: Long,
         /** 调用方提供的「文档开始前」脚本，按顺序注入（如把页面自己的取数响应存下来的钩子） */
-        extraDocumentStartJs: List<String> = emptyList()
+        extraDocumentStartJs: List<String>
     ): String? = withContext(Dispatchers.Main.immediate) {
         val activity = resumedActivity?.get()
         if (activity == null) {
@@ -134,11 +140,7 @@ object HeadlessWebView {
         //   服务端**不给直出作品详情**，页面退回客户端 XHR，而那些 XHR 的响应体是空的
         //   （`aweme/v1/web/aweme/detail/` → HTTP 200 + len=0）。
         //   `WebSettings` 没有改它的 API，只能在文档开始前注入脚本覆盖 getter。
-        val platformName = when {
-            userAgent.contains("Windows") -> "Win32"
-            userAgent.contains("Mac OS X") -> "MacIntel"
-            else -> null
-        }
+        val platformName = ClientHints.fromUserAgent(userAgent).navigatorPlatform
         if (platformName != null && WebViewFeature.isFeatureSupported(WebViewFeature.DOCUMENT_START_SCRIPT)) {
             val platformJs = "(function(){try{Object.defineProperty(navigator,'platform'," +
                 "{get:function(){return '$platformName';},configurable:true});}catch(e){}})()"
@@ -222,4 +224,28 @@ object HeadlessWebView {
             }
         }.getOrDefault(raw)
     }
+}
+
+/** 将 `:core` 推导的 [ClientHintsSpec] 写入 Android WebView 的 User-Agent Client Hints。 */
+internal fun WebSettings.alignClientHintsWith(userAgent: String) {
+    if (!WebViewFeature.isFeatureSupported(WebViewFeature.USER_AGENT_METADATA)) return
+    val spec = ClientHints.fromUserAgent(userAgent)
+    val brandVersions = spec.brands.map { entry ->
+        UserAgentMetadata.BrandVersion.Builder()
+            .setBrand(entry.brand)
+            .setMajorVersion(entry.majorVersion)
+            .setFullVersion(entry.fullVersion)
+            .build()
+    }
+    val metadata = UserAgentMetadata.Builder()
+        .setBrandVersionList(brandVersions)
+        .setFullVersion(spec.fullVersion)
+        .setPlatform(spec.platform)
+        .setPlatformVersion(spec.platformVersion)
+        .setArchitecture(spec.architecture)
+        .setModel(spec.model)
+        .setMobile(spec.mobile)
+        .setWow64(spec.wow64)
+        .build()
+    WebSettingsCompat.setUserAgentMetadata(this, metadata)
 }

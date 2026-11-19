@@ -18,8 +18,7 @@
 
 package com.yunget.app.data.network.video
 
-import android.util.Log
-import com.yunget.app.data.download.DownloadPathPolicy
+import com.yunget.app.data.network.CoreLog
 import kotlinx.coroutines.async
 import kotlinx.coroutines.awaitAll
 import kotlinx.coroutines.coroutineScope
@@ -107,7 +106,7 @@ object XhsParser : VideoParser {
         val response = runCatching {
             VideoHttp.request(EXPLORE_PROBE_URL, headers = exploreHeaders(cookie))
         }.getOrElse { error ->
-            Log.w(TAG, "小红书登录态探测失败（按未登录处理）：${error.message}")
+            CoreLog.warn(CoreLog.NETWORK, TAG, "小红书登录态探测失败（按未登录处理）：${error.message}")
             return null
         }
         if (LOGIN_WALL_MARKERS.any { response.finalUrl.contains(it) }) return null
@@ -449,7 +448,7 @@ object XhsParser : VideoParser {
     } catch (e: kotlinx.coroutines.CancellationException) {
         throw e
     } catch (e: Exception) {
-        Log.w(TAG, "小红书去水印原图探测失败（按可用处理）：${e.message}")
+        CoreLog.warn(CoreLog.NETWORK, TAG, "小红书去水印原图探测失败（按可用处理）：${e.message}")
         false
     }
 
@@ -482,7 +481,7 @@ object XhsParser : VideoParser {
 
     /** 文件名主干：清洗非法字符并截断；标题为空时兜底为「平台_id」 */
     private fun fileBase(title: String, link: DetectedVideoLink): String {
-        val cleaned = DownloadPathPolicy.sanitizeName(title).take(80)
+        val cleaned = VideoHttp.sanitizeFileName(title).take(80)
         return cleaned.ifBlank { "${platform.displayName}_${link.id}" }
     }
 }

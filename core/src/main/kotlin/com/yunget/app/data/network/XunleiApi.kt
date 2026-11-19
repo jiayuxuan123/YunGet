@@ -24,7 +24,6 @@ import com.yunget.app.data.network.model.QuotaInfo
 import com.yunget.app.data.network.model.ShareExpire
 import com.yunget.app.data.network.model.ShareFile
 import com.yunget.app.data.network.model.ShareInfo
-import com.yunget.app.util.DiagnosticLog
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.withContext
@@ -93,7 +92,7 @@ sealed interface WebCaptchaInit {
  * - Pan：文件列表 / 分享解析 / 转存 / 直链（Bearer 认证，无需 x-signature，抓包确认）
  */
 class XunleiApi(
-    private val clientProvider: () -> OkHttpClient = { HttpClients.apiClient() }
+    private val clientProvider: () -> OkHttpClient = { CoreHttp.client() }
 ) {
     /** 每次请求动态获取全局客户端（忽略 SSL 开关切换即时生效） */
     private val client get() = clientProvider()
@@ -402,18 +401,14 @@ class XunleiApi(
     /** 解析 JWT 的 exp（秒）；解析失败返回 0 */
     fun jwtExp(token: String): Long = runCatching {
         val payload = token.split(".").getOrNull(1) ?: return@runCatching 0L
-        val json = String(
-            android.util.Base64.decode(payload, android.util.Base64.URL_SAFE or android.util.Base64.NO_PADDING)
-        )
+        val json = String(CoreBase64.decode(payload), Charsets.UTF_8)
         JSONObject(json).optLong("exp")
     }.getOrDefault(0L)
 
     /** 从 JWT 中解析 sub（用户 ID） */
     private fun jwtSub(token: String): String = runCatching {
         val payload = token.split(".").getOrNull(1) ?: return@runCatching ""
-        val json = String(
-            android.util.Base64.decode(payload, android.util.Base64.URL_SAFE or android.util.Base64.NO_PADDING)
-        )
+        val json = String(CoreBase64.decode(payload), Charsets.UTF_8)
         JSONObject(json).optString("sub")
     }.getOrDefault("")
 
@@ -1162,8 +1157,8 @@ class XunleiApi(
                         val expiresAt = System.currentTimeMillis() + ttl * 1000L - 30_000L
                         WebCaptchaInit.Ok(PanCaptcha(token, expiresAt))
                     } else {
-                        DiagnosticLog.warn(
-                            DiagnosticLog.NETWORK,
+                        CoreLog.warn(
+                            CoreLog.NETWORK,
                             "xunlei_web_captcha_init_failed",
                             "status=${resp.code} err=${json.optString("error")} " +
                                 "desc=${json.optString("error_description")} " +
