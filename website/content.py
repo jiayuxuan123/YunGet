@@ -99,6 +99,8 @@ def _download_edge_url(url: str) -> str:
 
 APKS = [a for a in LATEST["assets"] if a["name"].lower().endswith(".apk") and "kernel" not in a["name"].lower()]
 APK = next((a for a in APKS if "universal" in a["name"].lower()), None) or next(iter(APKS), None)
+WIN_INSTALLERS = [a for a in LATEST["assets"] if a["name"].lower().endswith((".msi", ".exe"))]
+WIN_INSTALLER = next(iter(WIN_INSTALLERS), None)
 
 #: 文档里的占位符 → 实际值。文档里写 `{{引擎版本}}` 而不是手写版本号：
 #: 手写的必然滞后（0.2.0.6 那版在站上挂了很久没人发现），改用占位符后
@@ -366,6 +368,8 @@ FACTS = {
     "releases": RELEASES,
     "apks": APKS,
     "apk": APK,
+    "win_installers": WIN_INSTALLERS,
+    "win_installer": WIN_INSTALLER,
     "min_sdk": MIN_SDK,
     "min_sdk_short": MIN_SDK_SHORT,
     "target_sdk": TARGET_SDK,

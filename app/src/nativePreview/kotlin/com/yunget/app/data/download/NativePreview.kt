@@ -208,7 +208,11 @@ internal class NativePreview(
                             context.reportTotalSize(total)
                         }
                         transferDetails[context.taskId] = downloadDetails(native, task, snapshot, started, torrent)
-                        context.reportProgress(snapshot.downloadedBytes, snapshot.activeRequests)
+                        if (snapshot.state != NativeTransferClient.QUEUED &&
+                            (snapshot.state != NativeTransferClient.PROBING || snapshot.downloadedBytes > 0)
+                        ) {
+                            context.reportProgress(snapshot.downloadedBytes, snapshot.activeRequests)
+                        }
                         val nextCap = speedLimit()
                         if (nextCap != cap) {
                             native.setSpeedLimit(nextCap)

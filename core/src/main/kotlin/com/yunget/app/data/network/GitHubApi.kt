@@ -36,7 +36,7 @@ import org.json.JSONObject
  * 所有方法均运行在 [Dispatchers.IO]，失败（网络异常 / 非 2xx / JSON 解析失败）返回 null。
  */
 class GitHubApi(
-    private val clientProvider: () -> OkHttpClient = { HttpClients.apiClient() },
+    private val clientProvider: () -> OkHttpClient = { CoreHttp.client() },
     private val tokenProvider: () -> String? = { null }
 ) {
     /** 每次请求动态获取全局客户端（忽略 SSL 开关切换即时生效） */

@@ -24,7 +24,6 @@ import com.yunget.app.data.network.model.ShareFile
 import com.yunget.app.data.upload.UploadIo
 import com.yunget.app.data.upload.UploadPhase
 import com.yunget.app.data.upload.UploadSource
-import com.yunget.app.util.DiagnosticLog
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import okhttp3.MediaType.Companion.toMediaType
@@ -60,7 +59,7 @@ data class BaiduTransferResult(
  * 全部基于抓包字段，错误码用 errno（0 表示成功）判定。
  */
 class BaiduApi(
-    private val clientProvider: () -> OkHttpClient = { HttpClients.apiClient() }
+    private val clientProvider: () -> OkHttpClient = { CoreHttp.client() }
 ) {
     /** 每次请求动态获取全局客户端（忽略 SSL 开关切换即时生效） */
     private val client get() = clientProvider()
@@ -553,13 +552,13 @@ suspend fun listShare(surl: String, sekey: String, dir: String, cookie: String, 
         val webResult = catching { fetchPersonalList(dir, cookie, thumbnailHeaders, app = false) }
         webResult.getOrNull()?.let { files ->
             // App 通道失败本身不算错（网页会话/老账号会这样），但要留痕：下次百度再改协议时能看出是兜底在生效
-            DiagnosticLog.warn(DiagnosticLog.NETWORK, "baidu_list_web_fallback", "app=$appError")
+            CoreLog.warn(CoreLog.NETWORK, "baidu_list_web_fallback", "app=$appError")
             return@withContext files
         }
         // 两个通道都失败：把真实原因抛出去（UI 显示 errno），不要再假装成空目录
         val webError = webResult.exceptionOrNull()?.message
-        DiagnosticLog.warn(
-            DiagnosticLog.NETWORK,
+        CoreLog.warn(
+            CoreLog.NETWORK,
             "baidu_list_failed",
             "app=$appError web=$webError"
         )

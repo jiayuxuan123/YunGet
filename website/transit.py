@@ -372,6 +372,16 @@ def download(facts: dict, href) -> str:
                 _button("下载", _edge(facts, asset["url"])),
             ]
         )
+    for asset in facts.get("win_installers") or []:
+        arch_rows.append(
+            [
+                f"<strong>Windows x64（早期 Beta）</strong><br><span class=\"mono small\">{esc(asset['name'])}</span>",
+                "Windows 10/11 64 位安装器（早期 Beta 预览版，内置 TurboDL 原生引擎）。",
+                _mb(asset["size"]),
+                f'<span class="mono small">{esc((asset.get("sha256") or "")[:16])}…</span>',
+                _button("下载", _edge(facts, asset["url"])),
+            ]
+        )
     release_rows = [
         [
             f'<span class="mono">{esc(item["tag"])}</span>'
@@ -390,6 +400,16 @@ def download(facts: dict, href) -> str:
         )
         if sha
         else ""
+    )
+    win_asset = facts.get("win_installer")
+    win_platform_row = (
+        [
+            "Windows",
+            _status("planned", "早期 Beta"),
+            f'已提供 x64 安装包（{_mb(win_asset["size"])}），{_button("下载 MSI", _edge(facts, win_asset["url"]))}',
+        ]
+        if win_asset
+        else ["Windows", _status("planned", "规划中"), "尚无公开安装包。"]
     )
     return (
         _page_intro(
@@ -423,12 +443,12 @@ def download(facts: dict, href) -> str:
         )
         + _section(
             "平台状态",
-            "只有 Android 提供可下载构建。没有构建的平台不会显示可点击的下载按钮。",
+            "Android 提供正式版 APK；Windows 已提供早期 Beta 安装包。尚无构建的平台不显示下载按钮。",
             _timetable(
                 ["平台", "状态", "当前说明"],
                 [
                     ["Android", _status("ready", "可下载"), f"{esc(facts['min_sdk'])}；targetSdk {esc(facts['target_sdk'])}"],
-                    ["Windows", _status("planned", "规划中"), "尚无公开安装包。"],
+                    win_platform_row,
                     ["macOS", _status("planned", "规划中"), "尚无公开安装包。"],
                     ["Linux", _status("planned", "规划中"), "尚无公开安装包。"],
                 ],

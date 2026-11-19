@@ -73,7 +73,7 @@ class GuangYaShareRestrictedException :
  * 业务 API 带 did/dt/traceparent 头；账号 API 带一整套 X-Device-* 头；Authorization 仅在有令牌时携带。
  */
 class GuangYaApi(
-    private val clientProvider: () -> OkHttpClient = { HttpClients.apiClient() }
+    private val clientProvider: () -> OkHttpClient = { CoreHttp.client() }
 ) {
     private val client get() = clientProvider()
     private val jsonMediaType = "application/json;charset=UTF-8".toMediaType()

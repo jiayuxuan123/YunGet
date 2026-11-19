@@ -18,8 +18,7 @@
 
 package com.yunget.app.data.upload
 
-import android.content.ContentResolver
-import com.yunget.app.util.DiagnosticLog
+import com.yunget.app.data.network.CoreLog
 import okhttp3.Call
 import okhttp3.Headers
 import okhttp3.MediaType
@@ -71,7 +70,6 @@ data class UploadResponse(val code: Int, val headers: Headers, val body: String)
  *   ViewModel 侧做了节流后再写 Compose 状态。
  */
 class UploadIo(
-    private val resolver: ContentResolver,
     val file: UploadSource,
     private val clientProvider: () -> OkHttpClient,
     private val onProgress: (UploadPhase, Long) -> Unit
@@ -119,7 +117,7 @@ class UploadIo(
     fun digestBytes(algorithm: String, start: Long = 0L, end: Long = file.size): ByteArray {
         val digest = MessageDigest.getInstance(algorithm)
         var read = 0L
-        file.open(resolver, start, end).use { input ->
+        file.open(start, end).use { input ->
             val buffer = ByteArray(IO_BUFFER)
             while (true) {
                 alive()
@@ -186,11 +184,11 @@ class UploadIo(
                     if (response.code !in 200..299) {
                         // 上传失败必须留下「方法 + 主机/路径 + Content-Type + 有没有带授权」：
                         // 对象存储的签名错只回 403，看不到这些就只能猜（日志里的 URL 默认会被脱敏成只剩主机）
-                        DiagnosticLog.error(
-                            DiagnosticLog.NETWORK,
+                        CoreLog.error(
+                            CoreLog.NETWORK,
                             "upload_http_failed",
-                            code = response.code,
                             summary = buildString {
+                                append("code=").append(response.code).append(" | ")
                                 append(method).append(' ').append(hostAndPath(url))
                                 append(" | ct=").append(requestBody.contentType())
                                 append(" | len=").append(runCatching { requestBody.contentLength() }.getOrDefault(-1L))
@@ -270,7 +268,7 @@ class UploadIo(
         override fun writeTo(sink: BufferedSink) {
             if (openBytes.isNotEmpty()) sink.write(openBytes)
             var written = 0L
-            file.open(resolver, start, end).use { input: InputStream ->
+            file.open(start, end).use { input: InputStream ->
                 val buffer = ByteArray(IO_BUFFER)
                 while (true) {
                     alive()
@@ -365,8 +363,8 @@ class UploadIo(
             )
         }
 
-        DiagnosticLog.event(
-            DiagnosticLog.NETWORK,
+        CoreLog.event(
+            CoreLog.NETWORK,
             "upload_oss_plan",
             summary = "endpoint=${UploadIo.hostAndPath(baseUrl)} | bucket=$bucket | key=${objectKey.take(64)}" +
                 " | token=${if (securityToken.isBlank()) "none" else "present(${securityToken.length})"}" +
@@ -514,8 +512,8 @@ class UploadIo(
             )
         }
 
-        DiagnosticLog.event(
-            DiagnosticLog.NETWORK,
+        CoreLog.event(
+            CoreLog.NETWORK,
             "upload_s3_plan",
             summary = "endpoint=${UploadIo.hostAndPath(origin)} | bucket=$bucket | key=${objectKey.take(64)}" +
                 " | region=$region | pathStyle=$pathStyle" +

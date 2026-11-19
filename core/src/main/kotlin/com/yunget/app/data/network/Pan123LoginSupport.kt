@@ -21,7 +21,7 @@ package com.yunget.app.data.network
 /**
  * 123 云盘登录的纯逻辑（错误映射 + 令牌校验），单独放一处是为了能脱离网络做单测。
  */
-internal object Pan123LoginSupport {
+object Pan123LoginSupport {
 
     /** 请求过于频繁（HTTP 429 / 业务 429 / 文案里出现频率相关字样）时的统一提示 */
     const val MESSAGE_TOO_FREQUENT = "123 登录请求过于频繁，请稍后重试"

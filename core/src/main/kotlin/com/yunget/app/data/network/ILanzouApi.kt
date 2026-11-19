@@ -60,7 +60,7 @@ private class ILanzouAccessChallenge : Exception()
  * 认证参数 appToken + uuid 走 URL query；appToken 特殊编码（%3A 还原为冒号）。
  */
 class ILanzouApi(
-    private val clientProvider: () -> OkHttpClient = { HttpClients.apiClient() }
+    private val clientProvider: () -> OkHttpClient = { CoreHttp.client() }
 ) {
     private val client get() = clientProvider()
     private val jsonMediaType = "application/json; charset=utf-8".toMediaType()

@@ -63,7 +63,7 @@ data class Pan115SharePage(
  * 全部接口共用同一套请求头：桌面 UA + `X-Requested-With` + 对应页面 Referer + Cookie。
  */
 class Pan115Api(
-    private val clientProvider: () -> OkHttpClient = { HttpClients.apiClient() }
+    private val clientProvider: () -> OkHttpClient = { CoreHttp.client() }
 ) {
     /** 每次请求动态获取全局客户端（忽略 SSL 开关切换即时生效） */
     private val client get() = clientProvider()

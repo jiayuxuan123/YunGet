@@ -125,7 +125,7 @@ class UploadRunner(
                         cancelled = true
                         break@loop
                     }
-                    val io = UploadIo(resolver, source, clientProvider) { phase, sent ->
+                    val io = UploadIo(source, clientProvider) { phase, sent ->
                         emit(index + 1, sources.size, source, phase, sent)
                     }
                     active = io

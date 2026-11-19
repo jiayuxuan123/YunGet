@@ -18,7 +18,6 @@
 
 package com.yunget.app.data.network
 
-import android.util.Base64
 import com.yunget.app.data.network.model.DownloadLink
 import com.yunget.app.data.network.model.FileThumbnail
 import com.yunget.app.data.network.model.QuotaInfo
@@ -28,7 +27,6 @@ import com.yunget.app.data.network.model.ShareInfo
 import com.yunget.app.data.upload.UploadIo
 import com.yunget.app.data.upload.UploadPhase
 import com.yunget.app.data.upload.UploadSource
-import com.yunget.app.util.DiagnosticLog
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import okhttp3.MediaType.Companion.toMediaType
@@ -54,15 +52,15 @@ sealed interface Pan123LoginResult {
 }
 
 class Pan123Api(
-    private val clientProvider: () -> OkHttpClient = { HttpClients.apiClient() }
+    private val clientProvider: () -> OkHttpClient = { CoreHttp.client() }
 ) {
     /** 每次请求动态获取全局客户端（忽略 SSL 开关切换即时生效） */
     private val client get() = clientProvider()
 
     private val jsonMediaType = "application/json;charset=UTF-8".toMediaType()
 
-    /** 设备标识（文档 §3.2：同一设备长期不变、不参与签名；由 [Pan123DeviceId] 持久化） */
-    private val loginuuid: String = Pan123DeviceId.value()
+    /** 设备标识（文档 §3.2：同一设备长期不变、不参与签名；由宿主通过 [CoreDeviceIds] 持久化） */
+    private val loginuuid: String = CoreDeviceIds.pan123LoginUuid()
 
     // ---------- 签名算法（文档 §6，已抓包逐字还原 + 实时验证） ----------
 
@@ -592,8 +590,8 @@ class Pan123Api(
         // 服务端只要给了 uploadId，就优先走「预签名分片」：分片地址由服务端签好，客户端不参与签名，
         // 不会因为 region / 寻址方式（path-style）猜错而 403。S3 直传是拿不到 uploadId 时的兜底。
         val direct = uploadId.isBlank() && accessKey.isNotBlank() && secretKey.isNotBlank()
-        DiagnosticLog.event(
-            DiagnosticLog.NETWORK,
+        CoreLog.event(
+            CoreLog.NETWORK,
             "upload_123_plan",
             summary = "direct=$direct | uploadId=${uploadId.take(24)} | endpoint=${data.optString("EndPoint")}" +
                 " | bucket=${data.optString("Bucket")} | key=${data.optString("Key").take(48)}" +
@@ -800,7 +798,7 @@ class Pan123Api(
         // 形态 1：整段 base64（不含协议头的串）
         if (!trimmed.contains("://")) {
             return runCatching {
-                String(Base64.decode(trimmed, Base64.DEFAULT), Charsets.UTF_8)
+                String(CoreBase64.decode(trimmed), Charsets.UTF_8)
                     .takeIf { it.startsWith("http", ignoreCase = true) }
             }.getOrNull()
         }
@@ -809,8 +807,7 @@ class Pan123Api(
         if (idx < 0) return null
         val params = trimmed.substring(idx + "params=".length).substringBefore("&")
         return runCatching {
-            val normalized = params.replace('-', '+').replace('_', '/')
-            String(Base64.decode(normalized, Base64.DEFAULT), Charsets.UTF_8)
+            String(CoreBase64.decode(params), Charsets.UTF_8)
         }.getOrNull()
     }
 
@@ -932,7 +929,7 @@ private const val PAN123_THUMB_SIZE = 120
  *
  * 列表项自带 https 的 `Thumbnail` 字段时优先用平台的（省一次拼装，也不依赖上面这条实测结论）。
  */
-internal fun pan123ThumbnailUrl(downloadUrl: String, platformThumbnail: String = ""): String {
+fun pan123ThumbnailUrl(downloadUrl: String, platformThumbnail: String = ""): String {
     // 平台自带字段只在「确实是 https 地址」时采信：JSON null 在这里会变成字符串 "null"，
     // 直接返回会让后面本可用的 DownloadUrl 拼装被跳过
     val provided = platformThumbnail.trim()

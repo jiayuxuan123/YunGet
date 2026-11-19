@@ -30,7 +30,7 @@ import javax.crypto.spec.SecretKeySpec
  * Base64 自己实现是为了两件事：`java.util.Base64` 要 API 26（本项目 minSdk 24），
  * 而 `android.util.Base64` 在 JVM 单测里直接抛 "not mocked"。
  */
-internal object UploadSigning {
+object UploadSigning {
 
     private const val STANDARD =
         "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/"

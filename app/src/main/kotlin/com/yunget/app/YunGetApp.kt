@@ -42,6 +42,14 @@ class YunGetApp : Application() {
         com.yunget.app.data.network.LanzouLog.install { msg ->
             android.util.Log.d("LanzouParse", msg)
         }
+        com.yunget.app.data.network.CoreLog.install(
+            onEvent = { cat, tag, summary -> com.yunget.app.util.DiagnosticLog.event(cat, tag, summary) },
+            onWarn = { cat, tag, summary -> com.yunget.app.util.DiagnosticLog.warn(cat, tag, summary) },
+            onError = { cat, tag, summary, _ -> com.yunget.app.util.DiagnosticLog.error(cat, tag, summary = summary) },
+        )
+        com.yunget.app.data.network.CoreDeviceIds.installPan123LoginUuid {
+            com.yunget.app.data.network.Pan123DeviceId.value()
+        }
         // 结构化诊断日志的落盘装配（滚动文件 + 后台写线程）。
         // 默认关闭，由设置里的「诊断模式」打开 —— 开启后所有出站请求、
         // WebView 事件、数据库操作都会留痕。

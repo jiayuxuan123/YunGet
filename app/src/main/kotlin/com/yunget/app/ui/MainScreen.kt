@@ -557,7 +557,15 @@ fun MainScreen(
         )
     }
     val ilanzouResolveRepository = remember {
-        ILanzouResolveRepository(ilanzouApi, ilanzouRepository)
+        ILanzouResolveRepository(ilanzouApi) {
+            ilanzouRepository.getAccount()?.let {
+                com.yunget.app.data.repository.ILanzouCredentials(
+                    appToken = it.appToken,
+                    uuid = it.uuid,
+                    userId = it.userId
+                )
+            }
+        }
     }
     val lanzouResolveRepository = remember {
         LanzouResolveRepository(lanzouApi)

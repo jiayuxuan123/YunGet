@@ -76,7 +76,7 @@ object QuarkCookieUtil {
  * 夸克 API 封装（OkHttp）：账号验证 + 分享解析 + 下载直链。
  */
 class QuarkApi(
-    private val clientProvider: () -> OkHttpClient = { HttpClients.apiClient() }
+    private val clientProvider: () -> OkHttpClient = { CoreHttp.client() }
 ) {
     /** 每次请求动态获取全局客户端（忽略 SSL 开关切换即时生效） */
     private val client get() = clientProvider()

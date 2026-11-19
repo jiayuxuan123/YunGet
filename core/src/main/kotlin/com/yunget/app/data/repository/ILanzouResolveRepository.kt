@@ -35,9 +35,15 @@ import kotlinx.coroutines.delay
  * - 取链：`/unproved/file/redirect`（匿名可用，302 Location）；
  * - 转存：`/proved/file/transfer`（需登录 appToken）。
  */
+data class ILanzouCredentials(
+    val appToken: String = "",
+    val uuid: String = "",
+    val userId: String = ""
+)
+
 class ILanzouResolveRepository(
     private val api: ILanzouApi,
-    private val accountRepository: ILanzouAccountRepository
+    private val credentialsProvider: suspend () -> ILanzouCredentials? = { null }
 ) : ShareResolveRepository {
 
     @Volatile
@@ -66,7 +72,7 @@ class ILanzouResolveRepository(
         if (file.isdir) throw IllegalStateException("文件夹无法直接下载")
         val fileId = file.fid.removePrefix(ILanzouConstants.FILE_PREFIX)
         // downloadId = AES('<fileId>|<userId>')：未登录传空串，登录则用当前账号 userId
-        val userId = accountRepository.getAccount()?.userId.orEmpty()
+        val userId = credentialsProvider()?.userId.orEmpty()
         api.shareDownload(session.stoken, fileId, userId, uuid())
     }
 
@@ -86,7 +92,7 @@ class ILanzouResolveRepository(
         cookie: String
     ): Result<String> = runCatching {
         val appToken = cookie.takeIf { it.isNotBlank() }
-            ?: accountRepository.getAccount()?.appToken?.takeIf { it.isNotBlank() }
+            ?: credentialsProvider()?.appToken?.takeIf { it.isNotBlank() }
             ?: throw IllegalStateException("请先登录蓝奏云优享版")
         val target = toDirFid.ifBlank { ILanzouConstants.ROOT_FOLDER_ID }
         val fileIds = if (file.isdir) emptyList() else listOf(file.fid.removePrefix(ILanzouConstants.FILE_PREFIX))
@@ -120,7 +126,7 @@ class ILanzouResolveRepository(
 
     private suspend fun uuid(): String {
         cachedUuid?.let { return it }
-        val existing = accountRepository.getAccount()?.uuid?.takeIf { isValidUuid(it) }
+        val existing = credentialsProvider()?.uuid?.takeIf { isValidUuid(it) }
         val value = existing ?: api.getUuid()
         cachedUuid = value
         return value

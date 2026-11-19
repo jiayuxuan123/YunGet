@@ -19,7 +19,6 @@
 
 package com.yunget.app.data.network
 
-import android.util.Base64
 import java.math.BigInteger
 import java.security.SecureRandom
 
@@ -97,13 +96,13 @@ internal object Pan115Crypto {
         val plain = ByteArray(16 + body.size)
         System.arraycopy(key, 0, plain, 0, 16)
         System.arraycopy(body, 0, plain, 16, body.size)
-        return Base64.encodeToString(rsaEncrypt(plain), Base64.NO_WRAP)
+        return CoreBase64.encode(rsaEncrypt(plain))
     }
 
     /** 响应 `data` 字段（base64）→ 明文 JSON */
     fun decode(data: String, key: ByteArray): String {
         require(key.size == 16) { "115 下载协议要求 16 字节 key" }
-        val decrypted = rsaDecrypt(Base64.decode(data, Base64.DEFAULT))
+        val decrypted = rsaDecrypt(CoreBase64.decode(data))
         check(decrypted.size > 16) { "115 下载响应长度异常" }
         val salt = decrypted.copyOfRange(0, 16)
         val body = decrypted.copyOfRange(16, decrypted.size)

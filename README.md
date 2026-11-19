@@ -4,11 +4,11 @@
 >
 > **本项目是 [CYQawa/YunX（云析）](https://github.com/CYQawa/YunX) 的二次开发版本**，在其协议与架构基础上进行功能扩展，并将下载能力逐步迁移至独立的 [TurboDL](https://github.com/jiayuxuan123/TurboDL) 下载引擎。遵循 GNU AGPL-3.0 协议开源。
 
-本版修复 TurboDL 原生下载的并发瓶颈、双栈地址误拦和引擎高级参数入口。详见 [2.7.41 更新日志](engineering/releases/2.7.41.md)。
+本版完成跨端核心模块化、修复 Android 原生下载队列状态上报，并首次提供 Windows x64 早期 Beta 安装包。详见 [2.7.42 更新日志](engineering/releases/2.7.42.md)。
 
-开发版本 **2.7.41**（versionCode 91）· Android 7.0+（minSdk 24，targetSdk 34）· 内置 TurboDL 0.5.0.8
+开发版本 **2.7.42**（versionCode 92）· Android 7.0+（minSdk 24，targetSdk 34）· Windows x64（早期 Beta）· 内置 TurboDL 0.5.0.8
 
-本次云取发布 Android 构建。宽屏导航、配色、字阶和通用设置组件放在共用界面源码中。
+本次云取同步发布 Android 正式版 APK 与 Windows x64 早期 Beta 安装包（MSI）。宽屏导航、配色、字阶、网盘解析核心与通用设置组件已抽离至共用模块。
 
 **官网**：[jiayuxuan123.github.io/YunGet](https://jiayuxuan123.github.io/YunGet/) —— 下载、使用说明、常见问题、隐私与条款
 
