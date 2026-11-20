@@ -8,6 +8,14 @@
   ],
   "items": [
     {
+      "id": "2026-11-20-release-2744",
+      "title": "云取 2.7.44：Windows 网盘入口、512 并发与 Android 登录修复",
+      "body": "# 云取 2.7.44\n\nAndroid 正式版与 Windows x64 安装器同步更新，内置 TurboDL 0.5.0.9。\n\n- Windows 新增城通、阿里云盘、天翼云盘、腾讯微云、联通沃盘和 PikPak 的官网入口，支持网盘搜索、打开分享和退出独立浏览器会话。\n- Windows 云取下载队列的 HTTP 并发上限由 64 提升至 512。Android 的 TurboDL 原生 HTTP 下载也新增 512 档。\n- Android 修正上述网盘的 WebView 跳转，加入重试和退出会话，经典样式补齐入口与复制直链按钮。\n- 修复部分旧版迅雷账号库升级时的启动崩溃，保留原有账号内容。Android 和 Windows 的文件列表显示网盘返回的文件时间。\n\n[下载安装包和查看完整更新说明](https://github.com/jiayuxuan123/YunGet/releases/tag/v2.7.44)",
+      "date": "2026-11-20",
+      "pinned": true,
+      "important": true
+    },
+    {
       "id": "2026-11-19-release-2743",
       "title": "云取 2.7.43：Windows 桌面端全功能补齐 + TurboDL 0.5.0.9",
       "body": "# 云取 2.7.43\n\nAndroid 正式版（versionCode 93，内置 TurboDL 0.5.0.9）与 **Windows x64 桌面端完整版** 同步发布。Android 端可直接覆盖升级。\n\n## Windows 桌面端重大升级\n\n- **网页登录与凭据安全**：新增基于本机 Edge/Chrome 隔离会话的自动网页登录与抓凭证（覆盖 11 个网盘与视频平台），补齐光鸭/蓝奏/小飞机账密与短信直登；接入 Windows DPAPI 用户态凭据加密并自动迁移旧配置；补齐抖音/快手/小红书无头浏览器视频抽取。\n- **网盘业务闭环**：支持同平台多账号管理与主账号切换；9 大平台支持分享一键转存、本地多文件上传与生成分享链接；接入小飞机个人盘浏览与直链下载。\n- **桌面原生交互**：新增系统托盘与原生完成/失败通知、剪贴板监听、解析历史与收藏夹、窗口拖放、全列表右键菜单与 `Ctrl+K` 命令面板。\n- **诊断与更新**：新增日志查看器、配置导入/导出（默认脱敏）、在线检查更新并一键下载 MSI、任务详情实时速率曲线。\n\n## Android 端与跨端核心\n\n- 升级内置 **TurboDL 0.5.0.9**：修复单源无强 ETag 并发分段、停滞分片主动回收（与限速协同）及续传测速基线虚高。\n- 139、迅雷与全平台视频解析核心统一迁入 `:core`，完善 Metalink/SFTP 原生路由能力支持。\n\n[TurboDL 0.5.0.9](https://github.com/jiayuxuan123/TurboDL/releases/tag/v0.5.0.9)",
