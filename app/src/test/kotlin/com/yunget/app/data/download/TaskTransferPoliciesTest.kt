@@ -9,6 +9,18 @@ import org.junit.Assert.assertNull
 import org.junit.Test
 
 class TaskTransferPoliciesTest {
+    @Test
+    fun `512 is persisted and only applied to a native HTTP task`() {
+        val policy = TaskTransferPolicies.encode(
+            TurboConfig(maxConnectionsPerTask = 256), "quark", "", connections = 512,
+        )
+        assertEquals(512, TaskTransferPolicies.connectionLimit(policy, 512, nativeHttp = true))
+        assertEquals(256, TaskTransferPolicies.connectionLimit(policy, 512))
+        assertEquals(64, TaskTransferPolicies.connectionLimit(policy, 64, nativeHttp = true))
+        val oldPolicy = TaskTransferPolicies.encode(TurboConfig(), "quark", "")
+        assertEquals(16, TaskTransferPolicies.connectionLimit(oldPolicy, 512, nativeHttp = true))
+    }
+
     private fun config(): TurboConfig = TurboConfig(
         minSegmentSize = 512L * 1024,
         blockSize = 8L * 1024 * 1024,

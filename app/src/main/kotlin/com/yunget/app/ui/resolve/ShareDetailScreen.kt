@@ -1,5 +1,7 @@
 package com.yunget.app.ui.resolve
 
+import com.yunget.app.data.network.model.formatShareFileTime
+
 import androidx.activity.compose.BackHandler
 import androidx.compose.animation.AnimatedContent
 import androidx.compose.animation.AnimatedVisibility
@@ -534,6 +536,7 @@ internal fun ShareFileRow(
         animationSpec = effectsFast(),
         label = "shareFileSelection"
     )
+    val fileTime = remember(file.modifyTime) { formatShareFileTime(file.modifyTime) }
     Card(
         modifier = modifier
             .fillMaxWidth()
@@ -564,7 +567,8 @@ internal fun ShareFileRow(
                     // 完整名称静态换行；列表中不再运行永久 marquee。
                     Text(text = file.fname, style = MaterialTheme.typography.bodyLarge)
                     Text(
-                        text = if (file.isdir) "文件夹" else formatSize(file.fsize),
+                        text = listOf(if (file.isdir) "文件夹" else formatSize(file.fsize), fileTime)
+                            .filter(String::isNotEmpty).joinToString(" · "),
                         style = MaterialTheme.typography.bodyMedium,
                         color = if (selected) MaterialTheme.colorScheme.onPrimaryContainer else MaterialTheme.colorScheme.onSurfaceVariant
                     )

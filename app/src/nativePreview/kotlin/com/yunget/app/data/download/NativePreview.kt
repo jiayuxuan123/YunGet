@@ -2,6 +2,7 @@ package com.yunget.app.data.download
 
 import android.content.Context
 import android.util.Base64
+import com.yunget.app.data.prefs.SettingsRepository
 import dev.turbodl.core.BackendContext
 import dev.turbodl.core.BackendResult
 import dev.turbodl.core.DownloadBackend
@@ -83,8 +84,9 @@ internal class NativePreview(
             engineRef.get() ?: NativeTransferClient(
                 checkpointDirectory = File(context.filesDir, "native-checkpoints"),
                 maxTasks = 16,
-                maxConnections = 256,
-                bufferBudgetBytes = 32L * 1024 * 1024,
+                maxConnections = SettingsRepository.MAX_DOWNLOAD_THREADS,
+                // 原生核心每个活动请求至少占 80 KiB，512 个请求需要 40 MiB。
+                bufferBudgetBytes = 40L * 1024 * 1024,
             ).also {
                 it.setSpeedLimit(speedLimit())
                 engineRef.set(it)
@@ -128,10 +130,14 @@ internal class NativePreview(
                 if (headers.keys.none { it.equals("User-Agent", ignoreCase = true) }) {
                     headers["User-Agent"] = config.userAgent
                 }
-                val connections = (request.connectionsOverride ?: config.maxConnectionsPerTask)
-                    .coerceIn(1, 256)
                 val native = engine()
                 val kind = request.tags[NativePreviewRouting.MEDIA_TAG]
+                val nativeHttp = kind == null &&
+                    NativePreviewRouting.supportsDirectLink(request.url, request.destination.name)
+                val connectionLimit = if (nativeHttp) SettingsRepository.MAX_DOWNLOAD_THREADS
+                    else SettingsRepository.COMPAT_DOWNLOAD_THREADS
+                val connections = (request.connectionsOverride ?: config.maxConnectionsPerTask)
+                    .coerceIn(1, connectionLimit)
                 val torrent = NativePreviewRouting.isMagnet(request.url) || kind == NativePreviewRouting.TORRENT_FILE
                 val metalink = kind == NativePreviewRouting.METALINK_FILE ||
                     NativePreviewRouting.isMetalinkFile(request.url, request.destination.name)
@@ -453,7 +459,8 @@ internal class NativePreview(
         connections = connections,
         requestWindowBytes = config.minSegmentSize.coerceIn(8192, 64L * 1024 * 1024),
         retries = config.maxRetries,
-        maxConnectionsPerHost = config.maxConnectionsPerHost.takeIf { it > 0 } ?: 256,
+        maxConnectionsPerHost = config.maxConnectionsPerHost.takeIf { it > 0 }
+            ?: maxOf(SettingsRepository.COMPAT_DOWNLOAD_THREADS, connections),
         cooldownGroup = runCatching { URI(url).host.orEmpty() }.getOrDefault(""),
         connectTimeoutMs = config.connectTimeoutMs.toInt(),
         readTimeoutMs = config.readTimeoutMs.toInt(),

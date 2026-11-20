@@ -119,7 +119,7 @@ internal object EngineManagerFactory {
             context = context,
             dao = dao,
             downloader = chunkDownloader(context, settings),
-            threadProvider = { settings.commonThreads() },
+            threadProvider = { settings.commonThreads().coerceAtMost(SettingsRepository.COMPAT_DOWNLOAD_THREADS) },
             saveDirProvider = { settings.downloadDirUri },
             concurrencyProvider = { settings.commonConcurrency() },
             speedLimitProvider = { settings.commonSpeedLimit() },
@@ -145,7 +145,7 @@ internal object EngineManagerFactory {
             context = context,
             dao = dao,
             downloader = chunkDownloader(context, settings),
-            threadProvider = { settings.commonThreads() },
+            threadProvider = { settings.commonThreads().coerceAtMost(SettingsRepository.COMPAT_DOWNLOAD_THREADS) },
             saveDirProvider = { settings.downloadDirUri },
             concurrencyProvider = { settings.commonConcurrency() },
             speedLimitProvider = { settings.commonSpeedLimit() },
@@ -172,7 +172,10 @@ internal object EngineManagerFactory {
     ) = ChunkDownloader(
         clientProvider = { HttpClients.downloadClient() },
         bufferSizeProvider = {
-            ioBufferSizeFor(settings.downloadThreads, settings.maxConcurrentDownloads)
+            ioBufferSizeFor(
+                settings.downloadThreads.coerceAtMost(SettingsRepository.COMPAT_DOWNLOAD_THREADS),
+                settings.maxConcurrentDownloads,
+            )
         },
     )
 }

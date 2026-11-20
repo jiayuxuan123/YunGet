@@ -121,7 +121,7 @@ private const val AUTO_DOH = "auto://best"
 
 
 
-/** 可选的最大下载线程数（引擎慢启动在 [4, 该值] 间动态爬升，最高 256 = 引擎上限） */
+/** 兼容下载器可用的并发上限档位。 */
 private val threadOptions = listOf(1, 2, 4, 8, 16, 32, 64, 128, 192, 256)
 
 /**
@@ -323,6 +323,9 @@ fun SettingsScreen(
         return
     }
 
+    val activeConns = activeConnectionsProvider()
+    val supports512 = ThreadCountAdvice.supports512(settingsRepo)
+    val shownThreads = if (supports512) threads else threads.coerceAtMost(SettingsRepository.COMPAT_DOWNLOAD_THREADS)
     Column(
         modifier = modifier
             .fillMaxSize()
@@ -337,13 +340,12 @@ fun SettingsScreen(
         // 描述文字来自 ThreadCountAdvice（P15）：高档位会给出"调高有风险、但对每连接
         // 限速的服务端有效"的说明。措辞是可测的（见 ThreadCountAdviceTest），
         // 不写在这里 —— 写在 Composable 里就只能靠肉眼回归。
-        val activeConns = activeConnectionsProvider()
         SettingsItem(
             icon = Icons.Outlined.Tune,
             title = "最大下载线程数",
-                        valueText = if (activeConns != null) "$threads 条上限 · 当前 $activeConns 条" else "$threads 条连接",
+            valueText = if (activeConns != null) "$shownThreads 条上限 · 当前 $activeConns 条" else "$shownThreads 条连接",
             description = buildString {
-                append(ThreadCountAdvice.describe(threads))
+                append(ThreadCountAdvice.describe(shownThreads))
                 // 有任务在跑时，把"引擎实际用到多少"也说出来。
                 // 设定值与实际值不一致是**正常的**（引擎会按实测吞吐自行收敛），
                 // 但用户看不见就会以为没生效。
@@ -1113,7 +1115,7 @@ fun SettingsScreen(
             text = {
                 Column {
                     Text(
-                        text = ThreadCountAdvice.dialogNote(threads),
+                        text = ThreadCountAdvice.dialogNote(shownThreads, supports512),
                         style = MaterialTheme.typography.bodyMedium,
                         color = MaterialTheme.colorScheme.onSurfaceVariant
                     )
@@ -1126,7 +1128,10 @@ fun SettingsScreen(
                             .heightIn(max = 320.dp)
                             .verticalScroll(rememberScrollState())
                     ) {
-                        threadOptions.chunked(2).forEach { rowValues ->
+                        val options = if (supports512) {
+                            threadOptions + SettingsRepository.MAX_DOWNLOAD_THREADS
+                        } else threadOptions
+                        options.chunked(2).forEach { rowValues ->
                             Row(
                                 modifier = Modifier.fillMaxWidth(),
                                 verticalAlignment = Alignment.CenterVertically
@@ -1134,7 +1139,7 @@ fun SettingsScreen(
                                 rowValues.forEach { value ->
                                     RadioThreadRow(
                                         value = value,
-                                        threads = threads,
+                                        threads = shownThreads,
                                         onSelect = { v ->
                                             threads = v
                                             onThreadsChange(v)

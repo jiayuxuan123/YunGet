@@ -12,6 +12,7 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.outlined.ContentCopy
 import androidx.compose.material.icons.outlined.Download
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.Icon
@@ -34,7 +35,7 @@ import androidx.compose.material3.Card
 import androidx.compose.material3.TextButton
 
 /**
- * 下载直链弹窗：展示文件名与直链（长按直链复制），支持「开始下载」（分片多线程下载）。
+ * 下载直链弹窗：展示文件名与直链，支持复制和开始下载。
  * 点「关闭」或弹窗外（管壁）关闭 = 放弃下载，由上层清理临时转存。
  */
 @Composable
@@ -47,6 +48,10 @@ fun DownloadLinkDialog(
     val context = LocalContext.current
     // Dialog 内提示宿主（AlertDialog 为独立窗口）
     val snackbarHostState = rememberGlobalSnackbarHostState()
+    val copyLink: () -> Unit = {
+        copyToClipboard(context, link.downloadUrl)
+        SnackbarController.show("下载链接已复制")
+    }
 
     AlertDialog(
         onDismissRequest = onDismiss,
@@ -78,10 +83,8 @@ fun DownloadLinkDialog(
                             .padding(12.dp)
                             .combinedClickable(
                                 onClick = {},
-                                onLongClick = {
-                                    copyToClipboard(context, link.downloadUrl)
-                                    SnackbarController.show("下载链接已复制")
-                                }
+                                onLongClick = copyLink,
+                                onLongClickLabel = "复制下载链接",
                             ),
                         style = MaterialTheme.typography.labelSmall.copy(
                             fontFamily = FontFamily.Monospace,
@@ -93,7 +96,11 @@ fun DownloadLinkDialog(
                         overflow = TextOverflow.Ellipsis
                     )
                 }
-                Spacer(modifier = Modifier.height(8.dp))
+                TextButton(onClick = copyLink) {
+                    Icon(Icons.Outlined.ContentCopy, contentDescription = null, modifier = Modifier.size(16.dp))
+                    Spacer(Modifier.width(6.dp))
+                    Text("复制链接")
+                }
                 Text(
                     text = "点击「开始下载」将分片多线程下载并保存到 Download 目录",
                     style = MaterialTheme.typography.labelMedium,

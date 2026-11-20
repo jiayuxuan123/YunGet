@@ -18,6 +18,7 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.semantics.Role
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import com.yunget.app.ui.login.externalDrives
 import com.yunget.app.ui.theme.ThemeController
 import com.yunget.app.ui.theme.spatialDefault
 import com.yunget.app.ui.theme.spatialFast
@@ -273,6 +274,9 @@ fun DriveScreen(
             onILanzouLogout = onILanzouLogout,
             onLanzouLogin = onLanzouLogin,
             onLanzouLogout = onLanzouLogout,
+            externalAccountLabels = externalAccountLabels,
+            onOpenExternalDrive = onOpenExternalDrive,
+            onLoginExternalDrive = onLoginExternalDrive,
             modifier = modifier,
         )
         return
@@ -287,7 +291,7 @@ fun DriveScreen(
         "quark" to "夸克网盘", "uc" to "UC 网盘", "xunlei" to "迅雷网盘",
         "baidu" to "百度网盘", "c139" to "139 网盘", "pan123" to "123 云盘",
         "pan115" to "115 网盘", "guangya" to "光鸭云盘", "ilanzou" to "蓝奏云优享版", "lanzou" to "蓝奏云"
-    )
+    ) + externalDrives.map { (id, drive) -> id to drive.title }
     if (showOrder) DriveOrderDialog(
         items = orderItems, order = accountOrder,
         onChange = { accountOrder = it; orderSettings.driveAccountOrder = it },
@@ -453,77 +457,26 @@ fun DriveScreen(
             },
             { showLanzouSheet = true }, onLanzouLogin
         ),
+    ) + externalDrives.map { (id, drive) ->
+        val saved = externalAccountLabels[id] != null
         DriveEntry(
             DriveAccount(
-                "feijipan", "小飞机网盘", "登录后浏览个人文件与下载", "飞",
-                externalAccountLabels["feijipan"] != null,
+                id = id,
+                name = drive.title,
+                description = when {
+                    drive.url == null -> "登录后浏览个人文件与下载"
+                    saved -> "网页入口已保存"
+                    else -> "使用官网登录、浏览文件与下载"
+                },
+                avatarText = drive.avatar,
+                isLoggedIn = saved,
             ),
-            null,
-            { onOpenExternalDrive("feijipan") },
-            null,
-            { onLoginExternalDrive("feijipan") },
-        ),
-        DriveEntry(
-            DriveAccount(
-                "ctfile", "城通网盘", "登录后使用网页文件管理与下载", "城",
-                externalAccountLabels["ctfile"] != null,
-            ),
-            null,
-            { onOpenExternalDrive("ctfile") },
-            null,
-            { onLoginExternalDrive("ctfile") },
-        ),
-        DriveEntry(
-            DriveAccount(
-                "aliyun", "阿里云盘", "登录后浏览文件与下载", "阿",
-                externalAccountLabels["aliyun"] != null,
-            ),
-            null,
-            { onOpenExternalDrive("aliyun") },
-            null,
-            { onLoginExternalDrive("aliyun") },
-        ),
-        DriveEntry(
-            DriveAccount(
-                "tianyi", "天翼云盘", "登录后浏览文件与下载", "翼",
-                externalAccountLabels["tianyi"] != null,
-            ),
-            null,
-            { onOpenExternalDrive("tianyi") },
-            null,
-            { onLoginExternalDrive("tianyi") },
-        ),
-        DriveEntry(
-            DriveAccount(
-                "weiyun", "腾讯微云", "登录后浏览文件与下载", "微",
-                externalAccountLabels["weiyun"] != null,
-            ),
-            null,
-            { onOpenExternalDrive("weiyun") },
-            null,
-            { onLoginExternalDrive("weiyun") },
-        ),
-        DriveEntry(
-            DriveAccount(
-                "wopan", "联通沃盘", "登录后浏览文件与下载", "沃",
-                externalAccountLabels["wopan"] != null,
-            ),
-            null,
-            { onOpenExternalDrive("wopan") },
-            null,
-            { onLoginExternalDrive("wopan") },
-        ),
-        DriveEntry(
-            DriveAccount(
-                "pikpak", "PikPak", "登录后浏览文件与下载", "P",
-                externalAccountLabels["pikpak"] != null,
-            ),
-            null,
-            { onOpenExternalDrive("pikpak") },
-            null,
-            { onLoginExternalDrive("pikpak") },
-        ),
-    )
+            quota = null,
+            onClick = { onOpenExternalDrive(id) },
+            onMoreClick = null,
+            onLogin = { onLoginExternalDrive(id) },
+        )
+    }
 
     // 账号列表 ↔ 夸克云盘 ↔ UC 云盘 ↔ 迅雷云盘 ↔ 百度云盘 ↔ 139 云盘 ↔ 123 云盘 ↔ 115 云盘 ↔ 光鸭云盘 ↔ 蓝奏云优享版 ↔ 蓝奏云：平滑过渡（淡入 + 轻微缩放，不僵硬）
     AnimatedContent(

@@ -1,5 +1,7 @@
 package com.yunget.app.ui.classic
 
+import com.yunget.app.data.network.model.formatShareFileTime
+
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.basicMarquee
 import androidx.compose.foundation.clickable
@@ -583,7 +585,10 @@ internal fun ShareFileRow(
                 )
                 Spacer(modifier = Modifier.height(2.dp))
                 Text(
-                    text = if (file.isdir) "文件夹" else formatSize(file.fsize),
+                    text = listOf(
+                        if (file.isdir) "文件夹" else formatSize(file.fsize),
+                        remember(file.modifyTime) { formatShareFileTime(file.modifyTime) },
+                    ).filter(String::isNotEmpty).joinToString(" · "),
                     style = MaterialTheme.typography.bodyMedium,
                     color = MaterialTheme.colorScheme.onSurfaceVariant
                 )

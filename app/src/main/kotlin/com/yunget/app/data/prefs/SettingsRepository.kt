@@ -14,7 +14,7 @@ class SettingsRepository(context: Context) {
     /**
      * 下载线程数（分片并发上限；引擎慢启动在 [4, 该值] 间动态爬升）。默认 16。
      *
-     * 上限 **256** = 引擎（TurboDL `maxConnectionsPerTask`）支持的最大值；
+     * 原生 HTTP 支持 512，兼容下载器保留 256 上限。
      * 以前这里卡在 128，白白少用一半（上游 YunX 也早已开放到更高）。
      */
     var downloadThreads: Int
@@ -536,12 +536,13 @@ class SettingsRepository(context: Context) {
         const val DEFAULT_DOWNLOAD_THREADS = 16
 
         /**
-         * 线程数上限 = 引擎（TurboDL `maxConnectionsPerTask`）支持的最大值 256。
+         * 512 档只用于原生 HTTP。兼容下载器保留 256 上限。
          *
          * 以前这里写死 128，等于主动放弃一半并发。注意网盘服务端普遍有风控：
          * 拉满不会更快，反而更容易被限速 —— 默认仍是 16。
          */
-        const val MAX_DOWNLOAD_THREADS = 256
+        const val MAX_DOWNLOAD_THREADS = 512
+        const val COMPAT_DOWNLOAD_THREADS = 256
         const val DEFAULT_MAX_CONCURRENT_DOWNLOADS = 1
         const val DEFAULT_DOWNLOAD_RETRY_COUNT = 3
 

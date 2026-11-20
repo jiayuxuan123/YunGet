@@ -1,5 +1,6 @@
 package com.yunget.app.ui.classic
 
+import com.yunget.app.ui.login.externalDrives
 import com.yunget.app.ui.screens.*
 
 import androidx.compose.animation.AnimatedContent
@@ -216,6 +217,9 @@ fun DriveScreen(
     /** 蓝奏云登录/退出 */
     onLanzouLogin: () -> Unit = {},
     onLanzouLogout: () -> Unit = {},
+    externalAccountLabels: Map<String, String?> = emptyMap(),
+    onOpenExternalDrive: (String) -> Unit = {},
+    onLoginExternalDrive: (String) -> Unit = {},
     modifier: Modifier = Modifier
 ) {
     val orderContext = LocalContext.current
@@ -227,7 +231,7 @@ fun DriveScreen(
         "quark" to "夸克网盘", "uc" to "UC 网盘", "xunlei" to "迅雷网盘",
         "baidu" to "百度网盘", "c139" to "139 网盘", "pan123" to "123 云盘",
         "pan115" to "115 网盘", "guangya" to "光鸭云盘", "ilanzou" to "蓝奏云优享版", "lanzou" to "蓝奏云"
-    )
+    ) + externalDrives.map { (id, drive) -> id to drive.title }
     if (showOrder) DriveOrderDialog(
         items = orderItems, order = accountOrder,
         onChange = { accountOrder = it; orderSettings.driveAccountOrder = it },
@@ -558,7 +562,26 @@ fun DriveScreen(
                         },
                         { showLanzouSheet = true }, onLanzouLogin
                     ),
-                )
+                ) + externalDrives.map { (id, drive) ->
+                    val saved = externalAccountLabels[id] != null
+                    DriveEntry(
+                        DriveAccount(
+                            id = id,
+                            name = drive.title,
+                            description = when {
+                                drive.url == null -> "登录后浏览个人文件与下载"
+                                saved -> "网页入口已保存"
+                                else -> "使用官网登录、浏览文件与下载"
+                            },
+                            avatarText = drive.avatar,
+                            isLoggedIn = saved,
+                        ),
+                        quota = null,
+                        onClick = { onOpenExternalDrive(id) },
+                        onMoreClick = null,
+                        onLogin = { onLoginExternalDrive(id) },
+                    )
+                }
                 item(key = "account_order") {
                     Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
                         TextButton(onClick = { showOrder = true }) { Text("账号排序") }

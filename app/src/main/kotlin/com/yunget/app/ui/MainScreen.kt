@@ -1300,6 +1300,11 @@ fun MainScreen(
                     "feijipan", "ctfile", "aliyun", "tianyi", "weiyun", "wopan", "pikpak" -> {
                         externalAccountStore.delete(platform)
                         externalAccountRefresh++
+                        com.yunget.app.ui.login.clearExternalDriveSession(platform) { cleared ->
+                            if (!cleared) {
+                                SnackbarController.show("已移除云取中的账号记录。请在官网退出网页会话，或更新系统 WebView。")
+                            }
+                        }
                     }
                 }
             },

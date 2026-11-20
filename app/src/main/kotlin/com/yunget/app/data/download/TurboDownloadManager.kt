@@ -413,7 +413,7 @@ class TurboDownloadManager(
     // ---------- 配置映射 ----------
 
     private fun buildConfig(): TurboConfig = TurboConfig(
-        maxConnectionsPerTask = threadProvider().coerceIn(1, SettingsRepository.MAX_DOWNLOAD_THREADS),
+        maxConnectionsPerTask = threadProvider().coerceIn(1, SettingsRepository.COMPAT_DOWNLOAD_THREADS),
         maxConcurrentTasks = concurrencyProvider().coerceIn(1, 64),
         globalSpeedLimitBytesPerSec = speedLimitProvider().coerceAtLeast(0L),
         maxRetries = retryCountProvider().coerceIn(0, 50),
@@ -996,7 +996,11 @@ class TurboDownloadManager(
                 refreshReferenceJson = submission.refreshReferenceJson,
                 transferPolicyJson = submission.transferPolicyJson.ifBlank { "{}" }.let { stored ->
                     val policy = if (stored == "{}") {
-                        TaskTransferPolicies.encode(buildConfig(), platform, submission.sourceAccountId)
+                        val config = buildConfig()
+                        val connections = if (useNative && NativePreviewRouting.supportsDirectLink(url, safeName)) {
+                            threadProvider().coerceIn(1, SettingsRepository.MAX_DOWNLOAD_THREADS)
+                        } else config.maxConnectionsPerTask
+                        TaskTransferPolicies.encode(config, platform, submission.sourceAccountId, connections)
                     } else stored
                     val pinnedAlt = buildList {
                         if (fallbackUrl.isNotBlank()) add(DownloadSource(fallbackUrl, headers))
@@ -1112,17 +1116,23 @@ class TurboDownloadManager(
             // TurboDL 下到应用缓存，完成后再交 DownloadSaver 保存到公共目录。
             val out = File(turboCacheDir().apply { mkdirs() }, "task_${id}.part")
             turboOutputs[id] = out
+            val tags = NativePreviewRouting.tags(task.transferPolicyJson)
             val request = DownloadRequest(
                 url = task.url,
                 destination = out,
                 headers = restoredHeaders,
                 knownSize = knownSize,
-                connectionsOverride = TaskTransferPolicies.connectionLimit(task.transferPolicyJson,
-                    threadProvider().coerceIn(1, SettingsRepository.MAX_DOWNLOAD_THREADS)),
+                connectionsOverride = TaskTransferPolicies.connectionLimit(
+                    task.transferPolicyJson,
+                    threadProvider(),
+                    nativeHttp = tags[NativePreviewRouting.TAG] == NativePreviewRouting.NATIVE &&
+                        tags[NativePreviewRouting.MEDIA_TAG] == null &&
+                        NativePreviewRouting.supportsDirectLink(task.url, task.fileName),
+                ),
                 // 稳定键 = Room 任务 id：使同一任务多次 submit 复用同一分片目录，
                 // 真正实现断点续传（暂停恢复 / 进程重启都从断点继续，而非从头下）。
                 stableKey = "room-$id",
-                tags = NativePreviewRouting.tags(task.transferPolicyJson),
+                tags = tags,
                 mirrors = if (NativePreviewRouting.selected(task.transferPolicyJson)) {
                     emptyList()
                 } else {
@@ -1323,7 +1333,7 @@ class TurboDownloadManager(
                         saveDir = dir,
                         headers = headers,
                         // 连接数用与内置路径同一个设置值（同一个「下载线程数」口径，避免两套设置各说各话）
-                        connections = threadProvider().coerceIn(1, SettingsRepository.MAX_DOWNLOAD_THREADS),
+                        connections = threadProvider().coerceIn(1, SettingsRepository.COMPAT_DOWNLOAD_THREADS),
                         name = fileName,
                         // 任务侧 id 塞进标签：出了问题时能在引擎侧直接反查是本地哪条任务
                         labels = mapOf("yungetTaskId" to id.toString()),
@@ -1436,7 +1446,7 @@ class TurboDownloadManager(
                                         -1L
                                     },
                                     chunkCount = 0,
-                                    connectionLimit = threadProvider().coerceAtLeast(1),
+                                    connectionLimit = threadProvider().coerceIn(1, SettingsRepository.COMPAT_DOWNLOAD_THREADS),
                                 ))
                             }
                             // 前台通知：与内置路径共用同一条节流与速度来源（_stats），故写在 _stats 之后

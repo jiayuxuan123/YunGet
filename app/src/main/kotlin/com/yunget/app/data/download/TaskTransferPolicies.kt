@@ -1,5 +1,6 @@
 package com.yunget.app.data.download
 
+import com.yunget.app.data.prefs.SettingsRepository
 import dev.turbodl.core.AdaptiveConcurrencyMode
 import dev.turbodl.core.TaskTransferPolicy
 import dev.turbodl.core.TurboConfig
@@ -39,10 +40,15 @@ internal object TaskTransferPolicies {
      * [accountId] 非空时只写入 `platform:sha256(accountId).take(16)`，用于同平台
      * 账号间的背压隔离；哈希前的账号 ID 不会进入 JSON。
      */
-    fun encode(config: TurboConfig, platform: String, accountId: String): String {
+    fun encode(
+        config: TurboConfig,
+        platform: String,
+        accountId: String,
+        connections: Int = config.maxConnectionsPerTask,
+    ): String {
         val json = JSONObject()
             .put(FIELD_VERSION, VERSION)
-            .put(FIELD_CONNECTIONS, config.maxConnectionsPerTask)
+            .put(FIELD_CONNECTIONS, connections)
             .put(FIELD_MIN_SEGMENT_SIZE, config.minSegmentSize)
             .put(FIELD_BLOCK_SIZE, config.blockSize)
             .put(FIELD_SEGMENTS_PER_CONNECTION, config.segmentsPerConnection)
@@ -97,12 +103,13 @@ internal object TaskTransferPolicies {
         }
     }
 
-    fun connectionLimit(json: String, userLimit: Int): Int {
-        val upper = userLimit.coerceIn(1, 256)
+    fun connectionLimit(json: String, userLimit: Int, nativeHttp: Boolean = false): Int {
+        val engineLimit = if (nativeHttp) SettingsRepository.MAX_DOWNLOAD_THREADS else SettingsRepository.COMPAT_DOWNLOAD_THREADS
+        val upper = userLimit.coerceIn(1, engineLimit)
         if (decode(json) == null) return upper
         return runCatching {
-            val saved = JSONObject(json).optionalLong(FIELD_CONNECTIONS)?.toInt() ?: upper
-            minOf(saved, upper)
+            val saved = JSONObject(json).optionalLong(FIELD_CONNECTIONS) ?: return upper
+            saved.coerceIn(1L, upper.toLong()).toInt()
         }.getOrDefault(upper)
     }
 

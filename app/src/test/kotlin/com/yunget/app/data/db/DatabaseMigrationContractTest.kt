@@ -308,4 +308,13 @@ class DatabaseMigrationContractTest {
             problems.isEmpty(),
         )
     }
+
+    @Test
+    fun v25To26RepairsLegacyXunleiAccountsMissingAuthType() {
+        val migration = migrationBody("MIGRATION_25_26")
+        val column = "xunlei_account" to "authType"
+        assertEquals("''", addedColumnDefaults(migration)[column])
+        assertEquals(entityColumnDefaultsOf(column.first)[column.second], addedColumnDefaults(migration)[column])
+        assertTrue(migration.contains("!db.hasColumn(\"xunlei_account\", \"authType\")"))
+    }
 }

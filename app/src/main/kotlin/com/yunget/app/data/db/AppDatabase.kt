@@ -505,9 +505,14 @@ abstract class AppDatabase : RoomDatabase() {
             }
         }
 
-        /** v26: normalize legacy download columns/defaults while retaining every task and account. */
+        /** v26：修复历史任务表，以及曾跳过 v19 加列的迅雷账号表。 */
         private val MIGRATION_25_26 = object : Migration(25, 26) {
-            override fun migrate(db: SupportSQLiteDatabase) = DownloadTaskTableRepair.migrate(db)
+            override fun migrate(db: SupportSQLiteDatabase) {
+                DownloadTaskTableRepair.migrate(db)
+                if (!db.hasColumn("xunlei_account", "authType")) {
+                    db.execSQL("ALTER TABLE `xunlei_account` ADD COLUMN `authType` TEXT NOT NULL DEFAULT ''")
+                }
+            }
         }
 
         /** 列是否存在：迁移里加列前先探测，避免「重复加列」把升级路径炸掉。 */

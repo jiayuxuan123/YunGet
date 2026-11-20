@@ -17,6 +17,8 @@
 
 package com.yunget.app.data.download
 
+import com.yunget.app.data.prefs.SettingsRepository
+
 /**
  * 线程数这个旋钮的取值建议（P15）。
  *
@@ -41,6 +43,10 @@ package com.yunget.app.data.download
  * 抽出来之后它可以被单测覆盖（`ThreadCountAdviceTest`），改措辞时能立刻看到影响范围。
  */
 internal object ThreadCountAdvice {
+    fun supports512(settings: SettingsRepository): Boolean =
+        settings.downloadEngine != SettingsRepository.ENGINE_GOPEED &&
+            settings.downloadEngineId == NativePreviewRouting.ENGINE_ID &&
+            !settings.ignoreSslCert && NativePreview.hasPackagedCore()
 
     /**
      * 超过这个值就给提示。
@@ -102,17 +108,19 @@ internal object ThreadCountAdvice {
      * 与 [describe] 分开是因为两处读者的处境不同：设置项描述是"扫一眼"，
      * 对话框是"我正在决定"，后者可以也更需要把机制讲清。
      */
-    fun dialogNote(threads: Int): String = when (levelFor(threads)) {
+    fun dialogNote(threads: Int, supports512: Boolean = false): String = when (levelFor(threads)) {
         Level.NORMAL ->
-            "设置并发上限（最高 ${com.yunget.app.data.prefs.SettingsRepository.MAX_DOWNLOAD_THREADS}，" +
-                "即引擎上限）；引擎会慢启动逐步爬升到该值（需服务器支持 Range）。"
+            "设置并发上限。引擎会按连接情况调整并发（需服务器支持 Range）。"
         Level.CAUTION, Level.SEVERE ->
-            "设置并发上限（最高 ${com.yunget.app.data.prefs.SettingsRepository.MAX_DOWNLOAD_THREADS}）。" +
+            "设置并发上限。" +
                 "引擎会慢启动爬升到该值，但**爬升不等于用满** —— " +
                 "引擎在测到加连接不再带来吞吐提升时会自行收敛，所以调高档位并不等于会拉满那么多连接。\n\n" +
                 "当前选择 $threads 线程：" + when (levelFor(threads)) {
                     Level.SEVERE -> "已在实测明显出问题的量级；除非你确定自己的服务端是每连接限速，否则建议降档。"
                     else -> "高于默认值；对每连接限速的服务端有效，对惩罚高并发的服务端可能反而更慢。"
                 }
+    }.let { note ->
+        if (supports512) "$note\n\n512 仅用于 TurboDL 原生 HTTP 下载，其他路径最多使用 256。"
+        else note
     }
 }

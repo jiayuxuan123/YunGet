@@ -567,6 +567,7 @@ object KernelProvisioner {
             PAN_CHUNKS
         } else {
             SettingsRepository(context).downloadThreadsFor(DownloadPlatform.GITHUB)
+                .coerceAtMost(SettingsRepository.COMPAT_DOWNLOAD_THREADS)
         }
         val total = if (plan.size > 0L) plan.size else (engine.getTotalSize(url, plan.headers) ?: -1L)
         lastReportAt = 0L
