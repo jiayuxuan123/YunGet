@@ -76,6 +76,7 @@ private sealed class ResolveViewState {
     data class GitHubRepoLoaded(val bundle: GitHubRepoBundle) : ResolveViewState()
     data class GitHubAccountLoaded(val owner: String, val repos: List<GitHubRepo>) : ResolveViewState()
     data class DirectReady(val direct: DesktopLinkTarget.Direct) : ResolveViewState()
+    data class WebDriveReady(val target: DesktopLinkTarget.WebDrive) : ResolveViewState()
 }
 
 @OptIn(ExperimentalLayoutApi::class)
@@ -85,6 +86,7 @@ internal fun DesktopResolveTab(
     accountStore: DesktopAccountStore,
     resolveService: DesktopResolveService,
     driveService: DesktopDriveService,
+    webDriveSessions: DesktopWebDriveSessions,
     downloads: DesktopDownloads,
     historyStore: DesktopResolveHistoryStore,
     onNotify: (String) -> Unit,
@@ -170,6 +172,9 @@ internal fun DesktopResolveTab(
                 directHeaders = ""
                 directShowAdvanced = false
                 viewState = ResolveViewState.DirectReady(target)
+            }
+            is DesktopLinkTarget.WebDrive -> {
+                viewState = ResolveViewState.WebDriveReady(target)
             }
             is DesktopLinkTarget.CloudShare -> {
                 busy = true
@@ -834,6 +839,31 @@ internal fun DesktopResolveTab(
                 }
             }
 
+            is ResolveViewState.WebDriveReady -> {
+                val target = state.target
+                DesktopEmptyCard(
+                    title = target.drive.displayName,
+                    subtitle = "在官网查看分享文件，使用本机保存的网页会话。",
+                    actionLabel = if (busy) "正在打开…" else "打开官网分享",
+                    onAction = if (busy) null else {
+                        {
+                            busy = true
+                            errorMessage = ""
+                            scope.launch {
+                                try {
+                                    webDriveSessions.open(target.drive, target.url)
+                                } catch (err: kotlinx.coroutines.CancellationException) {
+                                    throw err
+                                } catch (err: Exception) {
+                                    errorMessage = err.message ?: "无法打开官网"
+                                } finally {
+                                    busy = false
+                                }
+                            }
+                        }
+                    },
+                )
+            }
             is ResolveViewState.DirectReady -> {
                 val direct = state.direct
                 Surface(

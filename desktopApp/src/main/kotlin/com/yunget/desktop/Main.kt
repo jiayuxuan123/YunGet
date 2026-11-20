@@ -430,6 +430,7 @@ internal fun YunGetDesktopShell(
     val scope = rememberCoroutineScope()
     val snackbarHost = remember { SnackbarHostState() }
     val accounts by accountStore.accounts.collectAsState()
+    val webDriveSessions = remember(dataDirectory) { DesktopWebDriveSessions(dataDirectory) }
     var accountDialogKind by remember { mutableStateOf<DriveAccountKind?>(null) }
     var showLogViewer by remember { mutableStateOf(false) }
     var checkingUpdate by remember { mutableStateOf(false) }
@@ -551,6 +552,7 @@ internal fun YunGetDesktopShell(
                                     accountStore = accountStore,
                                     resolveService = resolveService,
                                     driveService = driveService,
+                                    webDriveSessions = webDriveSessions,
                                     downloads = downloads,
                                     historyStore = historyStore,
                                     onNotify = ::notify,
@@ -571,6 +573,7 @@ internal fun YunGetDesktopShell(
                                     config = config,
                                     accountStore = accountStore,
                                     driveService = driveService,
+                                    webDriveSessions = webDriveSessions,
                                     downloads = downloads,
                                     onNotify = ::notify,
                                     onOpenAccountDialog = { accountDialogKind = it },

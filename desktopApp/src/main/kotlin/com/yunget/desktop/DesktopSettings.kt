@@ -41,6 +41,8 @@ internal enum class ConflictPolicy(val label: String, val summary: String) {
     }
 }
 
+internal const val MAX_DESKTOP_HTTP_CONNECTIONS = 512
+
 internal data class DesktopConfig(
     val downloadDirectory: String = File(System.getProperty("user.home"), "Downloads").absolutePath,
     val themeMode: ThemeMode = ThemeMode.SYSTEM,
@@ -92,7 +94,7 @@ internal class DesktopSettingsStore(private val dataDirectory: File) {
         val next = transform(state.value).let { cfg ->
             cfg.copy(
                 maxConcurrentTasks = cfg.maxConcurrentTasks.coerceIn(1, 8),
-                connectionsPerTask = cfg.connectionsPerTask.coerceIn(1, 64),
+                connectionsPerTask = cfg.connectionsPerTask.coerceIn(1, MAX_DESKTOP_HTTP_CONNECTIONS),
                 speedLimitMbPerSec = cfg.speedLimitMbPerSec.coerceIn(0.0, 2000.0),
                 httpPolicy = cfg.httpPolicy.coerceIn(0, 3),
                 proxyUrl = cfg.proxyUrl.trim(),
@@ -146,7 +148,7 @@ internal class DesktopSettingsStore(private val dataDirectory: File) {
                     themeMode = ThemeMode.fromName(obj.optString("themeMode")),
                     httpPolicy = obj.optInt("httpPolicy", 0).coerceIn(0, 3),
                     maxConcurrentTasks = obj.optInt("maxConcurrentTasks", 3).coerceIn(1, 8),
-                    connectionsPerTask = obj.optInt("connectionsPerTask", 16).coerceIn(1, 64),
+                    connectionsPerTask = obj.optInt("connectionsPerTask", 16).coerceIn(1, MAX_DESKTOP_HTTP_CONNECTIONS),
                     speedLimitMbPerSec = obj.optDouble("speedLimitMbPerSec", 0.0).coerceAtLeast(0.0),
                     proxyUrl = obj.optString("proxyUrl", ""),
                     dohUrl = obj.optString("dohUrl", ""),

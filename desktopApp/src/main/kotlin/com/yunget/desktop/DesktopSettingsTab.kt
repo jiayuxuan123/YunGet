@@ -175,14 +175,23 @@ internal fun DesktopSettingsTab(
 
                     StepperRow(
                         title = "单任务并发连接数",
-                        subtitle = "多线程分片下载并发度（HTTP/1.1 或支持 Range 的 CDN 效果显著）",
+                        subtitle = "HTTP 分片上限取决于服务器的 Range 支持和实际传输情况",
                         value = config.connectionsPerTask,
                         min = 1,
-                        max = 64,
+                        max = MAX_DESKTOP_HTTP_CONNECTIONS,
                         step = if (config.connectionsPerTask >= 16) 4 else 2,
                         unit = "线程",
                         onChange = { v -> settingsStore.update { it.copy(connectionsPerTask = v) } },
                     )
+                    FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                        for (connections in listOf(16, 32, 64, 128, 256, MAX_DESKTOP_HTTP_CONNECTIONS)) {
+                            FilterChip(
+                                selected = config.connectionsPerTask == connections,
+                                onClick = { settingsStore.update { it.copy(connectionsPerTask = connections) } },
+                                label = { Text("$connections 线程") },
+                            )
+                        }
+                    }
 
                     HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f))
 

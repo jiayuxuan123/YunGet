@@ -28,6 +28,7 @@ import com.yunget.app.data.network.ParsedShare
 import com.yunget.app.data.network.QuarkApi
 import com.yunget.app.data.network.QuarkConstants
 import com.yunget.app.data.network.ShareLinkParser
+import com.yunget.app.data.network.OfficialWebDrive
 import com.yunget.app.data.network.SharePlatform
 import com.yunget.app.data.network.UCApi
 import com.yunget.app.data.network.UCConstants
@@ -70,6 +71,7 @@ internal sealed class DesktopLinkTarget {
     data class Video(val detected: DetectedVideoLink, val rawInput: String) : DesktopLinkTarget()
     data class GitHub(val link: GitHubLinkType) : DesktopLinkTarget()
     data class Direct(val source: String, val kind: TransferKind, val suggestedName: String) : DesktopLinkTarget()
+    data class WebDrive(val drive: OfficialWebDrive, val url: URI) : DesktopLinkTarget()
     data class Unsupported(val reason: String) : DesktopLinkTarget()
 }
 
@@ -241,6 +243,12 @@ internal fun detectDesktopLinkTarget(rawInput: String): DesktopLinkTarget {
 
     val httpUrl = Regex("""https?://[^\s]+""", RegexOption.IGNORE_CASE).find(trimmed)?.value
     if (httpUrl != null) {
+        val webUrl = runCatching {
+            URI(httpUrl.trimEnd('。', '，', ',', '；', ';', ')', ']', '}', '"', '\''))
+        }.getOrNull()
+        if (webUrl != null) {
+            OfficialWebDrive.fromUri(webUrl)?.let { return DesktopLinkTarget.WebDrive(it, webUrl) }
+        }
         val kind = inferTransferKind(httpUrl)
         val fallback = when (kind) {
             TransferKind.HLS, TransferKind.DASH -> "stream.mp4"

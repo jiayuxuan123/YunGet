@@ -78,6 +78,8 @@ class DesktopAppVerificationTest {
                 "sftp://mirror.example.org:2222/pub/a%20b.iso",
                 stripDesktopSftpUserInfo("sftp://alice:demo@mirror.example.org:2222/pub/a%20b.iso"),
             )
+            store.update { it.copy(connectionsPerTask = 513) }
+            assertEquals(512, DesktopSettingsStore(root).config.value.connectionsPerTask)
         } finally {
             root.deleteRecursively()
         }

@@ -66,7 +66,9 @@ internal class DesktopDownloads(
     private val engine = NativeTransferClient(
         checkpointsDir,
         maxTasks = 8,
-        maxConnections = 128,
+        maxConnections = MAX_DESKTOP_HTTP_CONNECTIONS,
+        // 原生引擎的每个活动 Range 请求至少需要 80 KiB。
+        bufferBudgetBytes = MAX_DESKTOP_HTTP_CONNECTIONS * 80L * 1024,
         allowLoopbackFixtures = allowLoopbackFixtures,
     )
     private val lock = Mutex()
@@ -270,9 +272,14 @@ internal class DesktopDownloads(
             dohUrl = cfg.dohUrl,
             httpVersion = httpVersion,
         )
+        val isHttp = row.kind == TransferKind.HTTP &&
+            (sanitizedSource.startsWith("https://", true) || sanitizedSource.startsWith("http://", true))
+        val connections = cfg.connectionsPerTask.coerceIn(1, if (isHttp) MAX_DESKTOP_HTTP_CONNECTIONS else 64)
         val policy = NativeTransferClient.Policy(
-            connections = cfg.connectionsPerTask.coerceIn(1, 64),
-            maxConnectionsPerHost = cfg.connectionsPerTask.coerceIn(1, 64),
+            connections = connections,
+            // 短探测分片避免在高并发档位预占一大片可切分空间。
+            requestWindowBytes = if (connections > 256) 64 * 1024L else 1024 * 1024L,
+            maxConnectionsPerHost = connections,
         )
         val id = try {
             when (row.kind) {

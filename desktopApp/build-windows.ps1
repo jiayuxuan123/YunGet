@@ -27,12 +27,11 @@ try {
     Pop-Location
 }
 
-$jars = @(Get-ChildItem -LiteralPath (Join-Path $PSScriptRoot 'build/compose/jars') -Filter '*.jar' -File)
-if ($jars.Count -ne 1) { throw 'Could not identify the Compose application JAR' }
+$jar = Get-Item -LiteralPath (Join-Path $PSScriptRoot "build/compose/jars/YunGet-windows-x64-$version.jar")
 $inputDir = Join-Path $out ('input-' + [Guid]::NewGuid().ToString('N'))
 $nativeInput = Join-Path $inputDir 'native'
 New-Item -ItemType Directory -Path $nativeInput -Force | Out-Null
-Copy-Item -LiteralPath $jars[0].FullName -Destination $inputDir
+Copy-Item -LiteralPath $jar.FullName -Destination $inputDir
 $nativeFiles = Get-ChildItem -LiteralPath (Join-Path $PSScriptRoot 'build/native-resources/windows-x64') -File
 foreach ($file in $nativeFiles) { Copy-Item -LiteralPath $file.FullName -Destination $nativeInput }
 
@@ -40,7 +39,7 @@ foreach ($file in $nativeFiles) { Copy-Item -LiteralPath $file.FullName -Destina
 # The launcher's $APPDIR expands to the bundled app directory at runtime.
 try {
     & $jpackage --type app-image --name YunGet --app-version $version --input $inputDir `
-        --dest $out --main-jar $jars[0].Name --main-class com.yunget.desktop.MainKt `
+        --dest $out --main-jar $jar.Name --main-class com.yunget.desktop.MainKt `
         --java-options '-Dyunget.native.bin=$APPDIR/native' --add-modules 'java.se,jdk.crypto.ec'
     if ($LASTEXITCODE -ne 0) { throw 'Windows app image packaging failed' }
 } finally {

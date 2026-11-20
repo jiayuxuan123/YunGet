@@ -1,5 +1,7 @@
 package com.yunget.desktop
 
+import com.yunget.app.data.network.model.formatShareFileTime
+
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.ContextMenuArea
 import androidx.compose.foundation.ContextMenuItem
@@ -48,6 +50,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import com.yunget.app.data.network.model.ShareFile
+import com.yunget.app.data.network.OfficialWebDrive
 import com.yunget.app.data.network.model.ShareInfo
 import com.yunget.app.data.upload.UploadIo
 import com.yunget.app.data.upload.UploadPhase
@@ -71,6 +74,7 @@ internal fun DesktopDriveTab(
     config: DesktopConfig,
     accountStore: DesktopAccountStore,
     driveService: DesktopDriveService,
+    webDriveSessions: DesktopWebDriveSessions,
     downloads: DesktopDownloads,
     onNotify: (String) -> Unit,
     onOpenAccountDialog: (DriveAccountKind) -> Unit,
@@ -80,11 +84,21 @@ internal fun DesktopDriveTab(
     val scope = rememberCoroutineScope()
     val accounts by accountStore.accounts.collectAsState()
     val allAccounts by accountStore.allAccounts.collectAsState()
+    val webProfiles by webDriveSessions.savedProfiles.collectAsState()
     val personalDrives = remember { DriveAccountKind.entries.filter { it.supportsPersonalDrive } }
     var selectedDrive by remember {
         mutableStateOf(
             personalDrives.firstOrNull { accounts.containsKey(it) } ?: personalDrives.first()
         )
+    }
+    var selectedWebDrive by remember { mutableStateOf<OfficialWebDrive?>(null) }
+    var driveSearch by remember { mutableStateOf("") }
+    val driveSearchTerm = driveSearch.trim()
+    val nativeMatches = personalDrives.filter {
+        it.displayName.contains(driveSearchTerm, ignoreCase = true) || it.name.contains(driveSearchTerm, ignoreCase = true)
+    }
+    val webMatches = OfficialWebDrive.entries.filter {
+        it.displayName.contains(driveSearchTerm, ignoreCase = true) || it.id.contains(driveSearchTerm, ignoreCase = true)
     }
 
     val crumbs = remember { mutableStateListOf<DriveCrumb>() }
@@ -217,7 +231,8 @@ internal fun DesktopDriveTab(
         if (pendingUploadFiles.isNotEmpty()) {
             val copy = pendingUploadFiles.toList()
             onConsumePendingUploadFiles()
-            uploadLocalFiles(copy)
+            if (selectedWebDrive == null) uploadLocalFiles(copy)
+            else onNotify("请在${selectedWebDrive?.displayName}的官网上传文件")
         }
     }
 
@@ -292,20 +307,30 @@ internal fun DesktopDriveTab(
                 fontWeight = FontWeight.SemiBold,
                 modifier = Modifier.padding(horizontal = 6.dp, vertical = 4.dp),
             )
+            OutlinedTextField(
+                value = driveSearch,
+                onValueChange = { driveSearch = it },
+                placeholder = { Text("搜索网盘") },
+                singleLine = true,
+                modifier = Modifier.fillMaxWidth(),
+            )
             LazyColumn(
                 modifier = Modifier.weight(1f),
                 verticalArrangement = Arrangement.spacedBy(6.dp),
             ) {
-                items(personalDrives, key = { it.name }) { kind ->
+                items(nativeMatches, key = { it.name }) { kind ->
                     val acc = accounts[kind]
-                    val selected = selectedDrive == kind
+                    val selected = selectedWebDrive == null && selectedDrive == kind
                     Surface(
                         shape = MaterialTheme.shapes.medium,
                         color = if (selected) MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.72f)
                         else MaterialTheme.colorScheme.surfaceContainerLow,
                         border = if (selected) BorderStroke(1.dp, MaterialTheme.colorScheme.primary.copy(alpha = 0.45f))
                         else BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.4f)),
-                        modifier = Modifier.fillMaxWidth().clickable { selectedDrive = kind },
+                        modifier = Modifier.fillMaxWidth().clickable {
+                            selectedWebDrive = null
+                            selectedDrive = kind
+                        },
                     ) {
                         Column(
                             modifier = Modifier.padding(horizontal = 12.dp, vertical = 10.dp),
@@ -357,6 +382,34 @@ internal fun DesktopDriveTab(
                         }
                     }
                 }
+                if (webMatches.isNotEmpty()) {
+                    item(key = "web-drive-heading") {
+                        Text("网页版网盘", style = MaterialTheme.typography.labelMedium, modifier = Modifier.padding(6.dp))
+                    }
+                    items(webMatches, key = { "web-${it.id}" }) { drive ->
+                        val selected = selectedWebDrive == drive
+                        Surface(
+                            shape = MaterialTheme.shapes.medium,
+                            color = if (selected) MaterialTheme.colorScheme.primaryContainer
+                            else MaterialTheme.colorScheme.surfaceContainerLow,
+                            modifier = Modifier.fillMaxWidth().clickable { selectedWebDrive = drive },
+                        ) {
+                            Row(
+                                modifier = Modifier.padding(horizontal = 12.dp, vertical = 10.dp),
+                                horizontalArrangement = Arrangement.SpaceBetween,
+                                verticalAlignment = Alignment.CenterVertically,
+                            ) {
+                                Text(drive.displayName, style = MaterialTheme.typography.titleSmall)
+                                if (drive in webProfiles) DesktopPill("本机会话")
+                            }
+                        }
+                    }
+                }
+                if (nativeMatches.isEmpty() && webMatches.isEmpty()) {
+                    item(key = "empty-drive-search") {
+                        Text("未找到匹配的网盘", modifier = Modifier.padding(6.dp))
+                    }
+                }
             }
             HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f))
             Text(
@@ -385,6 +438,18 @@ internal fun DesktopDriveTab(
         }
 
         VerticalDivider(color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.6f))
+
+        val webDrive = selectedWebDrive
+        if (webDrive != null) {
+            DesktopWebDrivePanel(
+                drive = webDrive,
+                hasProfile = webDrive in webProfiles,
+                sessions = webDriveSessions,
+                onNotify = onNotify,
+                modifier = Modifier.weight(1f).fillMaxHeight(),
+            )
+            return@Row
+        }
 
         // Right file explorer
         Column(
@@ -678,7 +743,7 @@ internal fun DesktopDriveTab(
                                             )
                                             val meta = buildList {
                                                 if (!file.isdir) add(formatBytes(file.fsize))
-                                                if (file.modifyTime.isNotBlank()) add(file.modifyTime)
+                                                formatShareFileTime(file.modifyTime).takeIf(String::isNotEmpty)?.let(::add)
                                             }.joinToString(" · ")
                                             if (meta.isNotBlank()) {
                                                 Text(meta, style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
