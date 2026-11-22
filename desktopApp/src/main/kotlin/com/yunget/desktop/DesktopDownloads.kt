@@ -274,7 +274,15 @@ internal class DesktopDownloads(
         )
         val isHttp = row.kind == TransferKind.HTTP &&
             (sanitizedSource.startsWith("https://", true) || sanitizedSource.startsWith("http://", true))
-        val connections = cfg.connectionsPerTask.coerceIn(1, if (isHttp) MAX_DESKTOP_HTTP_CONNECTIONS else 64)
+        val host = if (isHttp) runCatching { URI(sanitizedSource).host.orEmpty().lowercase() }.getOrDefault("") else ""
+        val xunlei = isHttp && (row.sourceLabel.startsWith("迅雷") ||
+            host == "xunlei.com" || host.endsWith(".xunlei.com") || host == "sandai.net" || host.endsWith(".sandai.net"))
+        val maxConnections = when {
+            xunlei -> 8
+            isHttp -> MAX_DESKTOP_HTTP_CONNECTIONS
+            else -> 64
+        }
+        val connections = cfg.connectionsPerTask.coerceIn(1, maxConnections)
         val policy = NativeTransferClient.Policy(
             connections = connections,
             // 短探测分片避免在高并发档位预占一大片可切分空间。

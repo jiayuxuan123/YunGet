@@ -317,4 +317,13 @@ class DatabaseMigrationContractTest {
         assertEquals(entityColumnDefaultsOf(column.first)[column.second], addedColumnDefaults(migration)[column])
         assertTrue(migration.contains("!db.hasColumn(\"xunlei_account\", \"authType\")"))
     }
+
+    @Test
+    fun v26To27RepairsExistingV26DevicesMissingXunleiAuthType() {
+        val migration = migrationBody("MIGRATION_26_27")
+        val column = "xunlei_account" to "authType"
+        assertEquals("''", addedColumnDefaults(migration)[column])
+        assertEquals(entityColumnDefaultsOf(column.first)[column.second], addedColumnDefaults(migration)[column])
+        assertTrue(migration.contains("!db.hasColumn(\"xunlei_account\", \"authType\")"))
+    }
 }

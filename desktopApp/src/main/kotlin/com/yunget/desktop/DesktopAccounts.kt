@@ -241,14 +241,17 @@ internal class DesktopAccountStore(private val dataDirectory: File) {
     }
 
     fun configureXunleiApi(api: XunleiApi): XunleiApi {
-        api.refreshTokenProvider = { devId -> refreshXunleiToken(api, devId) }
+        api.refreshTokenProvider = { devId, token -> refreshXunleiToken(api, devId, expectedAccess = token) }
         api.webCaptchaRefresher = { devId, action -> refreshXunleiWebCaptcha(api, devId, action) }
         return api
     }
 
-    suspend fun refreshXunleiToken(api: XunleiApi, deviceId: String = ""): Pair<String, String>? =
+    suspend fun refreshXunleiToken(
+        api: XunleiApi, deviceId: String = "", expectedAccess: String? = null,
+    ): Pair<String, String>? =
         withContext(Dispatchers.IO) {
             val existing = state.value[DriveAccountKind.XUNLEI] ?: return@withContext null
+            if (expectedAccess != null && existing.credential != expectedAccess) return@withContext null
             val refreshToken = existing.extra["refreshToken"].orEmpty()
             if (refreshToken.isBlank()) return@withContext null
             val effectiveDeviceId = deviceId.ifBlank {
@@ -256,6 +259,7 @@ internal class DesktopAccountStore(private val dataDirectory: File) {
             }
             val authType = existing.extra["authType"].orEmpty()
             val refreshed = api.refreshToken(refreshToken, effectiveDeviceId, authType) ?: return@withContext null
+            if (state.value[DriveAccountKind.XUNLEI] != existing) return@withContext null
             val nextRefresh = refreshed.second.ifBlank { refreshToken }
             saveAccount(
                 existing.copy(

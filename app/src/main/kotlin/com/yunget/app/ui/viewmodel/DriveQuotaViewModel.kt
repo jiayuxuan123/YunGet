@@ -77,7 +77,7 @@ class DriveQuotaViewModel(
     val loading = MutableStateFlow(false)
 
     /** 并发加载全部已登录平台的空间（各平台独立请求，互不阻塞；未登录平台自动跳过） */
-    fun loadAll() {
+    fun loadAll(includeBaidu: Boolean = true) {
         if (loading.value) return // 防止下拉刷新与进入页面初始化重复触发
         loading.value = true
         viewModelScope.launch {
@@ -105,12 +105,9 @@ class DriveQuotaViewModel(
                         _xunleiQuota.value = runCatching { xunleiApi.getQuota(xl, deviceId, captcha) }.getOrNull()
                     }
                 }
-                // 百度
-                launch {
+                if (includeBaidu) launch {
                     val bd = baiduCookie()
-                    if (bd != null) {
-                        _baiduQuota.value = runCatching { baiduApi.getQuota(bd) }.getOrNull()
-                    }
+                    _baiduQuota.value = bd?.let { runCatching { baiduApi.getQuota(it) }.getOrNull() }
                 }
                 // 139
                 launch {

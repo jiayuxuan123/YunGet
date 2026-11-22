@@ -6,7 +6,7 @@
 
 本版在 Windows 新增城通、阿里云盘、天翼云盘、腾讯微云、联通沃盘和 PikPak 的官网入口。Android 同步修正这批网盘的 WebView 登录与会话退出路径，并修复部分旧版迅雷账号数据库升级崩溃。Android 与 Windows 的 TurboDL 原生 HTTP 下载均支持最高 512 条分片并发请求。详见 [2.7.44 更新日志](engineering/releases/2.7.44.md)。
 
-当前版本 **2.7.44**（versionCode 94）· Android 7.0+（minSdk 24，targetSdk 34）· Windows x64 · 内置 TurboDL 0.5.0.9
+当前版本 **2.7.45**（versionCode 95）· Android 7.0+（minSdk 24，targetSdk 34）· Windows x64 · 内置 TurboDL 0.5.0.10
 
 本次云取同步发布 Android 正式版 APK 与 Windows x64 安装包（MSI）。
 

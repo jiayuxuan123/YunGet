@@ -193,6 +193,20 @@ internal object SecureAccountDaos {
         override suspend fun getById(id: String): XunleiAccountEntity? = decryptGuarded(raw::clear) {
             raw.getById(id)?.let { decryptXunlei(raw, cipher, it) }
         }
+        override suspend fun replaceTokens(
+            id: String, previousAccess: String, previousRefresh: String, access: String, refresh: String, now: Long,
+        ): Int = withContext(Dispatchers.IO) {
+            decryptGuarded(raw::clear) {
+                val stored = raw.getById(id) ?: return@decryptGuarded 0
+                if (cipher.decrypt(stored.accessToken, "xunlei.accessToken") != previousAccess ||
+                    cipher.decrypt(stored.refreshToken, "xunlei.refreshToken") != previousRefresh
+                ) return@decryptGuarded 0
+                raw.replaceTokens(
+                    id, stored.accessToken, stored.refreshToken,
+                    cipher.encrypt(access, "xunlei.accessToken"), cipher.encrypt(refresh, "xunlei.refreshToken"), now,
+                )
+            } ?: 0
+        }
         override suspend fun count(): Int = raw.count()
         override suspend fun deleteById(id: String) = raw.deleteById(id)
         override suspend fun setPrimary(id: String) = raw.setPrimary(id)

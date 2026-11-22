@@ -11,7 +11,7 @@ import com.yunget.app.data.security.CredentialCipher
 
 @Database(
     entities = [QuarkAccountEntity::class, DownloadTaskEntity::class, UCAccountEntity::class, XunleiAccountEntity::class, BaiduAccountEntity::class, C139AccountEntity::class, Pan123AccountEntity::class, BookmarkEntity::class, Pan115AccountEntity::class, GuangYaAccountEntity::class, ILanzouAccountEntity::class, LanzouAccountEntity::class, PluginInstalledEntity::class, PluginSourceEntity::class],
-    version = 26,
+    version = 27,
     exportSchema = false
 )
 abstract class AppDatabase : RoomDatabase() {
@@ -110,6 +110,7 @@ abstract class AppDatabase : RoomDatabase() {
                         MIGRATION_22_23, MIGRATION_23_24,
                         MIGRATION_24_25,
                         MIGRATION_25_26,
+                        MIGRATION_26_27,
                     )
                     // 早期开发版（1-8）无可靠 schema；从 v9 起必须保留凭证和下载任务
                     .fallbackToDestructiveMigrationFrom(1, 2, 3, 4, 5, 6, 7, 8)
@@ -509,6 +510,15 @@ abstract class AppDatabase : RoomDatabase() {
         private val MIGRATION_25_26 = object : Migration(25, 26) {
             override fun migrate(db: SupportSQLiteDatabase) {
                 DownloadTaskTableRepair.migrate(db)
+                if (!db.hasColumn("xunlei_account", "authType")) {
+                    db.execSQL("ALTER TABLE `xunlei_account` ADD COLUMN `authType` TEXT NOT NULL DEFAULT ''")
+                }
+            }
+        }
+
+        /** v27：为已停留在 v26 且缺少 xunlei_account.authType 的存量设备补齐列。 */
+        private val MIGRATION_26_27 = object : Migration(26, 27) {
+            override fun migrate(db: SupportSQLiteDatabase) {
                 if (!db.hasColumn("xunlei_account", "authType")) {
                     db.execSQL("ALTER TABLE `xunlei_account` ADD COLUMN `authType` TEXT NOT NULL DEFAULT ''")
                 }

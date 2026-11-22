@@ -37,6 +37,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import com.yunget.app.ui.components.HttpPolicySelector
+import com.yunget.app.ui.components.WebDavBackupDialog
 import com.yunget.app.ui.components.SettingsSection
 import org.json.JSONObject
 import java.io.File
@@ -57,6 +58,14 @@ internal fun DesktopSettingsTab(
 ) {
     val accounts by accountStore.accounts.collectAsState()
     val scroll = rememberScrollState()
+    var showWebDavDialog by remember { mutableStateOf(false) }
+    if (showWebDavDialog) {
+        WebDavBackupDialog(
+            onDismiss = { showWebDavDialog = false },
+            exportSnapshot = { exportDesktopWebDavSnapshot(accountStore, config) },
+            restoreSnapshot = { restoreDesktopWebDavSnapshot(it, accountStore, settingsStore) },
+        )
+    }
 
     var speedLimitText by remember(config.speedLimitMbPerSec) {
         mutableStateOf(if (config.speedLimitMbPerSec <= 0.0) "" else config.speedLimitMbPerSec.toString())
@@ -553,6 +562,7 @@ internal fun DesktopSettingsTab(
                                 }
                             },
                         ) { Text("导入配置备份") }
+                        OutlinedButton(onClick = { showWebDavDialog = true }) { Text("WebDAV 加密备份") }
                         OutlinedButton(onClick = onOpenLogViewer) {
                             Text("打开日志查看器")
                         }

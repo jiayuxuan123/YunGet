@@ -113,7 +113,7 @@ object UCConstants {
     const val GUEST_SEC_CH_UA = "\"Not=A?Brand\";v=\"99\", \"Chromium\";v=\"100\", \"Google Chrome\";v=\"100\""
 
     /** 云盘下载直链（抓包：?pr=UCBrowser&fr=pc&sys=win32&ve=1.6.1；个人云盘文件用，非 entry=ft 分享通道） */
-    const val CLOUD_DOWNLOAD_URL = "$API_BASE/1/clouddrive/file/download"
+    const val CLOUD_DOWNLOAD_URL = "$API_BASE/1/clouddrive/file/download?pr=UCBrowser&fr=pc&sys=win32&ve=1.6.1"
 
     /** 删除文件（body: action_type=2 + filelist + exclude_fids） */
     const val DELETE_URL = "$API_BASE/1/clouddrive/file/delete?pr=UCBrowser&fr=pc"

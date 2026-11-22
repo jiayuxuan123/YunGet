@@ -18,4 +18,11 @@ class RateLimitCooldownTest {
         assertEquals("quark", RateLimitCooldown.sourceKey("", "https://drive-pc.quark.cn/file"))
         assertEquals(null, RateLimitCooldown.sourceKey("direct", "https://example.invalid/file"))
     }
+
+    @Test fun xunleiRecoveryStepsDownAndWaitsLongerAfterRepeatedFailures() {
+        val url = "https://example.invalid/file"
+        assertEquals(listOf(8, 4, 2, 1, 1), (0..4).map { RateLimitCooldown.connectionLimit("xunlei", url, 32, it) })
+        assertEquals(listOf(30_000L, 120_000L, 300_000L, 600_000L, 600_000L), (1..5).map(RateLimitCooldown::delayMs))
+        assertEquals(32, RateLimitCooldown.connectionLimit("quark", url, 32, failures = 3))
+    }
 }

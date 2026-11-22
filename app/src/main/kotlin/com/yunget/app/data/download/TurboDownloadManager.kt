@@ -169,6 +169,7 @@ class TurboDownloadManager(
     private val saveLock = Mutex()
     private val sourceRefreshAttempts = ConcurrentHashMap<Long, Int>()
     private val rateLimitUntil = ConcurrentHashMap<Long, Long>()
+    private val rateLimitFailures = ConcurrentHashMap<Long, Int>()
     private val sourceRateLimitUntil = ConcurrentHashMap<String, Long>()
     private val refreshJobs = ConcurrentHashMap<Long, kotlinx.coroutines.Job>()
     private val sourceRefresher by lazy { QuarkTaskRefresher(context) }
@@ -913,6 +914,7 @@ class TurboDownloadManager(
         taskHeaders.clear()
         taskSizes.clear()
         rateLimitUntil.clear()
+        rateLimitFailures.clear()
         sourceRateLimitUntil.clear()
         taskNames.clear()
         taskCallbacks.clear()
@@ -1050,7 +1052,12 @@ class TurboDownloadManager(
                     until?.takeIf { it > now },
                     sourceUntil?.takeIf { it > now },
                 ).maxOrNull() ?: now
-                dao.updateError(id, RateLimitCooldown.message(status, activeUntil))
+                val failure = RateLimitCooldown.message(status, activeUntil)
+                if (task.status == DownloadTaskEntity.STATUS_PENDING) {
+                    dao.failGeneration(id, task.attemptGeneration, failure)
+                } else {
+                    dao.updateError(id, failure)
+                }
                 Log.w(TAG, "start blocked by source cooldown: id=$id source=${sourceKey ?: "-"}")
                 return@launch
             }
@@ -1122,12 +1129,17 @@ class TurboDownloadManager(
                 destination = out,
                 headers = restoredHeaders,
                 knownSize = knownSize,
-                connectionsOverride = TaskTransferPolicies.connectionLimit(
-                    task.transferPolicyJson,
-                    threadProvider(),
-                    nativeHttp = tags[NativePreviewRouting.TAG] == NativePreviewRouting.NATIVE &&
-                        tags[NativePreviewRouting.MEDIA_TAG] == null &&
-                        NativePreviewRouting.supportsDirectLink(task.url, task.fileName),
+                connectionsOverride = RateLimitCooldown.connectionLimit(
+                    task.platform,
+                    task.url,
+                    TaskTransferPolicies.connectionLimit(
+                        task.transferPolicyJson,
+                        threadProvider(),
+                        nativeHttp = tags[NativePreviewRouting.TAG] == NativePreviewRouting.NATIVE &&
+                            tags[NativePreviewRouting.MEDIA_TAG] == null &&
+                            NativePreviewRouting.supportsDirectLink(task.url, task.fileName),
+                    ),
+                    rateLimitFailures[id] ?: 0,
                 ),
                 // 稳定键 = Room 任务 id：使同一任务多次 submit 复用同一分片目录，
                 // 真正实现断点续传（暂停恢复 / 进程重启都从断点继续，而非从头下）。
@@ -1245,6 +1257,7 @@ class TurboDownloadManager(
         taskHeaders.remove(id)
         taskSizes.remove(id)
         rateLimitUntil.remove(id)
+        rateLimitFailures.remove(id)
         lastSeenBytes.remove(id)
         lastDbWriteTs.remove(id)
         lastDbWriteBytes.remove(id)
@@ -1446,7 +1459,7 @@ class TurboDownloadManager(
                                         -1L
                                     },
                                     chunkCount = 0,
-                                    connectionLimit = threadProvider().coerceIn(1, SettingsRepository.COMPAT_DOWNLOAD_THREADS),
+                                    connectionLimit = 0,
                                 ))
                             }
                             // 前台通知：与内置路径共用同一条节流与速度来源（_stats），故写在 _stats 之后
@@ -1576,7 +1589,8 @@ class TurboDownloadManager(
                     it + (roomId to DownloadStats(
                         speed = p.speedBytesPerSec,
                         remainMillis = p.etaMillis,
-                        chunkCount = (details?.takeIf { it.requestMetricsAvailable }?.activeRequests ?: p.activeConnections).coerceAtLeast(0),
+                        chunkCount = (details?.takeIf { it.requestMetricsAvailable }?.activeRequests?.takeIf { it > 0 }
+                            ?: p.activeConnections).coerceAtLeast(0),
                         connectionLimit = details?.configuredConnections ?: threadProvider().coerceAtLeast(1),
                         diagnostics = nativePreview.diagnostics(ev.taskId) ?: DownloadDiagnostics.from(details),
                         liveRecording = nativePreview.isRecording(ev.taskId),
@@ -1596,6 +1610,7 @@ class TurboDownloadManager(
             }
             is TurboEvent.Completed -> {
                 rateLimitUntil.remove(roomId)
+                rateLimitFailures.remove(roomId)
                 val diagnostics = nativePreview.takeDiagnostics(ev.taskId)
                     ?: DownloadDiagnostics.from(client.taskDetails(ev.taskId))
                 if (diagnostics != null) synchronized(terminalDetails) {
@@ -1847,6 +1862,7 @@ class TurboDownloadManager(
             }
             sourceRefreshAttempts.remove(roomId)
             rateLimitUntil.remove(roomId)
+            rateLimitFailures.remove(roomId)
             dispatchToFileHandlers(task.copy(fileName = savedName), savedPath, actualSize)
             taskCallbacks.remove(roomId)?.let { callback -> runCatching { callback() } }
             DiagLog.i(context, DiagLog.Category.DOWNLOAD, "下载完成：id=$roomId 实际=$actualSize")
@@ -1919,12 +1935,17 @@ class TurboDownloadManager(
                 synchronized(terminalDetails) { terminalDetails[roomId] = details }
             }
             val failureText = if (RateLimitCooldown.applies(event.reason, status)) {
-                val until = System.currentTimeMillis() + RateLimitCooldown.DURATION_MS
+                val failures = rateLimitFailures.compute(roomId) { _, previous -> ((previous ?: 0) + 1).coerceAtMost(4) } ?: 1
+                val until = System.currentTimeMillis() + RateLimitCooldown.delayMs(failures)
                 rateLimitUntil[roomId] = until
-                RateLimitCooldown.sourceKey(task.platform, task.url)?.let { sourceRateLimitUntil[it] = until }
-                RateLimitCooldown.message(status, until)
+                val sourceKey = RateLimitCooldown.sourceKey(task.platform, task.url)
+                val sharedUntil = sourceKey?.let { key ->
+                    sourceRateLimitUntil.compute(key) { _, previous -> maxOf(previous ?: 0L, until) }
+                }
+                RateLimitCooldown.message(status, sharedUntil ?: until)
             } else {
                 rateLimitUntil.remove(roomId)
+                rateLimitFailures.remove(roomId)
                 DownloadRecoveryPolicy.displayFailure(event.reason)
             }
             dao.failGeneration(roomId, generation, failureText)

@@ -18,13 +18,14 @@
 
 package com.yunget.app.data.backup
 
-import android.util.Base64
+import com.yunget.app.data.network.CoreBase64
 import java.security.SecureRandom
 import javax.crypto.Cipher
 import javax.crypto.SecretKey
 import javax.crypto.SecretKeyFactory
 import javax.crypto.spec.GCMParameterSpec
 import javax.crypto.spec.PBEKeySpec
+import javax.crypto.spec.SecretKeySpec
 
 /**
  * 网盘认证备份的 AES 加密/解密：
@@ -60,12 +61,12 @@ object AuthCrypto {
         System.arraycopy(salt, 0, payload, magic.size, salt.size)
         System.arraycopy(iv, 0, payload, magic.size + salt.size, iv.size)
         System.arraycopy(ciphertext, 0, payload, magic.size + salt.size + iv.size, ciphertext.size)
-        return Base64.encodeToString(payload, Base64.NO_WRAP)
+        return CoreBase64.encode(payload)
     }
 
     /** 解密 Base64 密文；密码错误/文件损坏抛异常 */
     fun decrypt(data: String, password: String): String {
-        val payload = Base64.decode(data.trim(), Base64.NO_WRAP)
+        val payload = CoreBase64.decode(data.trim())
         val magicV1 = MAGIC_V1.toByteArray(Charsets.UTF_8)
         val magicV2 = MAGIC_V2.toByteArray(Charsets.UTF_8)
         val (magic, iterations) = when {
@@ -87,7 +88,7 @@ object AuthCrypto {
 
     /** 判断内容是否为加密备份（检查魔数头部） */
     fun isEncrypted(data: String): Boolean = runCatching {
-        val payload = Base64.decode(data.trim(), Base64.NO_WRAP)
+        val payload = CoreBase64.decode(data.trim())
         val magicV1 = MAGIC_V1.toByteArray(Charsets.UTF_8)
         val magicV2 = MAGIC_V2.toByteArray(Charsets.UTF_8)
         (payload.size >= magicV1.size && payload.copyOfRange(0, magicV1.size).contentEquals(magicV1)) ||
@@ -97,7 +98,8 @@ object AuthCrypto {
     private fun deriveKey(password: String, salt: ByteArray, iterations: Int): SecretKey {
         val spec = PBEKeySpec(password.toCharArray(), salt, iterations, KEY_LENGTH)
         return try {
-            SecretKeyFactory.getInstance("PBKDF2WithHmacSHA256").generateSecret(spec)
+            val derived = SecretKeyFactory.getInstance("PBKDF2WithHmacSHA256").generateSecret(spec).encoded
+            SecretKeySpec(derived, "AES")
         } finally {
             spec.clearPassword()
         }

@@ -35,7 +35,7 @@ class XunleiResolveRepository(
     private val deviceIdProvider: suspend () -> String?,
     private val captchaProvider: suspend () -> String?,
     /** token 过期自动刷新回调：返回新 (access_token, refresh_token) 并持久化；失败返回 null */
-    private val refreshProvider: (suspend () -> Pair<String, String>?)? = null
+    private val refreshProvider: (suspend (accessToken: String) -> Pair<String, String>?)? = null
 ) : ShareResolveRepository {
 
     /** shareId → 提取码（转存时仍需携带） */
@@ -56,10 +56,10 @@ class XunleiResolveRepository(
     private suspend fun ensureFreshToken() {
         val acc = accountProvider() ?: return
         val exp = api.jwtExp(acc)
-        if (exp > 0 && exp - System.currentTimeMillis() / 1000 > 60) return
+        if (exp == 0L || exp - System.currentTimeMillis() / 1000 > 60) return
         // refreshProvider 内部负责读取 refreshToken、刷新并持久化新 token
         // 刷新失败（refresh_token 被轮换/过期）→ 抛明确错误引导重新登录，而不是继续发无效请求
-        if (refreshProvider?.invoke() == null) {
+        if (refreshProvider?.invoke(acc) == null) {
             throw IllegalStateException("迅雷登录已过期，请重新登录")
         }
     }

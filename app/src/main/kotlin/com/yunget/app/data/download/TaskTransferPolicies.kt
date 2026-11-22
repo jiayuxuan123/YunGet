@@ -83,7 +83,9 @@ internal object TaskTransferPolicies {
 
         return try {
             if (value.optionalLong(FIELD_VERSION) != VERSION.toLong()) return null
-            value.optionalLong(FIELD_CONNECTIONS)?.let { require(it in 1L..256L) }
+            value.optionalLong(FIELD_CONNECTIONS)?.let {
+                require(it in 1L..SettingsRepository.MAX_DOWNLOAD_THREADS.toLong())
+            }
             val adaptiveConcurrencyMode = value
                 .optionalString(FIELD_ADAPTIVE_CONCURRENCY_MODE)
                 ?.let(AdaptiveConcurrencyMode::valueOf)

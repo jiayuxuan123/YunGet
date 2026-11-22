@@ -100,6 +100,7 @@ class AuthBackupManager(
                     .put("refreshToken", a.refreshToken)
                     .put("deviceId", a.deviceId)
                     .put("captchaToken", a.captchaToken)
+                    .put("authType", a.authType)
                     .put("nickname", a.nickname)
                     .put("updatedAt", a.updatedAt)
             )
@@ -240,6 +241,7 @@ class AuthBackupManager(
                                 refreshToken = obj.optString("refreshToken"),
                                 deviceId = obj.optString("deviceId"),
                                 captchaToken = obj.optString("captchaToken"),
+                                authType = obj.optString("authType"),
                                 nickname = obj.optString("nickname"),
                                 updatedAt = obj.optLong("updatedAt", System.currentTimeMillis())
                             )

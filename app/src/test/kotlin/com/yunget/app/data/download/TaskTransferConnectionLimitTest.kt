@@ -54,7 +54,7 @@ class TaskTransferConnectionLimitTest {
 
     @Test
     fun `decode rejects zero oversized and string connections`() {
-        listOf<Any>(0, 257, "16").forEach { invalid ->
+        listOf<Any>(0, 513, "16").forEach { invalid ->
             val json = JSONObject()
                 .put("version", 1)
                 .put("connections", invalid)

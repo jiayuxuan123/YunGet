@@ -48,6 +48,15 @@ interface XunleiAccountDao {
     @Query("SELECT * FROM xunlei_account WHERE id = :id")
     suspend fun getById(id: String): XunleiAccountEntity?
 
+    @Query("""
+        UPDATE xunlei_account
+        SET accessToken = :access, refreshToken = :refresh, updatedAt = :now
+        WHERE id = :id AND accessToken = :previousAccess AND refreshToken = :previousRefresh
+    """)
+    suspend fun replaceTokens(
+        id: String, previousAccess: String, previousRefresh: String, access: String, refresh: String, now: Long,
+    ): Int
+
     /** 该平台现有账号数。 */
     @Query("SELECT COUNT(*) FROM xunlei_account")
     suspend fun count(): Int

@@ -293,10 +293,10 @@ internal class DesktopResolveService(
                 ?.takeIf { it.isNotBlank() } ?: XunleiDeviceFingerprint.deviceId()
         },
         captchaProvider = { accountStore.get(DriveAccountKind.XUNLEI)?.extra?.get("captchaToken").orEmpty() },
-        refreshProvider = {
+        refreshProvider = { token ->
             val devId = accountStore.get(DriveAccountKind.XUNLEI)?.extra?.get("deviceId")
                 ?.takeIf { it.isNotBlank() } ?: XunleiDeviceFingerprint.deviceId()
-            accountStore.refreshXunleiToken(xunleiApi, devId)
+            accountStore.refreshXunleiToken(xunleiApi, devId, expectedAccess = token)
         },
     )
     private val c139Repo = C139ResolveRepository(C139Api())

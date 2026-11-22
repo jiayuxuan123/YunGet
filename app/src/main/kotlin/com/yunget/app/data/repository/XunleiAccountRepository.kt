@@ -27,6 +27,8 @@ import com.yunget.app.data.db.XunleiAccountEntity
 import com.yunget.app.data.network.XunleiApi
 import com.yunget.app.data.network.XunleiLoginStep
 import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.sync.Mutex
+import kotlinx.coroutines.sync.withLock
 
 /**
  * 迅雷账号仓库：账号+密码登录（可能触发短信验证）→ 换 token 落库。
@@ -52,7 +54,10 @@ class XunleiAccountRepository(
     fun observeAll() = dao.observeAll()
 
     /** 切换主账号（同一事务内先降后升）。 */
-    suspend fun setPrimary(id: String) = dao.setPrimary(id)
+    suspend fun setPrimary(id: String) {
+        dao.setPrimary(id)
+        api.resetSessionCache()
+    }
     /**
      * 从列表里移除一个账号。
      *
@@ -63,6 +68,7 @@ class XunleiAccountRepository(
     suspend fun removeAccount(id: String) {
         val wasPrimary = dao.getById(id)?.isPrimary == true
         dao.deleteById(id)
+        api.resetSessionCache()
         if (!wasPrimary) return
         if (dao.getAccount() != null) return      // 还有别的主账号，无需处理
         dao.demoteAll()
@@ -144,14 +150,25 @@ class XunleiAccountRepository(
         return true
     }
 
-    /** 刷新 token 后更新 accessToken/refreshToken（deviceId/captchaToken 保持不变） */
-    suspend fun updateTokens(accessToken: String, refreshToken: String) {
-        val acc = dao.getAccount() ?: return
-        dao.upsert(acc.copy(accessToken = accessToken, refreshToken = refreshToken))
-    }
+    private val refreshLock = Mutex()
+
+    suspend fun refreshSession(token: String, requestDeviceId: String = ""): Pair<String, String>? =
+        refreshLock.withLock {
+            val account = dao.observeAll().first().firstOrNull { it.accessToken == token } ?: return@withLock null
+            if (account.refreshToken.isBlank()) return@withLock null
+            val deviceId = account.deviceId.ifBlank { requestDeviceId }.ifBlank { XunleiApi.newDeviceId() }
+            if (requestDeviceId.isNotBlank() && deviceId != requestDeviceId) return@withLock null
+            val refreshed = api.refreshToken(account.refreshToken, deviceId, account.authType) ?: return@withLock null
+            val refresh = refreshed.second.ifBlank { account.refreshToken }
+            val updated = dao.replaceTokens(
+                account.id, account.accessToken, account.refreshToken, refreshed.first, refresh, System.currentTimeMillis(),
+            )
+            if (updated == 1) refreshed.first to refresh else null
+        }
 
     suspend fun logout() {
         dao.clear()
+        api.resetSessionCache()
     }
 
     suspend fun allCredentials(): List<String> = dao.observeAll().first().map { it.accessToken }

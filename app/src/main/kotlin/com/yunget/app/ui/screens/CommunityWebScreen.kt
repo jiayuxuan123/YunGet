@@ -1,5 +1,6 @@
 package com.yunget.app.ui.screens
 
+import android.app.Activity
 import android.content.Intent
 import android.graphics.Bitmap
 import android.graphics.BitmapFactory
@@ -48,7 +49,9 @@ import com.yunget.app.data.community.CommunityApi
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
+import kotlinx.coroutines.delay
 import org.json.JSONArray
+import org.json.JSONObject
 import java.io.ByteArrayOutputStream
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -68,21 +71,32 @@ fun CommunityWebScreen(
     var pageReady by remember { mutableStateOf(false) }
     var pendingPickedFiles by remember { mutableStateOf<List<String>?>(null) }
     var pageUrl by rememberSaveable(initialUrl) { mutableStateOf(initialUrl) }
+    var pickerUrl by rememberSaveable(initialUrl) { mutableStateOf<String?>(null) }
     val imagePicker = rememberLauncherForActivityResult(ActivityResultContracts.StartActivityForResult()) { result ->
-        val selected = WebChromeClient.FileChooserParams.parseResult(result.resultCode, result.data)
-            ?.filter { it.scheme == "content" }?.distinct()?.take(4)?.toTypedArray()
+        val selected = if (result.resultCode == Activity.RESULT_OK) {
+            buildList {
+                val intent = result.data
+                intent?.data?.let { add(it) }
+                intent?.clipData?.let { clip ->
+                    for (index in 0 until clip.itemCount) clip.getItemAt(index).uri?.let { add(it) }
+                }
+            }.filter { it.scheme == "content" }.distinct().take(4).toTypedArray()
+        } else emptyArray()
         val callback = fileCallback
+        val samePage = trustedPage && pickerUrl == pageUrl
         if (callback != null) {
-            callback.onReceiveValue(if (trustedPage && !selected.isNullOrEmpty()) selected else null)
+            callback.onReceiveValue(selected.takeIf { samePage && it.isNotEmpty() })
             fileCallback = null
-        } else if (trustedPage && !selected.isNullOrEmpty()) {
+            pickerUrl = null
+        } else if (pickerUrl != null && selected.isNotEmpty()) {
             scope.launch {
                 val encoded = withContext(Dispatchers.IO) {
                     selected.mapNotNull { webImageDataUrl(context, it) }
                 }
                 if (alive && encoded.isNotEmpty()) pendingPickedFiles = encoded
+                else pickerUrl = null
             }
-        }
+        } else pickerUrl = null
     }
     val webView = remember {
         WebView(context).apply {
@@ -104,6 +118,8 @@ fun CommunityWebScreen(
                     if (current?.scheme != "https" || current.host != communityHost) return false
                     fileCallback?.onReceiveValue(null)
                     fileCallback = callback
+                    pickerUrl = current.toString()
+                    pageUrl = current.toString()
                     return try {
                         imagePicker.launch(params.createIntent().apply {
                             type = "image/*"
@@ -114,6 +130,7 @@ fun CommunityWebScreen(
                     } catch (_: Exception) {
                         fileCallback?.onReceiveValue(null)
                         fileCallback = null
+                        pickerUrl = null
                         false
                     }
                 }
@@ -125,6 +142,11 @@ fun CommunityWebScreen(
                     val current = url?.let(Uri::parse)
                     trustedPage = current?.scheme == "https" && current.host == communityHost
                     if (trustedPage && !url.isNullOrBlank()) pageUrl = url
+                }
+
+                override fun doUpdateVisitedHistory(view: WebView, url: String?, isReload: Boolean) {
+                    val current = url?.let(Uri::parse)
+                    if (current?.scheme == "https" && current.host == communityHost) pageUrl = current.toString()
                 }
 
                 override fun onPageFinished(view: WebView?, url: String?) {
@@ -150,16 +172,33 @@ fun CommunityWebScreen(
                     return true
                 }
             }
-            val initial = Uri.parse(pageUrl).buildUpon().appendQueryParameter("embed", "app").build()
+            val restored = Uri.parse(pageUrl)
+            val initial = if (restored.getQueryParameter("embed") == "app") restored
+                else restored.buildUpon().appendQueryParameter("embed", "app").build()
             loadUrl(initial.toString())
         }
     }
-    LaunchedEffect(pageReady, pendingPickedFiles) {
+    LaunchedEffect(pageReady, pageUrl, pendingPickedFiles) {
         val files = pendingPickedFiles ?: return@LaunchedEffect
-        if (!pageReady) return@LaunchedEffect
+        val target = pickerUrl ?: return@LaunchedEffect
+        if (!pageReady || !trustedPage || target != pageUrl) return@LaunchedEffect
+        val href = JSONObject.quote(target)
         val payload = JSONArray(files).toString()
-        webView.evaluateJavascript("window.yungetReceivePickedFiles($payload)", null)
+        repeat(20) {
+            val accepted = kotlinx.coroutines.suspendCancellableCoroutine<Boolean> { continuation ->
+                webView.evaluateJavascript(
+                    "location.href === $href && typeof window.yungetReceivePickedFiles === 'function' && window.yungetReceivePickedFiles($payload)",
+                ) { value -> if (continuation.isActive) continuation.resumeWith(Result.success(value == "true")) }
+            }
+            if (accepted) {
+                pendingPickedFiles = null
+                pickerUrl = null
+                return@LaunchedEffect
+            }
+            delay(250)
+        }
         pendingPickedFiles = null
+        pickerUrl = null
     }
 
     fun navigateBack() {

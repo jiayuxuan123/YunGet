@@ -347,7 +347,7 @@ fun DriveScreen(
 
     // 进入网盘页加载空间详情（仅已登录平台）
     LaunchedEffect(Unit) {
-        driveQuotaViewModel.loadAll()
+        driveQuotaViewModel.loadAll(includeBaidu = false)
     }
     // 下拉刷新状态：绑定空间配额加载中状态
     val isRefreshing by driveQuotaViewModel.loading.collectAsState()

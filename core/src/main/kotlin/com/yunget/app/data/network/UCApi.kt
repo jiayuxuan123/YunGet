@@ -399,6 +399,7 @@ class UCApi(
         val request = postJson(UCConstants.DOWNLOAD_URL, cookie, body)
         val response = client.newCall(request).execute()
         val bodyStr = response.use {
+            mergeCookieFromResponse(request, it)
             it.body?.string() ?: throw QuarkApiException("获取下载链接失败：响应为空")
         }
         val json = runCatching { JSONObject(bodyStr) }.getOrElse {
@@ -444,6 +445,7 @@ class UCApi(
         // 先取本次响应的 __pugs（与本次直链同响应绑定，不能用别的响应/上一次的值）
         val responsePugs = pugsFromSetCookies(response.headers("Set-Cookie"))
         val bodyStr = response.use {
+            mergeCookieFromResponse(request, it)
             it.body?.string() ?: throw QuarkApiException("获取下载链接失败：响应为空")
         }
         if (responsePugs != null) guestPugs = responsePugs
@@ -498,6 +500,7 @@ suspend fun getDownloadLink(fid: String, cookie: String): DownloadLink? = withCo
         val request = postJson(UCConstants.DOWNLOAD_URL, cookie, body)
         val response = client.newCall(request).execute()
         val bodyStr = response.use {
+            mergeCookieFromResponse(request, it)
             it.body?.string() ?: throw QuarkApiException("获取下载链接失败：响应为空")
         }
         val json = runCatching { JSONObject(bodyStr) }.getOrElse {
@@ -558,6 +561,7 @@ suspend fun getDownloadLink(fid: String, cookie: String): DownloadLink? = withCo
             .build()
         val response = client.newCall(request).execute()
         val bodyStr = response.use {
+            mergeCookieFromResponse(request, it)
             it.body?.string() ?: throw QuarkApiException("获取下载链接失败：响应为空")
         }
         val json = runCatching { JSONObject(bodyStr) }.getOrElse {

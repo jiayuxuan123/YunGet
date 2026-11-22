@@ -1,5 +1,7 @@
 package com.yunget.app.ui.login
 
+import android.app.Dialog
+import android.os.Message
 import android.view.ViewGroup
 import android.webkit.CookieManager
 import android.webkit.RenderProcessGoneDetail
@@ -89,7 +91,7 @@ internal val externalDrives = mapOf(
     }
     drive.id to ExternalDrive(
         drive.displayName, avatar, drive.entryUrl,
-        desktopUserAgent = drive != OfficialWebDrive.CTFILE && drive != OfficialWebDrive.WOPAN,
+        desktopUserAgent = drive != OfficialWebDrive.CTFILE && drive != OfficialWebDrive.WOPAN && drive != OfficialWebDrive.TIANYI,
         additionalSessionSites = extraSites,
     )
 }
@@ -303,17 +305,21 @@ fun ExternalDriveLoginScreen(
                         style = MaterialTheme.typography.bodySmall,
                     )
                     key(startUrl, webPageGeneration) {
+                        var loginWindow by remember { mutableStateOf<Dialog?>(null) }
+                        val supportsLoginPopup = drive?.url == OfficialWebDrive.WEIYUN.entryUrl
                         AndroidView(
                             modifier = Modifier.weight(1f).fillMaxWidth(),
-                            onRelease = { it.destroy() },
+                            onRelease = {
+                                loginWindow?.dismiss()
+                                it.destroy()
+                            },
                             factory = { viewContext ->
                                 WebView(viewContext).apply {
                                     settings.javaScriptEnabled = true
                                     settings.domStorageEnabled = true
                                     settings.databaseEnabled = true
                                     settings.javaScriptCanOpenWindowsAutomatically = true
-                                    // 登录站点的新窗口在当前 WebView 内导航，保留本次会话。
-                                    settings.setSupportMultipleWindows(false)
+                                    settings.setSupportMultipleWindows(supportsLoginPopup)
                                     settings.mixedContentMode = WebSettings.MIXED_CONTENT_COMPATIBILITY_MODE
                                     settings.cacheMode = WebSettings.LOAD_DEFAULT
                                     if (drive?.desktopUserAgent == true) {
@@ -321,15 +327,58 @@ fun ExternalDriveLoginScreen(
                                             settings.userAgentString = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) " +
                                                 "AppleWebKit/537.36 (KHTML, like Gecko) $chrome Safari/537.36"
                                         }
-                                        settings.useWideViewPort = true
-                                        settings.loadWithOverviewMode = true
-                                        settings.setSupportZoom(true)
-                                        settings.builtInZoomControls = true
-                                        settings.displayZoomControls = false
                                     }
+                                    settings.useWideViewPort = true
+                                    settings.loadWithOverviewMode = true
+                                    settings.setSupportZoom(true)
+                                    settings.builtInZoomControls = true
+                                    settings.displayZoomControls = false
                                     CookieManager.getInstance().setAcceptCookie(true)
                                     CookieManager.getInstance().setAcceptThirdPartyCookies(this, true)
-                                    webChromeClient = WebChromeClient()
+                                    webChromeClient = object : WebChromeClient() {
+                                        override fun onCreateWindow(
+                                            view: WebView, isDialog: Boolean, isUserGesture: Boolean, resultMsg: Message,
+                                        ): Boolean {
+                                            if (!supportsLoginPopup || !isUserGesture || loginWindow != null) return false
+                                            val transport = resultMsg.obj as? WebView.WebViewTransport ?: return false
+                                            val dialog = Dialog(viewContext)
+                                            val child = WebView(viewContext).apply {
+                                                settings.javaScriptEnabled = true
+                                                settings.domStorageEnabled = true
+                                                settings.allowFileAccess = false
+                                                settings.allowContentAccess = false
+                                                settings.mixedContentMode = WebSettings.MIXED_CONTENT_NEVER_ALLOW
+                                                settings.userAgentString = view.settings.userAgentString
+                                                settings.useWideViewPort = true
+                                                settings.loadWithOverviewMode = true
+                                                CookieManager.getInstance().setAcceptThirdPartyCookies(this, true)
+                                                webViewClient = object : WebViewClient() {
+                                                    override fun shouldOverrideUrlLoading(view: WebView, request: WebResourceRequest): Boolean =
+                                                        request.isForMainFrame && request.url.scheme != "https"
+                                                    override fun onRenderProcessGone(view: WebView, detail: RenderProcessGoneDetail): Boolean {
+                                                        dialog.dismiss()
+                                                        return true
+                                                    }
+                                                }
+                                                webChromeClient = object : WebChromeClient() {
+                                                    override fun onCloseWindow(window: WebView) = dialog.dismiss()
+                                                }
+                                            }
+                                            dialog.setContentView(child)
+                                            dialog.setOnDismissListener {
+                                                loginWindow = null
+                                                CookieManager.getInstance().flush()
+                                                (child.parent as? ViewGroup)?.removeView(child)
+                                                child.destroy()
+                                            }
+                                            loginWindow = dialog
+                                            dialog.show()
+                                            dialog.window?.setLayout(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT)
+                                            transport.webView = child
+                                            resultMsg.sendToTarget()
+                                            return true
+                                        }
+                                    }
                                     webViewClient = object : WebViewClient() {
                                         override fun onReceivedError(view: WebView, request: WebResourceRequest, error: WebResourceError) {
                                             if (request.isForMainFrame) pageError = "网页未能加载，请检查网络后重试。"

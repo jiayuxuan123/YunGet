@@ -192,6 +192,8 @@ fun BaiduCloudScreen(
         }
     }
 
+    LaunchedEffect(viewModel) { viewModel.loadRoot() }
+
     LaunchedEffect(viewModel.cloudMessage) {
         viewModel.cloudMessage?.let {
             SnackbarController.show(it)

@@ -336,13 +336,13 @@ class SettingsRepository(context: Context) {
         }
 
     /**
-     * 吞吐自适应（默认开）：先从用户线程数起跑，再按实测总吞吐向下收敛。
+     * 吞吐自适应（默认关）：开启后先从用户线程数起跑，再按实测总吞吐向下收敛。
      *
-     * 不是“关掉自适应换速度”，而是“自适应必须从用户设定的并发上限开始测量”；
-     * 这样短文件也能立刻拿到高并发，聚合限速时才收敛到更稳的档位。
+     * 网盘多为每连接限速，社区实测关闭后速度明显更高（3MB/s → 40MB/s 级别），
+     * 因此默认关闭；仅在服务端总带宽封顶、想少开连接时手动开启。
      */
     var adaptiveConcurrency: Boolean
-        get() = prefs.getBoolean("adaptive_concurrency", true)
+        get() = prefs.getBoolean("adaptive_concurrency", false)
         set(value) {
             prefs.edit().putBoolean("adaptive_concurrency", value).apply()
         }
@@ -365,14 +365,13 @@ class SettingsRepository(context: Context) {
         }
 
     /**
-     * 背压连续失败阈值（默认 0 = 关闭）。
+     * 背压连续失败阈值（默认 3；0 = 关闭）。
      *
-     * 开启后，连续 N 个分片失败就把并发减半。**默认关闭是因为网盘 CDN 频繁 502/503**，
-     * 开了会让线程只降难升，这正是旧版"下到后面速度暴跌"的主因。
-     * 只有在服务端确实因为并发过高而限流时才该打开。
+     * 连续 N 个分片收到 429/503 或失败时把并发减半，之后持续成功会自动恢复。
+     * 关闭后，服务端限流时引擎不会降并发，迅雷等平台会在 1 秒内被 503 打满。
      */
     var backpressureFailures: Int
-        get() = prefs.getInt("backpressure_failures", 0)
+        get() = prefs.getInt("backpressure_failures", 3)
         set(value) {
             prefs.edit().putInt("backpressure_failures", value.coerceIn(0, 16)).apply()
         }
@@ -390,12 +389,12 @@ class SettingsRepository(context: Context) {
         }
 
     /**
-     * 停滞多久断开该连接（毫秒，默认 45000；0 = 关闭）。
+     * 停滞多久断开该连接（毫秒，默认 30000；0 = 关闭）。
      *
      * 服务端接受连接却不发数据时，没有它就要一路等到读超时（默认 30 秒）。
      */
     var stallTimeoutMs: Long
-        get() = prefs.getLong("stall_timeout_ms", 45_000L)
+        get() = prefs.getLong("stall_timeout_ms", 30_000L)
         set(value) {
             prefs.edit().putLong("stall_timeout_ms", value.coerceIn(0L, 300_000L)).apply()
         }

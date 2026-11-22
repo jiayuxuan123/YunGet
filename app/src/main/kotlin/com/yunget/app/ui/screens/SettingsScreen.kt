@@ -107,6 +107,7 @@ import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.unit.dp
 import com.yunget.app.data.backup.AuthBackupManager
 import com.yunget.app.data.backup.AuthCrypto
+import com.yunget.app.ui.components.WebDavBackupDialog
 import com.yunget.app.data.download.DownloadSaver
 import com.yunget.app.data.download.DownloadEngineRegistry
 import com.yunget.app.data.download.ThreadCountAdvice
@@ -221,6 +222,7 @@ fun SettingsScreen(
     // 网盘认证导入：加密文件内容（非空时弹解密密码框）
     var pendingImportContent by remember { mutableStateOf<String?>(null) }
     var showImportAuthDialog by remember { mutableStateOf(false) }
+    var showWebDavDialog by remember { mutableStateOf(false) }
     // 本地状态：修改后立即刷新 UI，同时同步外部保存值
     var threads by remember { mutableStateOf(downloadThreads) }
     LaunchedEffect(downloadThreads) { threads = downloadThreads }
@@ -710,7 +712,14 @@ fun SettingsScreen(
                         description = "选择加密或明文的认证备份文件，恢复网盘登录",
                         onClick = { importLauncher.launch(arrayOf("application/json", "application/octet-stream", "*/*")) }
                     )
-                }
+                    SettingsDivider()
+                    SettingsItem(
+                        icon = Icons.Outlined.Backup,
+                        title = "WebDAV 加密备份",
+                        description = "在手机与电脑之间恢复网盘认证和下载设置",
+                        onClick = { showWebDavDialog = true }
+                    )
+                                    }
             }
             item(key = "settings_group_7") {
                 SettingsGroup(title = "帮助与反馈", description = "查看公告、定位问题与导出记录") {
@@ -1180,6 +1189,27 @@ fun SettingsScreen(
     }
 
     // 导出网盘认证弹窗（AES 加密密码 + 导出范围）
+    if (showWebDavDialog) {
+        WebDavBackupDialog(
+            onDismiss = { showWebDavDialog = false },
+            exportSnapshot = {
+                org.json.JSONObject(backupManager.exportJson()).put(
+                    "downloadSettings", org.json.JSONObject()
+                        .put("connectionsPerTask", settingsRepo.downloadThreads)
+                        .put("maxConcurrentTasks", settingsRepo.maxConcurrentDownloads),
+                )
+            },
+            restoreSnapshot = { snapshot ->
+                val count = backupManager.importJson(snapshot.toString())
+                snapshot.optJSONObject("downloadSettings")?.let { settings ->
+                    settingsRepo.downloadThreads = settings.optInt("connectionsPerTask", settingsRepo.downloadThreads)
+                    settingsRepo.maxConcurrentDownloads = settings.optInt("maxConcurrentTasks", settingsRepo.maxConcurrentDownloads)
+                }
+                count
+            },
+        )
+    }
+
     if (showExportAuthDialog) {
         ExportAuthDialog(
             onDismiss = { showExportAuthDialog = false },

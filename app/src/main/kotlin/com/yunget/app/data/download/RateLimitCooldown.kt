@@ -6,7 +6,15 @@ import java.util.Locale
 
 /** Prevents repeated manual retries from turning a source-side throttle into an account ban. */
 internal object RateLimitCooldown {
-    const val DURATION_MS = 10 * 60 * 1000L
+    private val retryDelaysMs = longArrayOf(30_000, 120_000, 300_000, 600_000)
+
+    fun delayMs(failures: Int): Long = retryDelaysMs[(failures - 1).coerceIn(retryDelaysMs.indices)]
+
+    fun connectionLimit(platform: String, url: String, configured: Int, failures: Int = 0): Int {
+        if (sourceKey(platform, url) != "xunlei") return configured
+        return (configured.coerceAtMost(8) shr failures.coerceIn(0, 3)).coerceAtLeast(1)
+    }
+
     private val knownSources = setOf(
         "quark", "uc", "xunlei", "baidu", "pan123", "c139", "pan115",
         "guangya", "ilanzou", "lanzou",

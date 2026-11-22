@@ -104,12 +104,13 @@ class XunleiApi(
      *  client_id 也不同，串用会直接得到 client_id not match）。带过期时间，过期的不会被再用 */
     private val refreshedCaptchas = java.util.concurrent.ConcurrentHashMap<String, PanCaptcha>()
 
-    /** 当前有效 access_token（401 自动刷新后更新；pan 请求优先使用，避免刷新后闭包仍用旧值） */
-    @Volatile
-    private var currentAccessToken: String = ""
+    fun resetSessionCache() {
+        currentUserId = ""
+        refreshedCaptchas.clear()
+    }
 
-    /** 401/unauthenticated 时自动刷新：提供 refresh_token 换新 token（由调用方注入并持久化） */
-    var refreshTokenProvider: suspend (deviceId: String) -> Pair<String, String>? = { null }
+    /** Refreshes the account identified by the original request. */
+    var refreshTokenProvider: suspend (deviceId: String, accessToken: String) -> Pair<String, String>? = { _, _ -> null }
 
     /**
      * 网页登录（webToken）captcha 的刷新入口（非网页账号返回 null，调用方走 App 通道重签）。
@@ -290,7 +291,6 @@ class XunleiApi(
                 if (at.isBlank()) null else {
                     // 缓存 user_id（JWT sub），captcha/init 的 meta 需要
                     jwtSub(at).takeIf { it.isNotBlank() }?.let { currentUserId = it }
-                    currentAccessToken = at
                     at to rt
                 }
             }
@@ -299,7 +299,7 @@ class XunleiApi(
 
     /** 缓存当前用户 ID（从 access_token JWT 解析），供 captcha/init 的 meta 使用 */
     fun cacheUserId(accessToken: String) {
-        if (currentUserId.isBlank()) currentUserId = jwtSub(accessToken)
+        jwtSub(accessToken).takeIf { it.isNotBlank() }?.let { currentUserId = it }
     }
 
     /**
@@ -357,8 +357,6 @@ class XunleiApi(
                     val at = json.optString("access_token").ifBlank { json.optString("accessToken") }
                     val rt = json.optString("refresh_token").ifBlank { json.optString("refreshToken") }
                     if (at.isBlank()) null else {
-                        jwtSub(at).takeIf { it.isNotBlank() }?.let { currentUserId = it }
-                        currentAccessToken = at
                         at to rt
                     }
                 }
@@ -371,9 +369,6 @@ class XunleiApi(
      * 只用网页 localStorage 里读到的东西无法判断登录是否已完成——页面在登录过程中会把
      * 中间态写进去，所以这里打一次真实的云盘接口（GET /drive/v1/about）再决定要不要落库；
      * 网络异常也返回 false，交给上层的自动检测继续轮询重试，不会误判成「登录成功」。
-     *
-     * **必须校验传入的这个 token**（`preferCachedToken = false`）：实例上缓存的 currentAccessToken
-     * 属于上一次（可能是另一个账号）的登录，拿它去校验会把「有效」判在错误的账号头上。
      */
     suspend fun verifyAccessToken(
         accessToken: String,
@@ -384,8 +379,7 @@ class XunleiApi(
         runCatching {
             val request = panRequest(
                 "${XunleiConstants.PAN_BASE}/drive/v1/about",
-                accessToken, deviceId, captchaToken,
-                preferCachedToken = false
+                accessToken, deviceId, captchaToken
             )
             client.newCall(request).execute().use { resp ->
                 if (!resp.isSuccessful) return@use false
@@ -923,8 +917,7 @@ class XunleiApi(
         accessToken: String,
         deviceId: String,
         captchaToken: String,
-        body: String? = null,
-        preferCachedToken: Boolean = true
+        body: String? = null
     ): Request {
         val builder = Request.Builder()
             .url(url)
@@ -935,10 +928,7 @@ class XunleiApi(
             .header("Origin", "https://pan.xunlei.com")
             .header("Referer", "https://pan.xunlei.com/")
             if (accessToken.isNotBlank()) {
-                // 登录态优先用刷新后的 currentAccessToken，避免闭包里的旧值。
-                // preferCachedToken=false 时只认传进来的 token（校验「另一份还没落库的凭据」时必须这样）
-                val bearer = if (preferCachedToken) currentAccessToken.ifBlank { accessToken } else accessToken
-                builder.header("Authorization", "Bearer $bearer")
+                builder.header("Authorization", "Bearer $accessToken")
             }
             if (captchaToken.isNotBlank()) builder.header("X-Captcha-Token", captchaToken)
         return if (body != null) builder.post(body.toRequestBody(jsonMediaType)).build()
@@ -963,7 +953,7 @@ class XunleiApi(
             .header("Origin", "https://pan.xunlei.com")
             .header("Referer", "https://pan.xunlei.com/")
             if (accessToken.isNotBlank()) {
-                builder.header("Authorization", "Bearer ${currentAccessToken.ifBlank { accessToken }}")
+                builder.header("Authorization", "Bearer $accessToken")
             }
             if (captchaToken.isNotBlank()) builder.header("X-Captcha-Token", captchaToken)
         val rb = body?.toRequestBody(jsonMediaType) ?: "{}".toRequestBody(jsonMediaType)
@@ -1015,8 +1005,13 @@ class XunleiApi(
             (cached ?: webCaptchaRefresher(deviceId, action)?.also { refreshedCaptchas[deviceId] = it })
                 ?.token ?: captchaToken
         }
+        var replacementBearer: String? = null
         repeat(2) { attempt ->
-            val response = client.newCall(build(token)).execute()
+            val request = build(token).let { original ->
+                replacementBearer?.let { original.newBuilder().header("Authorization", "Bearer $it").build() }
+                    ?: original
+            }
+            val response = client.newCall(request).execute()
             val body = response.use { it.body?.string() ?: throw QuarkApiException("请求失败：响应为空") }
             val json = runCatching { JSONObject(body) }.getOrElse {
                 throw QuarkApiException("响应解析失败（HTTP ${response.code}）")
@@ -1025,9 +1020,10 @@ class XunleiApi(
                 val err = json.optString("error")
                 // access_token 过期（401/unauthenticated）：refresh_token 换新 → 重新 init captcha → 重试（对齐官方抓包）
                 if (!anonymous && (response.code == 401 || err == "unauthenticated") && attempt == 0) {
-                    val refreshed = refreshTokenProvider(deviceId)
+                    val originalBearer = request.header("Authorization")?.removePrefix("Bearer ")
+                    val refreshed = originalBearer?.let { refreshTokenProvider(deviceId, it) }
                     if (refreshed != null) {
-                        currentAccessToken = refreshed.first
+                        replacementBearer = refreshed.first
                         val newCaptcha = webCaptchaRefresher(deviceId, action)
                             ?: initPanCaptcha(deviceId, action, token)
                                 ?.let { PanCaptcha(it, Long.MAX_VALUE) }
