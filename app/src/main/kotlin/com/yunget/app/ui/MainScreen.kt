@@ -197,6 +197,11 @@ fun MainScreen(
     onIncomingLinkConsumed: () -> Unit = {},
 ) {
     var currentTab by rememberSaveable { mutableStateOf(MainTab.Resolve) }
+    var activeDownloadTabRequest by rememberSaveable { mutableStateOf(0) }
+    fun openActiveDownloads() {
+        activeDownloadTabRequest++
+        currentTab = MainTab.Download
+    }
     var showQuarkLogin by rememberSaveable { mutableStateOf(false) }
     var showUCLogin by rememberSaveable { mutableStateOf(false) }
     var showXunleiLogin by rememberSaveable { mutableStateOf(false) }
@@ -605,7 +610,7 @@ fun MainScreen(
         if (text.isNullOrBlank()) return@LaunchedEffect
         if (com.yunget.app.data.download.MagnetLink.isMagnet(text)) {
             // 磁力由支持 BT 的引擎处理；内置兼容和旧 TurboDL 不认识 BT。
-            currentTab = MainTab.Download
+            openActiveDownloads()
             val settings = com.yunget.app.data.prefs.SettingsRepository(context)
             val nativeProvider = com.yunget.app.data.download.DownloadEngineRegistry
                 .find(settings.downloadEngineId)
@@ -679,10 +684,10 @@ fun MainScreen(
         mutableStateOf(com.yunget.app.data.analytics.AnonymousAnalytics.needsDisclosure(context))
     }
 
-    // 解析页发起下载后，自动切换到「下载」Tab
+    // 解析页发起下载后，自动切换到「下载」Tab 的正在下载列表
     LaunchedEffect(resolveViewModel.downloadStarted) {
         if (resolveViewModel.downloadStarted) {
-            currentTab = MainTab.Download
+            openActiveDownloads()
             resolveViewModel.consumeDownloadStarted()
         }
     }
@@ -966,7 +971,7 @@ fun MainScreen(
                         onQuarkSelectPrimary = { viewModel.setPrimary(it) },
                         onQuarkDeleteAccount = { viewModel.removeAccount(it) },
                         onManageAccounts = { showAccountManager = true },
-                        onDownloadStarted = { currentTab = MainTab.Download },
+                        onDownloadStarted = { openActiveDownloads() },
                         onUCLogin = { showUCLogin = true },
                         onUCLogout = { ucViewModel.logout() },
                         onXunleiLogin = { showXunleiLogin = true },
@@ -1001,7 +1006,11 @@ fun MainScreen(
                             externalLoginPlatform = platform
                         },
                     )
-                    MainTab.Download -> DownloadScreen(scrollBehavior, downloadViewModel)
+                    MainTab.Download -> DownloadScreen(
+                        scrollBehavior,
+                        downloadViewModel,
+                        activeTabRequest = activeDownloadTabRequest,
+                    )
                     MainTab.Settings -> SettingsScreen(
                         scrollBehavior = scrollBehavior,
                         downloadThreads = settings.downloadThreads,
@@ -1026,7 +1035,7 @@ fun MainScreen(
                         onDownloadUpdateApk = { url, name ->
                             scope.launch {
                                 downloadManager.enqueue(url = url, fileName = name)
-                                currentTab = MainTab.Download
+                                openActiveDownloads()
                             }
                         }
                     )
@@ -1344,7 +1353,7 @@ fun MainScreen(
                 },
                 onDownloaded = {
                     externalLoginPlatform = null
-                    currentTab = MainTab.Download
+                    openActiveDownloads()
                 },
             )
         }
@@ -1362,7 +1371,7 @@ fun MainScreen(
                 onBack = { externalBrowsePlatform = null },
                 onDownloaded = {
                     externalBrowsePlatform = null
-                    currentTab = MainTab.Download
+                    openActiveDownloads()
                 },
             )
         } else {
@@ -1371,6 +1380,7 @@ fun MainScreen(
                     platform = platform,
                     downloadManager = downloadManager,
                     initialUrl = externalBrowseUrl,
+                    browseMode = true,
                     onBack = {
                         externalBrowsePlatform = null
                         externalBrowseUrl = null
@@ -1379,7 +1389,7 @@ fun MainScreen(
                     onDownloaded = {
                         externalBrowsePlatform = null
                         externalBrowseUrl = null
-                        currentTab = MainTab.Download
+                        openActiveDownloads()
                     },
                 )
             }
@@ -1513,7 +1523,7 @@ fun MainScreen(
                     if (apk != null) {
                         scope.launch {
                             downloadManager.enqueue(url = apk.downloadUrl, fileName = apk.name)
-                            currentTab = MainTab.Download
+                            openActiveDownloads()
                         }
                         SnackbarController.show("已加入下载，完成后点击「打开」即可安装")
                     } else {
@@ -1527,7 +1537,7 @@ fun MainScreen(
                     if (apk != null) {
                         scope.launch {
                             downloadManager.enqueue(url = UpdateChecker.mirrorUrl(apk.downloadUrl), fileName = apk.name)
-                            currentTab = MainTab.Download
+                            openActiveDownloads()
                         }
                         SnackbarController.show("已通过镜像站加入下载，完成后点击「打开」即可安装")
                     } else {

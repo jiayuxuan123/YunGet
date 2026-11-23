@@ -150,9 +150,9 @@ suspend fun listShare(surl: String, sekey: String, dir: String, cookie: String, 
             "&shorturl=$surl&page=$page&num=100&root=$root&dir=" +
             URLEncoder.encode(if (dir.isBlank()) "/" else dir, "UTF-8") +
             sekeyPart
-        // 子目录(root=0)必须携带 BDCLND（= verify 的 randsk），否则 errno=2；顶层(root=1)无需
-        val authCookie = if (sekey.isNotBlank() && !cookie.contains("BDCLND="))
-            "$cookie; BDCLND=$sekey" else cookie
+        // 子目录(root=0)必须携带本次分享的 BDCLND（= verify 的 randsk），否则 errno=2；
+        // 若登录态 Cookie 中残留旧分享的 BDCLND，必须替换而不是沿用旧值。
+        val authCookie = withBaiduShareCookie(cookie, sekey)
         val request = Request.Builder()
             .url(url)
             .header("Cookie", authCookie)
@@ -402,9 +402,9 @@ suspend fun listShare(surl: String, sekey: String, dir: String, cookie: String, 
             "&channel=chunlei&sekey=$sekey&ondup=newcopy&web=1&app_id=${BaiduConstants.APP_ID}" +
             "&bdstoken=$bdstoken&clienttype=0"
         val body = "fsidlist=%5B%22$fsId%22%5D&path=${urlEncode(toDir)}"
-        // verify 响应会 Set-Cookie: BDCLND=<randsk>，transfer 必须携带（分享验证标识），
-        // 缺失会 errno=2；BDCLND 值即 sekey（randsk），手动补齐
-        val authCookie = if (cookie.contains("BDCLND=")) cookie else "$cookie; BDCLND=$sekey"
+        // verify 响应会 Set-Cookie: BDCLND=<randsk>，transfer 必须携带本次分享的 BDCLND，
+        // 若登录态 Cookie 中带有历史 BDCLND，必须先剔除再写入当前 sekey。
+        val authCookie = withBaiduShareCookie(cookie, sekey)
         val request = Request.Builder()
             .url(url)
             .header("Cookie", authCookie)
@@ -867,9 +867,20 @@ suspend fun listShare(surl: String, sekey: String, dir: String, cookie: String, 
     private fun checkErrno(json: JSONObject, fallback: String) {
         val errno = json.optInt("errno")
         if (errno != 0) {
-            // 常见：errno=-12 提取码错误 / 403 分享已失效 / 31066 文件不存在
-            val msg = json.optString("err_msg").ifBlank { json.optString("show_msg") }.ifBlank { fallback }
-            throw BaiduApiException("$msg（errno=$errno）")
+            // 常见：errno=-12 提取码错误 / 403 分享已失效 / 31066 文件不存在 / 9013 账号风控限制
+            val serverMsg = listOf("err_msg", "show_msg", "errmsg")
+                .firstNotNullOfOrNull { key ->
+                    json.optString(key).takeIf { it.isNotBlank() && it != "null" }
+                }
+            val hint = baiduErrnoHint(errno)
+            val detail = when {
+                serverMsg != null && hint != null && !serverMsg.contains(hint) ->
+                    "$serverMsg（errno=$errno，$hint）"
+                serverMsg != null -> "$serverMsg（errno=$errno）"
+                hint != null -> "$fallback（errno=$errno，$hint）"
+                else -> "$fallback（errno=$errno）"
+            }
+            throw BaiduApiException(detail)
         }
     }
 
@@ -882,4 +893,21 @@ suspend fun listShare(surl: String, sekey: String, dir: String, cookie: String, 
         /** 翻页硬上限：防止服务端忽略偏移导致死循环 */
         const val LIST_MAX_PAGES = 100
     }
+}
+
+internal fun withBaiduShareCookie(cookie: String, sekey: String): String {
+    val cleaned = cookie.split(';')
+        .map { it.trim() }
+        .filter { it.isNotEmpty() && !it.startsWith("BDCLND=", ignoreCase = true) }
+    val parts = if (sekey.isNotBlank()) cleaned + "BDCLND=$sekey" else cleaned
+    return parts.joinToString("; ")
+}
+
+internal fun baiduErrnoHint(errno: Int): String? = when (errno) {
+    -6 -> "登录已失效，请重新登录百度网盘"
+    -12 -> "提取码错误"
+    12 -> "批量转存受限或目标位置已存在同名文件"
+    9013 -> "账号可能触发百度风控限制，请前往官方客户端验证或更换账号"
+    31066 -> "文件不存在或分享已失效"
+    else -> null
 }

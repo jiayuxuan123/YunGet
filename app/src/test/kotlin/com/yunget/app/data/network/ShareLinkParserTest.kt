@@ -112,4 +112,14 @@ class ShareLinkParserTest {
         assertEquals("f/65712267-17569899321195-e8ce7f", ctfile.shareId)
         assertEquals("5577", ctfile.pwd)
     }
+
+    @Test
+    fun parsesBaiduLinkWithHashFragment() {
+        val parsed = ShareLinkParser.parse(
+            "https://pan.baidu.com/s/1vBf_j7C_3yIz6X-Ix29u5A?dp-logid=60380500563641460002&pwd=1234#/home/%2F/%2F"
+        )!!
+        assertEquals(SharePlatform.BAIDU, parsed.platform)
+        assertEquals("vBf_j7C_3yIz6X-Ix29u5A", parsed.shareId)
+        assertEquals("1234", parsed.pwd)
+    }
 }

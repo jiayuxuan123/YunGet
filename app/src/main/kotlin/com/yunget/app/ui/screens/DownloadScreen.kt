@@ -123,6 +123,9 @@ import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.launch
 
+internal fun shouldSwitchToActiveDownloadTab(requestId: Int, handledRequestId: Int): Boolean =
+    requestId > handledRequestId
+
 /** 页面只观察列表结构；任务进度、实时速度和曲线各自在使用处订阅。 */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -130,6 +133,7 @@ fun DownloadScreen(
     scrollBehavior: TopAppBarScrollBehavior,
     viewModel: DownloadViewModel,
     modifier: Modifier = Modifier,
+    activeTabRequest: Int = 0,
 ) {
     if (com.yunget.app.ui.theme.LocalAppUiStyle.current == com.yunget.app.ui.theme.AppUiStyle.CLASSIC) {
         com.yunget.app.ui.classic.DownloadScreen(
@@ -146,6 +150,7 @@ fun DownloadScreen(
     }
     val listItems by listFlow.collectAsState(initial = viewModel.tasks.value.map { it.toDownloadListItem() })
     var showAddDialog by rememberSaveable { mutableStateOf(false) }
+    var localActiveTabRequest by rememberSaveable { mutableStateOf(0) }
     var pendingDeleteId by rememberSaveable { mutableStateOf<Long?>(null) }
     var detailId by rememberSaveable { mutableStateOf<Long?>(null) }
     var showDeleteAllConfirm by rememberSaveable { mutableStateOf(false) }
@@ -194,11 +199,16 @@ fun DownloadScreen(
         onResumeAll = { viewModel.resumeAll() },
         onDeleteAll = { showDeleteAllConfirm = true },
         modifier = modifier.nestedScroll(scrollBehavior.nestedScrollConnection),
+        activeTabRequest = activeTabRequest + localActiveTabRequest,
     )
     if (showAddDialog) {
         AddDownloadDialog(
             onDismiss = { showAddDialog = false },
-            onConfirm = { url, name -> showAddDialog = false; viewModel.enqueue(url, name) },
+            onConfirm = { url, name ->
+                showAddDialog = false
+                viewModel.enqueue(url, name)
+                localActiveTabRequest++
+            },
         )
     }
     detailId?.let { id ->
@@ -247,6 +257,7 @@ private fun DownloadPageContent(
     onDeleteAll: () -> Unit,
     modifier: Modifier = Modifier,
     initialCompletedTab: Boolean = false,
+    activeTabRequest: Int = 0,
 ) {
     val ui = LocalUiMetrics.current
     val haptic = LocalHapticFeedback.current
@@ -256,11 +267,21 @@ private fun DownloadPageContent(
     )
     val scope = rememberCoroutineScope()
     var completedTab by rememberSaveable { mutableStateOf(initialCompletedTab) }
+    var handledActiveTabRequest by rememberSaveable { mutableStateOf(0) }
     var collapsedFolders by rememberSaveable { mutableStateOf(emptyList<String>()) }
     val activeListState = rememberLazyListState()
     val completedListState = rememberLazyListState()
     val completedCount = listItems.count { it.isCompleted }
     val activeCount = listItems.size - completedCount
+    LaunchedEffect(activeTabRequest) {
+        if (shouldSwitchToActiveDownloadTab(activeTabRequest, handledActiveTabRequest)) {
+            handledActiveTabRequest = activeTabRequest
+            completedTab = false
+            if (pagerState.currentPage != 0 || pagerState.targetPage != 0) {
+                pagerState.animateScrollToPage(0)
+            }
+        }
+    }
     LaunchedEffect(pagerState) {
         snapshotFlow { pagerState.currentPage }.collect { page ->
             completedTab = page == 1

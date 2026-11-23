@@ -1,8 +1,10 @@
 package com.yunget.app.ui.login
 
 import android.app.Dialog
+import android.graphics.Bitmap
 import android.os.Message
 import android.view.ViewGroup
+import android.webkit.ConsoleMessage
 import android.webkit.CookieManager
 import android.webkit.RenderProcessGoneDetail
 import android.webkit.URLUtil
@@ -32,6 +34,7 @@ import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
+import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Scaffold
@@ -42,6 +45,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.key
+import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
@@ -53,16 +57,22 @@ import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.viewinterop.AndroidView
+import androidx.webkit.WebSettingsCompat
 import androidx.webkit.WebStorageCompat
+import androidx.webkit.WebViewCompat
 import androidx.webkit.WebViewFeature
 import com.yunget.app.data.account.ExternalAccountStore
 import com.yunget.app.data.download.DownloadManager
 import com.yunget.app.data.download.DownloadSubmissionContext
 import com.yunget.app.data.network.FeijipanApi
 import com.yunget.app.data.network.OfficialWebDrive
+import com.yunget.app.data.network.video.ClientHints
+import com.yunget.app.data.network.video.alignClientHintsWith
 import com.yunget.app.ui.SnackbarController
+import com.yunget.app.util.DiagnosticLog
 import kotlinx.coroutines.launch
 import org.json.JSONObject
+import java.net.URI
 import java.net.URLDecoder
 
 internal data class ExternalDrive(
@@ -72,6 +82,39 @@ internal data class ExternalDrive(
     val desktopUserAgent: Boolean = false,
     val additionalSessionSites: List<String> = emptyList(),
 )
+
+internal sealed interface ExternalDriveNavigationAction {
+    data object Allow : ExternalDriveNavigationAction
+    data class RedirectHttps(val url: String) : ExternalDriveNavigationAction
+    data object Block : ExternalDriveNavigationAction
+}
+
+internal fun resolveExternalDriveNavigation(rawUrl: String): ExternalDriveNavigationAction {
+    val trimmed = rawUrl.trim()
+    val scheme = trimmed.substringBefore(':', missingDelimiterValue = "").lowercase()
+    return when (scheme) {
+        "https" -> ExternalDriveNavigationAction.Allow
+        "http" -> {
+            val rest = trimmed.substringAfter(':', "").trimStart('/')
+            if (rest.isBlank()) ExternalDriveNavigationAction.Block
+            else ExternalDriveNavigationAction.RedirectHttps("https://$rest")
+        }
+        else -> ExternalDriveNavigationAction.Block
+    }
+}
+
+internal fun isWeiyunSessionTarget(rawUrl: String): Boolean {
+    val uri = runCatching { URI(rawUrl.trim()) }.getOrNull() ?: return false
+    val host = uri.host?.lowercase() ?: return false
+    val path = uri.path?.lowercase().orEmpty()
+    val isWeiyunHost = host == "weiyun.com" || host.endsWith(".weiyun.com")
+    return isWeiyunHost && (path == "/disk" || path.startsWith("/disk/"))
+}
+
+internal fun externalDriveScreenTitle(driveTitle: String?, browseMode: Boolean): String {
+    val name = driveTitle ?: "网盘"
+    return if (browseMode) name else "${name}登录"
+}
 
 internal val externalDrives = mapOf(
     "feijipan" to ExternalDrive("小飞机网盘", "飞"),
@@ -87,6 +130,7 @@ internal val externalDrives = mapOf(
     val extraSites = when (drive) {
         OfficialWebDrive.ALIYUN -> listOf("aliyundrive.com")
         OfficialWebDrive.TIANYI -> listOf("dlife.cn")
+        OfficialWebDrive.WEIYUN -> listOf("qq.com", "open.weixin.qq.com")
         else -> emptyList()
     }
     drive.id to ExternalDrive(
@@ -118,12 +162,58 @@ internal fun clearExternalDriveSession(platform: String, onFinished: (Boolean) -
 
 private val chromeVersionPattern = Regex("""Chrome/[\d.]+""")
 
+private fun configureDriveWebView(
+    webView: WebView,
+    desktopMode: Boolean,
+    supportMultipleWindows: Boolean,
+) {
+    webView.layoutParams = ViewGroup.LayoutParams(
+        ViewGroup.LayoutParams.MATCH_PARENT,
+        ViewGroup.LayoutParams.MATCH_PARENT,
+    )
+    val settings = webView.settings
+    settings.javaScriptEnabled = true
+    settings.domStorageEnabled = true
+    settings.databaseEnabled = true
+    settings.javaScriptCanOpenWindowsAutomatically = true
+    settings.setSupportMultipleWindows(supportMultipleWindows)
+    settings.mixedContentMode = WebSettings.MIXED_CONTENT_COMPATIBILITY_MODE
+    settings.cacheMode = WebSettings.LOAD_DEFAULT
+    settings.allowFileAccess = false
+    settings.allowContentAccess = false
+    if (desktopMode) {
+        chromeVersionPattern.find(settings.userAgentString)?.value?.let { chrome ->
+            val desktopUa = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) " +
+                "AppleWebKit/537.36 (KHTML, like Gecko) $chrome Safari/537.36"
+            settings.userAgentString = desktopUa
+            settings.alignClientHintsWith(desktopUa)
+            val platformName = ClientHints.fromUserAgent(desktopUa).navigatorPlatform
+            if (platformName != null && WebViewFeature.isFeatureSupported(WebViewFeature.DOCUMENT_START_SCRIPT)) {
+                val platformJs = "(function(){try{Object.defineProperty(navigator,'platform'," +
+                    "{get:function(){return '$platformName';},configurable:true});}catch(e){}})()"
+                WebViewCompat.addDocumentStartJavaScript(webView, platformJs, setOf("*"))
+            }
+        }
+    }
+    if (WebViewFeature.isFeatureSupported(WebViewFeature.REQUESTED_WITH_HEADER_ALLOW_LIST)) {
+        WebSettingsCompat.setRequestedWithHeaderOriginAllowList(settings, emptySet())
+    }
+    settings.useWideViewPort = true
+    settings.loadWithOverviewMode = true
+    settings.setSupportZoom(true)
+    settings.builtInZoomControls = true
+    settings.displayZoomControls = false
+    CookieManager.getInstance().setAcceptCookie(true)
+    CookieManager.getInstance().setAcceptThirdPartyCookies(webView, true)
+}
+
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun ExternalDriveLoginScreen(
     platform: String,
     downloadManager: DownloadManager,
     initialUrl: String? = null,
+    browseMode: Boolean = false,
     onBack: () -> Unit,
     onSaved: () -> Unit,
     onDownloaded: () -> Unit,
@@ -139,15 +229,19 @@ fun ExternalDriveLoginScreen(
     val drive = externalDrives[platform]
     val webUrl = drive?.url
     val startUrl = initialUrl ?: webUrl
-    val title = "${drive?.title ?: "网盘"}登录"
+    val title = externalDriveScreenTitle(drive?.title, browseMode = browseMode)
     var pageError by remember(startUrl) { mutableStateOf<String?>(null) }
+    var loadProgress by remember(startUrl) { mutableIntStateOf(0) }
+    var useDesktopMode by remember(platform) { mutableStateOf(drive?.desktopUserAgent == true) }
+    var webViewRef by remember(startUrl) { mutableStateOf<WebView?>(null) }
     var menuOpen by remember { mutableStateOf(false) }
     var clearingSession by remember { mutableStateOf(false) }
-    var webPageGeneration by remember { mutableStateOf(0) }
+    var webPageGeneration by remember { mutableIntStateOf(0) }
 
     fun openInBrowser() {
-        if (startUrl == null) return
-        runCatching { uriHandler.openUri(startUrl) }.onFailure {
+        val target = webViewRef?.url?.takeIf { it.startsWith("http://") || it.startsWith("https://") } ?: startUrl
+        if (target == null) return
+        runCatching { uriHandler.openUri(target) }.onFailure {
             SnackbarController.show("无法打开浏览器")
         }
     }
@@ -195,6 +289,7 @@ fun ExternalDriveLoginScreen(
 
     fun saveWebAccount() {
         if (saving || drive == null || webUrl == null) return
+        CookieManager.getInstance().flush()
         val cookie = if (platform == "ctfile") {
             CookieManager.getInstance().getCookie(webUrl).orEmpty()
         } else ""
@@ -218,7 +313,14 @@ fun ExternalDriveLoginScreen(
         saving = false
     }
 
-    BackHandler(enabled = !saving && !clearingSession) { onBack() }
+    BackHandler(enabled = !saving && !clearingSession) {
+        val currentWebView = webViewRef
+        if (currentWebView != null && currentWebView.canGoBack()) {
+            currentWebView.goBack()
+        } else {
+            onBack()
+        }
+    }
 
     Scaffold(
         topBar = {
@@ -230,10 +332,12 @@ fun ExternalDriveLoginScreen(
                     }
                 },
                 actions = {
-                    TextButton(
-                        onClick = { if (platform == "feijipan") saveFeijipan() else saveWebAccount() },
-                        enabled = !saving && !clearingSession && pageError == null,
-                    ) { Text("保存") }
+                    if (!browseMode || platform == "feijipan") {
+                        TextButton(
+                            onClick = { if (platform == "feijipan") saveFeijipan() else saveWebAccount() },
+                            enabled = !saving && !clearingSession && pageError == null,
+                        ) { Text("保存") }
+                    }
                     if (webUrl != null) {
                         IconButton(onClick = { menuOpen = true }, enabled = !clearingSession) {
                             Icon(Icons.Default.MoreVert, contentDescription = "网页操作")
@@ -242,8 +346,25 @@ fun ExternalDriveLoginScreen(
                             DropdownMenuItem(text = { Text("重新加载网页") }, onClick = {
                                 menuOpen = false
                                 pageError = null
+                                webViewRef?.clearCache(true)
                                 webPageGeneration++
                             })
+                            DropdownMenuItem(text = { Text("回到网盘首页") }, onClick = {
+                                menuOpen = false
+                                pageError = null
+                                val current = webViewRef
+                                if (current != null) current.loadUrl(webUrl)
+                                else webPageGeneration++
+                            })
+                            DropdownMenuItem(
+                                text = { Text(if (useDesktopMode) "切换为移动版网页" else "切换为桌面版网页") },
+                                onClick = {
+                                    menuOpen = false
+                                    pageError = null
+                                    useDesktopMode = !useDesktopMode
+                                    webPageGeneration++
+                                },
+                            )
                             DropdownMenuItem(text = { Text("在浏览器打开") }, onClick = {
                                 menuOpen = false
                                 openInBrowser()
@@ -296,66 +417,138 @@ fun ExternalDriveLoginScreen(
                     Text("正在退出网页账号…", Modifier.padding(16.dp))
                 } else if (error != null) {
                     Text(error, Modifier.padding(16.dp))
-                    TextButton(onClick = { pageError = null }) { Text("重试") }
+                    TextButton(onClick = {
+                        pageError = null
+                        webPageGeneration++
+                    }) { Text("重试") }
                     TextButton(onClick = ::openInBrowser) { Text("在浏览器打开") }
                 } else {
-                    Text(
-                        "请在官网完成登录。网页触发的下载会交给云取，登录后可点“保存”保留入口。",
-                        modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp),
-                        style = MaterialTheme.typography.bodySmall,
-                    )
-                    key(startUrl, webPageGeneration) {
+                    if (!browseMode) {
+                        Text(
+                            "请在官网完成登录。网页触发的下载会交给云取，登录后可点“保存”保留入口。",
+                            modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp),
+                            style = MaterialTheme.typography.bodySmall,
+                        )
+                    }
+                    if (loadProgress in 1..99) {
+                        LinearProgressIndicator(
+                            progress = { loadProgress / 100f },
+                            modifier = Modifier.fillMaxWidth(),
+                        )
+                    }
+                    key(startUrl, useDesktopMode, webPageGeneration) {
                         var loginWindow by remember { mutableStateOf<Dialog?>(null) }
                         val supportsLoginPopup = drive?.url == OfficialWebDrive.WEIYUN.entryUrl
                         AndroidView(
                             modifier = Modifier.weight(1f).fillMaxWidth(),
                             onRelease = {
                                 loginWindow?.dismiss()
+                                if (webViewRef === it) webViewRef = null
                                 it.destroy()
                             },
                             factory = { viewContext ->
                                 WebView(viewContext).apply {
-                                    settings.javaScriptEnabled = true
-                                    settings.domStorageEnabled = true
-                                    settings.databaseEnabled = true
-                                    settings.javaScriptCanOpenWindowsAutomatically = true
-                                    settings.setSupportMultipleWindows(supportsLoginPopup)
-                                    settings.mixedContentMode = WebSettings.MIXED_CONTENT_COMPATIBILITY_MODE
-                                    settings.cacheMode = WebSettings.LOAD_DEFAULT
-                                    if (drive?.desktopUserAgent == true) {
-                                        chromeVersionPattern.find(settings.userAgentString)?.value?.let { chrome ->
-                                            settings.userAgentString = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) " +
-                                                "AppleWebKit/537.36 (KHTML, like Gecko) $chrome Safari/537.36"
-                                        }
-                                    }
-                                    settings.useWideViewPort = true
-                                    settings.loadWithOverviewMode = true
-                                    settings.setSupportZoom(true)
-                                    settings.builtInZoomControls = true
-                                    settings.displayZoomControls = false
-                                    CookieManager.getInstance().setAcceptCookie(true)
-                                    CookieManager.getInstance().setAcceptThirdPartyCookies(this, true)
+                                    webViewRef = this
+                                    configureDriveWebView(
+                                        webView = this,
+                                        desktopMode = useDesktopMode,
+                                        supportMultipleWindows = supportsLoginPopup,
+                                    )
                                     webChromeClient = object : WebChromeClient() {
+                                        override fun onProgressChanged(view: WebView?, newProgress: Int) {
+                                            loadProgress = newProgress
+                                        }
+
+                                        override fun onConsoleMessage(consoleMessage: ConsoleMessage): Boolean {
+                                            if (consoleMessage.messageLevel() == ConsoleMessage.MessageLevel.ERROR) {
+                                                DiagnosticLog.webview(
+                                                    "external_console_error",
+                                                    consoleMessage.sourceId(),
+                                                    code = consoleMessage.lineNumber(),
+                                                    summary = "platform=$platform msg=${consoleMessage.message()}",
+                                                )
+                                            }
+                                            return super.onConsoleMessage(consoleMessage)
+                                        }
+
                                         override fun onCreateWindow(
                                             view: WebView, isDialog: Boolean, isUserGesture: Boolean, resultMsg: Message,
                                         ): Boolean {
-                                            if (!supportsLoginPopup || !isUserGesture || loginWindow != null) return false
                                             val transport = resultMsg.obj as? WebView.WebViewTransport ?: return false
+                                            if (!supportsLoginPopup || loginWindow != null) {
+                                                // 非弹窗窗口或已有弹窗时，将新窗口导航回收到当前主 WebView，避免静默丢弃跳转
+                                                val relay = WebView(viewContext).apply {
+                                                    webViewClient = object : WebViewClient() {
+                                                        override fun shouldOverrideUrlLoading(
+                                                            relayView: WebView,
+                                                            request: WebResourceRequest,
+                                                        ): Boolean {
+                                                            val target = request.url?.toString().orEmpty()
+                                                            when (val action = resolveExternalDriveNavigation(target)) {
+                                                                ExternalDriveNavigationAction.Allow -> view.loadUrl(target)
+                                                                is ExternalDriveNavigationAction.RedirectHttps -> view.loadUrl(action.url)
+                                                                ExternalDriveNavigationAction.Block -> Unit
+                                                            }
+                                                            relayView.stopLoading()
+                                                            relayView.post { relayView.destroy() }
+                                                            return true
+                                                        }
+                                                    }
+                                                }
+                                                transport.webView = relay
+                                                resultMsg.sendToTarget()
+                                                return true
+                                            }
                                             val dialog = Dialog(viewContext)
                                             val child = WebView(viewContext).apply {
-                                                settings.javaScriptEnabled = true
-                                                settings.domStorageEnabled = true
-                                                settings.allowFileAccess = false
-                                                settings.allowContentAccess = false
+                                                configureDriveWebView(
+                                                    webView = this,
+                                                    desktopMode = useDesktopMode,
+                                                    supportMultipleWindows = false,
+                                                )
                                                 settings.mixedContentMode = WebSettings.MIXED_CONTENT_NEVER_ALLOW
-                                                settings.userAgentString = view.settings.userAgentString
-                                                settings.useWideViewPort = true
-                                                settings.loadWithOverviewMode = true
-                                                CookieManager.getInstance().setAcceptThirdPartyCookies(this, true)
                                                 webViewClient = object : WebViewClient() {
-                                                    override fun shouldOverrideUrlLoading(view: WebView, request: WebResourceRequest): Boolean =
-                                                        request.isForMainFrame && request.url.scheme != "https"
-                                                    override fun onRenderProcessGone(view: WebView, detail: RenderProcessGoneDetail): Boolean {
+                                                    override fun shouldOverrideUrlLoading(
+                                                        childView: WebView,
+                                                        request: WebResourceRequest,
+                                                    ): Boolean {
+                                                        if (!request.isForMainFrame) return false
+                                                        val target = request.url?.toString().orEmpty()
+                                                        return when (val action = resolveExternalDriveNavigation(target)) {
+                                                            ExternalDriveNavigationAction.Allow -> {
+                                                                if (isWeiyunSessionTarget(target)) {
+                                                                    CookieManager.getInstance().flush()
+                                                                    dialog.dismiss()
+                                                                    view.loadUrl(target)
+                                                                    true
+                                                                } else {
+                                                                    false
+                                                                }
+                                                            }
+                                                            is ExternalDriveNavigationAction.RedirectHttps -> {
+                                                                if (isWeiyunSessionTarget(action.url)) {
+                                                                    CookieManager.getInstance().flush()
+                                                                    dialog.dismiss()
+                                                                    view.loadUrl(action.url)
+                                                                } else {
+                                                                    childView.loadUrl(action.url)
+                                                                }
+                                                                true
+                                                            }
+                                                            ExternalDriveNavigationAction.Block -> true
+                                                        }
+                                                    }
+
+                                                    override fun onPageFinished(childView: WebView?, url: String?) {
+                                                        CookieManager.getInstance().flush()
+                                                        val finishedUrl = url.orEmpty()
+                                                        if (isWeiyunSessionTarget(finishedUrl)) {
+                                                            dialog.dismiss()
+                                                            view.loadUrl(finishedUrl)
+                                                        }
+                                                    }
+
+                                                    override fun onRenderProcessGone(childView: WebView, detail: RenderProcessGoneDetail): Boolean {
                                                         dialog.dismiss()
                                                         return true
                                                     }
@@ -380,11 +573,50 @@ fun ExternalDriveLoginScreen(
                                         }
                                     }
                                     webViewClient = object : WebViewClient() {
+                                        override fun shouldOverrideUrlLoading(
+                                            view: WebView,
+                                            request: WebResourceRequest,
+                                        ): Boolean {
+                                            if (!request.isForMainFrame) return false
+                                            val target = request.url?.toString().orEmpty()
+                                            return when (val action = resolveExternalDriveNavigation(target)) {
+                                                ExternalDriveNavigationAction.Allow -> false
+                                                is ExternalDriveNavigationAction.RedirectHttps -> {
+                                                    view.loadUrl(action.url)
+                                                    true
+                                                }
+                                                ExternalDriveNavigationAction.Block -> true
+                                            }
+                                        }
+
+                                        override fun onPageStarted(view: WebView?, url: String?, favicon: Bitmap?) {
+                                            pageError = null
+                                            DiagnosticLog.webview("external_page_started", url, summary = "platform=$platform desktop=$useDesktopMode")
+                                        }
+
+                                        override fun onPageFinished(view: WebView?, url: String?) {
+                                            loadProgress = 100
+                                            CookieManager.getInstance().flush()
+                                            DiagnosticLog.webview("external_page_finished", url, summary = "platform=$platform desktop=$useDesktopMode")
+                                        }
+
                                         override fun onReceivedError(view: WebView, request: WebResourceRequest, error: WebResourceError) {
+                                            DiagnosticLog.webview(
+                                                "external_page_error",
+                                                request.url?.toString(),
+                                                code = error.errorCode,
+                                                summary = "platform=$platform main=${request.isForMainFrame} desc=${error.description}",
+                                            )
                                             if (request.isForMainFrame) pageError = "网页未能加载，请检查网络后重试。"
                                         }
 
                                         override fun onReceivedHttpError(view: WebView, request: WebResourceRequest, response: WebResourceResponse) {
+                                            DiagnosticLog.webview(
+                                                "external_http_error",
+                                                request.url?.toString(),
+                                                code = response.statusCode,
+                                                summary = "platform=$platform main=${request.isForMainFrame}",
+                                            )
                                             if (request.isForMainFrame) pageError = "网页返回 HTTP ${response.statusCode}，可以重试或改用浏览器。"
                                         }
 

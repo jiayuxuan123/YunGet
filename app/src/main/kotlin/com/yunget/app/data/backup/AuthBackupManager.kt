@@ -211,10 +211,12 @@ class AuthBackupManager(
                 "quark" -> {
                     val c = obj.optString("cookie")
                     if (c.isNotBlank()) {
+                        quarkDao.demoteAll()
                         quarkDao.upsert(
                             QuarkAccountEntity(
                                 id = "quark", cookie = c,
                                 nickname = obj.optString("nickname"),
+                                isPrimary = true,
                                 updatedAt = obj.optLong("updatedAt", System.currentTimeMillis())
                             )
                         ); count++
@@ -223,10 +225,12 @@ class AuthBackupManager(
                 "uc" -> {
                     val c = obj.optString("cookie")
                     if (c.isNotBlank()) {
+                        ucDao.demoteAll()
                         ucDao.upsert(
                             UCAccountEntity(
                                 id = "uc", cookie = c,
                                 nickname = obj.optString("nickname"),
+                                isPrimary = true,
                                 updatedAt = obj.optLong("updatedAt", System.currentTimeMillis())
                             )
                         ); count++
@@ -235,6 +239,7 @@ class AuthBackupManager(
                 "xunlei" -> {
                     val t = obj.optString("accessToken")
                     if (t.isNotBlank()) {
+                        xunleiDao.demoteAll()
                         xunleiDao.upsert(
                             XunleiAccountEntity(
                                 id = "xunlei", accessToken = t,
@@ -243,6 +248,7 @@ class AuthBackupManager(
                                 captchaToken = obj.optString("captchaToken"),
                                 authType = obj.optString("authType"),
                                 nickname = obj.optString("nickname"),
+                                isPrimary = true,
                                 updatedAt = obj.optLong("updatedAt", System.currentTimeMillis())
                             )
                         ); count++
@@ -251,10 +257,12 @@ class AuthBackupManager(
                 "baidu" -> {
                     val c = obj.optString("cookie")
                     if (c.isNotBlank()) {
+                        baiduDao.demoteAll()
                         baiduDao.upsert(
                             BaiduAccountEntity(
                                 id = "baidu", cookie = c,
                                 nickname = obj.optString("nickname"),
+                                isPrimary = true,
                                 updatedAt = obj.optLong("updatedAt", System.currentTimeMillis())
                             )
                         ); count++
@@ -263,11 +271,13 @@ class AuthBackupManager(
                 "c139" -> {
                     val c = obj.optString("cookie")
                     if (c.isNotBlank()) {
+                        c139Dao.demoteAll()
                         c139Dao.upsert(
                             C139AccountEntity(
                                 id = "c139", cookie = c,
                                 authorization = obj.optString("authorization"),
                                 nickname = obj.optString("nickname"),
+                                isPrimary = true,
                                 updatedAt = obj.optLong("updatedAt", System.currentTimeMillis())
                             )
                         ); count++
@@ -276,11 +286,13 @@ class AuthBackupManager(
                 "pan123" -> {
                     val t = obj.optString("accessToken")
                     if (t.isNotBlank()) {
+                        pan123Dao.demoteAll()
                         pan123Dao.upsert(
                             Pan123AccountEntity(
                                 id = "pan123", accessToken = t,
                                 account = obj.optString("account"),
                                 nickname = obj.optString("nickname"),
+                                isPrimary = true,
                                 updatedAt = obj.optLong("updatedAt", System.currentTimeMillis())
                             )
                         ); count++
@@ -289,10 +301,12 @@ class AuthBackupManager(
                 "pan115" -> {
                     val c = obj.optString("cookie")
                     if (c.isNotBlank()) {
+                        pan115Dao.demoteAll()
                         pan115Dao.upsert(
                             Pan115AccountEntity(
                                 id = "pan115", cookie = c,
                                 nickname = obj.optString("nickname"),
+                                isPrimary = true,
                                 updatedAt = obj.optLong("updatedAt", System.currentTimeMillis())
                             )
                         ); count++
@@ -301,6 +315,7 @@ class AuthBackupManager(
                 "guangya" -> {
                     val t = obj.optString("accessToken")
                     if (t.isNotBlank()) {
+                        guangyaDao.demoteAll()
                         guangyaDao.upsert(
                             GuangYaAccountEntity(
                                 id = "guangya", accessToken = t,
@@ -309,6 +324,7 @@ class AuthBackupManager(
                                 deviceSign = obj.optString("deviceSign"),
                                 account = obj.optString("account"),
                                 nickname = obj.optString("nickname"),
+                                isPrimary = true,
                                 updatedAt = obj.optLong("updatedAt", System.currentTimeMillis())
                             )
                         ); count++
@@ -317,6 +333,7 @@ class AuthBackupManager(
                 "ilanzou" -> {
                     val t = obj.optString("appToken")
                     if (t.isNotBlank()) {
+                        ilanzouDao.demoteAll()
                         ilanzouDao.upsert(
                             ILanzouAccountEntity(
                                 id = "ilanzou", appToken = t,
@@ -325,6 +342,7 @@ class AuthBackupManager(
                                 password = obj.optString("password"),
                                 userId = obj.optString("userId"),
                                 nickname = obj.optString("nickname"),
+                                isPrimary = true,
                                 updatedAt = obj.optLong("updatedAt", System.currentTimeMillis())
                             )
                         ); count++
@@ -333,10 +351,12 @@ class AuthBackupManager(
                 "lanzou" -> {
                     val c = obj.optString("cookie")
                     if (c.isNotBlank()) {
+                        lanzouDao.demoteAll()
                         lanzouDao.upsert(
                             LanzouAccountEntity(
                                 id = "lanzou", cookie = c,
                                 nickname = obj.optString("nickname"),
+                                isPrimary = true,
                                 updatedAt = obj.optLong("updatedAt", System.currentTimeMillis())
                             )
                         ); count++

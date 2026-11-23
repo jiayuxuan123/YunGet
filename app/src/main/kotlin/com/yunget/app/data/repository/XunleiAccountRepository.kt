@@ -26,6 +26,7 @@ import com.yunget.app.data.db.XunleiAccountDao
 import com.yunget.app.data.db.XunleiAccountEntity
 import com.yunget.app.data.network.XunleiApi
 import com.yunget.app.data.network.XunleiLoginStep
+import com.yunget.app.data.network.XunleiWebCredential
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
@@ -56,6 +57,7 @@ class XunleiAccountRepository(
     /** 切换主账号（同一事务内先降后升）。 */
     suspend fun setPrimary(id: String) {
         dao.setPrimary(id)
+        refreshLock.withLock { recentlyRefreshed.clear() }
         api.resetSessionCache()
     }
     /**
@@ -68,6 +70,7 @@ class XunleiAccountRepository(
     suspend fun removeAccount(id: String) {
         val wasPrimary = dao.getById(id)?.isPrimary == true
         dao.deleteById(id)
+        refreshLock.withLock { recentlyRefreshed.clear() }
         api.resetSessionCache()
         if (!wasPrimary) return
         if (dao.getAccount() != null) return      // 还有别的主账号，无需处理
@@ -151,23 +154,60 @@ class XunleiAccountRepository(
     }
 
     private val refreshLock = Mutex()
+    // 并发请求同时拿同一过期 token 进来时，第二个请求复用刚刷出的结果，避免查不到旧 token 误报过期。
+    private val recentlyRefreshed = LinkedHashMap<String, Pair<String, String>>(8, 0.75f, false)
 
     suspend fun refreshSession(token: String, requestDeviceId: String = ""): Pair<String, String>? =
         refreshLock.withLock {
+            recentlyRefreshed[token]?.let { return@withLock it }
             val account = dao.observeAll().first().firstOrNull { it.accessToken == token } ?: return@withLock null
             if (account.refreshToken.isBlank()) return@withLock null
             val deviceId = account.deviceId.ifBlank { requestDeviceId }.ifBlank { XunleiApi.newDeviceId() }
             if (requestDeviceId.isNotBlank() && deviceId != requestDeviceId) return@withLock null
-            val refreshed = api.refreshToken(account.refreshToken, deviceId, account.authType) ?: return@withLock null
+            val primaryAttempt = api.refreshToken(account.refreshToken, deviceId, account.authType)
+            // 旧版备份未导出 authType：默认 App 客户端刷新失败时，自动回退尝试网页 OAuth 客户端。
+            val (refreshed, resolvedAuthType) = if (primaryAttempt != null) {
+                primaryAttempt to account.authType
+            } else if (account.authType.isBlank()) {
+                val webAttempt = api.refreshToken(account.refreshToken, deviceId, XunleiWebCredential.AUTH_TYPE)
+                    ?: return@withLock null
+                webAttempt to XunleiWebCredential.AUTH_TYPE
+            } else {
+                return@withLock null
+            }
             val refresh = refreshed.second.ifBlank { account.refreshToken }
-            val updated = dao.replaceTokens(
-                account.id, account.accessToken, account.refreshToken, refreshed.first, refresh, System.currentTimeMillis(),
-            )
-            if (updated == 1) refreshed.first to refresh else null
+            val now = System.currentTimeMillis()
+            val persisted = if (resolvedAuthType != account.authType || deviceId != account.deviceId) {
+                val current = dao.getById(account.id)
+                if (current != null && current.accessToken == account.accessToken && current.refreshToken == account.refreshToken) {
+                    dao.upsert(
+                        current.copy(
+                            accessToken = refreshed.first,
+                            refreshToken = refresh,
+                            deviceId = deviceId,
+                            authType = resolvedAuthType,
+                            updatedAt = now,
+                        )
+                    )
+                    true
+                } else false
+            } else {
+                dao.replaceTokens(
+                    account.id, account.accessToken, account.refreshToken, refreshed.first, refresh, now,
+                ) == 1
+            }
+            if (!persisted) return@withLock null
+            val result = refreshed.first to refresh
+            if (recentlyRefreshed.size >= 8) {
+                recentlyRefreshed.entries.firstOrNull()?.let { recentlyRefreshed.remove(it.key) }
+            }
+            recentlyRefreshed[token] = result
+            result
         }
 
     suspend fun logout() {
         dao.clear()
+        refreshLock.withLock { recentlyRefreshed.clear() }
         api.resetSessionCache()
     }
 
