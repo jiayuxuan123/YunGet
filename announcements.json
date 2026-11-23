@@ -8,6 +8,14 @@
   ],
   "items": [
     {
+      "id": "2026-11-23-release-2746",
+      "title": "云取 2.7.46：百度分享、账号恢复与网页网盘修正",
+      "body": "# 云取 2.7.46\n\nAndroid 版本号为 96，内置 TurboDL 0.5.0.10。\n\n- 发起下载后「下载」页会切回「正在下载」，不再停留在上次查看的「已完成」。\n- 百度分享子目录与转存改用本次分享的 BDCLND，避免沿用旧分享标识导致 errno=2；补充风控与登录失效提示。\n- 认证备份导入的账号恢复为主账号；迅雷旧备份缺少登录方式时自动回退网页版刷新。\n- 网页网盘支持桌面版/移动版切换、回到首页、加载进度，http 自动升级 https 并拦截非 http(s) 跳转。\n\n[下载安装包和查看完整更新说明](https://github.com/jiayuxuan123/YunGet/releases/tag/v2.7.46)",
+      "date": "2026-11-23",
+      "pinned": true,
+      "important": true
+    },
+    {
       "id": "2026-11-22-release-2745",
       "title": "云取 2.7.45：下载尾段、迅雷恢复与 WebDAV 备份",
       "body": "Android 和 Windows 同步更新，内置 TurboDL 0.5.0.10。\n\n- 改善下载尾段分配、迅雷 503 冷却与登录刷新。\n- 调整微云登录、天翼等网页视口、社区多图选择及百度、UC 请求。\n- 设置新增 WebDAV 加密备份，可在手机和电脑间恢复主账号及下载配置。\n\n[下载安装包及完整说明](https://github.com/jiayuxuan123/YunGet/releases/tag/v2.7.45)",

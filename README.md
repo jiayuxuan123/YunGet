@@ -4,9 +4,9 @@
 >
 > **本项目是 [CYQawa/YunX（云析）](https://github.com/CYQawa/YunX) 的二次开发版本**，在其协议与架构基础上进行功能扩展，并将下载能力逐步迁移至独立的 [TurboDL](https://github.com/jiayuxuan123/TurboDL) 下载引擎。遵循 GNU AGPL-3.0 协议开源。
 
-本版在 Windows 新增城通、阿里云盘、天翼云盘、腾讯微云、联通沃盘和 PikPak 的官网入口。Android 同步修正这批网盘的 WebView 登录与会话退出路径，并修复部分旧版迅雷账号数据库升级崩溃。Android 与 Windows 的 TurboDL 原生 HTTP 下载均支持最高 512 条分片并发请求。详见 [2.7.44 更新日志](engineering/releases/2.7.44.md)。
+本版修复百度分享子目录与转存的分享标识残留、认证备份恢复后仍提示未登录，以及迅雷旧备份的登录刷新。下载页在发起新任务后会切回「正在下载」，网页网盘补齐桌面版/移动版切换、首页跳转与加载进度。详见 [2.7.46 更新日志](engineering/releases/2.7.46.md)。
 
-当前版本 **2.7.45**（versionCode 95）· Android 7.0+（minSdk 24，targetSdk 34）· Windows x64 · 内置 TurboDL 0.5.0.10
+当前版本 **2.7.46**（versionCode 96）· Android 7.0+（minSdk 24，targetSdk 34）· Windows x64 · 内置 TurboDL 0.5.0.10
 
 本次云取同步发布 Android 正式版 APK 与 Windows x64 安装包（MSI）。
 
