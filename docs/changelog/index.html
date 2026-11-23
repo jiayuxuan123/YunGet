@@ -54,7 +54,15 @@
 </div>
 </header>
 <main id="main">
-<div class="page-canvas" data-page="changelog"><section class="page-intro"><div class="wrap intro-grid"><h1>更新日志</h1><div class="intro-copy"><p>版本、日期与附件数量来自 GitHub Release 数据；应用内检查更新读取同一来源。</p><div class="page-actions"><a class="button button-primary" href="../download/index.html">下载当前版本<svg class="icon-arrow" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true"><path d="M5 12h14M13 6l6 6-6 6"/></svg></a><a class="button" href="https://github.com/jiayuxuan123/YunGet/releases">GitHub Releases<svg class="icon-arrow" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true"><path d="M5 12h14M13 6l6 6-6 6"/></svg></a></div></div></div></section><section class="section"><div class="wrap"><header class="section-head"><h2>最近发布</h2><p class="section-lead">完整发布说明保留在 GitHub；这里列出便于扫描的版本路线。</p></header><article class="release-row"><div class="release-id"><strong>v2.7.45</strong><span>2026-11-22</span></div><p>云取 2.7.45
+<div class="page-canvas" data-page="changelog"><section class="page-intro"><div class="wrap intro-grid"><h1>更新日志</h1><div class="intro-copy"><p>版本、日期与附件数量来自 GitHub Release 数据；应用内检查更新读取同一来源。</p><div class="page-actions"><a class="button button-primary" href="../download/index.html">下载当前版本<svg class="icon-arrow" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true"><path d="M5 12h14M13 6l6 6-6 6"/></svg></a><a class="button" href="https://github.com/jiayuxuan123/YunGet/releases">GitHub Releases<svg class="icon-arrow" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true"><path d="M5 12h14M13 6l6 6-6 6"/></svg></a></div></div></div></section><section class="section"><div class="wrap"><header class="section-head"><h2>最近发布</h2><p class="section-lead">完整发布说明保留在 GitHub；这里列出便于扫描的版本路线。</p></header><article class="release-row"><div class="release-id"><strong>v2.7.46</strong><span>2026-11-23</span></div><p>云取 2.7.46
+Android 版本号为 96，内置 TurboDL 0.5.0.10。本次同步提供 Android APK 和 Windows x64 安装器。
+下载
+· 从解析页、网盘或更新包发起下载后，「下载」页会切回「正在下载」，不再停留在上次查看的「已完成」；在下载页内新增任务、磁力任务和外部网盘回传的下载使用同一套切页逻辑。
+网盘与账号
+· 百度分享的子目录浏览与转存改用本次分享的 BDCLND，不再沿用登录 Cookie 中残留的旧分享标识，避免 errno=2；错误提示补充 9013 风控、-6 登录失效、31066 失效等常见原因。
+· 认证备份导入的账号会恢复为主账号，避免恢复后仍然提示未登录。
+· 迅雷旧备份缺少登录方式时，刷新失败会自动改用网页版 OAuth 客户端重试，并把新凭证写回原账号；并发请求复用同一次刷新结果，不再把旧 token 误报为过期。
+·…</p><a href="https://github.com/jiayuxuan123/YunGet/releases/tag/v2.7.46">发布页</a></article><article class="release-row"><div class="release-id"><strong>v2.7.45</strong><span>2026-11-22</span></div><p>云取 2.7.45
 Android 版本号为 95，内置 TurboDL 0.5.0.10。本次同步提供 Android APK 和 Windows x64 安装器。
 下载
 · 调整最后一段 Range 的调度。有空闲连接且预估能缩短尾段时间时，内置引擎会安排分担，并保留暂停续传所需的分片记录。
@@ -186,14 +194,7 @@ Android 正式版，versionCode 91，内置 TurboDL 0.5.0.8。已安装 2.7.40 �
 · 新版和经典解析页都增加“扫码”入口。
 · 扫描结果只填入解析框，确认后仍由原有分享链接、直链和视频解析流程处理。
 · 相机画面只在设备本机解码，不上传；权限被拒绝时可再次授权或打开系统设置。
-匿名使用统计…</p><a href="https://github.com/jiayuxuan123/YunGet/releases/tag/v2.7.31">发布页</a></article><article class="release-row"><div class="release-id"><strong>v2.7.30</strong><span>2026-11-11</span></div><p>云取 2.7.30
-版本：2.7.30（versionCode 78），内置 TurboDL 0.5.0.3。本版相对 2.7.29 完善下载、续传、保存和任务详情流程；主界面风格和主要操作方式保持不变。
-下载与续传
-· 新任务会保存提交时的传输策略、下载参数和连接上限。恢复时继续使用保存值；如果当前用户允许的连接上限更低，则按较低值执行。
-· 续传使用任务保存的来源引用和传输策略，不依赖当前选中的账号或临时下载地址。
-· 仅当夸克任务同时具备来源账号和文件引用时，切换主账号后仍使用原账号恢复；识别到链接过期后，才经过受控流程由原账号重新获取下载链接。换链后会核对文件标识、预期大小和已有断点，验证不通过时不会把新来源数据写入无法确认的旧文件。
-· 原账号已退出时，不会使用缓存凭据重新提交任务。遇到 412/429 等限制时，也不会通过盲目反复刷新链接来绕过。
-· 暂停或重试…</p><a href="https://github.com/jiayuxuan123/YunGet/releases/tag/v2.7.30">发布页</a></article></div></section></div></main>
+匿名使用统计…</p><a href="https://github.com/jiayuxuan123/YunGet/releases/tag/v2.7.31">发布页</a></article></div></section></div></main>
 <footer class="site-footer">
 <div class="wrap footer-station">
 <div class="footer-stop"><span class="footer-node" aria-hidden="true"></span>
@@ -213,7 +214,7 @@ Android 正式版，versionCode 91，内置 TurboDL 0.5.0.8。已安装 2.7.40 �
 <nav class="footer-nav" aria-label="页脚导航"><section class="footer-col"><h2>项目</h2><ul><li><a href="https://github.com/jiayuxuan123/YunGet">GitHub</a></li><li><a href="../download/index.html">下载</a></li><li><a href="index.html">更新日志</a></li><li><a href="https://github.com/jiayuxuan123/YunGet/issues">问题反馈</a></li></ul></section><section class="footer-col"><h2>文档</h2><ul><li><a href="../docs/readme/index.html">项目说明</a></li><li><a href="../docs/guide/index.html">使用说明</a></li><li><a href="../docs/faq/index.html">常见问题</a></li><li><a href="../docs/engines/index.html">下载引擎</a></li><li><a href="../docs/build/index.html">从源码构建</a></li></ul></section><section class="footer-col"><h2>插件</h2><ul><li><a href="../plugins/index.html">插件（市场与安装）</a></li><li><a href="../developers/index.html">开发者（怎么写）</a></li><li><a href="../docs/plugin-dev/index.html">写一个插件</a></li><li><a href="../docs/plugin-api/index.html">插件 ABI 参考</a></li><li><a href="../docs/plugin-publish/index.html">打包与发布</a></li><li><a href="../docs/plugin-security/index.html">插件安全模型</a></li></ul></section><section class="footer-col"><h2>协议与说明</h2><ul><li><a href="../legal/license/index.html">AGPL-3.0 原文</a></li><li><a href="../legal/notice/index.html">署名与致谢</a></li><li><a href="../legal/privacy/index.html">隐私说明</a></li><li><a href="../legal/terms/index.html">使用条款</a></li><li><a href="../support/index.html">支持开发</a></li></ul></section><section class="footer-col"><h2>相关</h2><ul><li><a href="https://github.com/CYQawa/YunX">上游 CYQawa/YunX</a></li><li><a href="https://github.com/jiayuxuan123/TurboDL">下载引擎 TurboDL</a></li><li><a href="https://github.com/jiayuxuan123/YunGet-Plugins">插件源 YunGet-Plugins</a></li><li><a href="../community/index.html">社区</a></li></ul></section></nav>
 </div>
 <div class="wrap footer-fine">
-<div class="footer-meta"><p>云取 YunGet v2.7.45 · AGPL-3.0 · 内置 TurboDL 0.5.0.10 · Android 7.0（API 24）</p><p>本项目是 CYQawa/YunX（云析）的二次开发版本，与上游作者无隐性关联。仅供个人学习与技术交流，请勿用于商业用途；下载内容的版权归原作者及相关权利人所有。</p></div>
+<div class="footer-meta"><p>云取 YunGet v2.7.46 · AGPL-3.0 · 内置 TurboDL 0.5.0.10 · Android 7.0（API 24）</p><p>本项目是 CYQawa/YunX（云析）的二次开发版本，与上游作者无隐性关联。仅供个人学习与技术交流，请勿用于商业用途；下载内容的版权归原作者及相关权利人所有。</p></div>
 <div class="footer-bottom">
 <span>云取 YunGet · ANDROID · OPEN SOURCE</span>
 <a href="https://github.com/jiayuxuan123/YunGet">GitHub / Source</a>
