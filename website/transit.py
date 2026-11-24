@@ -456,14 +456,14 @@ def download(facts: dict, href) -> str:
         )
         + _section(
             "浏览器链接助手",
-            "在电脑浏览器里先把分享链接整理好，再粘贴到云取。扩展不上传链接，也不读取网页正文。",
+            "配合云取 Windows 桌面端自动拦截浏览器下载并嗅探网页音视频/直链资源。仅与本机 127.0.0.1 通信，不上传任何数据。",
             '<div class="extension-offer">'
-            '<div><span class="status status-ready">Manifest V3</span>'
+            '<div><span class="status status-ready">Manifest V3 · v2.0</span>'
             "<h3>云取链接助手</h3>"
-            "<p>复制当前标签页链接，按域名识别常见网盘，并在浏览器本地保留最近 5 条记录。</p></div>"
+            "<p>自动拦截浏览器下载并携带 Cookie/Referer 交给云取 PC 满速下载，支持网页 HLS/DASH/视频/音频/附件资源嗅探与右键直接下载。</p></div>"
             '<div class="extension-actions">'
             '<a class="button button-primary" href="{ASSET:extensions/yunget-link-relay.zip}" download>'
-            "下载扩展 ZIP</a>"
+            "下载扩展 ZIP (v2.0)</a>"
             '<a class="text-link" href="https://developer.chrome.com/docs/extensions/get-started/tutorial/hello-world#load-unpacked">'
             "查看加载未打包扩展的官方步骤</a>"
             "</div></div>",

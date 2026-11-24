@@ -1,12 +1,23 @@
 {
   "manifest_version": 3,
   "name": "云取链接助手",
-  "version": "1.0.0",
-  "description": "复制当前页面链接，识别常见网盘来源，并保存最近使用的分享链接。",
+  "version": "2.0.0",
+  "description": "自动拦截浏览器下载并交给云取 PC 满速下载，内置网页视频/HLS/音频/文件资源嗅探与右键接管。",
   "permissions": [
     "tabs",
-    "storage"
+    "storage",
+    "downloads",
+    "cookies",
+    "webRequest",
+    "contextMenus",
+    "notifications"
   ],
+  "host_permissions": [
+    "<all_urls>"
+  ],
+  "background": {
+    "service_worker": "background.js"
+  },
   "action": {
     "default_title": "云取链接助手",
     "default_popup": "popup.html",

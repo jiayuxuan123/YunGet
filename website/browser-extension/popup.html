@@ -30,84 +30,190 @@
     }
     * { box-sizing: border-box; }
     body {
-      width: 360px;
-      min-height: 250px;
+      width: 400px;
+      min-height: 360px;
       margin: 0;
-      padding: 18px;
+      padding: 16px;
       background:
         linear-gradient(135deg, color-mix(in srgb, var(--route) 9%, transparent), transparent 45%),
         var(--paper);
       color: var(--ink);
-      font: 14px/1.55 "Schibsted Grotesk", "Microsoft YaHei", "PingFang SC", sans-serif;
+      font: 13px/1.5 "Microsoft YaHei", "PingFang SC", system-ui, sans-serif;
     }
-    h1 { margin: 0; font-size: 20px; letter-spacing: -0.03em; }
-    .eyebrow {
-      margin: 0 0 4px;
-      color: var(--route);
+    .head { display: flex; justify-content: space-between; align-items: flex-start; gap: 8px; }
+    h1 { margin: 0; font-size: 18px; letter-spacing: -0.02em; }
+    .eyebrow { margin: 0 0 2px; color: var(--route); font-size: 10px; font-weight: 800; letter-spacing: 0.14em; }
+    .badge-status {
+      padding: 3px 8px;
+      border: 1px solid var(--line);
+      background: var(--surface);
       font-size: 11px;
-      font-weight: 800;
-      letter-spacing: 0.14em;
+      font-weight: 700;
+      white-space: nowrap;
     }
-    .current {
-      margin-top: 16px;
-      padding: 13px;
+    .badge-status.online { border-color: var(--route); color: var(--route); }
+    .badge-status.offline { border-color: var(--signal); color: var(--signal); }
+
+    .controls {
+      display: grid;
+      gap: 8px;
+      margin-top: 12px;
+      padding: 10px 12px;
       border: 1px solid var(--line);
       background: var(--surface);
     }
-    .provider { color: var(--signal); font-size: 12px; font-weight: 750; }
+    .toggle-row { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
+    .toggle-row label { display: flex; align-items: center; gap: 6px; font-weight: 700; cursor: pointer; }
+    .inline-opts { display: flex; align-items: center; gap: 6px; font-size: 12px; color: var(--muted); }
+    select, input[type="number"] {
+      padding: 3px 6px;
+      border: 1px solid var(--line);
+      background: var(--paper);
+      color: var(--ink);
+      font: inherit;
+    }
+    input[type="number"] { width: 72px; }
+
+    .section { margin-top: 12px; }
+    .section-head { display: flex; justify-content: space-between; align-items: center; margin-bottom: 6px; }
+    .section h2 { margin: 0; font-size: 12px; letter-spacing: 0.06em; color: var(--muted); }
+
+    .sniff-list {
+      display: grid;
+      gap: 6px;
+      max-height: 220px;
+      overflow-y: auto;
+      padding: 0;
+      margin: 0;
+      list-style: none;
+    }
+    .sniff-item {
+      display: grid;
+      grid-template-columns: 1fr auto;
+      gap: 8px;
+      align-items: center;
+      padding: 8px 10px;
+      border: 1px solid var(--line);
+      background: var(--surface);
+    }
+    .sniff-meta { min-width: 0; }
+    .sniff-top { display: flex; align-items: center; gap: 6px; }
+    .tag {
+      padding: 1px 5px;
+      font-size: 10px;
+      font-weight: 800;
+      background: var(--route);
+      color: var(--route-ink);
+      flex-shrink: 0;
+    }
+    .sniff-name {
+      font-weight: 700;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+    .sniff-sub {
+      margin-top: 2px;
+      font-family: "Cascadia Mono", Consolas, monospace;
+      font-size: 10px;
+      color: var(--muted);
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+    .sniff-btns { display: flex; gap: 4px; }
+    .mini-btn {
+      min-height: 28px;
+      padding: 2px 8px;
+      font-size: 12px;
+    }
+
+    .current {
+      padding: 10px 12px;
+      border: 1px solid var(--line);
+      background: var(--surface);
+    }
+    .provider { color: var(--signal); font-size: 12px; font-weight: 700; }
     .url {
       display: -webkit-box;
-      margin: 6px 0 0;
+      margin: 4px 0 0;
       overflow: hidden;
       font-family: "Cascadia Mono", Consolas, monospace;
       font-size: 11px;
       overflow-wrap: anywhere;
       -webkit-box-orient: vertical;
-      -webkit-line-clamp: 4;
+      -webkit-line-clamp: 2;
     }
-    .actions { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin-top: 12px; }
-    button, .site-link {
-      min-height: 40px;
+    .actions { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin-top: 8px; }
+    button {
+      min-height: 36px;
       border: 1px solid var(--line);
       background: var(--surface);
       color: var(--ink);
       font: inherit;
       font-weight: 700;
-      text-align: center;
-      text-decoration: none;
       cursor: pointer;
     }
-    button:hover, .site-link:hover { border-color: var(--route); }
-    button:focus-visible, .site-link:focus-visible {
-      outline: 3px solid var(--signal);
-      outline-offset: 2px;
-    }
+    button:hover { border-color: var(--route); }
+    button:disabled { opacity: 0.5; cursor: not-allowed; }
     .primary { border-color: var(--route); background: var(--route); color: var(--route-ink); }
-    .site-link { display: grid; place-items: center; }
-    .status { min-height: 20px; margin: 10px 0 0; color: var(--route); font-size: 12px; }
-    .recent { margin-top: 14px; }
-    .recent h2 { margin: 0 0 7px; font-size: 12px; text-transform: uppercase; letter-spacing: 0.1em; }
-    .recent ul { display: grid; gap: 5px; margin: 0; padding: 0; list-style: none; }
-    .recent button { width: 100%; min-height: 32px; padding: 5px 8px; overflow: hidden; text-align: left; text-overflow: ellipsis; white-space: nowrap; }
-    .empty { color: var(--muted); font-size: 12px; }
+    .link-btn { min-height: 24px; padding: 2px 6px; font-size: 11px; }
+    .status { min-height: 18px; margin: 8px 0 0; color: var(--route); font-size: 12px; }
+    .empty { padding: 10px; border: 1px dashed var(--line); color: var(--muted); font-size: 12px; text-align: center; }
   </style>
 </head>
 <body>
-  <p class="eyebrow">YUNGET · LINK RELAY</p>
-  <h1>云取链接助手</h1>
-  <section class="current" aria-label="当前页面">
-    <div class="provider" id="provider">正在读取当前页面</div>
-    <p class="url" id="url">…</p>
-  </section>
-  <div class="actions">
-    <button class="primary" id="copy" type="button">复制当前链接</button>
-    <a class="site-link" href="https://yunget.yunl.us.ci/" target="_blank" rel="noopener">打开云取官网</a>
+  <div class="head">
+    <div>
+      <p class="eyebrow">YUNGET · LINK RELAY 2.0</p>
+      <h1>云取链接助手</h1>
+    </div>
+    <span class="badge-status" id="pc-state">检测中…</span>
   </div>
-  <p class="status" id="status" aria-live="polite"></p>
-  <section class="recent" aria-labelledby="recent-title">
-    <h2 id="recent-title">最近复制</h2>
-    <ul id="recent-list"><li class="empty">还没有记录。</li></ul>
+
+  <section class="controls" aria-label="接管与嗅探设置">
+    <div class="toggle-row">
+      <label><input type="checkbox" id="intercept-toggle" checked> 自动拦截浏览器下载</label>
+      <div class="inline-opts">
+        <select id="min-size" title="拦截最小体积">
+          <option value="0">全部文件</option>
+          <option value="1" selected>≥ 1 MB</option>
+          <option value="5">≥ 5 MB</option>
+          <option value="10">≥ 10 MB</option>
+        </select>
+      </div>
+    </div>
+    <div class="toggle-row">
+      <label><input type="checkbox" id="sniff-toggle" checked> 网页媒体/文件资源嗅探</label>
+      <div class="inline-opts">
+        <label for="port">端口</label>
+        <input id="port" type="number" min="1024" max="65535" value="17890">
+      </div>
+    </div>
   </section>
+
+  <section class="section" aria-labelledby="sniff-title">
+    <div class="section-head">
+      <h2 id="sniff-title">本页嗅探到的资源（<span id="sniff-count">0</span>）</h2>
+      <button class="link-btn" id="clear-sniff" type="button">清空</button>
+    </div>
+    <ul class="sniff-list" id="sniff-list">
+      <li class="empty">暂未嗅探到音视频或下载直链；播放视频或触发下载请求后会自动捕获。</li>
+    </ul>
+  </section>
+
+  <section class="section" aria-label="当前网页">
+    <div class="current">
+      <div class="provider" id="provider">正在读取当前页面</div>
+      <p class="url" id="url">…</p>
+    </div>
+    <div class="actions">
+      <button class="primary" id="send-pc" type="button">发送当前页到云取解析</button>
+      <button id="copy" type="button">复制当前链接</button>
+    </div>
+  </section>
+
+  <p class="status" id="status" aria-live="polite"></p>
   <script src="popup.js"></script>
 </body>
 </html>
