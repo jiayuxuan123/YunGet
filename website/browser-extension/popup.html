@@ -165,7 +165,7 @@
 <body>
   <div class="head">
     <div>
-      <p class="eyebrow">YUNGET · LINK RELAY 2.0</p>
+      <p class="eyebrow">YUNGET · LINK RELAY 2.1</p>
       <h1>云取链接助手</h1>
     </div>
     <span class="badge-status" id="pc-state">检测中…</span>
@@ -195,10 +195,13 @@
   <section class="section" aria-labelledby="sniff-title">
     <div class="section-head">
       <h2 id="sniff-title">本页嗅探到的资源（<span id="sniff-count">0</span>）</h2>
-      <button class="link-btn" id="clear-sniff" type="button">清空</button>
+      <div class="sniff-btns">
+        <button class="link-btn" id="rescan-sniff" type="button">扫描本页</button>
+        <button class="link-btn" id="clear-sniff" type="button">清空</button>
+      </div>
     </div>
     <ul class="sniff-list" id="sniff-list">
-      <li class="empty">暂未嗅探到音视频或下载直链；播放视频或触发下载请求后会自动捕获。</li>
+      <li class="empty">正在扫描当前页面链接与网络媒体资源…</li>
     </ul>
   </section>
 

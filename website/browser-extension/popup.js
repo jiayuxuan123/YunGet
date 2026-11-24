@@ -36,6 +36,7 @@ const sniffToggle = document.getElementById("sniff-toggle");
 const portInput = document.getElementById("port");
 const sniffCountNode = document.getElementById("sniff-count");
 const sniffListNode = document.getElementById("sniff-list");
+const rescanSniffBtn = document.getElementById("rescan-sniff");
 const clearSniffBtn = document.getElementById("clear-sniff");
 const providerNode = document.getElementById("provider");
 const urlNode = document.getElementById("url");
@@ -114,13 +115,157 @@ async function sendViaBackground(payload) {
   if (!resp?.ok) throw new Error(resp?.error || "发送失败");
 }
 
+// 在当前标签页 DOM 中主动扫描可下载直链、音视频元素、磁力链接与网盘分享链接
+function scanPageDomResources() {
+  const DOWNLOAD_EXTS = {
+    apk: "安装包", msi: "安装包", exe: "安装包", dmg: "安装包", pkg: "安装包", deb: "安装包", rpm: "安装包", appimage: "安装包",
+    zip: "压缩包", rar: "压缩包", "7z": "压缩包", tar: "压缩包", gz: "压缩包", xz: "压缩包", bz2: "压缩包", zst: "压缩包",
+    iso: "镜像", img: "镜像",
+    m3u8: "HLS", m3u: "HLS", mpd: "DASH",
+    mp4: "视频", mkv: "视频", webm: "视频", flv: "视频", mov: "视频", m4v: "视频", avi: "视频",
+    mp3: "音频", m4a: "音频", flac: "音频", wav: "音频", aac: "音频", ogg: "音频",
+    torrent: "种子", pdf: "文档", epub: "文档"
+  };
+  const CLOUD_HOSTS = [
+    "pan.quark.cn", "drive.uc.cn", "pan.xunlei.com", "pan.baidu.com",
+    "caiyun.139.com", "123pan.com", "123684.com", "123865.com",
+    "115.com", "115cdn.com", "feijipan.com", "feijix.com", "ctfile.com",
+    "alipan.com", "aliyundrive.com", "cloud.189.cn", "weiyun.com", "pan.wo.cn", "mypikpak.com"
+  ];
+  const seen = new Set();
+  const found = [];
+  const pageUrl = location.href;
+
+  function extOf(u) {
+    try {
+      const p = new URL(u, pageUrl).pathname;
+      const base = p.split("/").pop() || "";
+      const dot = base.lastIndexOf(".");
+      return dot > 0 && dot < base.length - 1 ? base.slice(dot + 1).toLowerCase() : "";
+    } catch { return ""; }
+  }
+
+  function nameOf(u, downloadAttr, labelText) {
+    if (downloadAttr && downloadAttr.trim()) return downloadAttr.trim();
+    try {
+      const seg = decodeURIComponent(new URL(u, pageUrl).pathname.split("/").pop() || "").trim();
+      if (seg && seg.includes(".")) return seg;
+    } catch {}
+    const txt = (labelText || "").replace(/\s+/g, " ").trim();
+    return txt ? txt.slice(0, 60) : u;
+  }
+
+  function pushItem(url, name, kind, mode) {
+    if (!url || seen.has(url)) return;
+    if (/^(javascript:|mailto:|tel:|#)/i.test(url)) return;
+    seen.add(url);
+    found.push({
+      url,
+      name: name || url,
+      kind,
+      size: 0,
+      mode: mode || "download",
+      headers: { Referer: pageUrl },
+      fromDom: true
+    });
+  }
+
+  // 1. <video> / <audio> / <source>
+  for (const el of document.querySelectorAll("video, audio")) {
+    const src = el.currentSrc || el.getAttribute("src") || "";
+    if (src && /^https?:\/\//i.test(src)) {
+      const ext = extOf(src);
+      const kind = DOWNLOAD_EXTS[ext] || (el.tagName === "AUDIO" ? "音频" : "视频");
+      pushItem(src, nameOf(src, "", document.title), kind, "download");
+    }
+    for (const s of el.querySelectorAll("source[src]")) {
+      const sUrl = s.src || "";
+      if (sUrl && /^https?:\/\//i.test(sUrl)) {
+        const ext = extOf(sUrl);
+        const kind = DOWNLOAD_EXTS[ext] || (el.tagName === "AUDIO" ? "音频" : "视频");
+        pushItem(sUrl, nameOf(sUrl, "", document.title), kind, "download");
+      }
+    }
+  }
+
+  // 2. <a href="..."> 可下载文件、磁力链、网盘分享链接
+  for (const a of document.querySelectorAll("a[href]")) {
+    const rawHref = (a.getAttribute("href") || "").trim();
+    if (!rawHref || rawHref.startsWith("#") || /^javascript:/i.test(rawHref)) continue;
+    const href = a.href || rawHref;
+    if (/^magnet:\?/i.test(href)) {
+      const dnMatch = /[?&]dn=([^&]+)/i.exec(href);
+      let dn = "磁力链接";
+      if (dnMatch) { try { dn = decodeURIComponent(dnMatch[1]); } catch {} }
+      pushItem(href, dn, "磁力", "download");
+      continue;
+    }
+    if (!/^https?:\/\//i.test(href)) continue;
+
+    let host = "";
+    try { host = new URL(href).hostname.toLowerCase(); } catch { continue; }
+    const ext = extOf(href);
+    const hasDownloadAttr = a.hasAttribute("download");
+    const isReleaseAsset = /\/releases\/download\//i.test(href);
+
+    if (ext && DOWNLOAD_EXTS[ext]) {
+      pushItem(href, nameOf(href, a.getAttribute("download"), a.textContent), DOWNLOAD_EXTS[ext], "download");
+    } else if (hasDownloadAttr || isReleaseAsset) {
+      pushItem(href, nameOf(href, a.getAttribute("download"), a.textContent), "直链", "download");
+    } else if (CLOUD_HOSTS.some((base) => host === base || host.endsWith(`.${base}`))) {
+      // 跳过首页/登录页，保留分享链接或带路径的资源链接
+      try {
+        const p = new URL(href).pathname;
+        if (p && p !== "/" && !/\/(login|signin|sign\/in)/i.test(p)) {
+          pushItem(href, nameOf(href, "", a.textContent || host), "网盘", "resolve");
+        }
+      } catch {}
+    }
+    if (found.length >= 60) break;
+  }
+
+  return found;
+}
+
+async function scanAndRenderSniffed() {
+  if (currentTab?.id == null) {
+    renderSniffed([]);
+    return;
+  }
+  const netResp = await chrome.runtime.sendMessage({ type: "GET_SNIFFED", tabId: currentTab.id }).catch(() => null);
+  const netItems = Array.isArray(netResp?.items) ? netResp.items : [];
+
+  let domItems = [];
+  if (currentTab.url && /^https?:\/\//i.test(currentTab.url)) {
+    try {
+      const results = await chrome.scripting.executeScript({
+        target: { tabId: currentTab.id },
+        func: scanPageDomResources
+      });
+      if (Array.isArray(results) && Array.isArray(results[0]?.result)) {
+        domItems = results[0].result;
+      }
+    } catch {}
+  }
+
+  // 合并去重：网络实时嗅探优先（含真实大小与捕获头），页面扫描补充静态直链/网盘链接
+  const seen = new Set();
+  const merged = [];
+  for (const item of [...netItems, ...domItems]) {
+    if (!item?.url || seen.has(item.url)) continue;
+    seen.add(item.url);
+    merged.push(item);
+  }
+  renderSniffed(merged);
+}
+
 function renderSniffed(items) {
   sniffCountNode.textContent = String(items.length);
   sniffListNode.replaceChildren();
   if (!items.length) {
     const empty = document.createElement("li");
     empty.className = "empty";
-    empty.textContent = "暂未嗅探到音视频或下载直链；播放视频或加载资源后会自动出现在这里。";
+    empty.textContent = "当前页面未发现可下载直链或媒体资源；播放视频后可点右上角「扫描本页」。";
     sniffListNode.appendChild(empty);
     return;
   }
@@ -144,7 +289,8 @@ function renderSniffed(items) {
 
     const sub = document.createElement("div");
     sub.className = "sniff-sub";
-    sub.textContent = `${formatSize(item.size)} · ${item.url}`;
+    const sizePrefix = item.size > 0 ? `${formatSize(item.size)} · ` : (item.fromDom ? "页面直链 · " : "");
+    sub.textContent = `${sizePrefix}${item.url}`;
     sub.title = item.url;
 
     meta.append(top, sub);
@@ -152,10 +298,11 @@ function renderSniffed(items) {
     const btns = document.createElement("div");
     btns.className = "sniff-btns";
 
+    const isResolve = item.mode === "resolve";
     const dlBtn = document.createElement("button");
     dlBtn.type = "button";
     dlBtn.className = "primary mini-btn";
-    dlBtn.textContent = "下载";
+    dlBtn.textContent = isResolve ? "解析" : "下载";
     dlBtn.addEventListener("click", async () => {
       dlBtn.disabled = true;
       try {
@@ -163,9 +310,11 @@ function renderSniffed(items) {
           url: item.url,
           fileName: item.name,
           headers: item.headers || {},
-          mode: "download"
+          mode: isResolve ? "resolve" : "download"
         });
-        statusNode.textContent = `已交给云取 PC 下载：${item.name}`;
+        statusNode.textContent = isResolve
+          ? `已发送到云取 PC 解析：${item.name}`
+          : `已交给云取 PC 下载：${item.name}`;
       } catch {
         await writeClipboard(item.url);
         statusNode.textContent = "未连接到云取 PC，已自动复制该资源链接。";
@@ -205,11 +354,13 @@ async function init() {
   sniffToggle.checked = Boolean(settings.sniffEnabled);
 
   checkPcOnline();
+  await scanAndRenderSniffed();
 
-  if (currentTab?.id != null) {
-    const resp = await chrome.runtime.sendMessage({ type: "GET_SNIFFED", tabId: currentTab.id });
-    renderSniffed(resp?.items || []);
-  }
+  rescanSniffBtn.addEventListener("click", async () => {
+    statusNode.textContent = "正在重新扫描当前页面…";
+    await scanAndRenderSniffed();
+    statusNode.textContent = "页面扫描完成。";
+  });
 
   interceptToggle.addEventListener("change", async () => {
     await chrome.storage.local.set({ interceptEnabled: interceptToggle.checked });

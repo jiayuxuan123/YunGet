@@ -1,14 +1,15 @@
 {
   "manifest_version": 3,
   "name": "云取链接助手",
-  "version": "2.0.0",
-  "description": "自动拦截浏览器下载并交给云取 PC 满速下载，内置网页视频/HLS/音频/文件资源嗅探与右键接管。",
+  "version": "2.1.0",
+  "description": "自动拦截浏览器下载并交给云取 PC 满速下载，支持网络流媒体嗅探（HLS/DASH/视频）与页面直链/磁力/网盘链接主动扫描。",
   "permissions": [
     "tabs",
     "storage",
     "downloads",
     "cookies",
     "webRequest",
+    "scripting",
     "contextMenus",
     "notifications"
   ],
