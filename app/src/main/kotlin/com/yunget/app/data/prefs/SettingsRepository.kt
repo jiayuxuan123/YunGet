@@ -531,6 +531,58 @@ class SettingsRepository(context: Context) {
             prefs.edit().putInt("engine_http_version_policy", value.coerceIn(0, 3)).apply()
         }
 
+    /** 记住上次使用的 WebDAV 同步地址与用户名（不存密码/口令）。 */
+    var webdavUrl: String
+        get() = prefs.getString("webdav_url", "").orEmpty()
+        set(value) {
+            prefs.edit().putString("webdav_url", value.trim()).apply()
+        }
+
+    var webdavUser: String
+        get() = prefs.getString("webdav_user", "").orEmpty()
+        set(value) {
+            prefs.edit().putString("webdav_user", value.trim()).apply()
+        }
+
+    /** 推送任务到局域网 PC 云取的地址（如 http://192.168.1.10:17890）与配对令牌。 */
+    var pcPushEndpoint: String
+        get() = prefs.getString("pc_push_endpoint", "").orEmpty()
+        set(value) {
+            prefs.edit().putString("pc_push_endpoint", value.trim().trimEnd('/')).apply()
+        }
+
+    var pcPushToken: String
+        get() = prefs.getString("pc_push_token", "").orEmpty()
+        set(value) {
+            prefs.edit().putString("pc_push_token", value.trim()).apply()
+        }
+
+    /** 是否启用分网盘默认安全并发上限（仅作默认兜底，用户可随时关闭或按单网盘覆盖）。 */
+    var providerSafeCapEnabled: Boolean
+        get() = prefs.getBoolean("provider_safe_cap_enabled", true)
+        set(value) {
+            prefs.edit().putBoolean("provider_safe_cap_enabled", value).apply()
+        }
+
+    /** 按网盘自定义的并发线程覆盖表（0 = 跟随全局，>0 = 指定上限，缺省 = 使用默认安全上限）。 */
+    var providerThreadOverrides: Map<String, Int>
+        get() = com.yunget.app.data.download.ProviderDownloadPolicy.decodeOverrides(
+            prefs.getString("provider_thread_overrides", "")
+        )
+        set(value) {
+            prefs.edit().putString(
+                "provider_thread_overrides",
+                com.yunget.app.data.download.ProviderDownloadPolicy.encodeOverrides(value),
+            ).apply()
+        }
+
+    /** 已读的分网盘并发策略说明弹窗版本号（升级说明变更后仅弹一次）。 */
+    var providerConcurrencyNoticeAckVersion: Int
+        get() = prefs.getInt("provider_concurrency_notice_ack_version", 0)
+        set(value) {
+            prefs.edit().putInt("provider_concurrency_notice_ack_version", value).apply()
+        }
+
     companion object {
         const val DEFAULT_DOWNLOAD_THREADS = 16
 

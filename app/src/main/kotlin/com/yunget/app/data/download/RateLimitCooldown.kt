@@ -10,10 +10,23 @@ internal object RateLimitCooldown {
 
     fun delayMs(failures: Int): Long = retryDelaysMs[(failures - 1).coerceIn(retryDelaysMs.indices)]
 
-    fun connectionLimit(platform: String, url: String, configured: Int, failures: Int = 0): Int {
-        if (sourceKey(platform, url) != "xunlei") return configured
-        return (configured.coerceAtMost(8) shr failures.coerceIn(0, 3)).coerceAtLeast(1)
-    }
+    fun connectionLimit(
+        platform: String,
+        url: String,
+        configured: Int,
+        failures: Int = 0,
+        safeCapEnabled: Boolean = true,
+        providerOverrides: Map<String, Int> = emptyMap(),
+        maxAllowed: Int = 512,
+    ): Int = ProviderDownloadPolicy.effectiveConnections(
+        platform = platform,
+        url = url,
+        configured = configured,
+        failures = failures,
+        enforceSafeCap = safeCapEnabled,
+        providerOverrides = providerOverrides,
+        maxAllowed = maxAllowed,
+    )
 
     private val knownSources = setOf(
         "quark", "uc", "xunlei", "baidu", "pan123", "c139", "pan115",
@@ -33,20 +46,6 @@ internal object RateLimitCooldown {
         return "源站持续限流$code，已暂停本轮重试。请在 $time 后再点继续，断点已保留"
     }
 
-    fun sourceKey(platform: String, url: String): String? {
-        val normalized = platform.trim().lowercase(Locale.ROOT)
-        if (normalized in knownSources) return normalized
-        val host = runCatching {
-            java.net.URI(url).host?.lowercase(Locale.ROOT)
-        }.getOrNull() ?: return null
-        fun under(domain: String) = host == domain || host.endsWith(".$domain")
-        return when {
-            under("quark.cn") -> "quark"
-            under("uc.cn") || under("ucweb.com") -> "uc"
-            under("xunlei.com") || under("sandai.net") -> "xunlei"
-            under("baidu.com") || under("baidupcs.com") -> "baidu"
-            under("115.com") || under("115cdn.com") -> "pan115"
-            else -> null
-        }
-    }
+    fun sourceKey(platform: String, url: String): String? =
+        ProviderDownloadPolicy.sourceKey(platform, url)
 }

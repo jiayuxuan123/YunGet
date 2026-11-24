@@ -41,6 +41,17 @@ internal enum class ConflictPolicy(val label: String, val summary: String) {
     }
 }
 
+internal enum class PostDownloadAction(val label: String, val summary: String) {
+    NONE("无操作", "所有任务完成后保持当前状态"),
+    OPEN_FOLDER("打开下载目录", "全部任务完成后自动打开默认下载目录"),
+    SHUTDOWN_PC("60 秒后自动关机", "全部任务完成后弹出倒计时并在 60 秒后关机（可随时取消）");
+
+    companion object {
+        fun fromName(name: String?): PostDownloadAction =
+            entries.firstOrNull { it.name.equals(name, ignoreCase = true) } ?: NONE
+    }
+}
+
 internal const val MAX_DESKTOP_HTTP_CONNECTIONS = 512
 
 internal data class DesktopConfig(
@@ -66,6 +77,17 @@ internal data class DesktopConfig(
     val minimizeToTray: Boolean = true,
     val systemNotifications: Boolean = true,
     val clipboardMonitor: Boolean = false,
+    val preventSleepWhileDownloading: Boolean = true,
+    val postDownloadAction: PostDownloadAction = PostDownloadAction.NONE,
+    val relayEnabled: Boolean = true,
+    val relayPort: Int = 17890,
+    val relayAllowLan: Boolean = false,
+    val relayToken: String = CoreDeviceIds.randomHex32().take(16),
+    val webdavUrl: String = "",
+    val webdavUser: String = "",
+    val providerSafeCapEnabled: Boolean = true,
+    val providerThreadOverrides: Map<String, Int> = emptyMap(),
+    val providerConcurrencyNoticeAckVersion: Int = 0,
 ) {
     val speedLimitBytesPerSec: Long
         get() = if (speedLimitMbPerSec <= 0.0) 0L else (speedLimitMbPerSec * 1024.0 * 1024.0).toLong()
@@ -106,6 +128,10 @@ internal class DesktopSettingsStore(private val dataDirectory: File) {
                 githubMirrorPrefix = cfg.githubMirrorPrefix.trim(),
                 windowWidthDp = cfg.windowWidthDp.coerceIn(720, 3840),
                 windowHeightDp = cfg.windowHeightDp.coerceIn(520, 2160),
+                relayPort = cfg.relayPort.coerceIn(1024, 65535),
+                relayToken = cfg.relayToken.trim().ifBlank { CoreDeviceIds.randomHex32().take(16) },
+                webdavUrl = cfg.webdavUrl.trim(),
+                webdavUser = cfg.webdavUser.trim(),
             )
         }
         state.value = next
@@ -166,6 +192,19 @@ internal class DesktopSettingsStore(private val dataDirectory: File) {
                     minimizeToTray = obj.optBoolean("minimizeToTray", true),
                     systemNotifications = obj.optBoolean("systemNotifications", true),
                     clipboardMonitor = obj.optBoolean("clipboardMonitor", false),
+                    preventSleepWhileDownloading = obj.optBoolean("preventSleepWhileDownloading", true),
+                    postDownloadAction = PostDownloadAction.fromName(obj.optString("postDownloadAction")),
+                    relayEnabled = obj.optBoolean("relayEnabled", true),
+                    relayPort = obj.optInt("relayPort", 17890).coerceIn(1024, 65535),
+                    relayAllowLan = obj.optBoolean("relayAllowLan", false),
+                    relayToken = obj.optString("relayToken").trim().ifBlank { CoreDeviceIds.randomHex32().take(16) },
+                    webdavUrl = obj.optString("webdavUrl", ""),
+                    webdavUser = obj.optString("webdavUser", ""),
+                    providerSafeCapEnabled = obj.optBoolean("providerSafeCapEnabled", true),
+                    providerThreadOverrides = com.yunget.app.data.download.ProviderDownloadPolicy.decodeOverrides(
+                        obj.optString("providerThreadOverrides", "")
+                    ),
+                    providerConcurrencyNoticeAckVersion = obj.optInt("providerConcurrencyNoticeAckVersion", 0),
                 )
             }
         }
@@ -204,6 +243,17 @@ internal class DesktopSettingsStore(private val dataDirectory: File) {
             .put("minimizeToTray", cfg.minimizeToTray)
             .put("systemNotifications", cfg.systemNotifications)
             .put("clipboardMonitor", cfg.clipboardMonitor)
+            .put("preventSleepWhileDownloading", cfg.preventSleepWhileDownloading)
+            .put("postDownloadAction", cfg.postDownloadAction.name)
+            .put("relayEnabled", cfg.relayEnabled)
+            .put("relayPort", cfg.relayPort)
+            .put("relayAllowLan", cfg.relayAllowLan)
+            .put("relayToken", cfg.relayToken)
+            .put("webdavUrl", cfg.webdavUrl)
+            .put("webdavUser", cfg.webdavUser)
+            .put("providerSafeCapEnabled", cfg.providerSafeCapEnabled)
+            .put("providerThreadOverrides", com.yunget.app.data.download.ProviderDownloadPolicy.encodeOverrides(cfg.providerThreadOverrides))
+            .put("providerConcurrencyNoticeAckVersion", cfg.providerConcurrencyNoticeAckVersion)
         Files.createDirectories(file.parentFile.toPath())
         val tmp = file.resolveSibling("settings.json.tmp")
         tmp.writeText(obj.toString(2))
@@ -234,6 +284,15 @@ internal class DesktopSettingsStore(private val dataDirectory: File) {
             .put("minimizeToTray", cfg.minimizeToTray)
             .put("systemNotifications", cfg.systemNotifications)
             .put("clipboardMonitor", cfg.clipboardMonitor)
+            .put("preventSleepWhileDownloading", cfg.preventSleepWhileDownloading)
+            .put("postDownloadAction", cfg.postDownloadAction.name)
+            .put("relayEnabled", cfg.relayEnabled)
+            .put("relayPort", cfg.relayPort)
+            .put("relayAllowLan", cfg.relayAllowLan)
+            .put("webdavUrl", cfg.webdavUrl)
+            .put("webdavUser", cfg.webdavUser)
+            .put("providerSafeCapEnabled", cfg.providerSafeCapEnabled)
+            .put("providerThreadOverrides", com.yunget.app.data.download.ProviderDownloadPolicy.encodeOverrides(cfg.providerThreadOverrides))
         if (includeSftpSecrets) {
             obj.put("sftpPassword", cfg.sftpPassword)
             obj.put("sftpPrivateKey", cfg.sftpPrivateKey)
@@ -264,6 +323,17 @@ internal class DesktopSettingsStore(private val dataDirectory: File) {
                 minimizeToTray = obj.optBoolean("minimizeToTray", cur.minimizeToTray),
                 systemNotifications = obj.optBoolean("systemNotifications", cur.systemNotifications),
                 clipboardMonitor = obj.optBoolean("clipboardMonitor", cur.clipboardMonitor),
+                preventSleepWhileDownloading = obj.optBoolean("preventSleepWhileDownloading", cur.preventSleepWhileDownloading),
+                postDownloadAction = if (obj.has("postDownloadAction")) PostDownloadAction.fromName(obj.optString("postDownloadAction")) else cur.postDownloadAction,
+                relayEnabled = obj.optBoolean("relayEnabled", cur.relayEnabled),
+                relayPort = obj.optInt("relayPort", cur.relayPort),
+                relayAllowLan = obj.optBoolean("relayAllowLan", cur.relayAllowLan),
+                webdavUrl = obj.optString("webdavUrl", cur.webdavUrl),
+                webdavUser = obj.optString("webdavUser", cur.webdavUser),
+                providerSafeCapEnabled = obj.optBoolean("providerSafeCapEnabled", cur.providerSafeCapEnabled),
+                providerThreadOverrides = if (obj.has("providerThreadOverrides")) {
+                    com.yunget.app.data.download.ProviderDownloadPolicy.decodeOverrides(obj.optString("providerThreadOverrides"))
+                } else cur.providerThreadOverrides,
             ).also { imported = it }
         }
         return state.value

@@ -102,7 +102,7 @@ fun main() {
         val accounts = DesktopAccountStore(dataDirectory)
         val resolve = DesktopResolveService(accounts)
         val drive = DesktopDriveService(accounts)
-        val dl = DesktopDownloads(dataDirectory)
+        val dl = DesktopDownloads(dataDirectory, sourceRefresher = drive::refreshTaskSource)
         val history = DesktopResolveHistoryStore(dataDirectory)
         StartupContext(settings, accounts, resolve, drive, dl, history)
     } catch (err: Throwable) {
@@ -150,38 +150,129 @@ fun main() {
         var pendingResolveInput by remember { mutableStateOf<String?>(null) }
         var pendingUploadFiles by remember { mutableStateOf<List<File>>(emptyList()) }
         var externalBannerMessage by remember { mutableStateOf<String?>(null) }
+        var shutdownScheduled by remember { mutableStateOf(false) }
 
         LaunchedEffect(config) {
             downloads.applyConfig(config)
         }
 
-        // Track task status transitions for Windows system notifications.
+        // Prevent Windows sleep while downloads are running when enabled.
+        LaunchedEffect(config.preventSleepWhileDownloading, activeCount > 0) {
+            DesktopSystemPower.setKeepAwake(config.preventSleepWhileDownloading && activeCount > 0)
+        }
+
+        // Local HTTP relay receiver for the browser extension and optional LAN mobile push.
+        DisposableEffect(config.relayEnabled, config.relayPort, config.relayAllowLan, config.relayToken) {
+            val server = if (config.relayEnabled) {
+                runCatching {
+                    DesktopRelayServer(
+                        port = config.relayPort,
+                        allowLan = config.relayAllowLan,
+                        token = config.relayToken,
+                        onRequest = { req ->
+                            appScope.launch {
+                                val fromLabel = when (req.source) {
+                                    "android" -> "手机云取"
+                                    "extension" -> "链接助手"
+                                    else -> "外部请求"
+                                }
+                                if (req.mode == "download" && (req.headers.isNotEmpty() || req.url.startsWith("magnet:", true))) {
+                                    val kind = inferTransferKind(req.url)
+                                    val fallbackName = req.fileName.ifBlank {
+                                        req.url.substringBefore('?').substringAfterLast('/').ifBlank { "relay-download" }
+                                    }
+                                    runCatching {
+                                        downloads.submit(
+                                            source = req.url,
+                                            directory = File(config.downloadDirectory),
+                                            fileName = sanitizeFileName(fallbackName),
+                                            kind = kind,
+                                            httpVersion = config.httpPolicy,
+                                            headers = req.headers,
+                                            autoRename = config.conflictPolicy == ConflictPolicy.AUTO_RENAME,
+                                            sourceLabel = fromLabel,
+                                        )
+                                    }.onSuccess {
+                                        currentTab = MainTab.Download
+                                        windowVisible = true
+                                        externalBannerMessage = "已接收来自${fromLabel}的下载任务：$fallbackName"
+                                    }.onFailure { err ->
+                                        externalBannerMessage = "接收下载任务失败：${err.message.orEmpty()}"
+                                    }
+                                } else {
+                                    val combined = if (req.passcode.isNotBlank() && !req.url.contains(req.passcode)) {
+                                        "${req.url} 提取码：${req.passcode}"
+                                    } else req.url
+                                    pendingResolveInput = combined
+                                    currentTab = MainTab.Resolve
+                                    windowVisible = true
+                                    externalBannerMessage = "已收到来自${fromLabel}的链接"
+                                }
+                            }
+                        },
+                    ).also { it.start() }
+                }.onFailure { err ->
+                    DesktopLogStore.warn("relay", "start_failed", err.message.orEmpty())
+                }.getOrNull()
+            } else null
+            onDispose {
+                server?.close()
+            }
+        }
+
+        // Track task status transitions for Windows system notifications & post-download actions.
         val previousStatuses = remember { mutableMapOf<String, String>() }
-        LaunchedEffect(tasks, config.systemNotifications) {
+        var hadActiveTasks by remember { mutableStateOf(false) }
+        var batchCompletedAny by remember { mutableStateOf(false) }
+        LaunchedEffect(tasks, config.systemNotifications, config.postDownloadAction) {
             if (previousStatuses.isEmpty() && tasks.isNotEmpty()) {
                 tasks.forEach { previousStatuses[it.id] = it.status }
+                hadActiveTasks = tasks.any { it.queuedOrActive }
                 return@LaunchedEffect
             }
             for (task in tasks) {
                 val prev = previousStatuses[task.id]
-                if (prev != null && prev != task.status && config.systemNotifications && isTraySupported && windowIcon != null) {
-                    when (task.status) {
-                        "DONE" -> trayState.sendNotification(
-                            Notification("下载完成", task.output.name, Notification.Type.Info)
-                        )
-                        "FAILED" -> trayState.sendNotification(
-                            Notification("下载失败", "${task.output.name}：${task.message.ifBlank { "请查看任务详情" }}", Notification.Type.Error)
-                        )
+                if (prev != null && prev != task.status) {
+                    if (task.status == "DONE") batchCompletedAny = true
+                    if (config.systemNotifications && isTraySupported && windowIcon != null) {
+                        when (task.status) {
+                            "DONE" -> trayState.sendNotification(
+                                Notification("下载完成", task.output.name, Notification.Type.Info)
+                            )
+                            "FAILED" -> trayState.sendNotification(
+                                Notification("下载失败", "${task.output.name}：${task.message.ifBlank { "请查看任务详情" }}", Notification.Type.Error)
+                            )
+                        }
                     }
                 }
                 previousStatuses[task.id] = task.status
             }
+            val nowActive = tasks.any { it.queuedOrActive }
+            if (hadActiveTasks && !nowActive && batchCompletedAny) {
+                batchCompletedAny = false
+                when (config.postDownloadAction) {
+                    PostDownloadAction.NONE -> Unit
+                    PostDownloadAction.OPEN_FOLDER -> {
+                        revealInExplorer(File(config.downloadDirectory))
+                        externalBannerMessage = "全部任务已完成，已打开下载目录"
+                    }
+                    PostDownloadAction.SHUTDOWN_PC -> {
+                        if (DesktopSystemPower.scheduleShutdownSeconds(60)) {
+                            shutdownScheduled = true
+                            windowVisible = true
+                            externalBannerMessage = "全部任务已完成，系统将在 60 秒后关机"
+                        }
+                    }
+                }
+            }
+            hadActiveTasks = nowActive
             val aliveIds = tasks.mapTo(hashSetOf()) { it.id }
             previousStatuses.keys.retainAll(aliveIds)
         }
 
         DisposableEffect(Unit) {
             onDispose {
+                DesktopSystemPower.setKeepAwake(false)
                 val w = windowState.size.width.value.toInt()
                 val h = windowState.size.height.value.toInt()
                 if (w >= 720 && h >= 520) {
@@ -378,6 +469,20 @@ fun main() {
                     externalToastMessage = externalBannerMessage,
                     onConsumeExternalToast = { externalBannerMessage = null },
                 )
+                if (shutdownScheduled) {
+                    androidx.compose.material3.AlertDialog(
+                        onDismissRequest = {},
+                        title = { Text("全部下载已完成，即将关机") },
+                        text = { Text("系统已计划在 60 秒后自动关机。如需继续使用电脑，请点击下方按钮立即取消。") },
+                        confirmButton = {
+                            androidx.compose.material3.Button(onClick = {
+                                DesktopSystemPower.cancelScheduledShutdown()
+                                shutdownScheduled = false
+                                externalBannerMessage = "已取消自动关机"
+                            }) { Text("取消关机") }
+                        },
+                    )
+                }
             }
         }
     }
@@ -432,7 +537,8 @@ internal fun YunGetDesktopShell(
     val accounts by accountStore.accounts.collectAsState()
     val webDriveSessions = remember(dataDirectory) { DesktopWebDriveSessions(dataDirectory) }
     var accountDialogKind by remember { mutableStateOf<DriveAccountKind?>(null) }
-    var showLogViewer by remember { mutableStateOf(false) }
+        var showLogViewer by remember { mutableStateOf(false) }
+    var showProviderConcurrency by remember { mutableStateOf(false) }
     var checkingUpdate by remember { mutableStateOf(false) }
     var updateInfo by remember { mutableStateOf<DesktopUpdateInfo?>(null) }
     var clipboardCandidate by remember { mutableStateOf<String?>(null) }
@@ -585,18 +691,21 @@ internal fun YunGetDesktopShell(
                                     downloads = downloads,
                                     onNotify = ::notify,
                                     onOpenNewDownloadDialog = { onShowNewDownloadDialogChange(true) },
+                                    onOpenProviderConcurrency = { showProviderConcurrency = true },
                                 )
                                 MainTab.Settings -> DesktopSettingsTab(
                                     dataDirectory = dataDirectory,
                                     config = config,
                                     settingsStore = settingsStore,
                                     accountStore = accountStore,
+                                    historyStore = historyStore,
                                     capabilities = downloads.capabilities,
                                     onNotify = ::notify,
                                     onOpenAccountDialog = { accountDialogKind = it },
                                     onOpenLogViewer = { showLogViewer = true },
                                     onCheckUpdate = ::triggerUpdateCheck,
                                     checkingUpdate = checkingUpdate,
+                                    onOpenProviderConcurrency = { showProviderConcurrency = true },
                                 )
                             }
                         }
@@ -604,6 +713,47 @@ internal fun YunGetDesktopShell(
                 }
             }
         }
+    }
+
+    if (config.providerConcurrencyNoticeAckVersion < com.yunget.app.data.download.ProviderDownloadPolicy.CONCURRENCY_NOTICE_VERSION && !showProviderConcurrency) {
+        com.yunget.app.ui.components.ProviderConcurrencyNoticeDialog(
+            globalConnections = config.connectionsPerTask,
+            onOpenQuickTune = {
+                settingsStore.update {
+                    it.copy(providerConcurrencyNoticeAckVersion = com.yunget.app.data.download.ProviderDownloadPolicy.CONCURRENCY_NOTICE_VERSION)
+                }
+                showProviderConcurrency = true
+            },
+            onDismissForever = {
+                settingsStore.update {
+                    it.copy(providerConcurrencyNoticeAckVersion = com.yunget.app.data.download.ProviderDownloadPolicy.CONCURRENCY_NOTICE_VERSION)
+                }
+            },
+        )
+    }
+
+    if (showProviderConcurrency) {
+        com.yunget.app.ui.components.ProviderConcurrencyQuickDialog(
+            globalConnections = config.connectionsPerTask,
+            maxAllowedConnections = MAX_DESKTOP_HTTP_CONNECTIONS,
+            safeCapEnabled = config.providerSafeCapEnabled,
+            overrides = config.providerThreadOverrides,
+            onSafeCapEnabledChange = { enabled ->
+                settingsStore.update { it.copy(providerSafeCapEnabled = enabled) }
+            },
+            onOverrideChange = { key, value ->
+                settingsStore.update { cur ->
+                    val next = cur.providerThreadOverrides.toMutableMap()
+                    if (value == null) next.remove(key) else next[key] = value
+                    cur.copy(providerThreadOverrides = next)
+                }
+            },
+            onResetAll = {
+                settingsStore.update { it.copy(providerSafeCapEnabled = true, providerThreadOverrides = emptyMap()) }
+                notify("已恢复全部分网盘默认安全并发")
+            },
+            onDismiss = { showProviderConcurrency = false },
+        )
     }
 
     accountDialogKind?.let { kind ->

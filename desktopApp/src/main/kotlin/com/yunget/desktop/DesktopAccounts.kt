@@ -30,6 +30,7 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withContext
 import org.json.JSONArray
 import org.json.JSONObject
@@ -203,7 +204,7 @@ internal class DesktopAccountStore(private val dataDirectory: File) {
         commitList(updated)
     }
 
-    fun saveAccount(account: DesktopAccount, addAsNew: Boolean = false) {
+    fun saveAccount(account: DesktopAccount, addAsNew: Boolean = false, makePrimary: Boolean = true) {
         val now = System.currentTimeMillis()
         val current = listState.value
         val sameKind = current.filter { it.kind == account.kind }
@@ -214,16 +215,17 @@ internal class DesktopAccountStore(private val dataDirectory: File) {
                 ?: sameKind.firstOrNull { it.isPrimary }
                 ?: sameKind.firstOrNull()
         }
+        val shouldBePrimary = makePrimary || sameKind.isEmpty()
         val nextEntry = account.copy(
             id = existingMatch?.id ?: account.id.ifBlank { UUID.randomUUID().toString() },
             remark = account.remark.ifBlank { existingMatch?.remark.orEmpty() },
-            isPrimary = true,
+            isPrimary = shouldBePrimary,
             updatedAt = now,
         )
         val updated = buildList(current.size + 1) {
             for (acc in current) {
                 if (acc.id == nextEntry.id) continue
-                if (acc.kind == account.kind) {
+                if (acc.kind == account.kind && shouldBePrimary) {
                     add(acc.copy(isPrimary = false))
                 } else {
                     add(acc)
@@ -246,31 +248,55 @@ internal class DesktopAccountStore(private val dataDirectory: File) {
         return api
     }
 
+    private val xunleiRefreshLock = kotlinx.coroutines.sync.Mutex()
+    private val recentlyRefreshedXunlei = LinkedHashMap<String, Pair<String, String>>(8, 0.75f, false)
+
     suspend fun refreshXunleiToken(
         api: XunleiApi, deviceId: String = "", expectedAccess: String? = null,
     ): Pair<String, String>? =
         withContext(Dispatchers.IO) {
-            val existing = state.value[DriveAccountKind.XUNLEI] ?: return@withContext null
-            if (expectedAccess != null && existing.credential != expectedAccess) return@withContext null
-            val refreshToken = existing.extra["refreshToken"].orEmpty()
-            if (refreshToken.isBlank()) return@withContext null
-            val effectiveDeviceId = deviceId.ifBlank {
-                existing.extra["deviceId"].orEmpty().ifBlank { XunleiDeviceFingerprint.deviceId() }
-            }
-            val authType = existing.extra["authType"].orEmpty()
-            val refreshed = api.refreshToken(refreshToken, effectiveDeviceId, authType) ?: return@withContext null
-            if (state.value[DriveAccountKind.XUNLEI] != existing) return@withContext null
-            val nextRefresh = refreshed.second.ifBlank { refreshToken }
-            saveAccount(
-                existing.copy(
-                    credential = refreshed.first,
-                    extra = existing.extra + mapOf(
-                        "refreshToken" to nextRefresh,
-                        "deviceId" to effectiveDeviceId,
-                    ),
+            xunleiRefreshLock.withLock {
+                if (!expectedAccess.isNullOrBlank()) {
+                    recentlyRefreshedXunlei[expectedAccess]?.let { return@withLock it }
+                }
+                val existing = state.value[DriveAccountKind.XUNLEI] ?: return@withLock null
+                if (expectedAccess != null && existing.credential != expectedAccess) return@withLock null
+                val refreshToken = existing.extra["refreshToken"].orEmpty()
+                if (refreshToken.isBlank()) return@withLock null
+                val effectiveDeviceId = deviceId.ifBlank {
+                    existing.extra["deviceId"].orEmpty().ifBlank { XunleiDeviceFingerprint.deviceId() }
+                }
+                val authType = existing.extra["authType"].orEmpty()
+                val primaryAttempt = api.refreshToken(refreshToken, effectiveDeviceId, authType)
+                // 同步 Android 2.7.46 修复：旧备份缺 authType 且默认刷新失败时，自动回退网页 OAuth 客户端
+                val (refreshed, resolvedAuthType) = if (primaryAttempt != null) {
+                    primaryAttempt to authType
+                } else if (authType.isBlank()) {
+                    val webAttempt = api.refreshToken(refreshToken, effectiveDeviceId, XunleiWebCredential.AUTH_TYPE)
+                        ?: return@withLock null
+                    webAttempt to XunleiWebCredential.AUTH_TYPE
+                } else {
+                    return@withLock null
+                }
+                if (state.value[DriveAccountKind.XUNLEI] != existing) return@withLock null
+                val nextRefresh = refreshed.second.ifBlank { refreshToken }
+                saveAccount(
+                    existing.copy(
+                        credential = refreshed.first,
+                        extra = existing.extra + buildMap {
+                            put("refreshToken", nextRefresh)
+                            put("deviceId", effectiveDeviceId)
+                            if (resolvedAuthType.isNotBlank()) put("authType", resolvedAuthType)
+                        },
+                    )
                 )
-            )
-            refreshed.first to nextRefresh
+                val result = refreshed.first to nextRefresh
+                if (recentlyRefreshedXunlei.size >= 8) {
+                    recentlyRefreshedXunlei.entries.iterator().let { if (it.hasNext()) { it.next(); it.remove() } }
+                }
+                recentlyRefreshedXunlei[existing.credential] = result
+                result
+            }
         }
 
     private suspend fun refreshXunleiWebCaptcha(

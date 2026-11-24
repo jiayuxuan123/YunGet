@@ -4,9 +4,9 @@
 >
 > **本项目是 [CYQawa/YunX（云析）](https://github.com/CYQawa/YunX) 的二次开发版本**，在其协议与架构基础上进行功能扩展，并将下载能力逐步迁移至独立的 [TurboDL](https://github.com/jiayuxuan123/TurboDL) 下载引擎。遵循 GNU AGPL-3.0 协议开源。
 
-本版修复 2.7.46 Android 安装包漏带内置原生引擎的问题，恢复 TurboDL 原生下载与 512 线程档；同时保留下载页切回「正在下载」、百度分享标识、账号备份恢复和网页网盘显示修正。详见 [2.7.47 更新日志](engineering/releases/2.7.47.md)。
+本版带来五项跨端实用升级：分网盘默认安全并发与快捷调节面板（支持自定义覆盖或关闭，更新后弹窗说明）、五网盘大文件直链过期自动换链续传、跨端 WebDAV 扩展同步（多账号+收藏+完整设置）、Windows 浏览器扩展一键接管/防休眠/完任务关机，以及 Android 空间预检、切网自动重连、带请求头 curl/aria2 导出与局域网推电脑下载。详见 [2.7.48 更新日志](engineering/releases/2.7.48.md)。
 
-当前版本 **2.7.47**（versionCode 97）· Android 7.0+（minSdk 24，targetSdk 34）· Windows x64 · 内置 TurboDL 0.5.0.10
+当前版本 **2.7.48**（versionCode 98）· Android 7.0+（minSdk 24，targetSdk 34）· Windows x64 · 内置 TurboDL 0.5.0.10
 
 本次云取同步发布 Android 正式版 APK 与 Windows x64 安装包（MSI）。
 

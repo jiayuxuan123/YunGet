@@ -55,6 +55,8 @@ internal fun DesktopSettingsTab(
     onOpenLogViewer: () -> Unit = {},
     onCheckUpdate: () -> Unit = {},
     checkingUpdate: Boolean = false,
+    historyStore: DesktopResolveHistoryStore? = null,
+    onOpenProviderConcurrency: () -> Unit = {},
 ) {
     val accounts by accountStore.accounts.collectAsState()
     val scroll = rememberScrollState()
@@ -62,8 +64,13 @@ internal fun DesktopSettingsTab(
     if (showWebDavDialog) {
         WebDavBackupDialog(
             onDismiss = { showWebDavDialog = false },
-            exportSnapshot = { exportDesktopWebDavSnapshot(accountStore, config) },
-            restoreSnapshot = { restoreDesktopWebDavSnapshot(it, accountStore, settingsStore) },
+            exportSnapshot = { exportDesktopWebDavSnapshot(accountStore, config, historyStore) },
+            restoreSnapshot = { restoreDesktopWebDavSnapshot(it, accountStore, settingsStore, historyStore) },
+            initialUrl = config.webdavUrl,
+            initialUser = config.webdavUser,
+            onRememberEndpoint = { u, usr ->
+                settingsStore.update { it.copy(webdavUrl = u, webdavUser = usr) }
+            },
         )
     }
 
@@ -199,6 +206,30 @@ internal fun DesktopSettingsTab(
                                 onClick = { settingsStore.update { it.copy(connectionsPerTask = connections) } },
                                 label = { Text("$connections 线程") },
                             )
+                        }
+                    }
+
+                    HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f))
+
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.spacedBy(10.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                    ) {
+                        Column(modifier = Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(2.dp)) {
+                            Text("分网盘安全并发与快捷调节", style = MaterialTheme.typography.titleSmall)
+                            Text(
+                                if (config.providerSafeCapEnabled) {
+                                    "默认开启（迅雷 8 / 百度·UC·115 16 / 123·139 等 32 / 夸克 64；已自定义 ${config.providerThreadOverrides.size} 项），可随时调高或关闭"
+                                } else {
+                                    "已关闭默认兜底：未单独设置的网盘全部跟随全局 ${config.connectionsPerTask} 线程"
+                                },
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            )
+                        }
+                        FilledTonalButton(onClick = onOpenProviderConcurrency) {
+                            Text("快捷调节")
                         }
                     }
 
@@ -519,6 +550,129 @@ internal fun DesktopSettingsTab(
                             onNotify(if (checked) "已开启剪贴板监听" else "已关闭剪贴板监听")
                         },
                     )
+                    HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f))
+                    ToggleRow(
+                        title = "下载时阻止系统休眠",
+                        subtitle = "挂机下载大文件时防止 Windows 进入睡眠中断网络（不影响屏幕熄屏）",
+                        checked = config.preventSleepWhileDownloading,
+                        onCheckedChange = { checked ->
+                            settingsStore.update { it.copy(preventSleepWhileDownloading = checked) }
+                        },
+                    )
+                    HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f))
+                    Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                        Text("全部任务完成后动作", style = MaterialTheme.typography.titleSmall)
+                        FlowRow(
+                            horizontalArrangement = Arrangement.spacedBy(8.dp),
+                            verticalArrangement = Arrangement.spacedBy(8.dp),
+                        ) {
+                            PostDownloadAction.entries.forEach { action ->
+                                FilterChip(
+                                    selected = config.postDownloadAction == action,
+                                    onClick = { settingsStore.update { it.copy(postDownloadAction = action) } },
+                                    label = { Text(action.label) },
+                                )
+                            }
+                        }
+                        Text(
+                            config.postDownloadAction.summary,
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        )
+                    }
+                }
+            }
+
+            SettingsSection(
+                title = "浏览器扩展接管与手机局域网推送",
+                description = "配合「云取链接助手」一键发送网页链接，或让手机端云取把大文件推送到电脑满速下载。",
+            ) {
+                var relayPortText by remember(config.relayPort) { mutableStateOf(config.relayPort.toString()) }
+                val lanIps = remember(config.relayAllowLan) { DesktopRelayServer.localLanAddresses() }
+                Column(
+                    modifier = Modifier.padding(16.dp),
+                    verticalArrangement = Arrangement.spacedBy(12.dp),
+                ) {
+                    ToggleRow(
+                        title = "启用本地链接接收服务",
+                        subtitle = "监听 127.0.0.1:${config.relayPort}，接收本机浏览器「云取链接助手」扩展发来的链接",
+                        checked = config.relayEnabled,
+                        onCheckedChange = { checked ->
+                            settingsStore.update { it.copy(relayEnabled = checked) }
+                        },
+                    )
+                    if (config.relayEnabled) {
+                        HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f))
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.spacedBy(10.dp),
+                            verticalAlignment = Alignment.CenterVertically,
+                        ) {
+                            OutlinedTextField(
+                                value = relayPortText,
+                                onValueChange = { relayPortText = it.filter(Char::isDigit).take(5) },
+                                label = { Text("监听端口") },
+                                singleLine = true,
+                                modifier = Modifier.width(150.dp),
+                            )
+                            FilledTonalButton(onClick = {
+                                val parsed = relayPortText.toIntOrNull()
+                                if (parsed == null || parsed !in 1024..65535) {
+                                    onNotify("端口需在 1024–65535 之间")
+                                } else {
+                                    settingsStore.update { it.copy(relayPort = parsed) }
+                                    onNotify("接收端口已更新为 $parsed")
+                                }
+                            }) { Text("保存端口") }
+                        }
+                        HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f))
+                        ToggleRow(
+                            title = "允许局域网手机推送（需配对令牌）",
+                            subtitle = "开启后手机端云取可把分享链接或直链推送到本机解析/下载",
+                            checked = config.relayAllowLan,
+                            onCheckedChange = { checked ->
+                                settingsStore.update { it.copy(relayAllowLan = checked) }
+                            },
+                        )
+                        if (config.relayAllowLan) {
+                            val primaryEndpoint = "http://${lanIps.firstOrNull() ?: "127.0.0.1"}:${config.relayPort}"
+                            Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                                Text(
+                                    "手机端填写地址：$primaryEndpoint",
+                                    style = MaterialTheme.typography.bodySmall,
+                                )
+                                if (lanIps.size > 1) {
+                                    Text(
+                                        "其他可用局域网 IP：${lanIps.drop(1).joinToString(" / ")}",
+                                        style = MaterialTheme.typography.labelSmall,
+                                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                    )
+                                }
+                                Text(
+                                    "配对令牌：${config.relayToken}",
+                                    style = MaterialTheme.typography.bodySmall,
+                                )
+                                FlowRow(
+                                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                                    verticalArrangement = Arrangement.spacedBy(8.dp),
+                                ) {
+                                    OutlinedButton(onClick = {
+                                        copyToClipboard(primaryEndpoint)
+                                        onNotify("已复制局域网接收地址")
+                                    }) { Text("复制地址") }
+                                    OutlinedButton(onClick = {
+                                        copyToClipboard(config.relayToken)
+                                        onNotify("已复制配对令牌")
+                                    }) { Text("复制令牌") }
+                                    TextButton(onClick = {
+                                        val nextToken = com.yunget.app.data.network.CoreDeviceIds.randomHex32().take(16)
+                                        settingsStore.update { it.copy(relayToken = nextToken) }
+                                        onNotify("已重置配对令牌")
+                                    }) { Text("重置令牌") }
+                                }
+                            }
+                        }
+                    }
                 }
             }
 

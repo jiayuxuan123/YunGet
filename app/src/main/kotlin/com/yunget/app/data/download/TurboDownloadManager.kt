@@ -172,7 +172,21 @@ class TurboDownloadManager(
     private val rateLimitFailures = ConcurrentHashMap<Long, Int>()
     private val sourceRateLimitUntil = ConcurrentHashMap<String, Long>()
     private val refreshJobs = ConcurrentHashMap<Long, kotlinx.coroutines.Job>()
-    private val sourceRefresher by lazy { QuarkTaskRefresher(context) }
+    private val sourceRefresher by lazy { CloudTaskRefresher(context) }
+    private val networkReconnectMonitor by lazy {
+        NetworkReconnectMonitor(context) { taskIds ->
+            scope.launch {
+                kotlinx.coroutines.delay(1_500L)
+                for (taskId in taskIds) {
+                    val task = dao.get(taskId) ?: continue
+                    if (task.status == DownloadTaskEntity.STATUS_FAILED) {
+                        DiagLog.i(context, DiagLog.Category.DOWNLOAD, "网络恢复，自动续传被中断的任务：id=$taskId")
+                        start(taskId)
+                    }
+                }
+            }
+        }
+    }
     private val nativePreview by lazy {
         NativePreview(
             context = context,
@@ -233,6 +247,7 @@ class TurboDownloadManager(
     private val client get() = bootstrap.client
 
     init {
+        networkReconnectMonitor.start()
         // 把应用侧插件宿主注册的下载后端接进引擎路由。引擎的 backendResolver 已被
         // TurboBootstrap 指向**引擎宿主**的注册表（HLS 后端在那里）；而 L2 插件装在
         // **应用侧**宿主（sharedPluginRuntime）—— 两个注册表互相独立，不做这一步，
@@ -382,6 +397,7 @@ class TurboDownloadManager(
          * 压到人眼无感的水平（约 1.25 次/秒，与下载速度无关）。
          */
         private const val DB_WRITE_INTERVAL_MS = 800L
+        private const val MAX_AUTO_SOURCE_REFRESHES = 2
 
         /**
          * 判"这是视频"用的扩展名。
@@ -1119,27 +1135,43 @@ class TurboDownloadManager(
                     alreadyProcessed = task.pipelineStage != "PROCESSING")
                 return@launch
             }
+            // 下载前剩余空间预检：提前拦截明显放不下的大文件，避免下到 99% 落盘才报错。
+            val spaceError = StoragePreflight.checkDirectory(
+                directory = turboCacheDir(),
+                totalSize = knownSize,
+                alreadyDownloaded = task.downloadedSize,
+            )
+            if (spaceError != null) {
+                dao.failGeneration(id, task.attemptGeneration, spaceError)
+                DiagLog.e(context, DiagLog.Category.DOWNLOAD, "空间预检未通过：id=$id $spaceError")
+                return@launch
+            }
+            networkReconnectMonitor.clearTask(id)
             dao.updatePipelineStage(id, "NETWORK", "", 0)
             // TurboDL 下到应用缓存，完成后再交 DownloadSaver 保存到公共目录。
             val out = File(turboCacheDir().apply { mkdirs() }, "task_${id}.part")
             turboOutputs[id] = out
             val tags = NativePreviewRouting.tags(task.transferPolicyJson)
+            val isNativeHttp = tags[NativePreviewRouting.TAG] == NativePreviewRouting.NATIVE &&
+                tags[NativePreviewRouting.MEDIA_TAG] == null &&
+                NativePreviewRouting.supportsDirectLink(task.url, task.fileName)
             val request = DownloadRequest(
                 url = task.url,
                 destination = out,
                 headers = restoredHeaders,
                 knownSize = knownSize,
                 connectionsOverride = RateLimitCooldown.connectionLimit(
-                    task.platform,
-                    task.url,
-                    TaskTransferPolicies.connectionLimit(
+                    platform = task.platform,
+                    url = task.url,
+                    configured = TaskTransferPolicies.connectionLimit(
                         task.transferPolicyJson,
                         threadProvider(),
-                        nativeHttp = tags[NativePreviewRouting.TAG] == NativePreviewRouting.NATIVE &&
-                            tags[NativePreviewRouting.MEDIA_TAG] == null &&
-                            NativePreviewRouting.supportsDirectLink(task.url, task.fileName),
+                        nativeHttp = isNativeHttp,
                     ),
-                    rateLimitFailures[id] ?: 0,
+                    failures = rateLimitFailures[id] ?: 0,
+                    safeCapEnabled = settings.providerSafeCapEnabled,
+                    providerOverrides = settings.providerThreadOverrides,
+                    maxAllowed = if (isNativeHttp) SettingsRepository.MAX_DOWNLOAD_THREADS else SettingsRepository.COMPAT_DOWNLOAD_THREADS,
                 ),
                 // 稳定键 = Room 任务 id：使同一任务多次 submit 复用同一分片目录，
                 // 真正实现断点续传（暂停恢复 / 进程重启都从断点继续，而非从头下）。
@@ -1196,6 +1228,7 @@ class TurboDownloadManager(
             return
         }
         pauseSerials.merge(id, 1L, Long::plus)
+        networkReconnectMonitor.clearTask(id)
         submittedRequests.remove(id)
         startJobs.remove(id)?.cancel()
         refreshJobs.remove(id)?.cancel()
@@ -1903,11 +1936,16 @@ class TurboDownloadManager(
                 turboIds[roomId] != event.taskId) return
             val failedDetails = client.taskDetails(event.taskId)
             val status = nativeFailure?.lastHttpStatus ?: failedDetails?.lastHttpStatus
-            val expired = status in setOf(401, 403, 410) ||
-                (status == null && event.reason.contains("授权/时效"))
-            if (expired && task.sourceAccountId.isNotBlank() &&
-                QuarkRefreshReference.decode(task.refreshReferenceJson) != null &&
-                sourceRefreshAttempts.putIfAbsent(roomId, 1) == null) {
+            val expired = ProviderDownloadPolicy.isExpiredSourceFailure(status, event.reason)
+            val refreshRef = TaskRefreshReference.decode(task.refreshReferenceJson)
+            val attemptCount = sourceRefreshAttempts[roomId] ?: 0
+            val canAttemptRefresh = expired && refreshRef != null &&
+                (refreshRef.mode == TaskRefreshReference.MODE_DRIVE || task.sourceAccountId.isNotBlank()) &&
+                attemptCount < MAX_AUTO_SOURCE_REFRESHES
+            if (canAttemptRefresh && sourceRefreshAttempts.compute(roomId) { _, prev ->
+                    val current = prev ?: 0
+                    if (current < MAX_AUTO_SOURCE_REFRESHES) current + 1 else current
+                } == attemptCount + 1) {
                 val headers = taskHeaders[roomId] ?: parseHeadersJson(task.requestHeadersJson)
                 val renewed = try {
                     sourceRefresher.refresh(task, headers)
@@ -1921,7 +1959,7 @@ class TurboDownloadManager(
                     taskHeaders[roomId] = renewed.headers
                     clearSdkMapping(roomId, generation)
                     sdkFinished(roomId, generation)
-                    DiagLog.i(context, DiagLog.Category.DOWNLOAD, "下载地址已更新，从有效断点继续：id=$roomId")
+                    DiagLog.i(context, DiagLog.Category.DOWNLOAD, "下载地址已自动换链（第 ${attemptCount + 1} 次），从有效断点继续：id=$roomId")
                     startTransfer(roomId, renewed.headers, requiredPauseSerial = pauseSerial)
                     return
                 }
@@ -1949,6 +1987,7 @@ class TurboDownloadManager(
                 DownloadRecoveryPolicy.displayFailure(event.reason)
             }
             dao.failGeneration(roomId, generation, failureText)
+            networkReconnectMonitor.recordFailure(roomId, status, event.reason)
             if (DownloadRecoveryPolicy.shouldDiscardPartial(event.reason)) turboOutputs.remove(roomId)?.delete()
             DiagLog.e(context, DiagLog.Category.DOWNLOAD, "下载失败：id=$roomId HTTP=${status ?: 0}")
         } finally {

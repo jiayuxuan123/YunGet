@@ -30,10 +30,13 @@ internal fun WebDavBackupDialog(
     onDismiss: () -> Unit,
     exportSnapshot: suspend () -> JSONObject,
     restoreSnapshot: suspend (JSONObject) -> Int,
+    initialUrl: String = "",
+    initialUser: String = "",
+    onRememberEndpoint: (url: String, user: String) -> Unit = { _, _ -> },
 ) {
     val scope = rememberCoroutineScope()
-    var url by remember { mutableStateOf("") }
-    var user by remember { mutableStateOf("") }
+    var url by remember(initialUrl) { mutableStateOf(initialUrl) }
+    var user by remember(initialUser) { mutableStateOf(initialUser) }
     var serverPassword by remember { mutableStateOf("") }
     var backupPassword by remember { mutableStateOf("") }
     var pendingRestore by remember { mutableStateOf<JSONObject?>(null) }
@@ -67,14 +70,29 @@ internal fun WebDavBackupDialog(
 
     val snapshot = pendingRestore
     if (snapshot != null) {
+        val primaryCount = snapshot.optJSONArray("accounts")?.length() ?: 0
+        val extraCount = snapshot.optJSONArray("extraAccounts")?.length() ?: 0
+        val bookmarkCount = snapshot.optJSONArray("bookmarks")?.length() ?: 0
+        val summaryParts = buildList {
+            add("${primaryCount + extraCount} 个网盘账号")
+            if (bookmarkCount > 0) add("$bookmarkCount 条收藏链接")
+            if (snapshot.optJSONObject("downloadSettings") != null) add("下载与引擎设置")
+        }.joinToString("、")
         AlertDialog(
             onDismissRequest = { pendingRestore = null },
             title = { Text("恢复 WebDAV 备份") },
-            text = { Text("恢复会更新备份里的网盘账号和下载设置。") },
+            text = { Text("检测到 $summaryParts。确认后将合并/更新到本机。") },
             confirmButton = {
                 TextButton(onClick = {
                     pendingRestore = null
-                    run { "已恢复 ${restoreSnapshot(snapshot)} 个网盘账号及备份中的下载设置" }
+                    run {
+                        val restoredAccounts = restoreSnapshot(snapshot)
+                        if (bookmarkCount > 0) {
+                            "已恢复 $restoredAccounts 个账号、$bookmarkCount 条收藏及下载设置"
+                        } else {
+                            "已恢复 $restoredAccounts 个网盘账号及备份中的下载设置"
+                        }
+                    }
                 }) { Text("确认恢复") }
             },
             dismissButton = { TextButton(onClick = { pendingRestore = null }) { Text("取消") } },
@@ -82,10 +100,10 @@ internal fun WebDavBackupDialog(
     } else {
         AlertDialog(
             onDismissRequest = { if (!active) onDismiss() },
-            title = { Text("WebDAV 加密备份") },
+            title = { Text("WebDAV 加密同步") },
             text = {
                 Column(Modifier.verticalScroll(rememberScrollState()), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                    Text("在两台设备填写同一个 HTTPS 文件地址。上传会更新此文件，备份口令用于本机加密和解密。")
+                    Text("在手机和电脑填写同一个 HTTPS 文件地址，即可加密同步全部多账号、收藏链接与下载设置。口令仅用于本机加解密。")
                     OutlinedTextField(url, { url = it }, Modifier.fillMaxWidth(), enabled = !active, singleLine = true,
                         label = { Text("备份文件地址") })
                     OutlinedTextField(user, { user = it }, Modifier.fillMaxWidth(), enabled = !active, singleLine = true,
@@ -99,15 +117,17 @@ internal fun WebDavBackupDialog(
             },
             confirmButton = {
                 TextButton(enabled = ready, onClick = {
+                    onRememberEndpoint(url.trim(), user.trim())
                     run {
                         WebDavBackup(url, user, serverPassword).upload(exportSnapshot(), backupPassword)
-                        "已上传加密备份"
+                        "已上传加密备份（含账号、收藏与设置）"
                     }
                 }) { Text("上传备份") }
             },
             dismissButton = {
                 TextButton(enabled = !active, onClick = onDismiss) { Text("关闭") }
                 TextButton(enabled = ready, onClick = {
+                    onRememberEndpoint(url.trim(), user.trim())
                     run {
                         pendingRestore = WebDavBackup(url, user, serverPassword).download(backupPassword)
                         "备份已解密，请确认恢复"

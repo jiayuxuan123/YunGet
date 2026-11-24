@@ -63,6 +63,7 @@ internal fun DesktopDownloadsTab(
     downloads: DesktopDownloads,
     onNotify: (String) -> Unit,
     onOpenNewDownloadDialog: () -> Unit,
+    onOpenProviderConcurrency: () -> Unit = {},
 ) {
     val scope = rememberCoroutineScope()
     val tasks by downloads.tasks.collectAsState()
@@ -165,6 +166,16 @@ internal fun DesktopDownloadsTab(
             Row(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
                 DesktopPill("并发上限 ${config.maxConcurrentTasks}")
                 DesktopPill("单任务 ${config.connectionsPerTask} 线程")
+                OutlinedButton(onClick = onOpenProviderConcurrency) {
+                    val customCount = config.providerThreadOverrides.size
+                    Text(
+                        when {
+                            !config.providerSafeCapEnabled -> "分盘并发：已关兜底"
+                            customCount > 0 -> "分盘并发 ($customCount 自定义)"
+                            else -> "分盘并发"
+                        }
+                    )
+                }
                 if (config.speedLimitMbPerSec > 0.0) {
                     DesktopPill("限速 ${config.speedLimitMbPerSec} MB/s")
                 }

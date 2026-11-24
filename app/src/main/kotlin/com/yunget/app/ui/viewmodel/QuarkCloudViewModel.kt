@@ -383,9 +383,15 @@ class QuarkCloudViewModel(
                         "Cookie" to cookie,
                         "User-Agent" to com.yunget.app.data.network.QuarkConstants.API_USER_AGENT,
                         "Referer" to com.yunget.app.data.network.QuarkConstants.DOWNLOAD_REFERER
-                    )
+                    ),
+                    refreshReferenceJson = com.yunget.app.data.download.TaskRefreshReference.forDrive(
+                        platform = DownloadPlatform.QUARK,
+                        fileId = file.fid,
+                        fileName = link.filename.ifBlank { file.fname },
+                        expectedSize = link.size.takeIf { it > 0L } ?: file.fsize,
+                    ).encode(),
                 )
-                downloadLink = link // 弹下载确认弹窗（长按直链可复制）
+                downloadLink = link.copy(headers = pendingDownload!!.headers) // 弹下载确认弹窗（支持复制带头命令与推到电脑）
             } catch (e: Exception) {
                 cloudMessage = e.message ?: "下载失败"
             } finally {
@@ -445,7 +451,10 @@ class QuarkCloudViewModel(
                     fileName = pd.fileName,
                     size = pd.size,
                     platform = DownloadPlatform.QUARK,
-                    headers = pd.headers
+                    headers = pd.headers,
+                    submission = com.yunget.app.data.download.DownloadSubmissionContext(
+                        refreshReferenceJson = pd.refreshReferenceJson
+                    ),
                 )
                 cloudMessage = "已加入下载：${pd.fileName}"
                 actionFile = null

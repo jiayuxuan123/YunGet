@@ -1,5 +1,6 @@
 package com.yunget.desktop
 
+import com.yunget.app.data.download.ProviderDownloadPolicy
 import dev.turbodl.nativebridge.NativeBridge
 import dev.turbodl.nativebridge.NativeTransferClient
 import kotlinx.coroutines.CoroutineScope
@@ -49,6 +50,7 @@ internal data class DesktopTask(
     val recordedMs: Long = 0,
     val createdAt: Long = System.currentTimeMillis(),
     val completedAt: Long = 0,
+    val refreshReferenceJson: String = "",
 ) {
     val partial: File get() = output.resolveSibling(".yunget-$id.part")
     val active: Boolean get() = status == "RUNNING" || status == "PAUSING"
@@ -58,6 +60,7 @@ internal data class DesktopTask(
 internal class DesktopDownloads(
     dataDirectory: File,
     allowLoopbackFixtures: Boolean = false,
+    private val sourceRefresher: (suspend (DesktopTask) -> Pair<String, Map<String, String>>?)? = null,
 ) : Closeable {
     private data class SpeedSample(val bytes: Long, val timeMs: Long, val emaBytesPerSec: Double)
 
@@ -78,6 +81,8 @@ internal class DesktopDownloads(
     private val speedSamples = mutableMapOf<String, SpeedSample>()
     private val speedHistoryFlow = MutableStateFlow<Map<String, List<Long>>>(emptyMap())
     private val cleanupHooks = mutableMapOf<String, suspend () -> Unit>()
+    private val autoRefreshAttempts = mutableMapOf<String, Int>()
+    private val refreshingIds = mutableSetOf<String>()
     private val current = MutableStateFlow(readTasks())
     val tasks = current.asStateFlow()
     val speedHistory = speedHistoryFlow.asStateFlow()
@@ -113,6 +118,7 @@ internal class DesktopDownloads(
         sourceLabel: String = "",
         knownSize: Long = -1L,
         cleanupHook: (suspend () -> Unit)? = null,
+        refreshReferenceJson: String = "",
     ): String = lock.withLock {
         val name = fileName.trim()
         require(name.isNotEmpty() && name != "." && name != ".." &&
@@ -137,6 +143,7 @@ internal class DesktopDownloads(
             headers = headers,
             sourceLabel = sourceLabel.ifBlank { defaultSourceLabel(kind) },
             createdAt = System.currentTimeMillis(),
+            refreshReferenceJson = refreshReferenceJson,
         )
         if (cleanupHook != null) cleanupHooks[row.id] = cleanupHook
         current.value = listOf(row) + current.value
@@ -181,6 +188,7 @@ internal class DesktopDownloads(
     suspend fun resume(id: String, httpVersion: Int) = lock.withLock {
         val row = current.value.firstOrNull { it.id == id } ?: return@withLock
         if (id in running || row.status == "DONE") return@withLock
+        autoRefreshAttempts.remove(id)
         if (row.status == "READY_TO_SAVE") {
             finishSaving(row, allowAutoRename = false)
         } else if (running.size < config.maxConcurrentTasks) {
@@ -274,20 +282,25 @@ internal class DesktopDownloads(
         )
         val isHttp = row.kind == TransferKind.HTTP &&
             (sanitizedSource.startsWith("https://", true) || sanitizedSource.startsWith("http://", true))
-        val host = if (isHttp) runCatching { URI(sanitizedSource).host.orEmpty().lowercase() }.getOrDefault("") else ""
-        val xunlei = isHttp && (row.sourceLabel.startsWith("迅雷") ||
-            host == "xunlei.com" || host.endsWith(".xunlei.com") || host == "sandai.net" || host.endsWith(".sandai.net"))
-        val maxConnections = when {
-            xunlei -> 8
-            isHttp -> MAX_DESKTOP_HTTP_CONNECTIONS
-            else -> 64
+        val sourceKey = if (isHttp) ProviderDownloadPolicy.sourceKey("", sanitizedSource, row.sourceLabel) else null
+        val connections = if (isHttp) {
+            ProviderDownloadPolicy.effectiveConnections(
+                platform = sourceKey.orEmpty(),
+                url = sanitizedSource,
+                configured = cfg.connectionsPerTask.coerceIn(1, MAX_DESKTOP_HTTP_CONNECTIONS),
+                enforceSafeCap = cfg.providerSafeCapEnabled,
+                providerOverrides = cfg.providerThreadOverrides,
+                maxAllowed = MAX_DESKTOP_HTTP_CONNECTIONS,
+            )
+        } else {
+            cfg.connectionsPerTask.coerceIn(1, 64)
         }
-        val connections = cfg.connectionsPerTask.coerceIn(1, maxConnections)
         val policy = NativeTransferClient.Policy(
             connections = connections,
             // 短探测分片避免在高并发档位预占一大片可切分空间。
             requestWindowBytes = if (connections > 256) 64 * 1024L else 1024 * 1024L,
             maxConnectionsPerHost = connections,
+            cooldownGroup = sourceKey.orEmpty(),
         )
         val id = try {
             when (row.kind) {
@@ -400,17 +413,75 @@ internal class DesktopDownloads(
                     retire(id, nativeId)
                     slotsFreed = true
                     val nextStatus = if (snapshot.state == NativeTransferClient.PAUSED) "PAUSED" else "FAILED"
-                    if (nextStatus == "FAILED") {
-                        DesktopLogStore.warn("download", "task_failed", "${row.output.name}: ${snapshot.message}")
+                    val attempts = autoRefreshAttempts[id] ?: 0
+                    val canAutoRefresh = nextStatus == "FAILED" &&
+                        row.kind == TransferKind.HTTP &&
+                        row.refreshReferenceJson.isNotBlank() &&
+                        sourceRefresher != null &&
+                        id !in refreshingIds &&
+                        attempts < 2 &&
+                        ProviderDownloadPolicy.isExpiredSourceFailure(
+                            snapshot.httpStatus.takeIf { it > 0 },
+                            snapshot.message,
+                        )
+                    if (canAutoRefresh) {
+                        autoRefreshAttempts[id] = attempts + 1
+                        refreshingIds.add(id)
+                        update(id) {
+                            updated.copy(
+                                status = "QUEUED",
+                                message = "直链已过期，正在自动换链续传…",
+                                speedBytesPerSec = 0,
+                                etaSeconds = -1,
+                                activeConnections = 0,
+                            )
+                        }
+                        persist()
+                        val targetRow = updated
+                        val refresher = sourceRefresher
+                        scope.launch {
+                            val renewed = runCatching { refresher?.invoke(targetRow) }.getOrNull()
+                            lock.withLock {
+                                refreshingIds.remove(id)
+                                val latest = current.value.firstOrNull { it.id == id } ?: return@withLock
+                                if (latest.status != "QUEUED") return@withLock
+                                if (renewed != null && renewed.first.isNotBlank()) {
+                                    DesktopLogStore.info("download", "auto_refresh_ok", "${latest.output.name} (attempt ${attempts + 1})")
+                                    val replaced = latest.copy(
+                                        source = renewed.first,
+                                        headers = renewed.second,
+                                        message = "",
+                                    )
+                                    update(id) { replaced }
+                                    persist()
+                                    if (running.size < config.maxConcurrentTasks) {
+                                        start(replaced, config.httpPolicy)
+                                    }
+                                } else {
+                                    DesktopLogStore.warn("download", "auto_refresh_failed", "${latest.output.name}: ${snapshot.message}")
+                                    update(id) {
+                                        latest.copy(
+                                            status = "FAILED",
+                                            message = snapshot.message.ifBlank { "直链已过期，自动换链失败" },
+                                        )
+                                    }
+                                    persist()
+                                }
+                            }
+                        }
+                    } else {
+                        if (nextStatus == "FAILED") {
+                            DesktopLogStore.warn("download", "task_failed", "${row.output.name}: ${snapshot.message}")
+                        }
+                        update(id) { updated.copy(
+                            status = nextStatus,
+                            message = snapshot.message,
+                            speedBytesPerSec = 0,
+                            etaSeconds = -1,
+                            activeConnections = 0,
+                        ) }
+                        persist()
                     }
-                    update(id) { updated.copy(
-                        status = nextStatus,
-                        message = snapshot.message,
-                        speedBytesPerSec = 0,
-                        etaSeconds = -1,
-                        activeConnections = 0,
-                    ) }
-                    persist()
                 }
                 else -> if (updated != row) update(id) { updated }
             }
@@ -498,6 +569,7 @@ internal class DesktopDownloads(
                     sourceLabel = row.optString("sourceLabel", ""),
                     createdAt = row.optLong("createdAt", 0L),
                     completedAt = row.optLong("completedAt", 0L),
+                    refreshReferenceJson = row.optString("refreshReferenceJson", ""),
                 )
             }.getOrNull()
         }
@@ -513,7 +585,8 @@ internal class DesktopDownloads(
                 .put("headers", JSONObject(row.headers))
                 .put("sourceLabel", row.sourceLabel)
                 .put("createdAt", row.createdAt)
-                .put("completedAt", row.completedAt))
+                .put("completedAt", row.completedAt)
+                .put("refreshReferenceJson", row.refreshReferenceJson))
         }
         Files.createDirectories(storage.parentFile.toPath())
         val temporary = storage.resolveSibling("tasks.json.tmp")

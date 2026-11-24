@@ -27,6 +27,7 @@ import com.yunget.app.data.db.UCAccountEntity
 import com.yunget.app.data.db.XunleiAccountDao
 import com.yunget.app.data.db.XunleiAccountEntity
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.withContext
 import org.json.JSONArray
 import org.json.JSONObject
@@ -35,6 +36,7 @@ import java.io.FileOutputStream
 import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
+import java.util.UUID
 
 /**
  * 网盘认证信息备份：把已登录的平台（夸克/UC/迅雷/百度/139）凭证打包为 JSON，
@@ -179,11 +181,82 @@ class AuthBackupManager(
                     .put("updatedAt", a.updatedAt)
             )
         }
+        val extraAccounts = JSONArray()
+        // 导出副账号（保留主账号在 accounts 里的 v1 兼容性，副账号走 extraAccounts 供新版本跨端同步）
+        runCatching { quarkDao.observeAll().first() }.getOrDefault(emptyList()).filter { !it.isPrimary }.forEach { a ->
+            if (!onlyLoggedIn || a.cookie.isNotBlank()) extraAccounts.put(
+                JSONObject().put("platform", "quark").put("cookie", a.cookie)
+                    .put("nickname", a.nickname).put("remark", a.remark).put("updatedAt", a.updatedAt)
+            )
+        }
+        runCatching { ucDao.observeAll().first() }.getOrDefault(emptyList()).filter { !it.isPrimary }.forEach { a ->
+            if (!onlyLoggedIn || a.cookie.isNotBlank()) extraAccounts.put(
+                JSONObject().put("platform", "uc").put("cookie", a.cookie)
+                    .put("nickname", a.nickname).put("remark", a.remark).put("updatedAt", a.updatedAt)
+            )
+        }
+        runCatching { xunleiDao.observeAll().first() }.getOrDefault(emptyList()).filter { !it.isPrimary }.forEach { a ->
+            if (!onlyLoggedIn || a.accessToken.isNotBlank()) extraAccounts.put(
+                JSONObject().put("platform", "xunlei").put("accessToken", a.accessToken)
+                    .put("refreshToken", a.refreshToken).put("deviceId", a.deviceId)
+                    .put("captchaToken", a.captchaToken).put("authType", a.authType)
+                    .put("nickname", a.nickname).put("remark", a.remark).put("updatedAt", a.updatedAt)
+            )
+        }
+        runCatching { baiduDao.observeAll().first() }.getOrDefault(emptyList()).filter { !it.isPrimary }.forEach { a ->
+            if (!onlyLoggedIn || a.cookie.isNotBlank()) extraAccounts.put(
+                JSONObject().put("platform", "baidu").put("cookie", a.cookie)
+                    .put("nickname", a.nickname).put("remark", a.remark).put("updatedAt", a.updatedAt)
+            )
+        }
+        runCatching { c139Dao.observeAll().first() }.getOrDefault(emptyList()).filter { !it.isPrimary }.forEach { a ->
+            if (!onlyLoggedIn || a.cookie.isNotBlank()) extraAccounts.put(
+                JSONObject().put("platform", "c139").put("cookie", a.cookie)
+                    .put("authorization", a.authorization).put("nickname", a.nickname)
+                    .put("remark", a.remark).put("updatedAt", a.updatedAt)
+            )
+        }
+        runCatching { pan123Dao.observeAll().first() }.getOrDefault(emptyList()).filter { !it.isPrimary }.forEach { a ->
+            if (!onlyLoggedIn || a.accessToken.isNotBlank()) extraAccounts.put(
+                JSONObject().put("platform", "pan123").put("accessToken", a.accessToken)
+                    .put("account", a.account).put("nickname", a.nickname)
+                    .put("remark", a.remark).put("updatedAt", a.updatedAt)
+            )
+        }
+        runCatching { pan115Dao.observeAll().first() }.getOrDefault(emptyList()).filter { !it.isPrimary }.forEach { a ->
+            if (!onlyLoggedIn || a.cookie.isNotBlank()) extraAccounts.put(
+                JSONObject().put("platform", "pan115").put("cookie", a.cookie)
+                    .put("nickname", a.nickname).put("remark", a.remark).put("updatedAt", a.updatedAt)
+            )
+        }
+        runCatching { guangyaDao.observeAll().first() }.getOrDefault(emptyList()).filter { !it.isPrimary }.forEach { a ->
+            if (!onlyLoggedIn || a.accessToken.isNotBlank()) extraAccounts.put(
+                JSONObject().put("platform", "guangya").put("accessToken", a.accessToken)
+                    .put("refreshToken", a.refreshToken).put("deviceId", a.deviceId)
+                    .put("deviceSign", a.deviceSign).put("account", a.account)
+                    .put("nickname", a.nickname).put("remark", a.remark).put("updatedAt", a.updatedAt)
+            )
+        }
+        runCatching { ilanzouDao.observeAll().first() }.getOrDefault(emptyList()).filter { !it.isPrimary }.forEach { a ->
+            if (!onlyLoggedIn || a.appToken.isNotBlank()) extraAccounts.put(
+                JSONObject().put("platform", "ilanzou").put("appToken", a.appToken)
+                    .put("uuid", a.uuid).put("account", a.account).put("password", a.password)
+                    .put("userId", a.userId).put("nickname", a.nickname)
+                    .put("remark", a.remark).put("updatedAt", a.updatedAt)
+            )
+        }
+        runCatching { lanzouDao.observeAll().first() }.getOrDefault(emptyList()).filter { !it.isPrimary }.forEach { a ->
+            if (!onlyLoggedIn || a.cookie.isNotBlank()) extraAccounts.put(
+                JSONObject().put("platform", "lanzou").put("cookie", a.cookie)
+                    .put("nickname", a.nickname).put("remark", a.remark).put("updatedAt", a.updatedAt)
+            )
+        }
         JSONObject()
             .put("app", APP_TAG)
             .put("version", VERSION)
             .put("exportedAt", System.currentTimeMillis())
             .put("accounts", accounts)
+            .apply { if (extraAccounts.length() > 0) put("extraAccounts", extraAccounts) }
             .toString(2)
     }
 
@@ -360,6 +433,103 @@ class AuthBackupManager(
                                 updatedAt = obj.optLong("updatedAt", System.currentTimeMillis())
                             )
                         ); count++
+                    }
+                }
+            }
+        }
+        // 恢复副账号（不覆盖主账号，按凭证去重）
+        val extras = root.optJSONArray("extraAccounts")
+        if (extras != null) {
+            for (i in 0 until extras.length()) {
+                val obj = extras.optJSONObject(i) ?: continue
+                val remark = obj.optString("remark")
+                val updatedAt = obj.optLong("updatedAt", System.currentTimeMillis())
+                val genId = "${obj.optString("platform")}-${UUID.randomUUID().toString().take(8)}"
+                when (obj.optString("platform")) {
+                    "quark" -> {
+                        val c = obj.optString("cookie")
+                        val existing = runCatching { quarkDao.observeAll().first() }.getOrDefault(emptyList())
+                        if (c.isNotBlank() && existing.none { it.cookie == c }) {
+                            quarkDao.upsert(QuarkAccountEntity(id = genId, cookie = c, nickname = obj.optString("nickname"), remark = remark, isPrimary = false, updatedAt = updatedAt))
+                            count++
+                        }
+                    }
+                    "uc" -> {
+                        val c = obj.optString("cookie")
+                        val existing = runCatching { ucDao.observeAll().first() }.getOrDefault(emptyList())
+                        if (c.isNotBlank() && existing.none { it.cookie == c }) {
+                            ucDao.upsert(UCAccountEntity(id = genId, cookie = c, nickname = obj.optString("nickname"), remark = remark, isPrimary = false, updatedAt = updatedAt))
+                            count++
+                        }
+                    }
+                    "xunlei" -> {
+                        val t = obj.optString("accessToken")
+                        val existing = runCatching { xunleiDao.observeAll().first() }.getOrDefault(emptyList())
+                        if (t.isNotBlank() && existing.none { it.accessToken == t }) {
+                            xunleiDao.upsert(XunleiAccountEntity(
+                                id = genId, accessToken = t, refreshToken = obj.optString("refreshToken"),
+                                deviceId = obj.optString("deviceId"), captchaToken = obj.optString("captchaToken"),
+                                authType = obj.optString("authType"), nickname = obj.optString("nickname"),
+                                remark = remark, isPrimary = false, updatedAt = updatedAt
+                            ))
+                            count++
+                        }
+                    }
+                    "baidu" -> {
+                        val c = obj.optString("cookie")
+                        val existing = runCatching { baiduDao.observeAll().first() }.getOrDefault(emptyList())
+                        if (c.isNotBlank() && existing.none { it.cookie == c }) {
+                            baiduDao.upsert(BaiduAccountEntity(id = genId, cookie = c, nickname = obj.optString("nickname"), remark = remark, isPrimary = false, updatedAt = updatedAt))
+                            count++
+                        }
+                    }
+                    "c139" -> {
+                        val c = obj.optString("cookie")
+                        val existing = runCatching { c139Dao.observeAll().first() }.getOrDefault(emptyList())
+                        if (c.isNotBlank() && existing.none { it.cookie == c }) {
+                            c139Dao.upsert(C139AccountEntity(id = genId, cookie = c, authorization = obj.optString("authorization"), nickname = obj.optString("nickname"), remark = remark, isPrimary = false, updatedAt = updatedAt))
+                            count++
+                        }
+                    }
+                    "pan123" -> {
+                        val t = obj.optString("accessToken")
+                        val existing = runCatching { pan123Dao.observeAll().first() }.getOrDefault(emptyList())
+                        if (t.isNotBlank() && existing.none { it.accessToken == t }) {
+                            pan123Dao.upsert(Pan123AccountEntity(id = genId, accessToken = t, account = obj.optString("account"), nickname = obj.optString("nickname"), remark = remark, isPrimary = false, updatedAt = updatedAt))
+                            count++
+                        }
+                    }
+                    "pan115" -> {
+                        val c = obj.optString("cookie")
+                        val existing = runCatching { pan115Dao.observeAll().first() }.getOrDefault(emptyList())
+                        if (c.isNotBlank() && existing.none { it.cookie == c }) {
+                            pan115Dao.upsert(Pan115AccountEntity(id = genId, cookie = c, nickname = obj.optString("nickname"), remark = remark, isPrimary = false, updatedAt = updatedAt))
+                            count++
+                        }
+                    }
+                    "guangya" -> {
+                        val t = obj.optString("accessToken")
+                        val existing = runCatching { guangyaDao.observeAll().first() }.getOrDefault(emptyList())
+                        if (t.isNotBlank() && existing.none { it.accessToken == t }) {
+                            guangyaDao.upsert(GuangYaAccountEntity(id = genId, accessToken = t, refreshToken = obj.optString("refreshToken"), deviceId = obj.optString("deviceId"), deviceSign = obj.optString("deviceSign"), account = obj.optString("account"), nickname = obj.optString("nickname"), remark = remark, isPrimary = false, updatedAt = updatedAt))
+                            count++
+                        }
+                    }
+                    "ilanzou" -> {
+                        val t = obj.optString("appToken")
+                        val existing = runCatching { ilanzouDao.observeAll().first() }.getOrDefault(emptyList())
+                        if (t.isNotBlank() && existing.none { it.appToken == t }) {
+                            ilanzouDao.upsert(ILanzouAccountEntity(id = genId, appToken = t, uuid = obj.optString("uuid"), account = obj.optString("account"), password = obj.optString("password"), userId = obj.optString("userId"), nickname = obj.optString("nickname"), remark = remark, isPrimary = false, updatedAt = updatedAt))
+                            count++
+                        }
+                    }
+                    "lanzou" -> {
+                        val c = obj.optString("cookie")
+                        val existing = runCatching { lanzouDao.observeAll().first() }.getOrDefault(emptyList())
+                        if (c.isNotBlank() && existing.none { it.cookie == c }) {
+                            lanzouDao.upsert(LanzouAccountEntity(id = genId, cookie = c, nickname = obj.optString("nickname"), remark = remark, isPrimary = false, updatedAt = updatedAt))
+                            count++
+                        }
                     }
                 }
             }

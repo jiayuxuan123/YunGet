@@ -214,6 +214,7 @@ fun SettingsScreen(
     val ui = LocalUiMetrics.current
     val settingsListState = rememberLazyListState()
     var showThreadsDialog by remember { mutableStateOf(false) }
+    var showProviderConcurrencyDialog by remember { mutableStateOf(false) }
     var showLogDialog by remember { mutableStateOf(false) }
     // 检查更新结果（非空时弹更新对话框）
     var updateRelease by remember { mutableStateOf<UpdateChecker.Release?>(null) }
@@ -230,6 +231,8 @@ fun SettingsScreen(
     val scope = rememberCoroutineScope()
     // 下载保存目录（SAF）：本地状态驱动 UI 刷新，同时同步 SharedPreferences
     val settingsRepo = remember { SettingsRepository(context) }
+    var providerSafeCapEnabled by remember { mutableStateOf(settingsRepo.providerSafeCapEnabled) }
+    var providerThreadOverrides by remember { mutableStateOf(settingsRepo.providerThreadOverrides) }
     // 插件仓库：只用来给下面「插件」一行取已装/启用数量（插件页自己会再拿一份，各管各的）
     val pluginRepo = remember { PluginRepository(context) }
     var downloadDirUri by remember { mutableStateOf(settingsRepo.downloadDirUri) }
@@ -1183,29 +1186,62 @@ fun SettingsScreen(
                 }
             },
             confirmButton = {
-                TextButton(onClick = { showThreadsDialog = false }) { Text("取消") }
+                TextButton(onClick = {
+                    showThreadsDialog = false
+                    providerSafeCapEnabled = settingsRepo.providerSafeCapEnabled
+                    providerThreadOverrides = settingsRepo.providerThreadOverrides
+                    showProviderConcurrencyDialog = true
+                }) { Text("分网盘快捷调节") }
+            },
+            dismissButton = {
+                TextButton(onClick = { showThreadsDialog = false }) { Text("关闭") }
             }
+        )
+    }
+
+    if (showProviderConcurrencyDialog) {
+        com.yunget.app.ui.components.ProviderConcurrencyQuickDialog(
+            globalConnections = shownThreads,
+            maxAllowedConnections = if (supports512) SettingsRepository.MAX_DOWNLOAD_THREADS else SettingsRepository.COMPAT_DOWNLOAD_THREADS,
+            safeCapEnabled = providerSafeCapEnabled,
+            overrides = providerThreadOverrides,
+            onSafeCapEnabledChange = { enabled ->
+                providerSafeCapEnabled = enabled
+                settingsRepo.providerSafeCapEnabled = enabled
+            },
+            onOverrideChange = { key, value ->
+                val next = providerThreadOverrides.toMutableMap()
+                if (value == null) next.remove(key) else next[key] = value
+                providerThreadOverrides = next
+                settingsRepo.providerThreadOverrides = next
+            },
+            onResetAll = {
+                providerSafeCapEnabled = true
+                providerThreadOverrides = emptyMap()
+                settingsRepo.providerSafeCapEnabled = true
+                settingsRepo.providerThreadOverrides = emptyMap()
+                SnackbarController.show("已恢复全部分网盘默认安全并发")
+            },
+            onDismiss = { showProviderConcurrencyDialog = false },
         )
     }
 
     // 导出网盘认证弹窗（AES 加密密码 + 导出范围）
     if (showWebDavDialog) {
+        val bookmarkDao = remember(context) { com.yunget.app.data.db.AppDatabase.get(context).bookmarkDao() }
         WebDavBackupDialog(
             onDismiss = { showWebDavDialog = false },
             exportSnapshot = {
-                org.json.JSONObject(backupManager.exportJson()).put(
-                    "downloadSettings", org.json.JSONObject()
-                        .put("connectionsPerTask", settingsRepo.downloadThreads)
-                        .put("maxConcurrentTasks", settingsRepo.maxConcurrentDownloads),
-                )
+                com.yunget.app.data.backup.AndroidWebDavSync.exportSnapshot(backupManager, settingsRepo, bookmarkDao)
             },
             restoreSnapshot = { snapshot ->
-                val count = backupManager.importJson(snapshot.toString())
-                snapshot.optJSONObject("downloadSettings")?.let { settings ->
-                    settingsRepo.downloadThreads = settings.optInt("connectionsPerTask", settingsRepo.downloadThreads)
-                    settingsRepo.maxConcurrentDownloads = settings.optInt("maxConcurrentTasks", settingsRepo.maxConcurrentDownloads)
-                }
-                count
+                com.yunget.app.data.backup.AndroidWebDavSync.restoreSnapshot(snapshot, backupManager, settingsRepo, bookmarkDao)
+            },
+            initialUrl = settingsRepo.webdavUrl,
+            initialUser = settingsRepo.webdavUser,
+            onRememberEndpoint = { u, usr ->
+                settingsRepo.webdavUrl = u
+                settingsRepo.webdavUser = usr
             },
         )
     }

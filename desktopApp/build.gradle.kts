@@ -64,6 +64,7 @@ compose.desktop {
                 "java.management",
                 "java.prefs",
                 "jdk.crypto.ec",
+                "jdk.httpserver",
                 "jdk.unsupported",
             )
             windows {

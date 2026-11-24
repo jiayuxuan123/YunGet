@@ -26,6 +26,7 @@ import androidx.compose.material3.Icon
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.outlined.Bookmarks
 import androidx.compose.material.icons.outlined.Notifications
+import androidx.compose.material.icons.outlined.Tune
 import androidx.compose.material3.LargeTopAppBar
 import androidx.compose.material3.TopAppBar
 import androidx.compose.foundation.layout.Spacer
@@ -683,6 +684,12 @@ fun MainScreen(
     var showAnalyticsDisclosure by rememberSaveable {
         mutableStateOf(com.yunget.app.data.analytics.AnonymousAnalytics.needsDisclosure(context))
     }
+    var showProviderConcurrencyNotice by rememberSaveable {
+        mutableStateOf(settings.providerConcurrencyNoticeAckVersion < com.yunget.app.data.download.ProviderDownloadPolicy.CONCURRENCY_NOTICE_VERSION)
+    }
+    var showProviderConcurrencyDialog by rememberSaveable { mutableStateOf(false) }
+    var providerSafeCapEnabled by remember { mutableStateOf(settings.providerSafeCapEnabled) }
+    var providerThreadOverrides by remember { mutableStateOf(settings.providerThreadOverrides) }
 
     // 解析页发起下载后，自动切换到「下载」Tab 的正在下载列表
     LaunchedEffect(resolveViewModel.downloadStarted) {
@@ -882,6 +889,11 @@ fun MainScreen(
         MainAppBar(
             currentTab, scrollBehavior,
             onBookmarks = { showBookmarks = true },
+            onProviderConcurrency = {
+                providerSafeCapEnabled = settings.providerSafeCapEnabled
+                providerThreadOverrides = settings.providerThreadOverrides
+                showProviderConcurrencyDialog = true
+            },
             onNotifications = {
                 communityUrl = CommunityApi.notificationsUrl
                 communityFromAnnouncement = false
@@ -1578,6 +1590,55 @@ fun MainScreen(
             }
         )
     }
+
+    if (showProviderConcurrencyNotice && !showAnalyticsDisclosure && !credentialLostNotice && !showProviderConcurrencyDialog) {
+        com.yunget.app.ui.components.ProviderConcurrencyNoticeDialog(
+            globalConnections = settings.downloadThreads,
+            onOpenQuickTune = {
+                settings.providerConcurrencyNoticeAckVersion = com.yunget.app.data.download.ProviderDownloadPolicy.CONCURRENCY_NOTICE_VERSION
+                showProviderConcurrencyNotice = false
+                providerSafeCapEnabled = settings.providerSafeCapEnabled
+                providerThreadOverrides = settings.providerThreadOverrides
+                showProviderConcurrencyDialog = true
+            },
+            onDismissForever = {
+                settings.providerConcurrencyNoticeAckVersion = com.yunget.app.data.download.ProviderDownloadPolicy.CONCURRENCY_NOTICE_VERSION
+                showProviderConcurrencyNotice = false
+            },
+        )
+    }
+
+    if (showProviderConcurrencyDialog) {
+        val maxAllowed = if (settings.downloadEngineId == com.yunget.app.data.download.NativePreviewRouting.ENGINE_ID) {
+            SettingsRepository.MAX_DOWNLOAD_THREADS
+        } else {
+            SettingsRepository.COMPAT_DOWNLOAD_THREADS
+        }
+        com.yunget.app.ui.components.ProviderConcurrencyQuickDialog(
+            globalConnections = settings.downloadThreads,
+            maxAllowedConnections = maxAllowed,
+            safeCapEnabled = providerSafeCapEnabled,
+            overrides = providerThreadOverrides,
+            onSafeCapEnabledChange = { enabled ->
+                providerSafeCapEnabled = enabled
+                settings.providerSafeCapEnabled = enabled
+            },
+            onOverrideChange = { key, value ->
+                val next = providerThreadOverrides.toMutableMap()
+                if (value == null) next.remove(key) else next[key] = value
+                providerThreadOverrides = next
+                settings.providerThreadOverrides = next
+            },
+            onResetAll = {
+                providerSafeCapEnabled = true
+                providerThreadOverrides = emptyMap()
+                settings.providerSafeCapEnabled = true
+                settings.providerThreadOverrides = emptyMap()
+                SnackbarController.show("已恢复全部分网盘默认安全并发")
+            },
+            onDismiss = { showProviderConcurrencyDialog = false },
+        )
+    }
 }
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -1586,6 +1647,7 @@ internal fun MainAppBar(
     tab: MainTab,
     scrollBehavior: androidx.compose.material3.TopAppBarScrollBehavior? = null,
     onBookmarks: () -> Unit = {},
+    onProviderConcurrency: () -> Unit = {},
     onNotifications: () -> Unit = {},
     unreadNotifications: Int = 0,
 ) {
@@ -1616,6 +1678,18 @@ internal fun MainAppBar(
                 onBookmarks()
             }) {
                 Icon(Icons.Outlined.Bookmarks, contentDescription = "收藏网盘链接")
+            }
+            Spacer(Modifier.size(4.dp))
+        }
+        if (tab == MainTab.Download) {
+            androidx.compose.material3.IconButton(onClick = {
+                haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
+                onProviderConcurrency()
+            }) {
+                Icon(
+                    Icons.Outlined.Tune,
+                    contentDescription = "分网盘并发快捷调节",
+                )
             }
             Spacer(Modifier.size(4.dp))
         }

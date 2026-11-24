@@ -204,7 +204,9 @@ data class DownloadLink(
      *
      * 取值来源：夸克游客取链响应的 Set-Cookie（见 QuarkApi.getGuestShareDownloadLink）。
      */
-    val guestCookie: String = ""
+    val guestCookie: String = "",
+    /** 可选的必需下载请求头（供直链弹窗导出 curl/aria2 或推送到电脑端时保留 UA/Referer/Cookie）。 */
+    val headers: Map<String, String> = emptyMap()
 )
 
 /** UC 转码播放流（绕过非会员视频下载被换成宣传片的问题；url 为 m3u8/fmp4 分片地址） */

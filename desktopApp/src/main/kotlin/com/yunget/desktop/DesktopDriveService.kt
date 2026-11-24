@@ -244,14 +244,60 @@ internal class DesktopDriveService(
             }
             val headers = buildPlatformDownloadHeaders(sharePlatformOf(kind), acc.credential, link)
             val transferKind = if (link.isHls) TransferKind.HLS else TransferKind.HTTP
+            val resolvedSize = if (link.size > 0L) link.size else file.fsize
+            val resolvedName = sanitizeFileName(link.filename.ifBlank { file.fname })
+            val refreshPlatform = when (kind) {
+                DriveAccountKind.QUARK -> "quark"
+                DriveAccountKind.UC -> "uc"
+                DriveAccountKind.XUNLEI -> "xunlei"
+                DriveAccountKind.PAN123 -> "pan123"
+                DriveAccountKind.C139 -> "c139"
+                else -> ""
+            }
+            val refreshJson = if (refreshPlatform.isNotEmpty() && transferKind == TransferKind.HTTP) {
+                com.yunget.app.data.download.TaskRefreshReference.forDrive(
+                    platform = refreshPlatform,
+                    fileId = file.fid,
+                    fileName = resolvedName,
+                    expectedSize = resolvedSize,
+                    fidToken = file.fidToken,
+                ).encode()
+            } else ""
             ResolvedDownload(
                 url = link.downloadUrl,
-                fileName = sanitizeFileName(link.filename.ifBlank { file.fname }),
-                size = if (link.size > 0L) link.size else file.fsize,
+                fileName = resolvedName,
+                size = resolvedSize,
                 kind = transferKind,
                 headers = headers,
                 sourceLabel = "${kind.displayName}·个人盘",
+                refreshReferenceJson = refreshJson,
             )
+        }
+
+    suspend fun refreshTaskSource(task: DesktopTask): Pair<String, Map<String, String>>? =
+        withContext(Dispatchers.IO) {
+            val ref = com.yunget.app.data.download.TaskRefreshReference.decode(task.refreshReferenceJson)
+                ?: return@withContext null
+            val kind = when (ref.platform) {
+                "quark" -> DriveAccountKind.QUARK
+                "uc" -> DriveAccountKind.UC
+                "xunlei" -> DriveAccountKind.XUNLEI
+                "pan123" -> DriveAccountKind.PAN123
+                "c139" -> DriveAccountKind.C139
+                else -> return@withContext null
+            }
+            val stub = ShareFile(
+                fid = ref.fileId,
+                fname = ref.fileName.ifBlank { task.output.name },
+                fsize = ref.expectedSize.takeIf { it > 0L } ?: task.total.coerceAtLeast(0L),
+                isdir = false,
+                pdirFid = ref.parentId,
+                fidToken = ref.fidToken,
+            )
+            val resolved = runCatching { resolveDownload(kind, stub) }.getOrNull() ?: return@withContext null
+            val expected = ref.expectedSize.takeIf { it > 0L } ?: task.total.takeIf { it > 0L } ?: 0L
+            if (expected > 0L && resolved.size > 0L && resolved.size != expected) return@withContext null
+            resolved.url to resolved.headers
         }
 
     suspend fun collectFolderFiles(

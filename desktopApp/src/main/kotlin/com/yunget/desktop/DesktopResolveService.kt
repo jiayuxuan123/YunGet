@@ -90,6 +90,7 @@ internal data class ResolvedDownload(
     val headers: Map<String, String>,
     val sourceLabel: String,
     val cleanupHook: (suspend () -> Unit)? = null,
+    val refreshReferenceJson: String = "",
 )
 
 internal data class GitHubRepoBundle(

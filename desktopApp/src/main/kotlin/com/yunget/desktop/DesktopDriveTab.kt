@@ -271,6 +271,7 @@ internal fun DesktopDriveTab(
                             autoRename = config.conflictPolicy == ConflictPolicy.AUTO_RENAME,
                             sourceLabel = resolved.sourceLabel,
                             knownSize = resolved.size,
+                            refreshReferenceJson = resolved.refreshReferenceJson,
                         )
                     }.onSuccess { added++ }
                         .onFailure { err ->

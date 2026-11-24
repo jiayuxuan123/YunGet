@@ -339,9 +339,15 @@ class C139CloudViewModel(
                     // 139 getDownloadUrl 响应不含 name → 用列表里的文件名（与分享链接下载一致，避免 fileId 乱码）
                     fileName = file.fname.ifBlank { link.filename },
                     size = link.size,
-                    headers = C139DownloadPolicy.headers()
+                    headers = C139DownloadPolicy.headers(),
+                    refreshReferenceJson = com.yunget.app.data.download.TaskRefreshReference.forDrive(
+                        platform = DownloadPlatform.C139,
+                        fileId = file.fid,
+                        fileName = file.fname.ifBlank { link.filename },
+                        expectedSize = link.size.takeIf { it > 0L } ?: file.fsize,
+                    ).encode(),
                 )
-                downloadLink = link // 弹下载确认弹窗（长按直链可复制）
+                downloadLink = link.copy(headers = pendingDownload!!.headers) // 弹下载确认弹窗（支持复制带头命令与推到电脑）
             } catch (e: Exception) {
                 cloudMessage = e.message ?: "下载失败"
             } finally {
@@ -386,7 +392,10 @@ class C139CloudViewModel(
                     fileName = pd.fileName,
                     size = pd.size,
                     platform = DownloadPlatform.C139,
-                    headers = pd.headers
+                    headers = pd.headers,
+                    submission = com.yunget.app.data.download.DownloadSubmissionContext(
+                        refreshReferenceJson = pd.refreshReferenceJson
+                    ),
                 )
                 cloudMessage = "已加入下载：${pd.fileName}"
                 actionFile = null
